@@ -38,7 +38,10 @@ namespace Fabr.Host.Api.Controllers
                     modelConfig.Provider,
                     modelConfig.Uri,
                     modelConfig.Model,
-                    modelConfig.ApiKeyAlias
+                    modelConfig.ApiKeyAlias,
+                    modelConfig.TimeoutSeconds,
+                    modelConfig.MaxOutputTokens,
+                    modelConfig.ContextWindowTokens
                 });
             }
             catch (Exception ex)

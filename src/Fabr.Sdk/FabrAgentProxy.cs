@@ -74,6 +74,13 @@ namespace Fabr.Sdk
 
         private DateTime? _initializedAt;
 
+        // Compaction plumbing — lazily initialized on first TryCompactAsync() call
+        private FabrChatHistoryProvider? _chatHistoryProvider;
+        private string? _chatClientConfigName;
+        private CompactionService? _compactionService;
+        private CompactionConfig? _compactionConfig;
+        private bool _compactionInitialized;
+
         // Custom state persistence
         private Dictionary<string, JsonElement>? _customStateCache;
         private readonly Dictionary<string, JsonElement> _pendingStateChanges = new();
@@ -128,6 +135,10 @@ namespace Fabr.Sdk
         {
             var chatClient = await GetChatClient(chatClientConfigName);
 
+            // Capture the provider reference so callers can use it for compaction
+            FabrChatHistoryProvider? capturedProvider = null;
+            var originalFactory = FabrChatHistoryProvider.CreateFactory(fabrAgentHost, threadId, logger);
+
             var options = new ChatClientAgentOptions
             {
                 ChatOptions = new ChatOptions
@@ -137,7 +148,12 @@ namespace Fabr.Sdk
                 },
                 Name = fabrAgentHost.GetHandle(),
                 // Wire up FabrChatHistoryProvider for automatic message persistence
-                ChatHistoryProviderFactory = FabrChatHistoryProvider.CreateFactory(fabrAgentHost, threadId, logger)
+                ChatHistoryProviderFactory = async (ctx, ct) =>
+                {
+                    var provider = await originalFactory(ctx, ct);
+                    capturedProvider = provider as FabrChatHistoryProvider;
+                    return provider;
+                }
             };
 
             // Allow caller to configure options (including AIContextProviderFactory)
@@ -150,10 +166,14 @@ namespace Fabr.Sdk
 
             var session = await agent.GetNewSessionAsync();
 
+            // Auto-store for compaction support
+            _chatHistoryProvider = capturedProvider;
+            _chatClientConfigName = chatClientConfigName;
+
             logger.LogDebug("Created ChatClientAgent - Config: {Config}, ThreadId: {ThreadId}",
                 chatClientConfigName, threadId);
 
-            return new ChatClientAgentResult(agent, session);
+            return new ChatClientAgentResult(agent, session, capturedProvider);
         }
 
 #pragma warning disable MEAI001 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
@@ -174,6 +194,98 @@ namespace Fabr.Sdk
             var registry = serviceProvider.GetRequiredService<FabrToolRegistry>();
             return await registry.ResolveToolsAsync(serviceProvider, config.Plugins, config.Tools, config, fabrAgentHost);
         }
+
+        #region Compaction
+
+        /// <summary>
+        /// Attempts to compact the chat history if the token count exceeds the configured threshold.
+        /// Safe to call on every message — returns null if compaction is not configured or not needed.
+        /// On first call, lazily resolves CompactionService from DI and builds CompactionConfig from agent args.
+        /// </summary>
+        /// <returns>The compaction result if compaction ran, or null if skipped/not configured.</returns>
+        protected async Task<CompactionResult?> TryCompactAsync(Func<Task>? onCompacting = null)
+        {
+            if (_chatHistoryProvider is null || _chatClientConfigName is null)
+                return null;
+
+            try
+            {
+                if (!_compactionInitialized)
+                {
+                    _compactionService = serviceProvider.GetService<CompactionService>();
+                    if (_compactionService is not null)
+                    {
+                        _compactionConfig = await BuildCompactionConfigAsync();
+                    }
+                    _compactionInitialized = true;
+                }
+
+                if (_compactionService is null || _compactionConfig is null)
+                    return null;
+
+                var result = await _compactionService.CompactIfNeededAsync(
+                    _chatHistoryProvider, _compactionConfig, _chatClientConfigName, onCompacting);
+
+                if (result.WasCompacted)
+                {
+                    logger.LogInformation(
+                        "Compacted history for '{Handle}': {Before} → {After} messages (~{TokensBefore} → ~{TokensAfter} tokens)",
+                        config.Handle,
+                        result.OriginalMessageCount, result.CompactedMessageCount,
+                        result.EstimatedTokensBefore, result.EstimatedTokensAfter);
+                }
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Compaction failed for '{Handle}' — continuing without compaction", config.Handle);
+                return null;
+            }
+        }
+
+        private async Task<CompactionConfig> BuildCompactionConfigAsync()
+        {
+            var args = config.Args ?? new Dictionary<string, string>();
+
+            var enabled = !args.TryGetValue("CompactionEnabled", out var enabledStr)
+                || !bool.TryParse(enabledStr, out var enabledVal)
+                || enabledVal;
+
+            var keepLastN = args.TryGetValue("CompactionKeepLastN", out var keepStr)
+                && int.TryParse(keepStr, out var keepVal) ? keepVal : 20;
+
+            int? maxContextTokens = args.TryGetValue("CompactionMaxContextTokens", out var maxStr)
+                && int.TryParse(maxStr, out var maxVal) ? maxVal : null;
+
+            // Fall back to model configuration's ContextWindowTokens
+            if (maxContextTokens is null)
+            {
+                try
+                {
+                    var modelConfig = await chatClientService.GetModelConfigurationAsync(_chatClientConfigName!);
+                    maxContextTokens = modelConfig.ContextWindowTokens;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogDebug(ex, "Could not load model configuration for compaction context window fallback");
+                }
+            }
+
+            var threshold = args.TryGetValue("CompactionThreshold", out var threshStr)
+                && double.TryParse(threshStr, System.Globalization.CultureInfo.InvariantCulture, out var threshVal)
+                ? threshVal : 0.75;
+
+            return new CompactionConfig
+            {
+                Enabled = enabled,
+                KeepLastN = keepLastN,
+                MaxContextTokens = maxContextTokens,
+                Threshold = threshold
+            };
+        }
+
+        #endregion
 
         #region Custom State API
 

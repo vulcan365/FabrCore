@@ -55,6 +55,14 @@ namespace Fabr.Core.Interfaces
         Task ClearThreadMessages(string threadId);
 
         /// <summary>
+        /// Atomically replaces all messages in a specific thread with a new set of messages.
+        /// Used for compaction (summarizing old messages into fewer entries).
+        /// </summary>
+        /// <param name="threadId">The unique identifier for the thread.</param>
+        /// <param name="messages">The replacement messages.</param>
+        Task ReplaceThreadMessages(string threadId, IEnumerable<StoredChatMessage> messages);
+
+        /// <summary>
         /// Gets the custom state dictionary.
         /// </summary>
         /// <returns>The custom state dictionary, or empty if none exists.</returns>

@@ -18,6 +18,12 @@ namespace Fabr.Core
         /// Setting this can improve response time by limiting output length.
         /// </summary>
         public int? MaxOutputTokens { get; set; }
+
+        /// <summary>
+        /// Total context window size in tokens for this model. Default is null (unknown).
+        /// Used by compaction to determine when to summarize conversation history.
+        /// </summary>
+        public int? ContextWindowTokens { get; set; }
     }
 
     public class ApiKeyConfiguration

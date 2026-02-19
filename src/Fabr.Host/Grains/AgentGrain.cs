@@ -393,6 +393,16 @@ namespace Fabr.Host.Grains
             }
         }
 
+        public async Task ReplaceThreadMessages(string threadId, IEnumerable<StoredChatMessage> messages)
+        {
+            _messageState.State.MessageThreads[threadId] = messages.ToList();
+            _messageState.State.LastModified = DateTime.UtcNow;
+            await _messageState.WriteStateAsync();
+
+            logger.LogDebug("Replaced messages for thread: {ThreadId}, new count: {Count}",
+                threadId, _messageState.State.MessageThreads[threadId].Count);
+        }
+
         public Task<Dictionary<string, JsonElement>> GetCustomStateAsync()
         {
             return Task.FromResult(_messageState.State.CustomState ?? new Dictionary<string, JsonElement>());
@@ -871,6 +881,9 @@ namespace Fabr.Host.Grains
 
         public Task ClearThreadAsync(string threadId)
             => ClearThreadMessages(threadId);
+
+        public Task ReplaceThreadMessagesAsync(string threadId, IEnumerable<StoredChatMessage> messages)
+            => ReplaceThreadMessages(threadId, messages);
 
         Task<Dictionary<string, JsonElement>> IFabrAgentHost.GetCustomStateAsync()
             => GetCustomStateAsync();

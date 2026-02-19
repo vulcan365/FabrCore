@@ -253,6 +253,26 @@ namespace Fabr.Sdk
         }
 
         /// <summary>
+        /// Gets all persisted messages from grain state (bypasses in-memory cache).
+        /// </summary>
+        public Task<List<StoredChatMessage>> GetStoredMessagesAsync()
+            => _agentHost.GetThreadMessagesAsync(_threadId);
+
+        /// <summary>
+        /// Replaces all messages in the thread and resets the local cache.
+        /// Caller must flush pending messages first.
+        /// </summary>
+        public async Task ReplaceAndResetCacheAsync(List<StoredChatMessage> newMessages)
+        {
+            await _agentHost.ReplaceThreadMessagesAsync(_threadId, newMessages);
+            lock (_syncLock)
+            {
+                _cachedMessages = new List<StoredChatMessage>(newMessages);
+                _pendingMessages.Clear();
+            }
+        }
+
+        /// <summary>
         /// Persists all pending messages to Orleans grain state.
         /// Thread-safe with re-queue on failure to prevent message loss.
         /// </summary>
