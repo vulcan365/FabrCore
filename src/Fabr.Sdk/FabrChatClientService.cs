@@ -374,7 +374,10 @@ namespace Fabr.Sdk
                     Provider = result.Provider,
                     Uri = result.Uri,
                     Model = result.Model,
-                    ApiKeyAlias = result.ApiKeyAlias
+                    ApiKeyAlias = result.ApiKeyAlias,
+                    TimeoutSeconds = result.TimeoutSeconds,
+                    MaxOutputTokens = result.MaxOutputTokens,
+                    ContextWindowTokens = result.ContextWindowTokens
                 };
             }
             catch (Exception ex)
@@ -456,6 +459,9 @@ namespace Fabr.Sdk
             public required string Uri { get; set; }
             public required string Model { get; set; }
             public required string ApiKeyAlias { get; set; }
+            public int TimeoutSeconds { get; set; }
+            public int? MaxOutputTokens { get; set; }
+            public int? ContextWindowTokens { get; set; }
         }
 
         private class ApiKeyResponse

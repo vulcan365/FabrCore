@@ -108,6 +108,14 @@ namespace Fabr.Sdk
         Task ClearThreadAsync(string threadId);
 
         /// <summary>
+        /// Atomically replaces all messages in a thread with a new set of messages.
+        /// Used for compaction (summarizing old messages into fewer entries).
+        /// </summary>
+        /// <param name="threadId">The unique identifier for the thread.</param>
+        /// <param name="messages">The replacement messages.</param>
+        Task ReplaceThreadMessagesAsync(string threadId, IEnumerable<StoredChatMessage> messages);
+
+        /// <summary>
         /// Gets the custom state dictionary from persistent storage.
         /// </summary>
         /// <returns>The custom state dictionary, or empty if none exists.</returns>
