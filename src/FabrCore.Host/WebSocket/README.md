@@ -1,6 +1,6 @@
-# Fabr WebSocket Interface
+# FabrCore WebSocket Interface
 
-This WebSocket interface provides a way for clients that cannot use the ClientContext (e.g., web browsers, non-.NET clients) to interact with the Fabr system via WebSocket connections.
+This WebSocket interface provides a way for clients that cannot use the ClientContext (e.g., web browsers, non-.NET clients) to interact with the FabrCore system via WebSocket connections.
 
 ## Overview
 
@@ -12,19 +12,19 @@ The WebSocket session wraps the `ClientGrain` in the same way that `ClientContex
 
 ## Endpoint
 
-Connect to: `ws://your-fabr-host/ws`
+Connect to: `ws://your-fabrcore-host/ws`
 
-For secure connections: `wss://your-fabr-host/ws`
+For secure connections: `wss://your-fabrcore-host/ws`
 
 ## Authentication
 
-**Required Header:** `x-fabr-userid`
+**Required Header:** `x-fabrcore-userid`
 
-The client handle is determined by the `x-fabr-userid` header sent during the WebSocket handshake. This header is required and cannot be empty.
+The client handle is determined by the `x-fabrcore-userid` header sent during the WebSocket handshake. This header is required and cannot be empty.
 
 **Example:**
 ```
-x-fabr-userid: user123
+x-fabrcore-userid: user123
 ```
 
 The session will automatically initialize and subscribe to the ClientGrain using this user ID upon connection.
@@ -123,7 +123,7 @@ You don't need to manually manage subscriptions or unsubscriptions.
 
 ## Sending Messages to Agents
 
-Once you've connected (with the `x-fabr-userid` header) and created an agent, you can send messages to agents.
+Once you've connected (with the `x-fabrcore-userid` header) and created an agent, you can send messages to agents.
 
 **Request:**
 ```json
@@ -185,7 +185,7 @@ For general errors:
 1. **Connect to WebSocket (with header)**
    ```
    Connect to ws://localhost:5000/ws
-   Header: x-fabr-userid: user123
+   Header: x-fabrcore-userid: user123
    ```
 
    The session automatically initializes and subscribes to the ClientGrain.
@@ -242,12 +242,12 @@ const WebSocket = require('ws');
 
 const ws = new WebSocket('ws://localhost:5000/ws', {
   headers: {
-    'x-fabr-userid': 'user123'
+    'x-fabrcore-userid': 'user123'
   }
 });
 
 ws.on('open', () => {
-  console.log('Connected to Fabr WebSocket');
+  console.log('Connected to FabrCore WebSocket');
 
   // Connection is automatically initialized, create agent immediately
   ws.send(JSON.stringify({
@@ -276,7 +276,7 @@ ws.on('error', (error) => {
 });
 
 ws.on('close', () => {
-  console.log('Disconnected from Fabr WebSocket');
+  console.log('Disconnected from FabrCore WebSocket');
 });
 
 // Function to send a chat message
@@ -300,7 +300,7 @@ const userId = 'user123';
 const ws = new WebSocket(`ws://localhost:5000/ws?userid=${userId}`);
 
 ws.onopen = () => {
-  console.log('Connected to Fabr WebSocket');
+  console.log('Connected to FabrCore WebSocket');
 
   // Create agent immediately
   ws.send(JSON.stringify({
@@ -334,7 +334,7 @@ The WebSocket implementation consists of:
    - Processes commands and routes messages
    - Serializes/deserializes JSON messages
 
-3. **Integration** (in `FabrHostExtensions.cs`)
+3. **Integration** (in `FabrCoreHostExtensions.cs`)
    - Enables WebSocket support via `app.UseWebSockets()`
    - Registers WebSocket middleware
 
@@ -342,14 +342,14 @@ The WebSocket implementation consists of:
 
 The WebSocket implementation includes comprehensive metrics:
 
-- `fabr.websocket.sessions.created` - Number of sessions created
-- `fabr.websocket.sessions.closed` - Number of sessions closed
-- `fabr.websocket.messages.received` - Messages received from clients
-- `fabr.websocket.messages.sent` - Messages sent to clients
-- `fabr.websocket.commands.processed` - Commands processed
-- `fabr.websocket.connections.accepted` - Connections accepted
-- `fabr.websocket.connections.rejected` - Connections rejected
-- `fabr.websocket.errors` - Error count
+- `fabrcore.websocket.sessions.created` - Number of sessions created
+- `fabrcore.websocket.sessions.closed` - Number of sessions closed
+- `fabrcore.websocket.messages.received` - Messages received from clients
+- `fabrcore.websocket.messages.sent` - Messages sent to clients
+- `fabrcore.websocket.commands.processed` - Commands processed
+- `fabrcore.websocket.connections.accepted` - Connections accepted
+- `fabrcore.websocket.connections.rejected` - Connections rejected
+- `fabrcore.websocket.errors` - Error count
 
 All operations are also traced via OpenTelemetry for distributed tracing.
 
@@ -363,13 +363,13 @@ All operations are also traced via OpenTelemetry for distributed tracing.
 
 ## Troubleshooting
 
-### Connection Rejected - Missing x-fabr-userid Header
-- Ensure the `x-fabr-userid` header is sent during the WebSocket handshake
+### Connection Rejected - Missing x-fabrcore-userid Header
+- Ensure the `x-fabrcore-userid` header is sent during the WebSocket handshake
 - If using a browser's native WebSocket API, consider using query parameters instead
 - If using Node.js, use the `ws` library which supports headers
 
 ### Connection Rejected - Empty Header
-- Ensure the `x-fabr-userid` header has a non-empty value
+- Ensure the `x-fabrcore-userid` header has a non-empty value
 
 ### "Client not initialized" Error
 - This shouldn't occur if the connection was successful

@@ -1,6 +1,6 @@
-# Fabr.Client
+# FabrCore.Client
 
-Client library for connecting to and interacting with Fabr agents.
+Client library for connecting to and interacting with FabrCore agents.
 
 ## Usage
 
@@ -9,10 +9,10 @@ Client library for connecting to and interacting with Fabr agents.
 The factory pattern provides proper initialization and automatic resource cleanup:
 
 ```csharp
-using Fabr.Client;
+using FabrCore.Client;
 using Microsoft.Extensions.DependencyInjection;
 
-// The factory is registered automatically when using AddFabrClient()
+// The factory is registered automatically when using AddFabrCoreClient()
 var factory = serviceProvider.GetRequiredService<IClientContextFactory>();
 
 // Create a fully-initialized client context
@@ -45,7 +45,7 @@ Console.WriteLine($"Agent responded: {response.Content}");
 ⚠️ **Deprecated**: This approach is maintained for backward compatibility but is not recommended for new code.
 
 ```csharp
-using Fabr.Client;
+using FabrCore.Client;
 using Microsoft.Extensions.DependencyInjection;
 
 var clientContext = serviceProvider.GetRequiredService<IClientContext>();
@@ -92,35 +92,35 @@ The client includes built-in metrics and tracing:
 
 ## Configuration
 
-Add Fabr client to your application:
+Add FabrCore client to your application:
 
 ```csharp
-using Fabr.Client;
+using FabrCore.Client;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-// Adds Orleans client and Fabr client services
-builder.AddFabrClient();
+// Adds Orleans client and FabrCore client services
+builder.AddFabrCoreClient();
 
 var host = builder.Build();
 
 // Optional post-configuration
-host.UseFabrClient();
+host.UseFabrCoreClient();
 
 await host.RunAsync();
 ```
 
 ### Connection Retry Configuration
 
-The Fabr client supports configurable connection retry logic, which is especially useful for local development when the Fabr server may not be running when client applications start.
+The FabrCore client supports configurable connection retry logic, which is especially useful for local development when the FabrCore server may not be running when client applications start.
 
 **appsettings.json:**
 
 ```json
 {
   "Orleans": {
-    "ClusterId": "fabr-cluster",
-    "ServiceId": "fabr-service",
+    "ClusterId": "fabrcore-cluster",
+    "ServiceId": "fabrcore-service",
     "ClusteringMode": "Localhost",
     "ConnectionRetryCount": 10,
     "ConnectionRetryDelay": "00:00:05",
@@ -139,19 +139,19 @@ The Fabr client supports configurable connection retry logic, which is especiall
 
 **Log Output Example:**
 
-When the Fabr server is not available at startup, you'll see logs like:
+When the FabrCore server is not available at startup, you'll see logs like:
 
 ```
-info: Fabr.Client.FabrClientConnectionRetryFilter[0]
-      Fabr client connection retry filter initialized. MaxRetries: 10, RetryDelay: 00:00:05
-warn: Fabr.Client.FabrClientConnectionRetryFilter[0]
+info: FabrCore.Client.FabrCoreClientConnectionRetryFilter[0]
+      FabrCore client connection retry filter initialized. MaxRetries: 10, RetryDelay: 00:00:05
+warn: FabrCore.Client.FabrCoreClientConnectionRetryFilter[0]
       Orleans client connection attempt 1 of 11 failed. Error: SiloUnavailableException: Unable to connect. Retrying in 00:00:05...
-info: Fabr.Client.FabrClientConnectionRetryFilter[0]
+info: FabrCore.Client.FabrCoreClientConnectionRetryFilter[0]
       Initiating Orleans client connection attempt 2 of 11...
-warn: Fabr.Client.FabrClientConnectionRetryFilter[0]
+warn: FabrCore.Client.FabrCoreClientConnectionRetryFilter[0]
       Orleans client connection attempt 2 of 11 failed. Error: SiloUnavailableException: Unable to connect. Retrying in 00:00:05...
 ...
-info: Fabr.Client.FabrClientConnectionRetryFilter[0]
+info: FabrCore.Client.FabrCoreClientConnectionRetryFilter[0]
       Orleans client connected successfully after 4 attempt(s)
 ```
 
@@ -159,9 +159,9 @@ info: Fabr.Client.FabrClientConnectionRetryFilter[0]
 
 The connection retry filter emits the following metrics:
 
-- `fabr.client.connection.retry_attempts` - Number of retry attempts made
-- `fabr.client.connection.success` - Number of successful connections (with attempt count tag)
-- `fabr.client.connection.failures` - Number of failures after all retries exhausted
+- `fabrcore.client.connection.retry_attempts` - Number of retry attempts made
+- `fabrcore.client.connection.success` - Number of successful connections (with attempt count tag)
+- `fabrcore.client.connection.failures` - Number of failures after all retries exhausted
 
 ## Advanced Usage
 
@@ -241,6 +241,6 @@ await using var context = await factory.CreateAsync("my-handle");
 
 ## See Also
 
-- [Fabr.Core](../Fabr.Core/) - Core domain models and interfaces
-- [Fabr.Host](../Fabr.Host/) - Server-side agent hosting
-- [Fabr.Sdk](../Fabr.Sdk/) - Advanced SDK features
+- [FabrCore.Core](../FabrCore.Core/) - Core domain models and interfaces
+- [FabrCore.Host](../FabrCore.Host/) - Server-side agent hosting
+- [FabrCore.Sdk](../FabrCore.Sdk/) - Advanced SDK features

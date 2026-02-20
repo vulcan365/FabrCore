@@ -1,4 +1,4 @@
-namespace Fabr.Sdk
+namespace FabrCore.Sdk
 {
     public class RegistryEntry
     {
@@ -6,7 +6,7 @@ namespace Fabr.Sdk
         public List<string> Aliases { get; set; } = new();
     }
 
-    public interface IFabrRegistry
+    public interface IFabrCoreRegistry
     {
         List<RegistryEntry> GetAgentTypes();
         List<RegistryEntry> GetPlugins();

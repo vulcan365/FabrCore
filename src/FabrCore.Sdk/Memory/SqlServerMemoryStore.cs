@@ -3,7 +3,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Fabr.Sdk.Memory;
+namespace FabrCore.Sdk.Memory;
 
 /// <summary>
 /// SQL Server implementation of IMemoryStore using native VECTOR type and VECTOR_DISTANCE().

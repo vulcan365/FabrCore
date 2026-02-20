@@ -1,13 +1,13 @@
-using Fabr.Host.Services;
+using FabrCore.Host.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Fabr.Host.Api.Controllers
+namespace FabrCore.Host.Api.Controllers
 {
     [ApiController]
-    [Route("fabrapi/[controller]")]
+    [Route("fabrcoreapi/[controller]")]
     public class FileController : ControllerBase
     {
         private readonly IFileStorageService _fileStorageService;

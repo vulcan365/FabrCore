@@ -1,4 +1,4 @@
-namespace Fabr.Client.Services;
+namespace FabrCore.Client.Services;
 
 /// <summary>
 /// Manages the state of multiple ChatDock components on a page.

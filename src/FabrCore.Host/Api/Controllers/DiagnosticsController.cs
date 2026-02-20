@@ -1,5 +1,5 @@
-using Fabr.Core;
-using Fabr.Core.Interfaces;
+using FabrCore.Core;
+using FabrCore.Core.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Orleans;
@@ -8,10 +8,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace Fabr.Host.Api.Controllers
+namespace FabrCore.Host.Api.Controllers
 {
     [ApiController]
-    [Route("fabrapi/[controller]")]
+    [Route("fabrcoreapi/[controller]")]
     public class DiagnosticsController : Controller
     {
         private readonly IClusterClient clusterClient;

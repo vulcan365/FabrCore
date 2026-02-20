@@ -1,5 +1,5 @@
 
-namespace Fabr.Sdk
+namespace FabrCore.Sdk
 {
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = true, Inherited = false)]
     public sealed class ToolAliasAttribute : Attribute

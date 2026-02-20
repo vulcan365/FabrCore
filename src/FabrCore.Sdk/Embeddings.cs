@@ -7,7 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Fabr.Sdk
+namespace FabrCore.Sdk
 {
     public interface IEmbeddings
     {
@@ -18,12 +18,12 @@ namespace Fabr.Sdk
     {
         private IEmbeddingGenerator<string, Embedding<float>>? embeddingClient;
 
-        private readonly IFabrChatClientService fabrChatClientService;
+        private readonly IFabrCoreChatClientService fabrcoreChatClientService;
         private readonly IServiceProvider serviceProvider;
 
-        public Embeddings(IFabrChatClientService fabrChatClientService, IServiceProvider serviceProvider)
+        public Embeddings(IFabrCoreChatClientService fabrcoreChatClientService, IServiceProvider serviceProvider)
         {
-            this.fabrChatClientService = fabrChatClientService;
+            this.fabrcoreChatClientService = fabrcoreChatClientService;
             this.serviceProvider = serviceProvider;
         }
 
@@ -31,7 +31,7 @@ namespace Fabr.Sdk
         {
             if (embeddingClient == null)
             {
-                embeddingClient = await fabrChatClientService.GetEmbeddingsClient("OpenAIEmbeddings");
+                embeddingClient = await fabrcoreChatClientService.GetEmbeddingsClient("OpenAIEmbeddings");
             }
 
             var val = await embeddingClient.GenerateAsync(text);

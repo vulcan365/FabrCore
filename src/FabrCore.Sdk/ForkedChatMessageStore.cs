@@ -2,9 +2,9 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
-using Fabr.Core;
+using FabrCore.Core;
 
-namespace Fabr.Sdk;
+namespace FabrCore.Sdk;
 
 /// <summary>
 /// A memory-efficient chat history provider for forked conversations.
@@ -124,7 +124,7 @@ public class ForkedChatHistoryProvider : ChatHistoryProvider
     /// <param name="threadId">The thread ID to persist to.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public async Task PersistAsync(
-        IFabrAgentHost agentHost,
+        IFabrCoreAgentHost agentHost,
         string threadId,
         CancellationToken cancellationToken = default)
     {
@@ -159,7 +159,7 @@ public class ForkedChatHistoryProvider : ChatHistoryProvider
     /// <param name="threadId">The thread ID to persist to.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public async Task PersistNewMessagesOnlyAsync(
-        IFabrAgentHost agentHost,
+        IFabrCoreAgentHost agentHost,
         string threadId,
         CancellationToken cancellationToken = default)
     {

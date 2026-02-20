@@ -1,6 +1,6 @@
-using Fabr.Core;
+using FabrCore.Core;
 
-namespace Fabr.Sdk;
+namespace FabrCore.Sdk;
 
 public static class PluginConfigExtensions
 {

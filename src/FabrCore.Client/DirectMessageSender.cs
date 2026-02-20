@@ -1,12 +1,12 @@
-using Fabr.Core;
-using Fabr.Core.Streaming;
+using FabrCore.Core;
+using FabrCore.Core.Streaming;
 using Microsoft.Extensions.Logging;
 using Orleans;
 using Orleans.Streams;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 
-namespace Fabr.Client
+namespace FabrCore.Client
 {
     /// <summary>
     /// Sends messages directly to agents via Orleans streams without using ClientContext or ClientGrain infrastructure.
@@ -14,19 +14,19 @@ namespace Fabr.Client
     /// </summary>
     public class DirectMessageSender : IDirectMessageSender
     {
-        private static readonly ActivitySource ActivitySource = new("Fabr.Client.DirectMessageSender");
-        private static readonly Meter Meter = new("Fabr.Client.DirectMessageSender");
+        private static readonly ActivitySource ActivitySource = new("FabrCore.Client.DirectMessageSender");
+        private static readonly Meter Meter = new("FabrCore.Client.DirectMessageSender");
 
         private static readonly Counter<long> MessagesSentCounter = Meter.CreateCounter<long>(
-            "fabr.direct.messages.sent",
+            "fabrcore.direct.messages.sent",
             description: "Number of direct messages sent");
 
         private static readonly Counter<long> EventsSentCounter = Meter.CreateCounter<long>(
-            "fabr.direct.events.sent",
+            "fabrcore.direct.events.sent",
             description: "Number of direct events sent");
 
         private static readonly Counter<long> ErrorCounter = Meter.CreateCounter<long>(
-            "fabr.direct.errors",
+            "fabrcore.direct.errors",
             description: "Number of errors encountered");
 
         private readonly IClusterClient _clusterClient;

@@ -1,6 +1,6 @@
 using Orleans;
 
-namespace Fabr.Core
+namespace FabrCore.Core
 {
     /// <summary>
     /// Represents the overall health state of a component.

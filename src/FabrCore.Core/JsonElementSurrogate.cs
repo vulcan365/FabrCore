@@ -1,7 +1,7 @@
 using Orleans;
 using System.Text.Json;
 
-namespace Fabr.Core
+namespace FabrCore.Core
 {
     /// <summary>
     /// Orleans surrogate for System.Text.Json.JsonElement serialization.

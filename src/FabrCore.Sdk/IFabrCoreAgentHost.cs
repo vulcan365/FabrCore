@@ -1,9 +1,9 @@
-using Fabr.Core;
+using FabrCore.Core;
 using System.Text.Json;
 
-namespace Fabr.Sdk
+namespace FabrCore.Sdk
 {
-    public interface IFabrAgentHost
+    public interface IFabrCoreAgentHost
     {
         string GetHandle();
         Task<AgentMessage> SendAndReceiveMessage(AgentMessage request);
@@ -65,27 +65,27 @@ namespace Fabr.Sdk
         /// Messages are buffered in memory until FlushAsync() is called.
         /// </summary>
         /// <param name="threadId">Unique identifier for the thread.</param>
-        /// <returns>A FabrChatHistoryProvider backed by Orleans persistence.</returns>
-        FabrChatHistoryProvider GetChatHistoryProvider(string threadId);
+        /// <returns>A FabrCoreChatHistoryProvider backed by Orleans persistence.</returns>
+        FabrCoreChatHistoryProvider GetChatHistoryProvider(string threadId);
 
         /// <summary>
         /// Tracks a chat history provider for automatic flushing on grain deactivation and after message processing.
-        /// Called automatically by FabrChatHistoryProvider.CreateFactory.
+        /// Called automatically by FabrCoreChatHistoryProvider.CreateFactory.
         /// </summary>
         /// <param name="provider">The chat history provider to track.</param>
-        void TrackChatHistoryProvider(FabrChatHistoryProvider provider);
+        void TrackChatHistoryProvider(FabrCoreChatHistoryProvider provider);
 
         /// <summary>
         /// Gets or creates a persisted ChatMessageStore for the specified thread.
         /// </summary>
         [Obsolete("Use GetChatHistoryProvider instead")]
-        FabrChatHistoryProvider GetMessageStore(string threadId) => GetChatHistoryProvider(threadId);
+        FabrCoreChatHistoryProvider GetMessageStore(string threadId) => GetChatHistoryProvider(threadId);
 
         /// <summary>
         /// Tracks a message store for automatic flushing.
         /// </summary>
         [Obsolete("Use TrackChatHistoryProvider instead")]
-        void TrackMessageStore(FabrChatHistoryProvider store) => TrackChatHistoryProvider(store);
+        void TrackMessageStore(FabrCoreChatHistoryProvider store) => TrackChatHistoryProvider(store);
 
         /// <summary>
         /// Gets messages for a thread from persistent storage.

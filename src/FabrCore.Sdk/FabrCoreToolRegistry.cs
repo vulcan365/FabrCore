@@ -1,19 +1,19 @@
-using Fabr.Core;
+using FabrCore.Core;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.ComponentModel;
 using System.Reflection;
 
-namespace Fabr.Sdk
+namespace FabrCore.Sdk
 {
-    public sealed class FabrToolRegistry
+    public sealed class FabrCoreToolRegistry
     {
-        private readonly ILogger<FabrToolRegistry> _logger;
+        private readonly ILogger<FabrCoreToolRegistry> _logger;
         private readonly Lazy<Dictionary<string, Type>> _pluginTypes;
         private readonly Lazy<Dictionary<string, MethodInfo>> _toolMethods;
 
-        public FabrToolRegistry(ILogger<FabrToolRegistry> logger)
+        public FabrCoreToolRegistry(ILogger<FabrCoreToolRegistry> logger)
         {
             _logger = logger;
             _pluginTypes = new Lazy<Dictionary<string, Type>>(ScanPlugins);
@@ -25,7 +25,7 @@ namespace Fabr.Sdk
             IEnumerable<string>? pluginAliases,
             IEnumerable<string>? toolAliases,
             AgentConfiguration config,
-            IFabrAgentHost? agentHost = null)
+            IFabrCoreAgentHost? agentHost = null)
         {
             var tools = new List<AITool>();
             var resolvedNames = new List<string>();
@@ -67,7 +67,7 @@ namespace Fabr.Sdk
             IServiceProvider serviceProvider,
             string alias,
             AgentConfiguration config,
-            IFabrAgentHost? agentHost)
+            IFabrCoreAgentHost? agentHost)
         {
             if (!_pluginTypes.Value.TryGetValue(alias, out var pluginType))
             {
@@ -75,7 +75,7 @@ namespace Fabr.Sdk
                 return (new List<AITool>(), new List<string>());
             }
 
-            // Create plugin-scoped provider that includes IFabrAgentHost
+            // Create plugin-scoped provider that includes IFabrCoreAgentHost
             var pluginServiceProvider = agentHost != null
                 ? new PluginServiceProvider(serviceProvider, agentHost)
                 : serviceProvider;
@@ -91,9 +91,9 @@ namespace Fabr.Sdk
                 return (new List<AITool>(), new List<string>());
             }
 
-            if (instance is IFabrPlugin fabrPlugin)
+            if (instance is IFabrCorePlugin fabrcorePlugin)
             {
-                await fabrPlugin.InitializeAsync(config, pluginServiceProvider);
+                await fabrcorePlugin.InitializeAsync(config, pluginServiceProvider);
                 _logger.LogInformation("Initialized plugin '{Alias}'", alias);
             }
 
@@ -222,9 +222,9 @@ namespace Fabr.Sdk
         private sealed class PluginServiceProvider : IServiceProvider
         {
             private readonly IServiceProvider _inner;
-            private readonly IFabrAgentHost _agentHost;
+            private readonly IFabrCoreAgentHost _agentHost;
 
-            public PluginServiceProvider(IServiceProvider inner, IFabrAgentHost agentHost)
+            public PluginServiceProvider(IServiceProvider inner, IFabrCoreAgentHost agentHost)
             {
                 _inner = inner;
                 _agentHost = agentHost;
@@ -232,7 +232,7 @@ namespace Fabr.Sdk
 
             public object? GetService(Type serviceType)
             {
-                if (serviceType == typeof(IFabrAgentHost))
+                if (serviceType == typeof(IFabrCoreAgentHost))
                     return _agentHost;
                 return _inner.GetService(serviceType);
             }

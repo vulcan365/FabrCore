@@ -1,4 +1,4 @@
-using Fabr.Core;
+using FabrCore.Core;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry.Trace;
@@ -6,33 +6,33 @@ using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Reflection;
 
-namespace Fabr.Client
+namespace FabrCore.Client
 {
     /// <summary>
     /// Base class for component-hosted agent proxies with typed component access.
     /// </summary>
     /// <typeparam name="TComponent">The Blazor component type this agent is attached to.</typeparam>
-    public abstract class FabrClientAgentProxy<TComponent> : IFabrClientAgentProxy
+    public abstract class FabrCoreClientAgentProxy<TComponent> : IFabrCoreClientAgentProxy
         where TComponent : ComponentBase
     {
-        private static readonly ActivitySource ActivitySource = new("Fabr.Client.FabrClientAgentProxy");
-        private static readonly Meter Meter = new("Fabr.Client.FabrClientAgentProxy");
+        private static readonly ActivitySource ActivitySource = new("FabrCore.Client.FabrCoreClientAgentProxy");
+        private static readonly Meter Meter = new("FabrCore.Client.FabrCoreClientAgentProxy");
 
         private static readonly Counter<long> AgentInitializedCounter = Meter.CreateCounter<long>(
-            "fabr.client.agent_proxy.initialized",
+            "fabrcore.client.agent_proxy.initialized",
             description: "Number of client agent proxies initialized");
 
         private static readonly Counter<long> MessagesProcessedCounter = Meter.CreateCounter<long>(
-            "fabr.client.agent_proxy.messages.processed",
+            "fabrcore.client.agent_proxy.messages.processed",
             description: "Number of messages processed by client agent proxy");
 
         private static readonly Histogram<double> MessageProcessingDuration = Meter.CreateHistogram<double>(
-            "fabr.client.agent_proxy.message.duration",
+            "fabrcore.client.agent_proxy.message.duration",
             unit: "ms",
             description: "Duration of client agent proxy message processing");
 
         private static readonly Counter<long> ErrorCounter = Meter.CreateCounter<long>(
-            "fabr.client.agent_proxy.errors",
+            "fabrcore.client.agent_proxy.errors",
             description: "Number of errors encountered in client agent proxy");
 
         private readonly IClientContextFactory _clientContextFactory;
@@ -44,7 +44,7 @@ namespace Fabr.Client
         protected readonly IServiceProvider serviceProvider;
         protected readonly ILoggerFactory loggerFactory;
         protected readonly ILogger logger;
-        protected readonly IFabrHostApiClient fabrHostApiClient;
+        protected readonly IFabrCoreHostApiClient fabrcoreHostApiClient;
 
         /// <summary>
         /// Gets the component this agent is attached to.
@@ -67,19 +67,19 @@ namespace Fabr.Client
         /// </summary>
         public bool IsInitialized => _initialized;
 
-        protected FabrClientAgentProxy(
+        protected FabrCoreClientAgentProxy(
             TComponent component,
             IClientContextFactory clientContextFactory,
             string handle,
             IServiceProvider serviceProvider,
-            IFabrHostApiClient fabrHostApiClient,
+            IFabrCoreHostApiClient fabrcoreHostApiClient,
             ILoggerFactory loggerFactory)
         {
             Component = component ?? throw new ArgumentNullException(nameof(component));
             _clientContextFactory = clientContextFactory ?? throw new ArgumentNullException(nameof(clientContextFactory));
             _handle = handle ?? throw new ArgumentNullException(nameof(handle));
             this.serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
-            this.fabrHostApiClient = fabrHostApiClient ?? throw new ArgumentNullException(nameof(fabrHostApiClient));
+            this.fabrcoreHostApiClient = fabrcoreHostApiClient ?? throw new ArgumentNullException(nameof(fabrcoreHostApiClient));
             this.loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
             this.logger = loggerFactory.CreateLogger(GetType());
         }
@@ -91,14 +91,14 @@ namespace Fabr.Client
         {
             if (_initialized)
             {
-                logger.LogDebug("FabrClientAgentProxy already initialized - Handle: {Handle}", Handle);
+                logger.LogDebug("FabrCoreClientAgentProxy already initialized - Handle: {Handle}", Handle);
                 return;
             }
 
             using var activity = ActivitySource.StartActivity("InitializeAsync", ActivityKind.Internal);
             activity?.SetTag("agent.handle", Handle);
 
-            logger.LogInformation("Initializing FabrClientAgentProxy - Handle: {Handle}, ProxyType: {ProxyType}",
+            logger.LogInformation("Initializing FabrCoreClientAgentProxy - Handle: {Handle}, ProxyType: {ProxyType}",
                 Handle, GetType().Name);
 
             try
@@ -123,13 +123,13 @@ namespace Fabr.Client
                 AgentInitializedCounter.Add(1,
                     new KeyValuePair<string, object?>("agent.handle", Handle));
 
-                logger.LogInformation("FabrClientAgentProxy initialized successfully - Handle: {Handle}, ProxyType: {ProxyType}",
+                logger.LogInformation("FabrCoreClientAgentProxy initialized successfully - Handle: {Handle}, ProxyType: {ProxyType}",
                     Handle, GetType().Name);
                 activity?.SetStatus(ActivityStatusCode.Ok);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to initialize FabrClientAgentProxy - Handle: {Handle}, ProxyType: {ProxyType}, ExceptionType: {ExceptionType}",
+                logger.LogError(ex, "Failed to initialize FabrCoreClientAgentProxy - Handle: {Handle}, ProxyType: {ProxyType}, ExceptionType: {ExceptionType}",
                     Handle, GetType().Name, ex.GetType().Name);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
@@ -328,7 +328,7 @@ namespace Fabr.Client
                 _clientContext.AgentMessageReceived -= OnAgentMessageReceived;
             }
 
-            logger.LogInformation("FabrClientAgentProxy disposed - Handle: {Handle}", Handle);
+            logger.LogInformation("FabrCoreClientAgentProxy disposed - Handle: {Handle}", Handle);
             activity?.SetStatus(ActivityStatusCode.Ok);
 
             GC.SuppressFinalize(this);

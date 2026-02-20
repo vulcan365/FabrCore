@@ -1,15 +1,15 @@
-using Fabr.Core;
-using Fabr.Core.Interfaces;
+using FabrCore.Core;
+using FabrCore.Core.Interfaces;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry.Trace;
 using Orleans;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 
-namespace Fabr.Client
+namespace FabrCore.Client
 {
     /// <summary>
-    /// Thread-safe client context for communicating with the Fabr agent cluster.
+    /// Thread-safe client context for communicating with the FabrCore agent cluster.
     /// Each context is immutably bound to a specific handle (user/client identifier).
     /// </summary>
     /// <remarks>
@@ -24,37 +24,37 @@ namespace Fabr.Client
     /// </remarks>
     public sealed class ClientContext : IClientContext, IClientGrainObserver
     {
-        private static readonly ActivitySource ActivitySource = new("Fabr.Client.ClientContext");
-        private static readonly Meter Meter = new("Fabr.Client.ClientContext");
+        private static readonly ActivitySource ActivitySource = new("FabrCore.Client.ClientContext");
+        private static readonly Meter Meter = new("FabrCore.Client.ClientContext");
 
         // Metrics
         private static readonly Counter<long> ClientsConnectedCounter = Meter.CreateCounter<long>(
-            "fabr.client.context.connected",
+            "fabrcore.client.context.connected",
             description: "Number of client contexts connected");
 
         private static readonly Counter<long> ClientsDisconnectedCounter = Meter.CreateCounter<long>(
-            "fabr.client.context.disconnected",
+            "fabrcore.client.context.disconnected",
             description: "Number of client contexts disconnected");
 
         private static readonly Counter<long> MessagesProcessedCounter = Meter.CreateCounter<long>(
-            "fabr.client.context.messages.processed",
+            "fabrcore.client.context.messages.processed",
             description: "Number of messages processed by client context");
 
         private static readonly Histogram<double> MessageProcessingDuration = Meter.CreateHistogram<double>(
-            "fabr.client.context.message.duration",
+            "fabrcore.client.context.message.duration",
             unit: "ms",
             description: "Duration of client context message processing");
 
         private static readonly Counter<long> MessagesReceivedCounter = Meter.CreateCounter<long>(
-            "fabr.client.context.messages.received",
+            "fabrcore.client.context.messages.received",
             description: "Number of messages received by observer");
 
         private static readonly Counter<long> AgentsCreatedCounter = Meter.CreateCounter<long>(
-            "fabr.client.context.agents.created",
+            "fabrcore.client.context.agents.created",
             description: "Number of agents created by client context");
 
         private static readonly Counter<long> ErrorCounter = Meter.CreateCounter<long>(
-            "fabr.client.context.errors",
+            "fabrcore.client.context.errors",
             description: "Number of errors encountered in client context");
 
         private readonly IClusterClient _clusterClient;

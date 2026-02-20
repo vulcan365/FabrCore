@@ -1,5 +1,5 @@
-using Fabr.Core;
-using Fabr.Core.Interfaces;
+using FabrCore.Core;
+using FabrCore.Core.Interfaces;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry.Trace;
 using Orleans;
@@ -9,7 +9,7 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 
-namespace Fabr.Host.WebSocket
+namespace FabrCore.Host.WebSocket
 {
     /// <summary>
     /// WebSocket session that wraps ClientGrain similar to how ClientContext works.
@@ -17,32 +17,32 @@ namespace Fabr.Host.WebSocket
     /// </summary>
     public class WebSocketSession : IClientGrainObserver, IAsyncDisposable
     {
-        private static readonly ActivitySource ActivitySource = new("Fabr.Host.WebSocketSession");
-        private static readonly Meter Meter = new("Fabr.Host.WebSocketSession");
+        private static readonly ActivitySource ActivitySource = new("FabrCore.Host.WebSocketSession");
+        private static readonly Meter Meter = new("FabrCore.Host.WebSocketSession");
 
         // Metrics
         private static readonly Counter<long> SessionsCreatedCounter = Meter.CreateCounter<long>(
-            "fabr.websocket.sessions.created",
+            "fabrcore.websocket.sessions.created",
             description: "Number of WebSocket sessions created");
 
         private static readonly Counter<long> SessionsClosedCounter = Meter.CreateCounter<long>(
-            "fabr.websocket.sessions.closed",
+            "fabrcore.websocket.sessions.closed",
             description: "Number of WebSocket sessions closed");
 
         private static readonly Counter<long> MessagesReceivedCounter = Meter.CreateCounter<long>(
-            "fabr.websocket.messages.received",
+            "fabrcore.websocket.messages.received",
             description: "Number of messages received from WebSocket");
 
         private static readonly Counter<long> MessagesSentCounter = Meter.CreateCounter<long>(
-            "fabr.websocket.messages.sent",
+            "fabrcore.websocket.messages.sent",
             description: "Number of messages sent to WebSocket");
 
         private static readonly Counter<long> CommandsProcessedCounter = Meter.CreateCounter<long>(
-            "fabr.websocket.commands.processed",
+            "fabrcore.websocket.commands.processed",
             description: "Number of commands processed");
 
         private static readonly Counter<long> ErrorCounter = Meter.CreateCounter<long>(
-            "fabr.websocket.errors",
+            "fabrcore.websocket.errors",
             description: "Number of errors encountered");
 
         private readonly System.Net.WebSockets.WebSocket webSocket;

@@ -1,6 +1,6 @@
 ﻿using Orleans;
 
-namespace Fabr.Core
+namespace FabrCore.Core
 {
     /// <summary>
     /// Indicates the kind of message being sent.

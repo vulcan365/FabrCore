@@ -1,10 +1,10 @@
-using Fabr.Core;
-using Fabr.Core.Interfaces;
+using FabrCore.Core;
+using FabrCore.Core.Interfaces;
 using Microsoft.Extensions.Logging;
 using Orleans;
 using Orleans.Runtime;
 
-namespace Fabr.Host.Grains
+namespace FabrCore.Host.Grains
 {
     public class AgentManagementGrain : Grain, IAgentManagementGrain
     {
@@ -12,7 +12,7 @@ namespace Fabr.Host.Grains
         private readonly ILogger<AgentManagementGrain> _logger;
 
         public AgentManagementGrain(
-            [PersistentState("agentRegistry", "fabrStorage")]
+            [PersistentState("agentRegistry", "fabrcoreStorage")]
             IPersistentState<Dictionary<string, AgentInfo>> state,
             ILogger<AgentManagementGrain> logger)
         {

@@ -1,9 +1,9 @@
-using Fabr.Core;
+using FabrCore.Core;
 
-namespace Fabr.Client
+namespace FabrCore.Client
 {
     /// <summary>
-    /// Represents a client context for communicating with the Fabr agent cluster.
+    /// Represents a client context for communicating with the FabrCore agent cluster.
     /// Each context is bound to a specific handle (user/client identifier) and is immutable after creation.
     /// </summary>
     /// <remarks>

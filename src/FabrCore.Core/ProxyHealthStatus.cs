@@ -1,9 +1,9 @@
 using Orleans;
 
-namespace Fabr.Core
+namespace FabrCore.Core
 {
     /// <summary>
-    /// Health status information from the FabrAgentProxy.
+    /// Health status information from the FabrCoreAgentProxy.
     /// </summary>
     [GenerateSerializer]
     public record ProxyHealthStatus

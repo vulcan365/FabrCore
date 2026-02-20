@@ -1,9 +1,9 @@
-using Fabr.Core;
-using Fabr.Core.Streaming;
+using FabrCore.Core;
+using FabrCore.Core.Streaming;
 using Orleans;
 using Orleans.Streams;
 
-namespace Fabr.Host.Streaming
+namespace FabrCore.Host.Streaming
 {
     /// <summary>
     /// Factory and extension methods for creating Orleans streams with consistent naming.

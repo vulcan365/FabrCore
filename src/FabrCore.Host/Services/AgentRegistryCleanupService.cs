@@ -1,9 +1,9 @@
-using Fabr.Core.Interfaces;
+using FabrCore.Core.Interfaces;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Orleans;
 
-namespace Fabr.Host.Services
+namespace FabrCore.Host.Services
 {
     public class AgentRegistryCleanupService : BackgroundService
     {

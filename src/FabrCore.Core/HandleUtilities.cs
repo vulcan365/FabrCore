@@ -1,4 +1,4 @@
-namespace Fabr.Core
+namespace FabrCore.Core
 {
     /// <summary>
     /// Utility methods for agent handle normalization.

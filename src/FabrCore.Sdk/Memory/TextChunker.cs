@@ -1,4 +1,4 @@
-namespace Fabr.Sdk.Memory;
+namespace FabrCore.Sdk.Memory;
 
 /// <summary>
 /// Splits text into overlapping chunks by character count, respecting paragraph boundaries.

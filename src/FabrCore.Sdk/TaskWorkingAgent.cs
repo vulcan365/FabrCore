@@ -1,4 +1,4 @@
-using Fabr.Core;
+using FabrCore.Core;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -6,7 +6,7 @@ using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 
-namespace Fabr.Sdk;
+namespace FabrCore.Sdk;
 
 /// <summary>
 /// Agent that creates and refines task plans from conversations using two-phase extraction.

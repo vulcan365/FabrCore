@@ -1,5 +1,5 @@
 using Azure.AI.OpenAI;
-using Fabr.Core;
+using FabrCore.Core;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -10,9 +10,9 @@ using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Text.Json;
 
-namespace Fabr.Sdk
+namespace FabrCore.Sdk
 {
-    public interface IFabrChatClientService
+    public interface IFabrCoreChatClientService
     {
         Task<IChatClient> GetChatClient(string name, int networkTimeoutSeconds = 100);
 #pragma warning disable MEAI001 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
@@ -26,40 +26,40 @@ namespace Fabr.Sdk
         Task<ModelConfiguration> GetModelConfigurationAsync(string name);
     }
 
-    public class FabrChatClientService : IFabrChatClientService
+    public class FabrCoreChatClientService : IFabrCoreChatClientService
     {
-        private static readonly ActivitySource ActivitySource = new("Fabr.Sdk.ChatClientService");
-        private static readonly Meter Meter = new("Fabr.Sdk.ChatClientService");
+        private static readonly ActivitySource ActivitySource = new("FabrCore.Sdk.ChatClientService");
+        private static readonly Meter Meter = new("FabrCore.Sdk.ChatClientService");
 
         // Metrics
         private static readonly Counter<long> ChatClientsCreatedCounter = Meter.CreateCounter<long>(
-            "fabr.chat_client_service.chat_clients.created",
+            "fabrcore.chat_client_service.chat_clients.created",
             description: "Number of chat clients created");
 
         private static readonly Counter<long> ModelConfigFetchCounter = Meter.CreateCounter<long>(
-            "fabr.chat_client_service.model_config.fetched",
+            "fabrcore.chat_client_service.model_config.fetched",
             description: "Number of model configurations fetched");
 
         private static readonly Counter<long> ApiKeyFetchCounter = Meter.CreateCounter<long>(
-            "fabr.chat_client_service.api_key.fetched",
+            "fabrcore.chat_client_service.api_key.fetched",
             description: "Number of API keys fetched");
 
         private static readonly Counter<long> ErrorCounter = Meter.CreateCounter<long>(
-            "fabr.chat_client_service.errors",
+            "fabrcore.chat_client_service.errors",
             description: "Number of errors encountered in chat client service");
 
         private readonly IConfiguration _configuration;
         private readonly ILoggerFactory _loggerFactory;
-        private readonly ILogger<FabrChatClientService> _logger;
+        private readonly ILogger<FabrCoreChatClientService> _logger;
         private static readonly HttpClient _httpClient = new HttpClient();
 
-        public FabrChatClientService(IConfiguration configuration, ILoggerFactory loggerFactory)
+        public FabrCoreChatClientService(IConfiguration configuration, ILoggerFactory loggerFactory)
         {
             _configuration = configuration;
             _loggerFactory = loggerFactory;
-            _logger = loggerFactory.CreateLogger<FabrChatClientService>();
+            _logger = loggerFactory.CreateLogger<FabrCoreChatClientService>();
 
-            _logger.LogDebug("FabrChatClientService created");
+            _logger.LogDebug("FabrCoreChatClientService created");
         }
 
         public async Task<IChatClient> GetChatClient(string name, int networkTimeoutSeconds = 100)
@@ -358,8 +358,8 @@ namespace Fabr.Sdk
         private async Task<ModelConfiguration> GetModelConfiguration(string name)
         {
             using var activity = ActivitySource.StartActivity("GetModelConfiguration", ActivityKind.Client);
-            var baseUrl = _configuration["FabrHostUrl"] ?? "http://localhost:5000";
-            var url = $"{baseUrl}/fabrapi/ModelConfig/model/{name}";
+            var baseUrl = _configuration["FabrCoreHostUrl"] ?? "http://localhost:5000";
+            var url = $"{baseUrl}/fabrcoreapi/ModelConfig/model/{name}";
 
             activity?.SetTag("model.config.name", name);
             activity?.SetTag("http.url", url);
@@ -431,8 +431,8 @@ namespace Fabr.Sdk
         private async Task<string> GetApiKey(string alias)
         {
             using var activity = ActivitySource.StartActivity("GetApiKey", ActivityKind.Client);
-            var baseUrl = _configuration["FabrHostUrl"] ?? "http://localhost:5000";
-            var url = $"{baseUrl}/fabrapi/ModelConfig/apikey/{alias}";
+            var baseUrl = _configuration["FabrCoreHostUrl"] ?? "http://localhost:5000";
+            var url = $"{baseUrl}/fabrcoreapi/ModelConfig/apikey/{alias}";
 
             activity?.SetTag("api_key.alias", alias);
             activity?.SetTag("http.url", url);

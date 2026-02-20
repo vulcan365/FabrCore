@@ -6,8 +6,8 @@
 		<Nullable>enable</Nullable>
 	</PropertyGroup>
 	<PropertyGroup>
-		<Title>Fabr Core</Title>
-		<Description>Core interfaces and data models for the Fabr agent framework</Description>
+		<Title>FabrCore Core</Title>
+		<Description>Core interfaces and data models for the FabrCore agent framework</Description>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -16,15 +16,15 @@
 
 	<ItemGroup>
 		<AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
-			<_Parameter1>Fabr.Host</_Parameter1>
+			<_Parameter1>FabrCore.Host</_Parameter1>
 		</AssemblyAttribute>
 		
 		<AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
-			<_Parameter1>Fabr.Sdk</_Parameter1>
+			<_Parameter1>FabrCore.Sdk</_Parameter1>
 		</AssemblyAttribute>
 
 		<AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
-			<_Parameter1>Fabr.Client</_Parameter1>
+			<_Parameter1>FabrCore.Client</_Parameter1>
 		</AssemblyAttribute>
 	</ItemGroup>
 	

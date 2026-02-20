@@ -1,9 +1,9 @@
 ﻿using Azure.Data.Tables;
-using Fabr.Core;
-using Fabr.Core.Interfaces;
-using Fabr.Core.Streaming;
-using Fabr.Host.Streaming;
-using Fabr.Sdk;
+using FabrCore.Core;
+using FabrCore.Core.Interfaces;
+using FabrCore.Core.Streaming;
+using FabrCore.Host.Streaming;
+using FabrCore.Sdk;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry.Trace;
 using Orleans;
@@ -19,53 +19,53 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Fabr.Host.Grains
+namespace FabrCore.Host.Grains
 {
     internal class ClientGrain : Grain, IClientGrain
     {
-        private static readonly ActivitySource ActivitySource = new("Fabr.Host.ClientGrain");
-        private static readonly Meter Meter = new("Fabr.Host.ClientGrain");
+        private static readonly ActivitySource ActivitySource = new("FabrCore.Host.ClientGrain");
+        private static readonly Meter Meter = new("FabrCore.Host.ClientGrain");
 
         // Metrics
         private static readonly Counter<long> ClientActivatedCounter = Meter.CreateCounter<long>(
-            "fabr.client.activated",
+            "fabrcore.client.activated",
             description: "Number of clients activated");
 
         private static readonly Counter<long> MessagesProcessedCounter = Meter.CreateCounter<long>(
-            "fabr.client.messages.processed",
+            "fabrcore.client.messages.processed",
             description: "Number of messages processed by client");
 
         private static readonly Histogram<double> MessageProcessingDuration = Meter.CreateHistogram<double>(
-            "fabr.client.message.duration",
+            "fabrcore.client.message.duration",
             unit: "ms",
             description: "Duration of client message processing");
 
         private static readonly Counter<long> StreamMessagesCounter = Meter.CreateCounter<long>(
-            "fabr.client.stream.messages",
+            "fabrcore.client.stream.messages",
             description: "Number of stream messages received by client");
 
         private static readonly Counter<long> ObserverSubscriptionsCounter = Meter.CreateCounter<long>(
-            "fabr.client.observer.subscriptions",
+            "fabrcore.client.observer.subscriptions",
             description: "Number of observer subscriptions");
 
         private static readonly Counter<long> ObserverNotificationsCounter = Meter.CreateCounter<long>(
-            "fabr.client.observer.notifications",
+            "fabrcore.client.observer.notifications",
             description: "Number of observer notifications sent");
 
         private static readonly Counter<long> AgentsCreatedCounter = Meter.CreateCounter<long>(
-            "fabr.client.agents.created",
+            "fabrcore.client.agents.created",
             description: "Number of agents created by client");
 
         private static readonly Counter<long> ErrorCounter = Meter.CreateCounter<long>(
-            "fabr.client.errors",
+            "fabrcore.client.errors",
             description: "Number of errors encountered in client");
 
         private static readonly Counter<long> PendingMessagesQueuedCounter = Meter.CreateCounter<long>(
-            "fabr.client.pending.messages.queued",
+            "fabrcore.client.pending.messages.queued",
             description: "Number of messages queued while waiting for observers");
 
         private static readonly Counter<long> PendingMessagesFlushedCounter = Meter.CreateCounter<long>(
-            "fabr.client.pending.messages.flushed",
+            "fabrcore.client.pending.messages.flushed",
             description: "Number of pending messages flushed to observers");
 
         private static readonly TimeSpan PendingMessageMaxAge = TimeSpan.FromHours(1);
@@ -80,7 +80,7 @@ namespace Fabr.Host.Grains
         public ClientGrain(
             IClusterClient clusterClient,
             ILoggerFactory loggerFactory,
-            [PersistentState("clientState", "fabrStorage")]
+            [PersistentState("clientState", "fabrcoreStorage")]
             IPersistentState<ClientGrainState> state)
         {
             this.clusterClient = clusterClient;

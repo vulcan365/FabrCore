@@ -1,16 +1,16 @@
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Fabr.Sdk.Memory;
+namespace FabrCore.Sdk.Memory;
 
 /// <summary>
-/// Extension methods for registering Fabr memory services in DI.
+/// Extension methods for registering FabrCore memory services in DI.
 /// </summary>
 public static class MemoryServiceExtensions
 {
     /// <summary>
-    /// Adds Fabr memory services (IMemoryStore, IMemoryToolFactory) to the service collection.
+    /// Adds FabrCore memory services (IMemoryStore, IMemoryToolFactory) to the service collection.
     /// </summary>
-    public static IServiceCollection AddFabrMemory(this IServiceCollection services, Action<MemoryOptions> configure)
+    public static IServiceCollection AddFabrCoreMemory(this IServiceCollection services, Action<MemoryOptions> configure)
     {
         services.Configure(configure);
         services.AddSingleton<IMemoryStore, SqlServerMemoryStore>();

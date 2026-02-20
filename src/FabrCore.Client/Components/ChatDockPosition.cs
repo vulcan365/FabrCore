@@ -1,4 +1,4 @@
-namespace Fabr.Client.Components;
+namespace FabrCore.Client.Components;
 
 /// <summary>
 /// Specifies where the ChatDock panel appears on the screen.

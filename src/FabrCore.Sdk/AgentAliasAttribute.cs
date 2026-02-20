@@ -1,5 +1,5 @@
 ﻿
-namespace Fabr.Sdk
+namespace FabrCore.Sdk
 {
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
     public sealed class AgentAliasAttribute : Attribute

@@ -2,7 +2,7 @@ using Orleans;
 using Orleans.Concurrency;
 using System.Text.Json;
 
-namespace Fabr.Core.Interfaces
+namespace FabrCore.Core.Interfaces
 {
     internal interface IAgentGrain : IGrainWithStringKey
     {

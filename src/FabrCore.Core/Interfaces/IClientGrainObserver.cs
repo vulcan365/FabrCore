@@ -1,6 +1,6 @@
 using Orleans;
 
-namespace Fabr.Core.Interfaces
+namespace FabrCore.Core.Interfaces
 {
     public interface IClientGrainObserver : IGrainObserver
     {

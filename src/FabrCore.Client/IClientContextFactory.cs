@@ -1,4 +1,4 @@
-namespace Fabr.Client
+namespace FabrCore.Client
 {
     /// <summary>
     /// Factory for creating and managing IClientContext instances.

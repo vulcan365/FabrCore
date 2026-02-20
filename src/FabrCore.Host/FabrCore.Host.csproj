@@ -7,8 +7,8 @@
 	</PropertyGroup>
 
 	<PropertyGroup>
-		<Title>Fabr Host</Title>
-		<Description>Orleans server host for the Fabr agent framework</Description>
+		<Title>FabrCore Host</Title>
+		<Description>Orleans server host for the FabrCore agent framework</Description>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -37,8 +37,8 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\Fabr.Core\Fabr.Core.csproj" />
-		<ProjectReference Include="..\Fabr.Sdk\Fabr.Sdk.csproj" />
+		<ProjectReference Include="..\FabrCore.Core\FabrCore.Core.csproj" />
+		<ProjectReference Include="..\FabrCore.Sdk\FabrCore.Sdk.csproj" />
 	</ItemGroup>
 
 </Project>

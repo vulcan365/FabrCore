@@ -1,6 +1,6 @@
 using Orleans;
 
-namespace Fabr.Core
+namespace FabrCore.Core
 {
     /// <summary>
     /// Persistent state for ClientGrain containing tracked agents and pending messages.

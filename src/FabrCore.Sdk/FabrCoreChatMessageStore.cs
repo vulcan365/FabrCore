@@ -2,9 +2,9 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
-using Fabr.Core;
+using FabrCore.Core;
 
-namespace Fabr.Sdk
+namespace FabrCore.Sdk
 {
     /// <summary>
     /// JSON serialization options for AIContent serialization.
@@ -25,16 +25,16 @@ namespace Fabr.Sdk
     /// A ChatHistoryProvider implementation that persists messages through Orleans grain state.
     /// Messages are buffered in memory until FlushAsync() is called.
     /// </summary>
-    public class FabrChatHistoryProvider : ChatHistoryProvider
+    public class FabrCoreChatHistoryProvider : ChatHistoryProvider
     {
-        private readonly IFabrAgentHost _agentHost;
+        private readonly IFabrCoreAgentHost _agentHost;
         private readonly string _threadId;
         private readonly List<StoredChatMessage> _pendingMessages = new();
         private List<StoredChatMessage>? _cachedMessages;
         private readonly object _syncLock = new();
         private readonly ILogger? _logger;
 
-        public FabrChatHistoryProvider(IFabrAgentHost agentHost, string threadId, ILogger? logger = null)
+        public FabrCoreChatHistoryProvider(IFabrCoreAgentHost agentHost, string threadId, ILogger? logger = null)
         {
             _agentHost = agentHost;
             _threadId = threadId;
@@ -42,15 +42,15 @@ namespace Fabr.Sdk
         }
 
         /// <summary>
-        /// Creates a FabrChatHistoryProvider from serialized state.
+        /// Creates a FabrCoreChatHistoryProvider from serialized state.
         /// Used for session resumption via ChatHistoryProviderFactory.
         /// </summary>
         /// <param name="agentHost">The agent host for persistence operations.</param>
         /// <param name="serializedState">Previously serialized state containing ThreadId.</param>
         /// <param name="jsonSerializerOptions">JSON serialization options.</param>
         /// <param name="logger">Optional logger for diagnostics.</param>
-        public FabrChatHistoryProvider(
-            IFabrAgentHost agentHost,
+        public FabrCoreChatHistoryProvider(
+            IFabrCoreAgentHost agentHost,
             JsonElement serializedState,
             JsonSerializerOptions? jsonSerializerOptions = null,
             ILogger? logger = null)
@@ -80,24 +80,24 @@ namespace Fabr.Sdk
         /// <param name="logger">Optional logger for diagnostics.</param>
         /// <returns>A factory function compatible with ChatHistoryProviderFactory.</returns>
         public static Func<ChatClientAgentOptions.ChatHistoryProviderFactoryContext, CancellationToken, ValueTask<ChatHistoryProvider>> CreateFactory(
-            IFabrAgentHost agentHost,
+            IFabrCoreAgentHost agentHost,
             string threadId,
             ILogger? logger = null)
         {
             return (ctx, ct) =>
             {
-                FabrChatHistoryProvider provider;
+                FabrCoreChatHistoryProvider provider;
 
                 // If we have serialized state, restore from it (session resumption)
                 if (ctx.SerializedState.ValueKind != JsonValueKind.Undefined &&
                     ctx.SerializedState.ValueKind != JsonValueKind.Null)
                 {
-                    provider = new FabrChatHistoryProvider(agentHost, ctx.SerializedState, ctx.JsonSerializerOptions, logger);
+                    provider = new FabrCoreChatHistoryProvider(agentHost, ctx.SerializedState, ctx.JsonSerializerOptions, logger);
                 }
                 else
                 {
                     // Create new provider with provided threadId
-                    provider = new FabrChatHistoryProvider(agentHost, threadId, logger);
+                    provider = new FabrCoreChatHistoryProvider(agentHost, threadId, logger);
                 }
 
                 // Register with agent host for tracking (enables auto-flush on deactivation)
@@ -330,13 +330,13 @@ namespace Fabr.Sdk
     }
 
     // Keep old name as alias for backward compatibility during migration
-    [Obsolete("Use FabrChatHistoryProvider instead")]
-    public class FabrChatMessageStore : FabrChatHistoryProvider
+    [Obsolete("Use FabrCoreChatHistoryProvider instead")]
+    public class FabrCoreChatMessageStore : FabrCoreChatHistoryProvider
     {
-        public FabrChatMessageStore(IFabrAgentHost agentHost, string threadId, ILogger? logger = null)
+        public FabrCoreChatMessageStore(IFabrCoreAgentHost agentHost, string threadId, ILogger? logger = null)
             : base(agentHost, threadId, logger) { }
 
-        public FabrChatMessageStore(IFabrAgentHost agentHost, JsonElement serializedState, JsonSerializerOptions? jsonSerializerOptions = null, ILogger? logger = null)
+        public FabrCoreChatMessageStore(IFabrCoreAgentHost agentHost, JsonElement serializedState, JsonSerializerOptions? jsonSerializerOptions = null, ILogger? logger = null)
             : base(agentHost, serializedState, jsonSerializerOptions, logger) { }
     }
 }

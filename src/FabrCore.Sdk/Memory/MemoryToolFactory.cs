@@ -3,7 +3,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Fabr.Sdk.Memory;
+namespace FabrCore.Sdk.Memory;
 
 /// <summary>
 /// Creates the agent-facing memory tools (search, write, get).

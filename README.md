@@ -1,11 +1,11 @@
-# Fabr
+# FabrCore
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![NuGet](https://img.shields.io/nuget/v/Fabr.Core.svg)](https://www.nuget.org/packages/Fabr.Core)
+[![NuGet](https://img.shields.io/nuget/v/FabrCore.Core.svg)](https://www.nuget.org/packages/FabrCore.Core)
 
 **An Orleans-based framework for building distributed AI agent systems in .NET.**
 
-Fabr provides the building blocks for creating, hosting, and connecting to AI agents that run as [Orleans](https://learn.microsoft.com/en-us/dotnet/orleans/) grains. Agents are durable, scalable, and communicate through a structured message-passing architecture.
+FabrCore provides the building blocks for creating, hosting, and connecting to AI agents that run as [Orleans](https://learn.microsoft.com/en-us/dotnet/orleans/) grains. Agents are durable, scalable, and communicate through a structured message-passing architecture.
 
 ## Architecture
 
@@ -13,15 +13,15 @@ Fabr provides the building blocks for creating, hosting, and connecting to AI ag
 ┌─────────────────────────────────────────────────┐
 │                  Your Application                │
 ├──────────────────┬──────────────────────────────┤
-│   Fabr.Client    │         Fabr.Host            │
+│   FabrCore.Client    │         FabrCore.Host            │
 │  ClientContext   │   AgentGrain (Orleans)       │
 │  ChatDock (UI)   │   API Controllers            │
 │                  │   WebSocket Middleware        │
 ├──────────────────┴──────────────────────────────┤
-│                   Fabr.Sdk                       │
-│  FabrAgentProxy · TaskWorkingAgent · ChatClient  │
+│                   FabrCore.Sdk                       │
+│  FabrCoreAgentProxy · TaskWorkingAgent · ChatClient  │
 ├─────────────────────────────────────────────────┤
-│                  Fabr.Core                        │
+│                  FabrCore.Core                        │
 │  Interfaces · Data Models · Grain Abstractions   │
 └─────────────────────────────────────────────────┘
 ```
@@ -30,29 +30,29 @@ Fabr provides the building blocks for creating, hosting, and connecting to AI ag
 
 | Package | Description |
 |---------|-------------|
-| **Fabr.Core** | Core interfaces and data models for the Fabr agent framework |
-| **Fabr.Sdk** | SDK for building AI agents — `FabrAgentProxy`, `TaskWorkingAgent`, chat client extensions |
-| **Fabr.Host** | Orleans server host — grains, API controllers, WebSocket middleware, streaming |
-| **Fabr.Client** | Client library — `ClientContext`, `ChatDock` Blazor component |
+| **FabrCore.Core** | Core interfaces and data models for the FabrCore agent framework |
+| **FabrCore.Sdk** | SDK for building AI agents — `FabrCoreAgentProxy`, `TaskWorkingAgent`, chat client extensions |
+| **FabrCore.Host** | Orleans server host — grains, API controllers, WebSocket middleware, streaming |
+| **FabrCore.Client** | Client library — `ClientContext`, `ChatDock` Blazor component |
 
 ## Quick Start
 
 ### 1. Install packages
 
 ```bash
-dotnet add package Fabr.Host
+dotnet add package FabrCore.Host
 ```
 
-`Fabr.Host` pulls in `Fabr.Sdk` and `Fabr.Core` transitively. For client applications, add `Fabr.Client` instead.
+`FabrCore.Host` pulls in `FabrCore.Sdk` and `FabrCore.Core` transitively. For client applications, add `FabrCore.Client` instead.
 
 ### 2. Create an agent
 
 ```csharp
-using Fabr.Sdk;
-using Fabr.Core;
+using FabrCore.Sdk;
+using FabrCore.Core;
 
 [AgentAlias("my-assistant")]
-public class MyAssistantAgent : FabrAgentProxy
+public class MyAssistantAgent : FabrCoreAgentProxy
 {
     public override async Task<AgentMessage> OnMessage(AgentMessage message)
     {
@@ -73,17 +73,17 @@ public class MyAssistantAgent : FabrAgentProxy
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
 
-// Configure Fabr with Orleans
-builder.AddFabrServer();
+// Configure FabrCore with Orleans
+builder.AddFabrCoreServer();
 
 var app = builder.Build();
-app.UseFabrServer();
+app.UseFabrCoreServer();
 app.Run();
 ```
 
 ### 4. Configure model access
 
-Copy `fabr.json.example` to `fabr.json` in your project root and fill in your API keys:
+Copy `fabrcore.json.example` to `fabrcore.json` in your project root and fill in your API keys:
 
 ```json
 {
@@ -105,13 +105,13 @@ Copy `fabr.json.example` to `fabr.json` in your project root and fill in your AP
 }
 ```
 
-> **Note:** `fabr.json` is gitignored by default to prevent accidental secret commits.
+> **Note:** `fabrcore.json` is gitignored by default to prevent accidental secret commits.
 
 ## Configuration
 
 ### Orleans Clustering
 
-Fabr supports multiple Orleans clustering providers out of the box:
+FabrCore supports multiple Orleans clustering providers out of the box:
 
 - **Azure Storage** — `Microsoft.Orleans.Clustering.AzureStorage`
 - **SQL Server (ADO.NET)** — `Microsoft.Orleans.Clustering.AdoNet`
@@ -121,16 +121,16 @@ Configure clustering through standard Orleans configuration in your host's `apps
 
 ### WebSocket API
 
-Fabr includes WebSocket middleware for real-time agent communication. See the [WebSocket documentation](src/Fabr.Host/WebSocket/README.md) for protocol details and usage.
+FabrCore includes WebSocket middleware for real-time agent communication. See the [WebSocket documentation](src/FabrCore.Host/WebSocket/README.md) for protocol details and usage.
 
 ### Client Library
 
-The `Fabr.Client` package provides `ClientContext` for connecting to agents and a `ChatDock` Blazor component for building chat UIs. See the [Client documentation](src/Fabr.Client/README.md) for details.
+The `FabrCore.Client` package provides `ClientContext` for connecting to agents and a `ChatDock` Blazor component for building chat UIs. See the [Client documentation](src/FabrCore.Client/README.md) for details.
 
 ## Building from Source
 
 ```bash
-dotnet build src/Fabr.sln
+dotnet build src/FabrCore.sln
 ```
 
 ## License
@@ -141,4 +141,4 @@ See [NOTICE](NOTICE) for attribution requirements.
 
 ## Contributing
 
-Contributions are welcome! Please open an issue or pull request on [GitHub](https://github.com/vulcan365/Fabr).
+Contributions are welcome! Please open an issue or pull request on [GitHub](https://github.com/vulcan365/FabrCore).

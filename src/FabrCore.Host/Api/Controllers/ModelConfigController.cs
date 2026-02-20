@@ -1,13 +1,13 @@
-using Fabr.Core;
+using FabrCore.Core;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
-namespace Fabr.Host.Api.Controllers
+namespace FabrCore.Host.Api.Controllers
 {
     [ApiController]
-    [Route("fabrapi/[controller]")]
+    [Route("fabrcoreapi/[controller]")]
     public class ModelConfigController : Controller
     {
         private readonly ILogger<ModelConfigController> logger;
@@ -16,7 +16,7 @@ namespace Fabr.Host.Api.Controllers
         public ModelConfigController(ILogger<ModelConfigController> logger, IWebHostEnvironment env)
         {
             this.logger = logger;
-            this.configFilePath = Path.Combine(env.ContentRootPath, "fabr.json");
+            this.configFilePath = Path.Combine(env.ContentRootPath, "fabrcore.json");
         }
 
         [HttpGet("model/{name}")]
@@ -73,21 +73,21 @@ namespace Fabr.Host.Api.Controllers
             }
         }
 
-        private async Task<FabrConfiguration> LoadConfiguration()
+        private async Task<FabrCoreConfiguration> LoadConfiguration()
         {
             if (!System.IO.File.Exists(configFilePath))
             {
                 logger.LogWarning("Configuration file {Path} not found. Creating default configuration.", configFilePath);
-                var defaultConfig = new FabrConfiguration();
+                var defaultConfig = new FabrCoreConfiguration();
                 await SaveConfiguration(defaultConfig);
                 return defaultConfig;
             }
 
             var json = await System.IO.File.ReadAllTextAsync(configFilePath);
-            return JsonSerializer.Deserialize<FabrConfiguration>(json) ?? new FabrConfiguration();
+            return JsonSerializer.Deserialize<FabrCoreConfiguration>(json) ?? new FabrCoreConfiguration();
         }
 
-        private async Task SaveConfiguration(FabrConfiguration config)
+        private async Task SaveConfiguration(FabrCoreConfiguration config)
         {
             var json = JsonSerializer.Serialize(config, new JsonSerializerOptions 
             { 

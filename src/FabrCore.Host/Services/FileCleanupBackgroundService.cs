@@ -3,7 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Fabr.Host.Services
+namespace FabrCore.Host.Services
 {
     public class FileCleanupBackgroundService : BackgroundService
     {

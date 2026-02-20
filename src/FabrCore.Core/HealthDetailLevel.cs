@@ -1,6 +1,6 @@
 using Orleans;
 
-namespace Fabr.Core
+namespace FabrCore.Core
 {
     /// <summary>
     /// Specifies the level of detail to include in health status responses.

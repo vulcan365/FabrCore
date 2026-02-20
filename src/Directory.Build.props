@@ -5,9 +5,9 @@
     <Company>Vulcan365 LLC</Company>
     <Copyright>Copyright (c) 2025 Vulcan365 LLC</Copyright>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/vulcan365/Fabr</RepositoryUrl>
+    <RepositoryUrl>https://github.com/vulcan365/FabrCore</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageProjectUrl>https://github.com/vulcan365/Fabr</PackageProjectUrl>
+    <PackageProjectUrl>https://github.com/vulcan365/FabrCore</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>

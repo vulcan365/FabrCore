@@ -1,9 +1,9 @@
-using Fabr.Core;
+using FabrCore.Core;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using System.Text.Json;
 
-namespace Fabr.Sdk
+namespace FabrCore.Sdk
 {
 
     public class A2AAgentSession : InMemoryAgentSession
@@ -15,12 +15,12 @@ namespace Fabr.Sdk
 
     public class A2AAgentProxy : AIAgent
     {
-        private readonly IFabrAgentHost fabrAgentHost;
+        private readonly IFabrCoreAgentHost fabrcoreAgentHost;
         private readonly string handle;
 
-        public A2AAgentProxy(IFabrAgentHost fabrAgentHost, string handle)
+        public A2AAgentProxy(IFabrCoreAgentHost fabrcoreAgentHost, string handle)
         {
-            this.fabrAgentHost = fabrAgentHost;
+            this.fabrcoreAgentHost = fabrcoreAgentHost;
             this.handle = handle;
         }
 
@@ -43,7 +43,7 @@ namespace Fabr.Sdk
                 ToHandle = handle,
                 Message = string.Join("\r\n", messages.Select(m => m.Text))
             };
-            var response = await fabrAgentHost.SendAndReceiveMessage(message);
+            var response = await fabrcoreAgentHost.SendAndReceiveMessage(message);
             var responseMessages = new List<ChatMessage>();
             responseMessages.Add(new ChatMessage(ChatRole.Assistant, response.Message));
 
@@ -62,7 +62,7 @@ namespace Fabr.Sdk
                     ToHandle = handle,
                     Message = string.Join("\r\n", messages.Select(m => m.Text))
                 };
-                var response = await fabrAgentHost.SendAndReceiveMessage(message);
+                var response = await fabrcoreAgentHost.SendAndReceiveMessage(message);
                 var update = new AgentResponseUpdate(ChatRole.Assistant, response.Message);
                 yield return update;
             }

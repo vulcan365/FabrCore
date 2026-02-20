@@ -1,7 +1,7 @@
-using Fabr.Core.Streaming;
-using Fabr.Host.Configuration;
-using Fabr.Host.Services;
-using Fabr.Sdk;
+using FabrCore.Core.Streaming;
+using FabrCore.Host.Configuration;
+using FabrCore.Host.Services;
+using FabrCore.Sdk;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,54 +13,54 @@ using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Reflection;
 
-namespace Fabr.Host
+namespace FabrCore.Host
 {
 
-    public class FabrServerOptions
+    public class FabrCoreServerOptions
     {
         public List<Assembly> AdditionalAssemblies { get; set; } = new();
     }
 
     /// <summary>
-    /// Obsolete alias for FabrServerOptions. Use FabrServerOptions instead.
+    /// Obsolete alias for FabrCoreServerOptions. Use FabrCoreServerOptions instead.
     /// </summary>
-    [Obsolete("Use FabrServerOptions instead.")]
-    public class StandaloneServerOptions : FabrServerOptions { }
+    [Obsolete("Use FabrCoreServerOptions instead.")]
+    public class StandaloneServerOptions : FabrCoreServerOptions { }
 
-    public static class FabrHostExtensions
+    public static class FabrCoreHostExtensions
     {
-        private static readonly ActivitySource ActivitySource = new("Fabr.Host.Extensions");
-        private static readonly Meter Meter = new("Fabr.Host.Extensions");
+        private static readonly ActivitySource ActivitySource = new("FabrCore.Host.Extensions");
+        private static readonly Meter Meter = new("FabrCore.Host.Extensions");
 
         // Metrics
         private static readonly Counter<long> ServerConfiguredCounter = Meter.CreateCounter<long>(
-            "fabr.host.server.configured",
+            "fabrcore.host.server.configured",
             description: "Number of standalone servers configured");
 
         private static readonly Counter<long> AssembliesLoadedCounter = Meter.CreateCounter<long>(
-            "fabr.host.assemblies.loaded",
+            "fabrcore.host.assemblies.loaded",
             description: "Number of additional assemblies loaded");
 
         private static readonly Counter<long> ErrorCounter = Meter.CreateCounter<long>(
-            "fabr.host.errors",
+            "fabrcore.host.errors",
             description: "Number of errors encountered in host extensions");
 
-        public static WebApplication UseFabrServer(this WebApplication app, FabrServerOptions? options = null)
+        public static WebApplication UseFabrCoreServer(this WebApplication app, FabrCoreServerOptions? options = null)
         {
-            using var activity = ActivitySource.StartActivity("UseFabrServer", ActivityKind.Internal);
+            using var activity = ActivitySource.StartActivity("UseFabrCoreServer", ActivityKind.Internal);
             var logger = app.Services.GetRequiredService<ILogger<WebApplication>>();
 
             activity?.SetTag("options.has_additional_assemblies", options?.AdditionalAssemblies?.Count > 0);
             activity?.SetTag("options.assembly_count", options?.AdditionalAssemblies?.Count ?? 0);
 
-            logger.LogInformation("Configuring Fabr server");
+            logger.LogInformation("Configuring FabrCore server");
             logger.LogDebug("Additional assemblies count: {AssemblyCount}", options?.AdditionalAssemblies?.Count ?? 0);
 
             try
             {
-                // Map Fabr API controllers
+                // Map FabrCore API controllers
                 app.MapControllers();
-                logger.LogInformation("Fabr API controllers mapped");
+                logger.LogInformation("FabrCore API controllers mapped");
 
                 // Enable WebSocket support with specific options
                 var webSocketOptions = new WebSocketOptions
@@ -71,16 +71,16 @@ namespace Fabr.Host
                 logger.LogInformation("WebSocket support enabled");
 
                 // Add WebSocket middleware - this will only handle /ws path
-                app.UseMiddleware<Fabr.Host.WebSocket.WebSocketMiddleware>();
+                app.UseMiddleware<FabrCore.Host.WebSocket.WebSocketMiddleware>();
                 logger.LogInformation("WebSocket middleware added");
 
-                logger.LogInformation("Fabr server configured successfully");
+                logger.LogInformation("FabrCore server configured successfully");
                 activity?.SetStatus(ActivityStatusCode.Ok);
                 return app;
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error configuring Fabr server");
+                logger.LogError(ex, "Error configuring FabrCore server");
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
                 ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "server_configuration_failed"));
@@ -89,16 +89,16 @@ namespace Fabr.Host
         }
 
         /// <summary>
-        /// Obsolete alias for UseFabrServer. Use UseFabrServer instead.
+        /// Obsolete alias for UseFabrCoreServer. Use UseFabrCoreServer instead.
         /// </summary>
-        [Obsolete("Use UseFabrServer instead.")]
-        public static WebApplication UseFabrStandaloneServer(this WebApplication app, FabrServerOptions? options = null)
-            => UseFabrServer(app, options);
+        [Obsolete("Use UseFabrCoreServer instead.")]
+        public static WebApplication UseFabrCoreStandaloneServer(this WebApplication app, FabrCoreServerOptions? options = null)
+            => UseFabrCoreServer(app, options);
 
-        public static WebApplicationBuilder AddFabrServer(this WebApplicationBuilder builder, FabrServerOptions? options = null)
+        public static WebApplicationBuilder AddFabrCoreServer(this WebApplicationBuilder builder, FabrCoreServerOptions? options = null)
         {
-            using var activity = ActivitySource.StartActivity("AddFabrServer", ActivityKind.Internal);
-            options ??= new FabrServerOptions();
+            using var activity = ActivitySource.StartActivity("AddFabrCoreServer", ActivityKind.Internal);
+            options ??= new FabrCoreServerOptions();
 
             activity?.SetTag("options.assembly_count", options.AdditionalAssemblies.Count);
             activity?.SetTag("environment", builder.Environment.EnvironmentName);
@@ -108,9 +108,9 @@ namespace Fabr.Host
             {
                 loggingBuilder.AddConsole();
             });
-            var logger = loggerFactory.CreateLogger("Fabr.Host.Extensions");
+            var logger = loggerFactory.CreateLogger("FabrCore.Host.Extensions");
 
-            logger.LogInformation("Adding Fabr server - Environment: {Environment}", builder.Environment.EnvironmentName);
+            logger.LogInformation("Adding FabrCore server - Environment: {Environment}", builder.Environment.EnvironmentName);
             logger.LogDebug("Additional assemblies to load: {AssemblyCount}", options.AdditionalAssemblies.Count);
 
             try
@@ -119,17 +119,17 @@ namespace Fabr.Host
                 logger.LogDebug("HttpContextAccessor added");
 
                 builder.Services.AddControllers()
-                    .AddApplicationPart(typeof(FabrServerOptions).Assembly);
-                logger.LogDebug("Fabr API controllers registered");
+                    .AddApplicationPart(typeof(FabrCoreServerOptions).Assembly);
+                logger.LogDebug("FabrCore API controllers registered");
 
-                builder.Services.AddSingleton<Fabr.Sdk.IFabrChatClientService, Fabr.Sdk.FabrChatClientService>();
-                logger.LogDebug("FabrChatClientService added");
+                builder.Services.AddSingleton<FabrCore.Sdk.IFabrCoreChatClientService, FabrCore.Sdk.FabrCoreChatClientService>();
+                logger.LogDebug("FabrCoreChatClientService added");
 
-                builder.Services.AddSingleton<Fabr.Sdk.FabrToolRegistry>();
-                logger.LogDebug("FabrToolRegistry added");
+                builder.Services.AddSingleton<FabrCore.Sdk.FabrCoreToolRegistry>();
+                logger.LogDebug("FabrCoreToolRegistry added");
 
-                builder.Services.AddSingleton<Fabr.Sdk.IFabrRegistry, Fabr.Sdk.FabrRegistry>();
-                logger.LogDebug("FabrRegistry added");
+                builder.Services.AddSingleton<FabrCore.Sdk.IFabrCoreRegistry, FabrCore.Sdk.FabrCoreRegistry>();
+                logger.LogDebug("FabrCoreRegistry added");
 
                 // Configure Embeddings
                 builder.Services.AddTransient<IEmbeddings, Embeddings>();
@@ -214,14 +214,14 @@ namespace Fabr.Host
                     new KeyValuePair<string, object?>("environment", builder.Environment.EnvironmentName),
                     new KeyValuePair<string, object?>("assemblies.count", options.AdditionalAssemblies.Count));
 
-                logger.LogInformation("Fabr server added successfully");
+                logger.LogInformation("FabrCore server added successfully");
                 activity?.SetStatus(ActivityStatusCode.Ok);
 
                 return builder;
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error adding Fabr server");
+                logger.LogError(ex, "Error adding FabrCore server");
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
                 ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "server_add_failed"));
@@ -230,11 +230,11 @@ namespace Fabr.Host
         }
 
         /// <summary>
-        /// Obsolete alias for AddFabrServer. Use AddFabrServer instead.
+        /// Obsolete alias for AddFabrCoreServer. Use AddFabrCoreServer instead.
         /// </summary>
-        [Obsolete("Use AddFabrServer instead.")]
-        public static WebApplicationBuilder AddFabrStandaloneServer(this WebApplicationBuilder builder, FabrServerOptions? options = null)
-            => AddFabrServer(builder, options);
+        [Obsolete("Use AddFabrCoreServer instead.")]
+        public static WebApplicationBuilder AddFabrCoreStandaloneServer(this WebApplicationBuilder builder, FabrCoreServerOptions? options = null)
+            => AddFabrCoreServer(builder, options);
 
         /// <summary>
         /// Configures Orleans clustering based on the specified mode.
@@ -305,7 +305,7 @@ namespace Fabr.Host
                         throw new InvalidOperationException("Orleans:ConnectionString or Orleans:StorageConnectionString is required when using SqlServer clustering mode.");
                     }
 
-                    siloBuilder.AddAdoNetGrainStorage("fabrStorage", storage =>
+                    siloBuilder.AddAdoNetGrainStorage("fabrcoreStorage", storage =>
                     {
                         storage.Invariant = "Microsoft.Data.SqlClient";
                         storage.ConnectionString = storageConnectionString;
@@ -324,7 +324,7 @@ namespace Fabr.Host
                         throw new InvalidOperationException("Orleans:ConnectionString or Orleans:StorageConnectionString is required when using AzureStorage clustering mode.");
                     }
 
-                    siloBuilder.AddAzureTableGrainStorage("fabrStorage", storage =>
+                    siloBuilder.AddAzureTableGrainStorage("fabrcoreStorage", storage =>
                     {
                         storage.ConfigureTableServiceClient(storageConnectionString);
                     });
@@ -337,7 +337,7 @@ namespace Fabr.Host
 
                 case ClusteringMode.Localhost:
                 default:
-                    siloBuilder.AddMemoryGrainStorage("fabrStorage");
+                    siloBuilder.AddMemoryGrainStorage("fabrcoreStorage");
                     siloBuilder.AddMemoryGrainStorage("PubSubStore");
                     logger.LogDebug("Orleans memory grain storage configured");
                     break;

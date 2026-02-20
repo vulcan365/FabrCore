@@ -1,11 +1,11 @@
-using Fabr.Core;
+using FabrCore.Core;
 
-namespace Fabr.Client
+namespace FabrCore.Client
 {
     /// <summary>
     /// Interface for component-hosted agent proxies.
     /// </summary>
-    public interface IFabrClientAgentProxy : IAsyncDisposable
+    public interface IFabrCoreClientAgentProxy : IAsyncDisposable
     {
         /// <summary>
         /// Gets the agent's handle (unique identifier).
