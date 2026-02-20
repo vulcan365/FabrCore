@@ -85,69 +85,75 @@ namespace Fabr.Sdk
                 _logger.LogInformation("Creating chat client - Provider: {Provider}, Model: {Model}",
                     modelConfig.Provider, modelConfig.Model);
 
-                if (string.Equals(modelConfig.Provider, "openai", StringComparison.OrdinalIgnoreCase))
+                OpenAIClient openAiClient;
+                switch (modelConfig.Provider.ToLowerInvariant())
                 {
-                    var client = new OpenAIClient(
-                        new ApiKeyCredential(apiKey),
-                        new OpenAIClientOptions
-                        {
-                            EnableDistributedTracing = true,
-                            NetworkTimeout = TimeSpan.FromSeconds(timeoutSeconds),
-                            ClientLoggingOptions = new System.ClientModel.Primitives.ClientLoggingOptions
+                    case "openai":
+                        openAiClient = new OpenAIClient(
+                            new ApiKeyCredential(apiKey),
+                            new OpenAIClientOptions
                             {
-                                EnableLogging = false,                  // Disable for performance
-                                EnableMessageContentLogging = false,    // MAJOR: Disable content serialization
-                                LoggerFactory = _loggerFactory,
-                                EnableMessageLogging = false            // Disable request/response logging
+                                EnableDistributedTracing = true,
+                                NetworkTimeout = TimeSpan.FromSeconds(timeoutSeconds),
+                                ClientLoggingOptions = new System.ClientModel.Primitives.ClientLoggingOptions
+                                {
+                                    EnableLogging = false,
+                                    EnableMessageContentLogging = false,
+                                    LoggerFactory = _loggerFactory,
+                                    EnableMessageLogging = false
+                                }
                             }
-                        }
-                    );
+                        );
+                        break;
 
-                    ChatClientsCreatedCounter.Add(1,
-                        new KeyValuePair<string, object?>("provider", "openai"),
-                        new KeyValuePair<string, object?>("model", modelConfig.Model));
-
-                    _logger.LogInformation("OpenAI chat client created successfully for model: {Model}", modelConfig.Model);
-                    activity?.SetStatus(ActivityStatusCode.Ok);
-                    return client.GetChatClient(modelConfig.Model).AsIChatClient();
-                }
-                else if (string.Equals(modelConfig.Provider, "azure", StringComparison.OrdinalIgnoreCase))
-                {
-                    var client = new AzureOpenAIClient(
-                        new Uri(modelConfig.Uri),
-                        new ApiKeyCredential(apiKey),
-                        new AzureOpenAIClientOptions
-                        {
-                            EnableDistributedTracing = true,
-                            NetworkTimeout = TimeSpan.FromSeconds(timeoutSeconds),
-                            ClientLoggingOptions = new System.ClientModel.Primitives.ClientLoggingOptions
+                    case "azure":
+                        var azureClient = new AzureOpenAIClient(
+                            new Uri(modelConfig.Uri),
+                            new ApiKeyCredential(apiKey),
+                            new AzureOpenAIClientOptions
                             {
-                                EnableLogging = false,                  // Disable for performance
-                                EnableMessageContentLogging = false,    // MAJOR: Disable content serialization
-                                LoggerFactory = _loggerFactory,
-                                EnableMessageLogging = false            // Disable request/response logging
+                                EnableDistributedTracing = true,
+                                NetworkTimeout = TimeSpan.FromSeconds(timeoutSeconds),
+                                ClientLoggingOptions = new System.ClientModel.Primitives.ClientLoggingOptions
+                                {
+                                    EnableLogging = false,
+                                    EnableMessageContentLogging = false,
+                                    LoggerFactory = _loggerFactory,
+                                    EnableMessageLogging = false
+                                }
                             }
-                        }
-                    );
+                        );
 
-                    ChatClientsCreatedCounter.Add(1,
-                        new KeyValuePair<string, object?>("provider", "azure"),
-                        new KeyValuePair<string, object?>("model", modelConfig.Model));
+                        ChatClientsCreatedCounter.Add(1,
+                            new KeyValuePair<string, object?>("provider", "azure"),
+                            new KeyValuePair<string, object?>("model", modelConfig.Model));
 
-                    _logger.LogInformation("Azure OpenAI chat client created successfully for model: {Model}", modelConfig.Model);
-                    activity?.SetStatus(ActivityStatusCode.Ok);
+                        _logger.LogInformation("Azure OpenAI chat client created successfully for model: {Model}", modelConfig.Model);
+                        activity?.SetStatus(ActivityStatusCode.Ok);
+                        return azureClient.GetChatClient(modelConfig.Model).AsIChatClient();
 
-                    return client.GetChatClient(modelConfig.Model).AsIChatClient();
+                    case "openrouter":
+                    case "grok":
+                    case "gemini":
+                        openAiClient = CreateOpenAICompatibleClient(apiKey, modelConfig.Uri, timeoutSeconds);
+                        break;
+
+                    default:
+                        _logger.LogError("Unsupported provider: {Provider}", modelConfig.Provider);
+                        activity?.SetStatus(ActivityStatusCode.Error, $"Unsupported provider: {modelConfig.Provider}");
+                        ErrorCounter.Add(1,
+                            new KeyValuePair<string, object?>("error.type", "unsupported_provider"),
+                            new KeyValuePair<string, object?>("provider", modelConfig.Provider));
+                        throw new NotSupportedException($"Provider '{modelConfig.Provider}' is not supported. Supported providers are: Azure, OpenAI, OpenRouter, Grok, Gemini.");
                 }
-                else
-                {
-                    _logger.LogError("Unsupported provider: {Provider}", modelConfig.Provider);
-                    activity?.SetStatus(ActivityStatusCode.Error, $"Unsupported provider: {modelConfig.Provider}");
-                    ErrorCounter.Add(1,
-                        new KeyValuePair<string, object?>("error.type", "unsupported_provider"),
-                        new KeyValuePair<string, object?>("provider", modelConfig.Provider));
-                    throw new NotSupportedException($"Provider '{modelConfig.Provider}' is not supported. Supported providers are 'Azure' and 'OpenAI'.");
-                }
+
+                ChatClientsCreatedCounter.Add(1,
+                    new KeyValuePair<string, object?>("provider", modelConfig.Provider.ToLowerInvariant()),
+                    new KeyValuePair<string, object?>("model", modelConfig.Model));
+
+                _logger.LogInformation("{Provider} chat client created successfully for model: {Model}", modelConfig.Provider, modelConfig.Model);
+                activity?.SetStatus(ActivityStatusCode.Ok);
+                return openAiClient.GetChatClient(modelConfig.Model).AsIChatClient();
             }
             catch (Exception ex)
             {
@@ -185,68 +191,75 @@ namespace Fabr.Sdk
                 _logger.LogInformation("Creating chat client - Provider: {Provider}, Model: {Model}",
                     modelConfig.Provider, modelConfig.Model);
 
-                if (string.Equals(modelConfig.Provider, "openai", StringComparison.OrdinalIgnoreCase))
+                switch (modelConfig.Provider.ToLowerInvariant())
                 {
-                    var client = new OpenAIClient(
-                        new ApiKeyCredential(apiKey),
-                        new OpenAIClientOptions
-                        {
-                            EnableDistributedTracing = true,
-                            NetworkTimeout = TimeSpan.FromSeconds(timeoutSeconds),
-                            ClientLoggingOptions = new System.ClientModel.Primitives.ClientLoggingOptions
+                    case "openai":
+                    {
+                        var client = new OpenAIClient(
+                            new ApiKeyCredential(apiKey),
+                            new OpenAIClientOptions
                             {
-                                EnableLogging = false,                  // Disable for performance
-                                EnableMessageContentLogging = false,    // MAJOR: Disable content serialization
-                                LoggerFactory = _loggerFactory,
-                                EnableMessageLogging = false            // Disable request/response logging
+                                EnableDistributedTracing = true,
+                                NetworkTimeout = TimeSpan.FromSeconds(timeoutSeconds),
+                                ClientLoggingOptions = new System.ClientModel.Primitives.ClientLoggingOptions
+                                {
+                                    EnableLogging = false,
+                                    EnableMessageContentLogging = false,
+                                    LoggerFactory = _loggerFactory,
+                                    EnableMessageLogging = false
+                                }
                             }
-                        }
-                    );
+                        );
 
-                    ChatClientsCreatedCounter.Add(1,
-                        new KeyValuePair<string, object?>("provider", "openai"),
-                        new KeyValuePair<string, object?>("model", modelConfig.Model));
+                        ChatClientsCreatedCounter.Add(1,
+                            new KeyValuePair<string, object?>("provider", "openai"),
+                            new KeyValuePair<string, object?>("model", modelConfig.Model));
 
-                    _logger.LogInformation("OpenAI chat client created successfully for model: {Model}", modelConfig.Model);
-                    activity?.SetStatus(ActivityStatusCode.Ok);
-                    return client.GetAudioClient(modelConfig.Model).AsISpeechToTextClient();
-                }
-                else if (string.Equals(modelConfig.Provider, "azure", StringComparison.OrdinalIgnoreCase))
-                {
-                    var client = new AzureOpenAIClient(
-                        new Uri(modelConfig.Uri),
-                        new ApiKeyCredential(apiKey),
-                        new AzureOpenAIClientOptions
-                        {
-                            EnableDistributedTracing = true,
-                            NetworkTimeout = TimeSpan.FromSeconds(timeoutSeconds),
-                            ClientLoggingOptions = new System.ClientModel.Primitives.ClientLoggingOptions
+                        _logger.LogInformation("OpenAI audio client created successfully for model: {Model}", modelConfig.Model);
+                        activity?.SetStatus(ActivityStatusCode.Ok);
+                        return client.GetAudioClient(modelConfig.Model).AsISpeechToTextClient();
+                    }
+
+                    case "azure":
+                    {
+                        var client = new AzureOpenAIClient(
+                            new Uri(modelConfig.Uri),
+                            new ApiKeyCredential(apiKey),
+                            new AzureOpenAIClientOptions
                             {
-                                EnableLogging = false,                  // Disable for performance
-                                EnableMessageContentLogging = false,    // MAJOR: Disable content serialization
-                                LoggerFactory = _loggerFactory,
-                                EnableMessageLogging = false            // Disable request/response logging
+                                EnableDistributedTracing = true,
+                                NetworkTimeout = TimeSpan.FromSeconds(timeoutSeconds),
+                                ClientLoggingOptions = new System.ClientModel.Primitives.ClientLoggingOptions
+                                {
+                                    EnableLogging = false,
+                                    EnableMessageContentLogging = false,
+                                    LoggerFactory = _loggerFactory,
+                                    EnableMessageLogging = false
+                                }
                             }
-                        }
-                    );
+                        );
 
-                    ChatClientsCreatedCounter.Add(1,
-                        new KeyValuePair<string, object?>("provider", "azure"),
-                        new KeyValuePair<string, object?>("model", modelConfig.Model));
+                        ChatClientsCreatedCounter.Add(1,
+                            new KeyValuePair<string, object?>("provider", "azure"),
+                            new KeyValuePair<string, object?>("model", modelConfig.Model));
 
-                    _logger.LogInformation("Azure OpenAI chat client created successfully for model: {Model}", modelConfig.Model);
-                    activity?.SetStatus(ActivityStatusCode.Ok);
+                        _logger.LogInformation("Azure OpenAI audio client created successfully for model: {Model}", modelConfig.Model);
+                        activity?.SetStatus(ActivityStatusCode.Ok);
+                        return client.GetAudioClient(modelConfig.Model).AsISpeechToTextClient();
+                    }
 
-                    return client.GetAudioClient(modelConfig.Model).AsISpeechToTextClient();
-                }
-                else
-                {
-                    _logger.LogError("Unsupported provider: {Provider}", modelConfig.Provider);
-                    activity?.SetStatus(ActivityStatusCode.Error, $"Unsupported provider: {modelConfig.Provider}");
-                    ErrorCounter.Add(1,
-                        new KeyValuePair<string, object?>("error.type", "unsupported_provider"),
-                        new KeyValuePair<string, object?>("provider", modelConfig.Provider));
-                    throw new NotSupportedException($"Provider '{modelConfig.Provider}' is not supported. Supported providers are 'Azure' and 'OpenAI'.");
+                    case "openrouter":
+                    case "grok":
+                    case "gemini":
+                        throw new NotSupportedException($"Provider '{modelConfig.Provider}' does not support audio/speech-to-text.");
+
+                    default:
+                        _logger.LogError("Unsupported provider: {Provider}", modelConfig.Provider);
+                        activity?.SetStatus(ActivityStatusCode.Error, $"Unsupported provider: {modelConfig.Provider}");
+                        ErrorCounter.Add(1,
+                            new KeyValuePair<string, object?>("error.type", "unsupported_provider"),
+                            new KeyValuePair<string, object?>("provider", modelConfig.Provider));
+                        throw new NotSupportedException($"Provider '{modelConfig.Provider}' is not supported. Supported providers are: Azure, OpenAI, OpenRouter, Grok, Gemini.");
                 }
             }
             catch (Exception ex)
@@ -276,32 +289,34 @@ namespace Fabr.Sdk
                 var apiKey = await GetApiKey(modelConfig.ApiKeyAlias);
 
 
-                if (string.Equals(modelConfig.Provider, "openai", StringComparison.OrdinalIgnoreCase))
+                switch (modelConfig.Provider.ToLowerInvariant())
                 {
-                    // Create the embedding generator instance
-                    IEmbeddingGenerator<string, Embedding<float>> generator = new OpenAIClient(new ApiKeyCredential(apiKey))
-                        .GetEmbeddingClient(model: modelConfig.Model) // Use GetEmbeddingClient to get the OpenAI-specific client
-                        .AsIEmbeddingGenerator();
+                    case "openai":
+                        return new OpenAIClient(new ApiKeyCredential(apiKey))
+                            .GetEmbeddingClient(modelConfig.Model)
+                            .AsIEmbeddingGenerator();
 
-                    return generator;
-                }
-                else if (string.Equals(modelConfig.Provider, "azure", StringComparison.OrdinalIgnoreCase))
-                {
-                    // Create the embedding generator instance
-                    IEmbeddingGenerator<string, Embedding<float>> generator = new AzureOpenAIClient(new Uri(modelConfig.Uri), new ApiKeyCredential(apiKey))
-                        .GetEmbeddingClient(modelConfig.Model) // Use GetEmbeddingClient to get the azure OpenAI-specific client
-                        .AsIEmbeddingGenerator();
+                    case "azure":
+                        return new AzureOpenAIClient(new Uri(modelConfig.Uri), new ApiKeyCredential(apiKey))
+                            .GetEmbeddingClient(modelConfig.Model)
+                            .AsIEmbeddingGenerator();
 
-                    return generator;
-                }
-                else
-                {
-                    _logger.LogError("Unsupported provider: {Provider}", modelConfig.Provider);
-                    activity?.SetStatus(ActivityStatusCode.Error, $"Unsupported provider: {modelConfig.Provider}");
-                    ErrorCounter.Add(1,
-                        new KeyValuePair<string, object?>("error.type", "unsupported_provider"),
-                        new KeyValuePair<string, object?>("provider", modelConfig.Provider));
-                    throw new NotSupportedException($"Provider '{modelConfig.Provider}' is not supported. Supported providers are 'Azure' and 'OpenAI'.");
+                    case "openrouter":
+                    case "gemini":
+                        return CreateOpenAICompatibleClient(apiKey, modelConfig.Uri, timeoutSeconds: 60)
+                            .GetEmbeddingClient(modelConfig.Model)
+                            .AsIEmbeddingGenerator();
+
+                    case "grok":
+                        throw new NotSupportedException("Grok (xAI) does not support embeddings. Use a different provider for your embeddings model.");
+
+                    default:
+                        _logger.LogError("Unsupported provider: {Provider}", modelConfig.Provider);
+                        activity?.SetStatus(ActivityStatusCode.Error, $"Unsupported provider: {modelConfig.Provider}");
+                        ErrorCounter.Add(1,
+                            new KeyValuePair<string, object?>("error.type", "unsupported_provider"),
+                            new KeyValuePair<string, object?>("provider", modelConfig.Provider));
+                        throw new NotSupportedException($"Provider '{modelConfig.Provider}' is not supported. Supported providers are: Azure, OpenAI, OpenRouter, Grok, Gemini.");
                 }
             }
             catch (Exception ex)
@@ -318,6 +333,27 @@ namespace Fabr.Sdk
 
         /// <inheritdoc />
         public Task<ModelConfiguration> GetModelConfigurationAsync(string name) => GetModelConfiguration(name);
+
+#pragma warning disable OPENAI001 // OpenAIClientOptions.Endpoint is experimental
+        private OpenAIClient CreateOpenAICompatibleClient(string apiKey, string endpointUri, int timeoutSeconds)
+        {
+            return new OpenAIClient(
+                new ApiKeyCredential(apiKey),
+                new OpenAIClientOptions
+                {
+                    Endpoint = new Uri(endpointUri),
+                    EnableDistributedTracing = true,
+                    NetworkTimeout = TimeSpan.FromSeconds(timeoutSeconds),
+                    ClientLoggingOptions = new System.ClientModel.Primitives.ClientLoggingOptions
+                    {
+                        EnableLogging = false,
+                        EnableMessageContentLogging = false,
+                        LoggerFactory = _loggerFactory,
+                        EnableMessageLogging = false
+                    }
+                });
+        }
+#pragma warning restore OPENAI001
 
         private async Task<ModelConfiguration> GetModelConfiguration(string name)
         {
