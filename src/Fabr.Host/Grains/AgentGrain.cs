@@ -979,7 +979,8 @@ namespace Fabr.Host.Grains
                 ToHandle = handle,
                 MessageType = messageType,
                 Message = message,
-                Kind = MessageKind.Response
+                Kind = MessageKind.Response,
+                Args = new Dictionary<string, string> { ["reminderName"] = name }
             };
 
             logger.LogTrace("Sending {Type} message to agent - Name: {Name}, MessageType: {MessageType}",
