@@ -1,4 +1,4 @@
-using Fabr.Core;
+using FabrCore.Core;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
@@ -6,7 +6,7 @@ using System.Diagnostics.Metrics;
 using System.Net.Http.Json;
 using System.Text.Json;
 
-namespace Fabr.Client
+namespace FabrCore.Client
 {
     /// <summary>
     /// Response from model configuration endpoint.
@@ -94,9 +94,9 @@ namespace Fabr.Client
     }
 
     /// <summary>
-    /// Client interface for the Fabr Host API.
+    /// Client interface for the FabrCore Host API.
     /// </summary>
-    public interface IFabrHostApiClient
+    public interface IFabrCoreHostApiClient
     {
         /// <summary>
         /// Creates agents with the specified configurations.
@@ -189,28 +189,28 @@ namespace Fabr.Client
     }
 
     /// <summary>
-    /// HTTP client implementation for the Fabr Host API.
+    /// HTTP client implementation for the FabrCore Host API.
     /// </summary>
-    public class FabrHostApiClient : IFabrHostApiClient
+    public class FabrCoreHostApiClient : IFabrCoreHostApiClient
     {
-        private static readonly ActivitySource ActivitySource = new("Fabr.Client.FabrHostApiClient");
-        private static readonly Meter Meter = new("Fabr.Client.FabrHostApiClient");
+        private static readonly ActivitySource ActivitySource = new("FabrCore.Client.FabrCoreHostApiClient");
+        private static readonly Meter Meter = new("FabrCore.Client.FabrCoreHostApiClient");
 
         private static readonly Counter<long> RequestCounter = Meter.CreateCounter<long>(
-            "fabr.api_client.requests",
+            "fabrcore.api_client.requests",
             description: "Number of API requests made");
 
         private static readonly Counter<long> ErrorCounter = Meter.CreateCounter<long>(
-            "fabr.api_client.errors",
+            "fabrcore.api_client.errors",
             description: "Number of API errors");
 
         private static readonly Histogram<double> RequestDuration = Meter.CreateHistogram<double>(
-            "fabr.api_client.request.duration",
+            "fabrcore.api_client.request.duration",
             unit: "ms",
             description: "Duration of API requests");
 
         private readonly HttpClient _httpClient;
-        private readonly ILogger<FabrHostApiClient> _logger;
+        private readonly ILogger<FabrCoreHostApiClient> _logger;
         private readonly string _baseUrl;
 
         private static readonly JsonSerializerOptions JsonOptions = new()
@@ -218,13 +218,13 @@ namespace Fabr.Client
             PropertyNameCaseInsensitive = true
         };
 
-        public FabrHostApiClient(HttpClient httpClient, IConfiguration configuration, ILogger<FabrHostApiClient> logger)
+        public FabrCoreHostApiClient(HttpClient httpClient, IConfiguration configuration, ILogger<FabrCoreHostApiClient> logger)
         {
             _httpClient = httpClient;
             _logger = logger;
-            _baseUrl = configuration["FabrHostUrl"] ?? "http://localhost:5000";
+            _baseUrl = configuration["FabrCoreHostUrl"] ?? "http://localhost:5000";
 
-            _logger.LogDebug("FabrApiClient initialized with base URL: {BaseUrl}", _baseUrl);
+            _logger.LogDebug("FabrCoreApiClient initialized with base URL: {BaseUrl}", _baseUrl);
         }
 
         public async Task<CreateAgentsResponse> CreateAgentsAsync(
@@ -238,7 +238,7 @@ namespace Fabr.Client
             activity?.SetTag("agents.count", configs.Count);
             activity?.SetTag("detail.level", detailLevel.ToString());
 
-            var url = $"{_baseUrl}/fabrapi/Agent/create?detailLevel={detailLevel}";
+            var url = $"{_baseUrl}/fabrcoreapi/Agent/create?detailLevel={detailLevel}";
             var startTime = Stopwatch.GetTimestamp();
 
             try
@@ -278,7 +278,7 @@ namespace Fabr.Client
             activity?.SetTag("agent.handle", handle);
             activity?.SetTag("detail.level", detailLevel.ToString());
 
-            var url = $"{_baseUrl}/fabrapi/Agent/health/{handle}?detailLevel={detailLevel}";
+            var url = $"{_baseUrl}/fabrcoreapi/Agent/health/{handle}?detailLevel={detailLevel}";
             var startTime = Stopwatch.GetTimestamp();
 
             try
@@ -311,7 +311,7 @@ namespace Fabr.Client
             activity?.SetTag("user.id", userId);
             activity?.SetTag("agent.handle", handle);
 
-            var url = $"{_baseUrl}/fabrapi/Agent/chat/{handle}";
+            var url = $"{_baseUrl}/fabrcoreapi/Agent/chat/{handle}";
             var startTime = Stopwatch.GetTimestamp();
 
             try
@@ -346,8 +346,8 @@ namespace Fabr.Client
             activity?.SetTag("agent.handle", handle);
 
             var url = streamName != null
-                ? $"{_baseUrl}/fabrapi/Agent/event/{handle}?streamName={Uri.EscapeDataString(streamName)}"
-                : $"{_baseUrl}/fabrapi/Agent/event/{handle}";
+                ? $"{_baseUrl}/fabrcoreapi/Agent/event/{handle}?streamName={Uri.EscapeDataString(streamName)}"
+                : $"{_baseUrl}/fabrcoreapi/Agent/event/{handle}";
             var startTime = Stopwatch.GetTimestamp();
 
             try
@@ -375,7 +375,7 @@ namespace Fabr.Client
             using var activity = ActivitySource.StartActivity("GetModelConfig", ActivityKind.Client);
             activity?.SetTag("model.config.name", name);
 
-            var url = $"{_baseUrl}/fabrapi/ModelConfig/model/{name}";
+            var url = $"{_baseUrl}/fabrcoreapi/ModelConfig/model/{name}";
             var startTime = Stopwatch.GetTimestamp();
 
             try
@@ -404,7 +404,7 @@ namespace Fabr.Client
             using var activity = ActivitySource.StartActivity("GetApiKey", ActivityKind.Client);
             activity?.SetTag("api_key.alias", alias);
 
-            var url = $"{_baseUrl}/fabrapi/ModelConfig/apikey/{alias}";
+            var url = $"{_baseUrl}/fabrcoreapi/ModelConfig/apikey/{alias}";
             var startTime = Stopwatch.GetTimestamp();
 
             try
@@ -434,8 +434,8 @@ namespace Fabr.Client
             activity?.SetTag("status.filter", status ?? "all");
 
             var url = string.IsNullOrEmpty(status)
-                ? $"{_baseUrl}/fabrapi/Diagnostics/agents"
-                : $"{_baseUrl}/fabrapi/Diagnostics/agents?status={status}";
+                ? $"{_baseUrl}/fabrcoreapi/Diagnostics/agents"
+                : $"{_baseUrl}/fabrcoreapi/Diagnostics/agents?status={status}";
             var startTime = Stopwatch.GetTimestamp();
 
             try
@@ -464,7 +464,7 @@ namespace Fabr.Client
             using var activity = ActivitySource.StartActivity("GetAgent", ActivityKind.Client);
             activity?.SetTag("agent.key", key);
 
-            var url = $"{_baseUrl}/fabrapi/Diagnostics/agents/{key}";
+            var url = $"{_baseUrl}/fabrcoreapi/Diagnostics/agents/{key}";
             var startTime = Stopwatch.GetTimestamp();
 
             try
@@ -499,7 +499,7 @@ namespace Fabr.Client
         {
             using var activity = ActivitySource.StartActivity("GetAgentStatistics", ActivityKind.Client);
 
-            var url = $"{_baseUrl}/fabrapi/Diagnostics/agents/statistics";
+            var url = $"{_baseUrl}/fabrcoreapi/Diagnostics/agents/statistics";
             var startTime = Stopwatch.GetTimestamp();
 
             try
@@ -528,7 +528,7 @@ namespace Fabr.Client
             using var activity = ActivitySource.StartActivity("PurgeOldAgents", ActivityKind.Client);
             activity?.SetTag("older_than_hours", olderThanHours);
 
-            var url = $"{_baseUrl}/fabrapi/Diagnostics/agents/purge?olderThanHours={olderThanHours}";
+            var url = $"{_baseUrl}/fabrcoreapi/Diagnostics/agents/purge?olderThanHours={olderThanHours}";
             var startTime = Stopwatch.GetTimestamp();
 
             try
@@ -559,8 +559,8 @@ namespace Fabr.Client
             activity?.SetTag("ttl.seconds", ttlSeconds);
 
             var url = ttlSeconds.HasValue
-                ? $"{_baseUrl}/fabrapi/File/upload?ttlSeconds={ttlSeconds}"
-                : $"{_baseUrl}/fabrapi/File/upload";
+                ? $"{_baseUrl}/fabrcoreapi/File/upload?ttlSeconds={ttlSeconds}"
+                : $"{_baseUrl}/fabrcoreapi/File/upload";
             var startTime = Stopwatch.GetTimestamp();
 
             try
@@ -592,7 +592,7 @@ namespace Fabr.Client
             using var activity = ActivitySource.StartActivity("GetFile", ActivityKind.Client);
             activity?.SetTag("file.id", fileId);
 
-            var url = $"{_baseUrl}/fabrapi/File/{fileId}";
+            var url = $"{_baseUrl}/fabrcoreapi/File/{fileId}";
             var startTime = Stopwatch.GetTimestamp();
 
             try
@@ -626,7 +626,7 @@ namespace Fabr.Client
             using var activity = ActivitySource.StartActivity("GetFileInfo", ActivityKind.Client);
             activity?.SetTag("file.id", fileId);
 
-            var url = $"{_baseUrl}/fabrapi/File/{fileId}/info";
+            var url = $"{_baseUrl}/fabrcoreapi/File/{fileId}/info";
             var startTime = Stopwatch.GetTimestamp();
 
             try
@@ -662,7 +662,7 @@ namespace Fabr.Client
             using var activity = ActivitySource.StartActivity("GetEmbeddings", ActivityKind.Client);
             activity?.SetTag("text.length", text.Length);
 
-            var url = $"{_baseUrl}/fabrapi/Embeddings";
+            var url = $"{_baseUrl}/fabrcoreapi/Embeddings";
             var startTime = Stopwatch.GetTimestamp();
 
             try

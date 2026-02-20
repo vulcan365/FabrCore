@@ -1,7 +1,7 @@
-using Fabr.Core;
-using Fabr.Core.Interfaces;
-using Fabr.Host.Streaming;
-using Fabr.Sdk;
+using FabrCore.Core;
+using FabrCore.Core.Interfaces;
+using FabrCore.Host.Streaming;
+using FabrCore.Sdk;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Orleans;
@@ -11,7 +11,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Fabr.Host.Api.Controllers
+namespace FabrCore.Host.Api.Controllers
 {
     /// <summary>
     /// Response for batch agent creation.
@@ -25,7 +25,7 @@ namespace Fabr.Host.Api.Controllers
     }
 
     [ApiController]
-    [Route("fabrapi/[controller]")]
+    [Route("fabrcoreapi/[controller]")]
     public class AgentController : Controller
     {
         private readonly IClusterClient clusterClient;

@@ -2,7 +2,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
-namespace Fabr.Sdk;
+namespace FabrCore.Sdk;
 
 /// <summary>
 /// Factory for creating TaskWorkingAgent instances.

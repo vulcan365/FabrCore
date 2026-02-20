@@ -1,17 +1,17 @@
-using Fabr.Sdk;
+using FabrCore.Sdk;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 
-namespace Fabr.Host.Api.Controllers
+namespace FabrCore.Host.Api.Controllers
 {
     [ApiController]
-    [Route("fabrapi/[controller]")]
+    [Route("fabrcoreapi/[controller]")]
     public class DiscoveryController : Controller
     {
-        private readonly IFabrRegistry _registry;
+        private readonly IFabrCoreRegistry _registry;
         private readonly ILogger<DiscoveryController> _logger;
 
-        public DiscoveryController(IFabrRegistry registry, ILogger<DiscoveryController> logger)
+        public DiscoveryController(IFabrCoreRegistry registry, ILogger<DiscoveryController> logger)
         {
             _registry = registry;
             _logger = logger;

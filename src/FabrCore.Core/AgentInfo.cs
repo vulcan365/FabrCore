@@ -1,6 +1,6 @@
 using Orleans;
 
-namespace Fabr.Core
+namespace FabrCore.Core
 {
     [GenerateSerializer]
     public enum AgentStatus

@@ -2,7 +2,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Collections.Concurrent;
 
-namespace Fabr.Host.Services
+namespace FabrCore.Host.Services
 {
     public class FileStorageService : IFileStorageService
     {

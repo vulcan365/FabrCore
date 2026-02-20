@@ -1,6 +1,6 @@
 using Orleans;
 
-namespace Fabr.Core
+namespace FabrCore.Core
 {
     /// <summary>
     /// Represents a chat message stored in Orleans grain state.

@@ -1,18 +1,18 @@
-using Fabr.Core;
+using FabrCore.Core;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace Fabr.Client
+namespace FabrCore.Client
 {
     /// <summary>
     /// Base class for agent components that can be dropped onto a parent Blazor component.
     /// Inherit from this class and specify the agent proxy type and parent component type.
     /// </summary>
-    /// <typeparam name="TAgent">The agent proxy type that inherits from FabrClientAgentProxy.</typeparam>
+    /// <typeparam name="TAgent">The agent proxy type that inherits from FabrCoreClientAgentProxy.</typeparam>
     /// <typeparam name="TComponent">The parent Blazor component type.</typeparam>
-    public abstract class FabrClientAgent<TAgent, TComponent> : ComponentBase, IAsyncDisposable
-        where TAgent : FabrClientAgentProxy<TComponent>
+    public abstract class FabrCoreClientAgent<TAgent, TComponent> : ComponentBase, IAsyncDisposable
+        where TAgent : FabrCoreClientAgentProxy<TComponent>
         where TComponent : ComponentBase
     {
         private ILogger? _logger;
@@ -24,7 +24,7 @@ namespace Fabr.Client
         protected IServiceProvider ServiceProvider { get; set; } = null!;
 
         [Inject]
-        protected IFabrHostApiClient FabrHostApiClient { get; set; } = null!;
+        protected IFabrCoreHostApiClient FabrCoreHostApiClient { get; set; } = null!;
 
         [Inject]
         protected ILoggerFactory LoggerFactory { get; set; } = null!;
@@ -54,18 +54,18 @@ namespace Fabr.Client
         protected override async Task OnInitializedAsync()
         {
             _logger = LoggerFactory.CreateLogger(GetType());
-            _logger.LogDebug("FabrClientAgent OnInitializedAsync starting - Handle: {Handle}, ComponentType: {ComponentType}",
+            _logger.LogDebug("FabrCoreClientAgent OnInitializedAsync starting - Handle: {Handle}, ComponentType: {ComponentType}",
                 Handle, typeof(TComponent).Name);
 
             if (Component == null)
             {
-                _logger.LogError("FabrClientAgent initialization failed - Component parameter is null. Handle: {Handle}", Handle);
+                _logger.LogError("FabrCoreClientAgent initialization failed - Component parameter is null. Handle: {Handle}", Handle);
                 throw new InvalidOperationException("Component parameter is required.");
             }
 
             if (string.IsNullOrEmpty(Handle))
             {
-                _logger.LogError("FabrClientAgent initialization failed - Handle parameter is null or empty");
+                _logger.LogError("FabrCoreClientAgent initialization failed - Handle parameter is null or empty");
                 throw new InvalidOperationException("Handle parameter is required.");
             }
 
@@ -80,12 +80,12 @@ namespace Fabr.Client
 
                 await Agent.InitializeAsync();
 
-                _logger.LogInformation("FabrClientAgent initialized successfully - Handle: {Handle}, AgentType: {AgentType}",
+                _logger.LogInformation("FabrCoreClientAgent initialized successfully - Handle: {Handle}, AgentType: {AgentType}",
                     Handle, typeof(TAgent).Name);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "FabrClientAgent initialization failed - Handle: {Handle}, AgentType: {AgentType}",
+                _logger.LogError(ex, "FabrCoreClientAgent initialization failed - Handle: {Handle}, AgentType: {AgentType}",
                     Handle, typeof(TAgent).Name);
                 throw;
             }
@@ -98,18 +98,18 @@ namespace Fabr.Client
 
         public virtual async ValueTask DisposeAsync()
         {
-            _logger?.LogDebug("FabrClientAgent disposing - Handle: {Handle}", Handle);
+            _logger?.LogDebug("FabrCoreClientAgent disposing - Handle: {Handle}", Handle);
 
             if (Agent != null)
             {
                 try
                 {
                     await Agent.DisposeAsync();
-                    _logger?.LogInformation("FabrClientAgent disposed successfully - Handle: {Handle}", Handle);
+                    _logger?.LogInformation("FabrCoreClientAgent disposed successfully - Handle: {Handle}", Handle);
                 }
                 catch (Exception ex)
                 {
-                    _logger?.LogError(ex, "Error disposing FabrClientAgent - Handle: {Handle}", Handle);
+                    _logger?.LogError(ex, "Error disposing FabrCoreClientAgent - Handle: {Handle}", Handle);
                 }
                 Agent = null;
             }

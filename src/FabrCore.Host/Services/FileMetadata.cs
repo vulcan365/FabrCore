@@ -1,4 +1,4 @@
-namespace Fabr.Host.Services
+namespace FabrCore.Host.Services
 {
     public class FileMetadata
     {

@@ -1,6 +1,6 @@
-using Fabr.Core;
+using FabrCore.Core;
 
-namespace Fabr.Client
+namespace FabrCore.Client
 {
     /// <summary>
     /// Provides direct message sending to agents without using ClientContext or ClientGrain infrastructure.

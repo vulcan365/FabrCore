@@ -3,15 +3,15 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
 VisualStudioVersion = 18.0.11217.181
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fabr.Host", "Fabr.Host\Fabr.Host.csproj", "{0E1AE8EA-60A6-468F-8928-DEBE053DFA80}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FabrCore.Host", "FabrCore.Host\FabrCore.Host.csproj", "{0E1AE8EA-60A6-468F-8928-DEBE053DFA80}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fabr.Sdk", "Fabr.Sdk\Fabr.Sdk.csproj", "{ABB6A4A4-AF0B-44D4-A6F8-17BCCB7CEE9B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FabrCore.Sdk", "FabrCore.Sdk\FabrCore.Sdk.csproj", "{ABB6A4A4-AF0B-44D4-A6F8-17BCCB7CEE9B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fabr.Core", "Fabr.Core\Fabr.Core.csproj", "{FF9BC47D-EE49-487F-92C0-7477EDB3F7AD}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FabrCore.Core", "FabrCore.Core\FabrCore.Core.csproj", "{FF9BC47D-EE49-487F-92C0-7477EDB3F7AD}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fabr.Client", "Fabr.Client\Fabr.Client.csproj", "{A39247FB-4CC3-4DFA-9D8C-8DBFD6B59706}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FabrCore.Client", "FabrCore.Client\FabrCore.Client.csproj", "{A39247FB-4CC3-4DFA-9D8C-8DBFD6B59706}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Fabr", "Fabr", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "FabrCore", "FabrCore", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

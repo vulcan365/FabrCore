@@ -1,6 +1,6 @@
 ﻿using Orleans;
 
-namespace Fabr.Core
+namespace FabrCore.Core
 {
     public class AgentConfiguration
     {
@@ -47,9 +47,9 @@ namespace Fabr.Core
 
 
     [RegisterConverter]
-    internal sealed class FabrAgentConfigurationSurrogateConverter : IConverter<AgentConfiguration, AgentConfigurationSurrogate>
+    internal sealed class FabrCoreAgentConfigurationSurrogateConverter : IConverter<AgentConfiguration, AgentConfigurationSurrogate>
     {
-        public FabrAgentConfigurationSurrogateConverter()
+        public FabrCoreAgentConfigurationSurrogateConverter()
         {
         }
 

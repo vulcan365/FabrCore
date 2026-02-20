@@ -1,4 +1,4 @@
-namespace Fabr.Sdk.Memory;
+namespace FabrCore.Sdk.Memory;
 
 /// <summary>
 /// Abstraction for persistent memory storage with vector search capabilities.

@@ -1,5 +1,5 @@
-using Fabr.Core;
-using Fabr.Core.Interfaces;
+using FabrCore.Core;
+using FabrCore.Core.Interfaces;
 using Microsoft.Extensions.Logging;
 using Orleans;
 using System.Collections.Concurrent;
@@ -7,7 +7,7 @@ using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using OpenTelemetry.Trace;
 
-namespace Fabr.Client
+namespace FabrCore.Client
 {
     /// <summary>
     /// Thread-safe factory for creating and managing ClientContext instances.
@@ -29,28 +29,28 @@ namespace Fabr.Client
     /// </remarks>
     public sealed class ClientContextFactory : IClientContextFactory, IAsyncDisposable
     {
-        private static readonly ActivitySource ActivitySource = new("Fabr.Client.ClientContextFactory");
-        private static readonly Meter Meter = new("Fabr.Client.ClientContextFactory");
+        private static readonly ActivitySource ActivitySource = new("FabrCore.Client.ClientContextFactory");
+        private static readonly Meter Meter = new("FabrCore.Client.ClientContextFactory");
 
         // Metrics
         private static readonly Counter<long> ContextsCreatedCounter = Meter.CreateCounter<long>(
-            "fabr.client.factory.contexts.created",
+            "fabrcore.client.factory.contexts.created",
             description: "Number of client contexts created by factory");
 
         private static readonly Counter<long> ContextsCachedCounter = Meter.CreateCounter<long>(
-            "fabr.client.factory.contexts.cached",
+            "fabrcore.client.factory.contexts.cached",
             description: "Number of client contexts retrieved from cache");
 
         private static readonly Counter<long> ContextsReleasedCounter = Meter.CreateCounter<long>(
-            "fabr.client.factory.contexts.released",
+            "fabrcore.client.factory.contexts.released",
             description: "Number of client contexts released from cache");
 
         private static readonly Counter<long> ErrorCounter = Meter.CreateCounter<long>(
-            "fabr.client.factory.errors",
+            "fabrcore.client.factory.errors",
             description: "Number of errors encountered in factory");
 
         private static readonly Histogram<double> ContextCreationDuration = Meter.CreateHistogram<double>(
-            "fabr.client.factory.creation.duration",
+            "fabrcore.client.factory.creation.duration",
             unit: "ms",
             description: "Duration of client context creation");
 

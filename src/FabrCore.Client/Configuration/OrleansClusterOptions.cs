@@ -1,8 +1,8 @@
-namespace Fabr.Client.Configuration
+namespace FabrCore.Client.Configuration
 {
     /// <summary>
     /// Configuration options for Orleans cluster providers.
-    /// Must match the configuration used by the Fabr.Host server.
+    /// Must match the configuration used by the FabrCore.Host server.
     /// </summary>
     public class OrleansClusterOptions
     {
@@ -14,12 +14,12 @@ namespace Fabr.Client.Configuration
         /// <summary>
         /// The cluster ID used for Orleans membership. Must match the server's ClusterId.
         /// </summary>
-        public string ClusterId { get; set; } = "fabr-cluster";
+        public string ClusterId { get; set; } = "fabrcore-cluster";
 
         /// <summary>
         /// The service ID used for Orleans. Must match the server's ServiceId.
         /// </summary>
-        public string ServiceId { get; set; } = "fabr-service";
+        public string ServiceId { get; set; } = "fabrcore-service";
 
         /// <summary>
         /// The clustering mode to use. Must match the server's clustering mode.

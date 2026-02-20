@@ -1,9 +1,9 @@
 using Orleans;
 
-namespace Fabr.Core
+namespace FabrCore.Core
 {
     /// <summary>
-    /// Combined health status from AgentGrain and its FabrAgentProxy.
+    /// Combined health status from AgentGrain and its FabrCoreAgentProxy.
     /// </summary>
     [GenerateSerializer]
     public record AgentHealthStatus
@@ -94,7 +94,7 @@ namespace Fabr.Core
         // Full level
 
         /// <summary>
-        /// Health status from the FabrAgentProxy.
+        /// Health status from the FabrCoreAgentProxy.
         /// Only populated when detail level is Full.
         /// </summary>
         [Id(11)]

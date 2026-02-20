@@ -1,8 +1,8 @@
-using Fabr.Core;
+using FabrCore.Core;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
-namespace Fabr.Sdk;
+namespace FabrCore.Sdk;
 
 public record CompactionConfig
 {
@@ -23,17 +23,17 @@ public record CompactionResult
 
 public class CompactionService
 {
-    private readonly IFabrChatClientService _chatClientService;
+    private readonly IFabrCoreChatClientService _chatClientService;
     private readonly ILogger<CompactionService> _logger;
 
-    public CompactionService(IFabrChatClientService chatClientService, ILogger<CompactionService> logger)
+    public CompactionService(IFabrCoreChatClientService chatClientService, ILogger<CompactionService> logger)
     {
         _chatClientService = chatClientService;
         _logger = logger;
     }
 
     public async Task<CompactionResult> CompactIfNeededAsync(
-        FabrChatHistoryProvider provider,
+        FabrCoreChatHistoryProvider provider,
         CompactionConfig config,
         string modelConfigName,
         Func<Task>? onCompacting = null,

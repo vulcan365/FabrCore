@@ -1,6 +1,6 @@
-@using Fabr.Client
-@using Fabr.Client.Services
-@using Fabr.Core
+@using FabrCore.Client
+@using FabrCore.Client.Services
+@using FabrCore.Core
 @using Markdig
 @using Microsoft.AspNetCore.Components.Web
 @inject IClientContextFactory ClientContextFactory
@@ -335,7 +335,7 @@
             try
             {
                 _jsModule = await JSRuntime.InvokeAsync<IJSObjectReference>(
-                    "import", "./_content/Fabr.Client/fabr.js");
+                    "import", "./_content/FabrCore.Client/fabrcore.js");
             }
             catch
             {

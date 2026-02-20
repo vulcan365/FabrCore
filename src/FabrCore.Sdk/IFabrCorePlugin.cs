@@ -1,8 +1,8 @@
-using Fabr.Core;
+using FabrCore.Core;
 
-namespace Fabr.Sdk
+namespace FabrCore.Sdk
 {
-    public interface IFabrPlugin
+    public interface IFabrCorePlugin
     {
         Task InitializeAsync(AgentConfiguration config, IServiceProvider serviceProvider);
     }

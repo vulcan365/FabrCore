@@ -1,6 +1,6 @@
 using Microsoft.Agents.AI;
 
-namespace Fabr.Sdk;
+namespace FabrCore.Sdk;
 
 /// <summary>
 /// Interface for plan-and-replan task tracking from conversations.

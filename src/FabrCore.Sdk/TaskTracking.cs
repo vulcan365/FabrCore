@@ -1,6 +1,6 @@
 using System.ComponentModel;
 
-namespace Fabr.Sdk;
+namespace FabrCore.Sdk;
 
 /// <summary>
 /// Controls the depth and breadth of task planning.
@@ -403,7 +403,7 @@ public class ExecutionOptions
     /// <summary>
     /// The agent host for sending messages and managing timers.
     /// </summary>
-    public required IFabrAgentHost AgentHost { get; init; }
+    public required IFabrCoreAgentHost AgentHost { get; init; }
 
     /// <summary>
     /// Available agents that can be assigned to tasks.

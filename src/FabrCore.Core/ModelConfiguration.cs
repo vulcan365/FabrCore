@@ -1,4 +1,4 @@
-namespace Fabr.Core
+namespace FabrCore.Core
 {
     public class ModelConfiguration
     {
@@ -32,7 +32,7 @@ namespace Fabr.Core
         public required string Value { get; set; }
     }
 
-    public class FabrConfiguration
+    public class FabrCoreConfiguration
     {
         public List<ModelConfiguration> ModelConfigurations { get; set; } = new();
         public List<ApiKeyConfiguration> ApiKeys { get; set; } = new();

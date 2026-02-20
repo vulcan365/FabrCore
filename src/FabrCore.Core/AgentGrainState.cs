@@ -1,7 +1,7 @@
 using Orleans;
 using System.Text.Json;
 
-namespace Fabr.Core
+namespace FabrCore.Core
 {
     /// <summary>
     /// Persistent state for AgentGrain containing configuration and message threads.

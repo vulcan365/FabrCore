@@ -1,7 +1,7 @@
 using Orleans;
 using Orleans.Concurrency;
 
-namespace Fabr.Core.Interfaces
+namespace FabrCore.Core.Interfaces
 {
     internal interface IClientGrain : IGrainWithStringKey
     {

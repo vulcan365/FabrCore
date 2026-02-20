@@ -1,16 +1,16 @@
 using Microsoft.Extensions.Logging;
 using System.Reflection;
 
-namespace Fabr.Sdk
+namespace FabrCore.Sdk
 {
-    public sealed class FabrRegistry : IFabrRegistry
+    public sealed class FabrCoreRegistry : IFabrCoreRegistry
     {
-        private readonly ILogger<FabrRegistry> _logger;
+        private readonly ILogger<FabrCoreRegistry> _logger;
         private readonly Lazy<Dictionary<string, Type>> _agentTypes;
         private readonly Lazy<Dictionary<string, Type>> _pluginTypes;
         private readonly Lazy<Dictionary<string, MethodInfo>> _toolMethods;
 
-        public FabrRegistry(ILogger<FabrRegistry> logger)
+        public FabrCoreRegistry(ILogger<FabrCoreRegistry> logger)
         {
             _logger = logger;
             _agentTypes = new Lazy<Dictionary<string, Type>>(ScanAgents);

@@ -7,8 +7,8 @@
 	</PropertyGroup>
 
 	<PropertyGroup>
-		<Title>Fabr Sdk</Title>
-		<Description>SDK for building AI agents with the Fabr framework</Description>
+		<Title>FabrCore Sdk</Title>
+		<Description>SDK for building AI agents with the FabrCore framework</Description>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -18,12 +18,12 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\Fabr.Core\Fabr.Core.csproj" />
+		<ProjectReference Include="..\FabrCore.Core\FabrCore.Core.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
 		<AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
-			<_Parameter1>Fabr.Host</_Parameter1>
+			<_Parameter1>FabrCore.Host</_Parameter1>
 		</AssemblyAttribute>
 
 	</ItemGroup>

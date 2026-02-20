@@ -1,11 +1,11 @@
-using Fabr.Sdk;
+using FabrCore.Sdk;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 
-namespace Fabr.Host.Api.Controllers
+namespace FabrCore.Host.Api.Controllers
 {
     [ApiController]
-    [Route("fabrapi/[controller]")]
+    [Route("fabrcoreapi/[controller]")]
     public class EmbeddingsController : Controller
     {
         private readonly ILogger<EmbeddingsController> logger;

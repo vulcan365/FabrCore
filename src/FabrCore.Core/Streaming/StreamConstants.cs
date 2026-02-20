@@ -1,4 +1,4 @@
-namespace Fabr.Core.Streaming
+namespace FabrCore.Core.Streaming
 {
     /// <summary>
     /// Constants for Orleans streaming configuration.

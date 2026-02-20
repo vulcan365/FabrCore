@@ -1,4 +1,4 @@
-namespace Fabr.Host.Configuration
+namespace FabrCore.Host.Configuration
 {
     /// <summary>
     /// Configuration options for Orleans cluster providers.
@@ -13,12 +13,12 @@ namespace Fabr.Host.Configuration
         /// <summary>
         /// The cluster ID used for Orleans membership. All silos in the same cluster must use the same ClusterId.
         /// </summary>
-        public string ClusterId { get; set; } = "fabr-cluster";
+        public string ClusterId { get; set; } = "fabrcore-cluster";
 
         /// <summary>
         /// The service ID used for Orleans. All silos providing the same service must use the same ServiceId.
         /// </summary>
-        public string ServiceId { get; set; } = "fabr-service";
+        public string ServiceId { get; set; } = "fabrcore-service";
 
         /// <summary>
         /// The clustering mode to use. Defaults to Localhost for development.

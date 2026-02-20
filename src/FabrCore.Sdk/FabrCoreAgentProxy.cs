@@ -1,4 +1,4 @@
-using Fabr.Core;
+using FabrCore.Core;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
@@ -10,10 +10,10 @@ using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Text.Json;
 
-namespace Fabr.Sdk
+namespace FabrCore.Sdk
 {
 
-    public interface IFabrAgentProxy
+    public interface IFabrCoreAgentProxy
     {
         internal Task InternalInitialize();
         internal Task<AgentMessage> InternalOnMessage(AgentMessage message);
@@ -41,41 +41,41 @@ namespace Fabr.Sdk
     }
 
 
-    public abstract class FabrAgentProxy : IFabrAgentProxy
+    public abstract class FabrCoreAgentProxy : IFabrCoreAgentProxy
     {
-        private static readonly ActivitySource ActivitySource = new("Fabr.Sdk.AgentProxy");
-        private static readonly Meter Meter = new("Fabr.Sdk.AgentProxy");
+        private static readonly ActivitySource ActivitySource = new("FabrCore.Sdk.AgentProxy");
+        private static readonly Meter Meter = new("FabrCore.Sdk.AgentProxy");
 
         // Metrics
         private static readonly Counter<long> AgentInitializedCounter = Meter.CreateCounter<long>(
-            "fabr.agent.proxy.initialized",
+            "fabrcore.agent.proxy.initialized",
             description: "Number of agent proxies initialized");
 
         private static readonly Counter<long> MessagesProcessedCounter = Meter.CreateCounter<long>(
-            "fabr.agent.proxy.messages.processed",
+            "fabrcore.agent.proxy.messages.processed",
             description: "Number of messages processed by agent proxy");
 
         private static readonly Histogram<double> MessageProcessingDuration = Meter.CreateHistogram<double>(
-            "fabr.agent.proxy.message.duration",
+            "fabrcore.agent.proxy.message.duration",
             unit: "ms",
             description: "Duration of agent proxy message processing");
 
         private static readonly Counter<long> ErrorCounter = Meter.CreateCounter<long>(
-            "fabr.agent.proxy.errors",
+            "fabrcore.agent.proxy.errors",
             description: "Number of errors encountered in agent proxy");
 
         protected readonly AgentConfiguration config;
-        protected readonly IFabrAgentHost fabrAgentHost;
+        protected readonly IFabrCoreAgentHost fabrcoreAgentHost;
         protected readonly IServiceProvider serviceProvider;
         protected readonly ILoggerFactory loggerFactory;
-        protected readonly ILogger<FabrAgentProxy> logger;
+        protected readonly ILogger<FabrCoreAgentProxy> logger;
         protected readonly IConfiguration configuration;
-        protected readonly IFabrChatClientService chatClientService;
+        protected readonly IFabrCoreChatClientService chatClientService;
 
         private DateTime? _initializedAt;
 
         // Compaction plumbing — lazily initialized on first TryCompactAsync() call
-        private FabrChatHistoryProvider? _chatHistoryProvider;
+        private FabrCoreChatHistoryProvider? _chatHistoryProvider;
         private string? _chatClientConfigName;
         private CompactionService? _compactionService;
         private CompactionConfig? _compactionConfig;
@@ -87,20 +87,20 @@ namespace Fabr.Sdk
         private readonly HashSet<string> _pendingStateDeletes = new();
         private bool _customStateLoaded;
 
-        public FabrAgentProxy(AgentConfiguration config, IServiceProvider serviceProvider, IFabrAgentHost fabrAgentHost)
+        public FabrCoreAgentProxy(AgentConfiguration config, IServiceProvider serviceProvider, IFabrCoreAgentHost fabrcoreAgentHost)
         {
             this.config = config;
             this.serviceProvider = serviceProvider;
-            this.fabrAgentHost = fabrAgentHost;
+            this.fabrcoreAgentHost = fabrcoreAgentHost;
 
             // Resolve dependencies from service provider
             this.loggerFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
             this.configuration = serviceProvider.GetRequiredService<IConfiguration>();
-            this.chatClientService = serviceProvider.GetRequiredService<IFabrChatClientService>();
+            this.chatClientService = serviceProvider.GetRequiredService<IFabrCoreChatClientService>();
 
-            logger = loggerFactory.CreateLogger<FabrAgentProxy>();
+            logger = loggerFactory.CreateLogger<FabrCoreAgentProxy>();
 
-            logger.LogDebug("FabrAgentProxy created - AgentType: {AgentType}, Handle: {Handle}",
+            logger.LogDebug("FabrCoreAgentProxy created - AgentType: {AgentType}, Handle: {Handle}",
                 config.AgentType, config.Handle);
         }
 
@@ -118,8 +118,8 @@ namespace Fabr.Sdk
 
 
         /// <summary>
-        /// Creates a ChatClientAgent with standard Fabr configuration.
-        /// Chat messages are automatically persisted to Orleans grain state via FabrChatHistoryProvider.
+        /// Creates a ChatClientAgent with standard FabrCore configuration.
+        /// Chat messages are automatically persisted to Orleans grain state via FabrCoreChatHistoryProvider.
         /// Use configureOptions to wire AIContextProviderFactory for dynamic context injection.
         /// </summary>
         /// <param name="chatClientConfigName">Name of the chat client configuration (e.g., "OpenAIProd").</param>
@@ -136,8 +136,8 @@ namespace Fabr.Sdk
             var chatClient = await GetChatClient(chatClientConfigName);
 
             // Capture the provider reference so callers can use it for compaction
-            FabrChatHistoryProvider? capturedProvider = null;
-            var originalFactory = FabrChatHistoryProvider.CreateFactory(fabrAgentHost, threadId, logger);
+            FabrCoreChatHistoryProvider? capturedProvider = null;
+            var originalFactory = FabrCoreChatHistoryProvider.CreateFactory(fabrcoreAgentHost, threadId, logger);
 
             var options = new ChatClientAgentOptions
             {
@@ -146,12 +146,12 @@ namespace Fabr.Sdk
                     Instructions = config.SystemPrompt,
                     Tools = tools
                 },
-                Name = fabrAgentHost.GetHandle(),
-                // Wire up FabrChatHistoryProvider for automatic message persistence
+                Name = fabrcoreAgentHost.GetHandle(),
+                // Wire up FabrCoreChatHistoryProvider for automatic message persistence
                 ChatHistoryProviderFactory = async (ctx, ct) =>
                 {
                     var provider = await originalFactory(ctx, ct);
-                    capturedProvider = provider as FabrChatHistoryProvider;
+                    capturedProvider = provider as FabrCoreChatHistoryProvider;
                     return provider;
                 }
             };
@@ -191,8 +191,8 @@ namespace Fabr.Sdk
 
         protected async Task<List<AITool>> ResolveConfiguredToolsAsync()
         {
-            var registry = serviceProvider.GetRequiredService<FabrToolRegistry>();
-            return await registry.ResolveToolsAsync(serviceProvider, config.Plugins, config.Tools, config, fabrAgentHost);
+            var registry = serviceProvider.GetRequiredService<FabrCoreToolRegistry>();
+            return await registry.ResolveToolsAsync(serviceProvider, config.Plugins, config.Tools, config, fabrcoreAgentHost);
         }
 
         #region Compaction
@@ -297,7 +297,7 @@ namespace Fabr.Sdk
         {
             if (!_customStateLoaded)
             {
-                _customStateCache = await fabrAgentHost.GetCustomStateAsync();
+                _customStateCache = await fabrcoreAgentHost.GetCustomStateAsync();
                 _customStateLoaded = true;
                 logger.LogDebug("Loaded custom state with {Count} keys", _customStateCache.Count);
             }
@@ -416,7 +416,7 @@ namespace Fabr.Sdk
                 return;
             }
 
-            await fabrAgentHost.MergeCustomStateAsync(_pendingStateChanges, _pendingStateDeletes);
+            await fabrcoreAgentHost.MergeCustomStateAsync(_pendingStateChanges, _pendingStateDeletes);
 
             // Update local cache
             if (_customStateCache != null)
@@ -438,10 +438,10 @@ namespace Fabr.Sdk
             _pendingStateDeletes.Clear();
         }
 
-        // Internal methods for IFabrAgentProxy
-        bool IFabrAgentProxy.InternalHasPendingStateChanges => HasPendingStateChanges;
+        // Internal methods for IFabrCoreAgentProxy
+        bool IFabrCoreAgentProxy.InternalHasPendingStateChanges => HasPendingStateChanges;
 
-        async Task IFabrAgentProxy.InternalFlushStateAsync()
+        async Task IFabrCoreAgentProxy.InternalFlushStateAsync()
         {
             await FlushStateAsync();
         }
@@ -492,7 +492,7 @@ namespace Fabr.Sdk
             return null;
         }
 
-        async Task IFabrAgentProxy.InternalInitialize()
+        async Task IFabrCoreAgentProxy.InternalInitialize()
         {
             using var activity = ActivitySource.StartActivity("InternalInitialize", ActivityKind.Internal);
             activity?.SetTag("agent.type", config.AgentType);
@@ -527,7 +527,7 @@ namespace Fabr.Sdk
             }
         }
 
-        async Task<ProxyHealthStatus> IFabrAgentProxy.InternalGetHealth(HealthDetailLevel detailLevel)
+        async Task<ProxyHealthStatus> IFabrCoreAgentProxy.InternalGetHealth(HealthDetailLevel detailLevel)
         {
             using var activity = ActivitySource.StartActivity("InternalGetHealth", ActivityKind.Internal);
             activity?.SetTag("agent.type", config.AgentType);
@@ -560,7 +560,7 @@ namespace Fabr.Sdk
             }
         }
 
-        async Task<AgentMessage> IFabrAgentProxy.InternalOnMessage(AgentMessage message)
+        async Task<AgentMessage> IFabrCoreAgentProxy.InternalOnMessage(AgentMessage message)
         {
             using var activity = ActivitySource.StartActivity("InternalOnMessage", ActivityKind.Server);
             activity?.SetTag("agent.type", config.AgentType);
@@ -607,7 +607,7 @@ namespace Fabr.Sdk
             }
         }
 
-        async Task IFabrAgentProxy.InternalOnEvent(AgentMessage message)
+        async Task IFabrCoreAgentProxy.InternalOnEvent(AgentMessage message)
         {
             using var activity = ActivitySource.StartActivity("InternalOnEvent", ActivityKind.Server);
             activity?.SetTag("agent.type", config.AgentType);

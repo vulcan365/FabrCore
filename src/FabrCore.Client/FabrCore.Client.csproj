@@ -7,12 +7,12 @@
   </PropertyGroup>
 
 	<PropertyGroup>
-		<Title>Fabr Client</Title>
-		<Description>Client library for connecting to Fabr agents</Description>
+		<Title>FabrCore Client</Title>
+		<Description>Client library for connecting to FabrCore agents</Description>
 	</PropertyGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\Fabr.Core\Fabr.Core.csproj" />
+		<ProjectReference Include="..\FabrCore.Core\FabrCore.Core.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

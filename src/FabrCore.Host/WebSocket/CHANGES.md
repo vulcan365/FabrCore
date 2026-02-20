@@ -2,14 +2,14 @@
 
 ## Summary
 
-Updated the Fabr WebSocket implementation to use the `x-fabr-userid` header (or query parameter fallback) for client identification instead of requiring a `sethandle` command.
+Updated the FabrCore WebSocket implementation to use the `x-fabrcore-userid` header (or query parameter fallback) for client identification instead of requiring a `sethandle` command.
 
 ## Changes Made
 
 ### 1. WebSocketMiddleware.cs
 
 **Modified:** Header/Query Parameter Extraction
-- Now extracts user ID from `x-fabr-userid` header (preferred)
+- Now extracts user ID from `x-fabrcore-userid` header (preferred)
 - Falls back to `userid` query parameter for browser compatibility
 - Rejects connections missing user ID with HTTP 400
 - Passes user ID to WebSocketSession constructor
@@ -45,7 +45,7 @@ Updated the Fabr WebSocket implementation to use the `x-fabr-userid` header (or 
 - ProcessCommandAsync: Lines 260-331 (sethandle and unsubscribe removed)
 - HandleUnsubscribeCommandAsync: Removed (automatic in DisposeAsync)
 
-### 3. FabrHostExtensions.cs
+### 3. FabrCoreHostExtensions.cs
 
 **No changes required** - WebSocket middleware already registered
 
@@ -104,7 +104,7 @@ ws.onopen = () => {
 **After (Node.js with headers):**
 ```javascript
 ws = new WebSocket('ws://localhost:5000/ws', {
-  headers: { 'x-fabr-userid': 'user123' }
+  headers: { 'x-fabrcore-userid': 'user123' }
 });
 ws.onopen = () => {
   // Session is already initialized, start using it
@@ -157,7 +157,7 @@ All existing clients must be updated to:
 A full-featured chat interface has been created in Demo.Server at `src/Demo.Server/wwwroot/chat.html`:
 
 **Features:**
-- Manual User ID input for testing (x-fabr-userid)
+- Manual User ID input for testing (x-fabrcore-userid)
 - Agent creation form with all configuration options
 - Real-time chat interface with message history
 - Visual distinction between user, agent, system, and error messages
@@ -174,7 +174,7 @@ See `src/Demo.Server/wwwroot/README.md` for detailed documentation.
 
 ## Security Considerations
 
-- **Header-based authentication** (x-fabr-userid) is preferred for production
+- **Header-based authentication** (x-fabrcore-userid) is preferred for production
 - **Query parameter** should only be used for browser clients in controlled environments
 - Consider implementing proper authentication middleware before the WebSocket handler
 - Validate and sanitize user IDs

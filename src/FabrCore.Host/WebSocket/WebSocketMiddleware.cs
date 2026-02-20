@@ -5,27 +5,27 @@ using Orleans;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 
-namespace Fabr.Host.WebSocket
+namespace FabrCore.Host.WebSocket
 {
     /// <summary>
-    /// Middleware to handle WebSocket connections for Fabr clients.
+    /// Middleware to handle WebSocket connections for FabrCore clients.
     /// </summary>
     public class WebSocketMiddleware
     {
-        private static readonly ActivitySource ActivitySource = new("Fabr.Host.WebSocketMiddleware");
-        private static readonly Meter Meter = new("Fabr.Host.WebSocketMiddleware");
+        private static readonly ActivitySource ActivitySource = new("FabrCore.Host.WebSocketMiddleware");
+        private static readonly Meter Meter = new("FabrCore.Host.WebSocketMiddleware");
 
         // Metrics
         private static readonly Counter<long> ConnectionsAcceptedCounter = Meter.CreateCounter<long>(
-            "fabr.websocket.connections.accepted",
+            "fabrcore.websocket.connections.accepted",
             description: "Number of WebSocket connections accepted");
 
         private static readonly Counter<long> ConnectionsRejectedCounter = Meter.CreateCounter<long>(
-            "fabr.websocket.connections.rejected",
+            "fabrcore.websocket.connections.rejected",
             description: "Number of WebSocket connections rejected");
 
         private static readonly Counter<long> ErrorCounter = Meter.CreateCounter<long>(
-            "fabr.websocket.middleware.errors",
+            "fabrcore.websocket.middleware.errors",
             description: "Number of errors in WebSocket middleware");
 
         private readonly RequestDelegate next;
@@ -51,7 +51,7 @@ namespace Fabr.Host.WebSocket
                 // Try header first (preferred), then fall back to query parameter (for browser compatibility)
                 string? userId = null;
 
-                if (context.Request.Headers.TryGetValue("x-fabr-userid", out var userIdValues))
+                if (context.Request.Headers.TryGetValue("x-fabrcore-userid", out var userIdValues))
                 {
                     userId = userIdValues.FirstOrDefault();
                     logger.LogDebug("User ID from header: {UserId}", userId);
@@ -71,7 +71,7 @@ namespace Fabr.Host.WebSocket
                         new KeyValuePair<string, object?>("reason", "missing_or_empty_userid"));
 
                     context.Response.StatusCode = StatusCodes.Status400BadRequest;
-                    await context.Response.WriteAsync("Missing required user ID. Provide via x-fabr-userid header or userid query parameter.");
+                    await context.Response.WriteAsync("Missing required user ID. Provide via x-fabrcore-userid header or userid query parameter.");
                     return;
                 }
 

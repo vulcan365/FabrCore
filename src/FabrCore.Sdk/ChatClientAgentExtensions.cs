@@ -2,7 +2,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
-namespace Fabr.Sdk;
+namespace FabrCore.Sdk;
 
 /// <summary>
 /// Result from forking a session, containing the new agent, session, and history provider.
@@ -45,9 +45,9 @@ public static class ChatClientAgentExtensions
         ArgumentNullException.ThrowIfNull(chatClient);
 
         // Get the original history provider
-        var originalProvider = session.GetService<FabrChatHistoryProvider>()
+        var originalProvider = session.GetService<FabrCoreChatHistoryProvider>()
             ?? throw new InvalidOperationException(
-                "ForkAsync requires a session with FabrChatHistoryProvider.");
+                "ForkAsync requires a session with FabrCoreChatHistoryProvider.");
 
         // Fork the provider (loads messages from Orleans if needed)
         var forkedProvider = await originalProvider.ForkAsync(logger, cancellationToken);
@@ -66,7 +66,7 @@ public static class ChatClientAgentExtensions
     }
 
     /// <summary>
-    /// Creates a ForkedChatHistoryProvider from an existing FabrChatHistoryProvider.
+    /// Creates a ForkedChatHistoryProvider from an existing FabrCoreChatHistoryProvider.
     /// The forked provider references original messages (read-only) and stores new messages in memory.
     ///
     /// - Memory efficient: original messages are not copied
@@ -78,7 +78,7 @@ public static class ChatClientAgentExtensions
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A new ForkedChatHistoryProvider that branches from the original conversation.</returns>
     public static async Task<ForkedChatHistoryProvider> ForkAsync(
-        this FabrChatHistoryProvider originalProvider,
+        this FabrCoreChatHistoryProvider originalProvider,
         ILogger? logger = null,
         CancellationToken cancellationToken = default)
     {

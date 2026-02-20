@@ -1,8 +1,8 @@
-﻿using Fabr.Core;
-using Fabr.Core.Interfaces;
-using Fabr.Core.Streaming;
-using Fabr.Host.Streaming;
-using Fabr.Sdk;
+﻿using FabrCore.Core;
+using FabrCore.Core.Interfaces;
+using FabrCore.Core.Streaming;
+using FabrCore.Host.Streaming;
+using FabrCore.Sdk;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,48 +15,48 @@ using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Text.Json;
 
-namespace Fabr.Host.Grains
+namespace FabrCore.Host.Grains
 {
-    internal class AgentGrain : Grain, IAgentGrain, IFabrAgentHost, IRemindable
+    internal class AgentGrain : Grain, IAgentGrain, IFabrCoreAgentHost, IRemindable
     {
-        private static readonly ActivitySource ActivitySource = new("Fabr.Host.AgentGrain");
-        private static readonly Meter Meter = new("Fabr.Host.AgentGrain");
+        private static readonly ActivitySource ActivitySource = new("FabrCore.Host.AgentGrain");
+        private static readonly Meter Meter = new("FabrCore.Host.AgentGrain");
 
         // Metrics
         private static readonly Counter<long> AgentConfiguredCounter = Meter.CreateCounter<long>(
-            "fabr.agent.configured",
+            "fabrcore.agent.configured",
             description: "Number of agents configured");
 
         private static readonly Counter<long> MessagesProcessedCounter = Meter.CreateCounter<long>(
-            "fabr.agent.messages.processed",
+            "fabrcore.agent.messages.processed",
             description: "Number of messages processed");
 
         private static readonly Histogram<double> MessageProcessingDuration = Meter.CreateHistogram<double>(
-            "fabr.agent.message.duration",
+            "fabrcore.agent.message.duration",
             unit: "ms",
             description: "Duration of message processing");
 
         private static readonly Counter<long> StreamMessagesCounter = Meter.CreateCounter<long>(
-            "fabr.agent.stream.messages",
+            "fabrcore.agent.stream.messages",
             description: "Number of stream messages received");
 
         private static readonly Counter<long> StreamsCreatedCounter = Meter.CreateCounter<long>(
-            "fabr.agent.streams.created",
+            "fabrcore.agent.streams.created",
             description: "Number of streams created");
 
         private static readonly Counter<long> ErrorCounter = Meter.CreateCounter<long>(
-            "fabr.agent.errors",
+            "fabrcore.agent.errors",
             description: "Number of errors encountered");
 
         private static readonly Counter<long> TimerFiredCounter = Meter.CreateCounter<long>(
-            "fabr.agent.timer.fired",
+            "fabrcore.agent.timer.fired",
             description: "Number of timer callbacks fired");
 
         private static readonly Counter<long> ReminderFiredCounter = Meter.CreateCounter<long>(
-            "fabr.agent.reminder.fired",
+            "fabrcore.agent.reminder.fired",
             description: "Number of reminder callbacks fired");
 
-        protected IFabrAgentProxy? fabrAgentProxy;
+        protected IFabrCoreAgentProxy? fabrcoreAgentProxy;
         protected AgentConfiguration? agentConfiguration;
 
         private readonly IClusterClient clusterClient;
@@ -64,11 +64,11 @@ namespace Fabr.Host.Grains
         private readonly ILoggerFactory loggerFactory;
         private readonly ILogger<AgentGrain> logger;
         private readonly IConfiguration configuration;
-        private readonly IFabrRegistry _registry;
+        private readonly IFabrCoreRegistry _registry;
 
         // Message persistence state
         private readonly IPersistentState<AgentGrainState> _messageState;
-        private readonly List<FabrChatHistoryProvider> _activeChatHistoryProviders = new();
+        private readonly List<FabrCoreChatHistoryProvider> _activeChatHistoryProviders = new();
 
         // Timer and reminder state
         private readonly Dictionary<string, IDisposable> _timers = new();
@@ -84,8 +84,8 @@ namespace Fabr.Host.Grains
             IServiceProvider serviceProvider,
             ILoggerFactory loggerFactory,
             IConfiguration configuration,
-            IFabrRegistry registry,
-            [PersistentState("agentMessages", "fabrStorage")]
+            IFabrCoreRegistry registry,
+            [PersistentState("agentMessages", "fabrcoreStorage")]
             IPersistentState<AgentGrainState> messageState)
         {
             this.clusterClient = clusterClient;
@@ -116,11 +116,11 @@ namespace Fabr.Host.Grains
                     agentConfiguration = persistedConfig;
 
                     var agentType = CreateAgent(persistedConfig.AgentType ?? throw new InvalidOperationException("Persisted AgentType is null"));
-                    fabrAgentProxy = (IFabrAgentProxy?)ActivatorUtilities.CreateInstance(serviceProvider, agentType, persistedConfig, this);
+                    fabrcoreAgentProxy = (IFabrCoreAgentProxy?)ActivatorUtilities.CreateInstance(serviceProvider, agentType, persistedConfig, this);
 
-                    if (fabrAgentProxy != null)
+                    if (fabrcoreAgentProxy != null)
                     {
-                        await fabrAgentProxy.InternalInitialize();
+                        await fabrcoreAgentProxy.InternalInitialize();
                         _configuredAt = DateTime.UtcNow;
 
                         await CreateStreams(persistedConfig.Streams ?? new List<string>());
@@ -138,11 +138,11 @@ namespace Fabr.Host.Grains
                     logger.LogError(ex, "Failed to restore agent from persisted configuration: {Handle}", persistedConfig.Handle);
                     // Clear the failed configuration to allow fresh configuration
                     agentConfiguration = null;
-                    fabrAgentProxy = null;
+                    fabrcoreAgentProxy = null;
                 }
             }
             // If agent was already configured in-memory, register with management grain
-            else if (agentConfiguration != null && fabrAgentProxy != null)
+            else if (agentConfiguration != null && fabrcoreAgentProxy != null)
             {
                 await RegisterWithManagementGrain();
             }
@@ -157,11 +157,11 @@ namespace Fabr.Host.Grains
             await FlushAllChatHistoryProvidersAsync();
 
             // Flush any pending custom state changes before deactivation
-            if (fabrAgentProxy != null && fabrAgentProxy.InternalHasPendingStateChanges)
+            if (fabrcoreAgentProxy != null && fabrcoreAgentProxy.InternalHasPendingStateChanges)
             {
                 try
                 {
-                    await fabrAgentProxy.InternalFlushStateAsync();
+                    await fabrcoreAgentProxy.InternalFlushStateAsync();
                     logger.LogDebug("Flushed pending custom state changes");
                 }
                 catch (Exception ex)
@@ -226,7 +226,7 @@ namespace Fabr.Host.Grains
             activity?.SetTag("force.reconfigure", forceReconfigure);
 
             // If already configured and not forcing reconfigure, return current health
-            if (agentConfiguration != null && fabrAgentProxy != null && !forceReconfigure)
+            if (agentConfiguration != null && fabrcoreAgentProxy != null && !forceReconfigure)
             {
                 logger.LogInformation("Agent already configured, returning health status: {Handle}",
                     this.GetPrimaryKeyString());
@@ -242,9 +242,9 @@ namespace Fabr.Host.Grains
                 agentConfiguration = config;
 
                 var agentType = CreateAgent(config.AgentType ?? throw new ArgumentException("AgentType cannot be null", nameof(config)));
-                fabrAgentProxy = (IFabrAgentProxy?)ActivatorUtilities.CreateInstance(serviceProvider, agentType, config, this);
+                fabrcoreAgentProxy = (IFabrCoreAgentProxy?)ActivatorUtilities.CreateInstance(serviceProvider, agentType, config, this);
 
-                if (fabrAgentProxy == null)
+                if (fabrcoreAgentProxy == null)
                 {
                     logger.LogError("Failed to create agent proxy for type: {AgentType}", config.AgentType);
                     activity?.SetStatus(ActivityStatusCode.Error, "Agent proxy type not found");
@@ -255,7 +255,7 @@ namespace Fabr.Host.Grains
 
                 logger.LogDebug("Agent proxy created successfully for: {AgentType}", config.AgentType);
 
-                await fabrAgentProxy.InternalInitialize();
+                await fabrcoreAgentProxy.InternalInitialize();
                 _configuredAt = DateTime.UtcNow;
                 logger.LogDebug("Agent proxy initialized for: {Handle}", config.Handle);
 
@@ -298,7 +298,7 @@ namespace Fabr.Host.Grains
             activity?.SetTag("detail.level", detailLevel.ToString());
 
             var handle = this.GetPrimaryKeyString();
-            var isConfigured = agentConfiguration != null && fabrAgentProxy != null;
+            var isConfigured = agentConfiguration != null && fabrcoreAgentProxy != null;
 
             // Build basic status
             var status = new AgentHealthStatus
@@ -334,7 +334,7 @@ namespace Fabr.Host.Grains
             // Add full diagnostics if requested
             if (detailLevel == HealthDetailLevel.Full)
             {
-                var proxyHealth = await fabrAgentProxy!.InternalGetHealth(detailLevel);
+                var proxyHealth = await fabrcoreAgentProxy!.InternalGetHealth(detailLevel);
 
                 status = status with
                 {
@@ -446,12 +446,12 @@ namespace Fabr.Host.Grains
 
             try
             {
-                if (fabrAgentProxy == null)
+                if (fabrcoreAgentProxy == null)
                 {
                     throw new InvalidOperationException("Agent has not been configured. Call ConfigureAgent first.");
                 }
 
-                var response = await fabrAgentProxy.InternalOnMessage(request);
+                var response = await fabrcoreAgentProxy.InternalOnMessage(request);
                 _messagesProcessed++;
                 logger.LogTrace("OnMessage completed - Response ToHandle: {ToHandle}", response?.ToHandle);
 
@@ -553,7 +553,7 @@ namespace Fabr.Host.Grains
 
 
 
-        // IFabrAgentHost
+        // IFabrCoreAgentHost
 
         public string GetHandle()
         {
@@ -854,17 +854,17 @@ namespace Fabr.Host.Grains
             }
         }
 
-        // IFabrAgentHost - Chat History Provider Support
+        // IFabrCoreAgentHost - Chat History Provider Support
 
-        public FabrChatHistoryProvider GetChatHistoryProvider(string threadId)
+        public FabrCoreChatHistoryProvider GetChatHistoryProvider(string threadId)
         {
-            var provider = new FabrChatHistoryProvider(this, threadId);
+            var provider = new FabrCoreChatHistoryProvider(this, threadId);
             _activeChatHistoryProviders.Add(provider);  // Track for deactivation flush
             logger.LogDebug("Created chat history provider for thread: {ThreadId}", threadId);
             return provider;
         }
 
-        public void TrackChatHistoryProvider(FabrChatHistoryProvider provider)
+        public void TrackChatHistoryProvider(FabrCoreChatHistoryProvider provider)
         {
             if (!_activeChatHistoryProviders.Contains(provider))
             {
@@ -885,10 +885,10 @@ namespace Fabr.Host.Grains
         public Task ReplaceThreadMessagesAsync(string threadId, IEnumerable<StoredChatMessage> messages)
             => ReplaceThreadMessages(threadId, messages);
 
-        Task<Dictionary<string, JsonElement>> IFabrAgentHost.GetCustomStateAsync()
+        Task<Dictionary<string, JsonElement>> IFabrCoreAgentHost.GetCustomStateAsync()
             => GetCustomStateAsync();
 
-        Task IFabrAgentHost.MergeCustomStateAsync(Dictionary<string, JsonElement> changes, IEnumerable<string> deletes)
+        Task IFabrCoreAgentHost.MergeCustomStateAsync(Dictionary<string, JsonElement> changes, IEnumerable<string> deletes)
             => MergeCustomStateAsync(changes, deletes);
 
         // IRemindable implementation
@@ -965,7 +965,7 @@ namespace Fabr.Host.Grains
 
         private async Task SendTimerOrReminderMessage(string name, string messageType, string? message, bool isReminder)
         {
-            if (fabrAgentProxy == null)
+            if (fabrcoreAgentProxy == null)
             {
                 logger.LogWarning("Agent proxy not initialized, cannot process {Type}: {Name}",
                     isReminder ? "reminder" : "timer", name);
@@ -986,7 +986,7 @@ namespace Fabr.Host.Grains
             logger.LogTrace("Sending {Type} message to agent - Name: {Name}, MessageType: {MessageType}",
                 isReminder ? "reminder" : "timer", name, messageType);
 
-            await fabrAgentProxy.InternalOnMessage(agentMessage);
+            await fabrcoreAgentProxy.InternalOnMessage(agentMessage);
         }
 
         // End Interfaces
@@ -1166,9 +1166,9 @@ namespace Fabr.Host.Grains
 
             try
             {
-                if (fabrAgentProxy != null)
+                if (fabrcoreAgentProxy != null)
                 {
-                    await fabrAgentProxy.InternalOnEvent(request);
+                    await fabrcoreAgentProxy.InternalOnEvent(request);
                 }
                 else
                 {

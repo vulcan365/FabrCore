@@ -1,4 +1,4 @@
-namespace Fabr.Core.Streaming
+namespace FabrCore.Core.Streaming
 {
     /// <summary>
     /// Represents a fully-qualified Orleans stream name with provider, namespace, and handle.

@@ -1,4 +1,4 @@
-namespace Fabr.Sdk.Memory;
+namespace FabrCore.Sdk.Memory;
 
 /// <summary>
 /// A stored document chunk with its embedding and metadata.

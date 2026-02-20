@@ -1,7 +1,7 @@
-namespace Fabr.Sdk.Memory;
+namespace FabrCore.Sdk.Memory;
 
 /// <summary>
-/// Configuration options for the Fabr memory system.
+/// Configuration options for the FabrCore memory system.
 /// </summary>
 public sealed class MemoryOptions
 {
