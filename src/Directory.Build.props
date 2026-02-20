@@ -1,6 +1,5 @@
 <Project>
   <PropertyGroup>
-    <Version>0.5.10</Version>
     <Authors>Vulcan365 LLC</Authors>
     <Company>Vulcan365 LLC</Company>
     <Copyright>Copyright (c) 2025 Vulcan365 LLC</Copyright>
@@ -9,8 +8,16 @@
     <RepositoryType>git</RepositoryType>
     <PackageProjectUrl>https://github.com/vulcan365/FabrCore</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <MinVerTagPrefix>v</MinVerTagPrefix>
+    <MinVerMinimumMajorMinor>0.5</MinVerMinimumMajorMinor>
   </PropertyGroup>
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)../README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="MinVer" Version="7.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
 </Project>
