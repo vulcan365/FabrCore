@@ -83,7 +83,7 @@ app.Run();
 
 ### 4. Configure model access
 
-Copy `fabrcore.json.example` to `fabrcore.json` in your project root and fill in your API keys:
+Copy `FabrCore.json.example` to `FabrCore.json` in your project root and fill in your API keys:
 
 ```json
 {
@@ -105,7 +105,7 @@ Copy `fabrcore.json.example` to `fabrcore.json` in your project root and fill in
 }
 ```
 
-> **Note:** `fabrcore.json` is gitignored by default to prevent accidental secret commits.
+> **Note:** `FabrCore.json` is gitignored by default to prevent accidental secret commits.
 
 ## Configuration
 
@@ -142,3 +142,4 @@ See [NOTICE](NOTICE) for attribution requirements.
 ## Contributing
 
 Contributions are welcome! Please open an issue or pull request on [GitHub](https://github.com/vulcan365/FabrCore).
+
