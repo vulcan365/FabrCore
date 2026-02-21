@@ -13,6 +13,7 @@ namespace FabrCore.Core
         public Dictionary<string, string> Args { get; set; } = new();
         public List<string> Plugins { get; set; } = new();
         public List<string> Tools { get; set; } = new();
+        public List<McpServerConfig> McpServers { get; set; } = new();
         public bool ForceReconfigure { get; set; }
 
     }
@@ -40,6 +41,8 @@ namespace FabrCore.Core
         public List<string> Plugins { get; set; } = new();
         [Id(7)]
         public List<string> Tools { get; set; } = new();
+        [Id(10)]
+        public List<McpServerConfig> McpServers { get; set; } = new();
         [Id(8)]
         public bool ForceReconfigure { get; set; }
 
@@ -66,6 +69,7 @@ namespace FabrCore.Core
                 Args = surrogate.Args,
                 Plugins = surrogate.Plugins,
                 Tools = surrogate.Tools,
+                McpServers = surrogate.McpServers,
                 ForceReconfigure = surrogate.ForceReconfigure
             };
         }
@@ -83,6 +87,7 @@ namespace FabrCore.Core
                 Args = value.Args,
                 Plugins = value.Plugins,
                 Tools = value.Tools,
+                McpServers = value.McpServers,
                 ForceReconfigure = value.ForceReconfigure
             };
         }

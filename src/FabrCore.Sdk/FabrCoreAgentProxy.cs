@@ -4,6 +4,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using ModelContextProtocol.Client;
 using OpenAI.Audio;
 using OpenTelemetry.Trace;
 using System.Diagnostics;
@@ -20,6 +21,7 @@ namespace FabrCore.Sdk
         internal Task InternalOnEvent(AgentMessage message);
         internal Task<ProxyHealthStatus> InternalGetHealth(HealthDetailLevel detailLevel);
         internal Task InternalFlushStateAsync();
+        internal Task InternalDisposeAsync();
         internal bool InternalHasPendingStateChanges { get; }
 
         Task OnInitialize();
@@ -64,6 +66,18 @@ namespace FabrCore.Sdk
             "fabrcore.agent.proxy.errors",
             description: "Number of errors encountered in agent proxy");
 
+        private static readonly Counter<long> McpServersConnectedCounter = Meter.CreateCounter<long>(
+            "fabrcore.agent.proxy.mcp.servers.connected",
+            description: "Number of MCP servers successfully connected");
+
+        private static readonly Counter<long> McpErrorsCounter = Meter.CreateCounter<long>(
+            "fabrcore.agent.proxy.mcp.errors",
+            description: "Number of MCP connection errors");
+
+        private static readonly Counter<long> McpServersDisposedCounter = Meter.CreateCounter<long>(
+            "fabrcore.agent.proxy.mcp.servers.disposed",
+            description: "Number of MCP servers disposed");
+
         protected readonly AgentConfiguration config;
         protected readonly IFabrCoreAgentHost fabrcoreAgentHost;
         protected readonly IServiceProvider serviceProvider;
@@ -73,6 +87,9 @@ namespace FabrCore.Sdk
         protected readonly IFabrCoreChatClientService chatClientService;
 
         private DateTime? _initializedAt;
+
+        // MCP client lifecycle tracking
+        private readonly List<McpClient> _mcpClients = new();
 
         // Compaction plumbing — lazily initialized on first TryCompactAsync() call
         private FabrCoreChatHistoryProvider? _chatHistoryProvider;
@@ -185,7 +202,91 @@ namespace FabrCore.Sdk
         protected async Task<List<AITool>> ResolveConfiguredToolsAsync()
         {
             var registry = serviceProvider.GetRequiredService<FabrCoreToolRegistry>();
-            return await registry.ResolveToolsAsync(serviceProvider, config.Plugins, config.Tools, config, fabrcoreAgentHost);
+            var tools = await registry.ResolveToolsAsync(serviceProvider, config.Plugins, config.Tools, config, fabrcoreAgentHost);
+
+            // Connect configured MCP servers (fail-open: log warning and continue on failure)
+            if (config.McpServers is { Count: > 0 })
+            {
+                foreach (var mcpConfig in config.McpServers)
+                {
+                    try
+                    {
+                        var mcpTools = await ConnectMcpServerAsync(mcpConfig);
+                        tools.AddRange(mcpTools);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "Failed to connect MCP server '{Name}' — agent will continue without its tools",
+                            mcpConfig.Name ?? "(unnamed)");
+                        McpErrorsCounter.Add(1,
+                            new KeyValuePair<string, object?>("agent.handle", config.Handle),
+                            new KeyValuePair<string, object?>("mcp.server", mcpConfig.Name));
+                    }
+                }
+            }
+
+            return tools;
+        }
+
+        /// <summary>
+        /// Connects to an MCP server and returns its tools as AITool instances.
+        /// The MCP client is tracked for automatic disposal on grain deactivation.
+        /// For config-driven MCP (via McpServers), failures are caught by ResolveConfiguredToolsAsync.
+        /// For code-driven usage, exceptions propagate to the caller.
+        /// </summary>
+        /// <param name="mcpConfig">The MCP server configuration.</param>
+        /// <returns>List of AI tools provided by the MCP server.</returns>
+        protected async Task<IList<AITool>> ConnectMcpServerAsync(McpServerConfig mcpConfig)
+        {
+            using var activity = ActivitySource.StartActivity("ConnectMcpServerAsync", ActivityKind.Client);
+            activity?.SetTag("mcp.server.name", mcpConfig.Name);
+            activity?.SetTag("mcp.transport", mcpConfig.TransportType.ToString());
+
+            logger.LogInformation("Connecting to MCP server '{Name}' via {Transport}",
+                mcpConfig.Name ?? "(unnamed)", mcpConfig.TransportType);
+
+            IClientTransport transport = mcpConfig.TransportType switch
+            {
+                McpTransportType.Stdio => new StdioClientTransport(new StdioClientTransportOptions
+                {
+                    Name = mcpConfig.Name,
+                    Command = mcpConfig.Command ?? throw new ArgumentException($"MCP server '{mcpConfig.Name}' requires a Command for Stdio transport"),
+                    Arguments = mcpConfig.Arguments,
+                    EnvironmentVariables = mcpConfig.Env?.Count > 0
+                        ? mcpConfig.Env.ToDictionary(kv => kv.Key, kv => (string?)kv.Value)
+                        : null
+                }, loggerFactory),
+
+                McpTransportType.Http => new HttpClientTransport(new HttpClientTransportOptions
+                {
+                    Name = mcpConfig.Name,
+                    Endpoint = new Uri(mcpConfig.Url ?? throw new ArgumentException($"MCP server '{mcpConfig.Name}' requires a Url for Http transport")),
+                    AdditionalHeaders = mcpConfig.Headers?.Count > 0
+                        ? mcpConfig.Headers.ToDictionary(kv => kv.Key, kv => kv.Value)
+                        : null
+                }, loggerFactory),
+
+                _ => throw new ArgumentException($"Unsupported MCP transport type: {mcpConfig.TransportType}")
+            };
+
+            var client = await McpClient.CreateAsync(transport, loggerFactory: loggerFactory);
+            _mcpClients.Add(client);
+
+            var tools = await client.ListToolsAsync();
+
+            McpServersConnectedCounter.Add(1,
+                new KeyValuePair<string, object?>("agent.handle", config.Handle),
+                new KeyValuePair<string, object?>("mcp.server", mcpConfig.Name));
+
+            logger.LogInformation("Connected to MCP server '{Name}' — {ToolCount} tools available: [{ToolNames}]",
+                mcpConfig.Name ?? "(unnamed)",
+                tools.Count,
+                string.Join(", ", tools.Select(t => t.Name)));
+
+            activity?.SetTag("mcp.tools.count", tools.Count);
+            activity?.SetStatus(ActivityStatusCode.Ok);
+
+            return tools.Cast<AITool>().ToList();
         }
 
         #region Compaction
@@ -439,6 +540,31 @@ namespace FabrCore.Sdk
             await FlushStateAsync();
         }
 
+        async Task IFabrCoreAgentProxy.InternalDisposeAsync()
+        {
+            if (_mcpClients.Count == 0)
+                return;
+
+            logger.LogInformation("Disposing {Count} MCP client(s) for agent '{Handle}'",
+                _mcpClients.Count, config.Handle);
+
+            foreach (var client in _mcpClients)
+            {
+                try
+                {
+                    await client.DisposeAsync();
+                    McpServersDisposedCounter.Add(1,
+                        new KeyValuePair<string, object?>("agent.handle", config.Handle));
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Error disposing MCP client for agent '{Handle}'", config.Handle);
+                }
+            }
+
+            _mcpClients.Clear();
+        }
+
         #endregion
 
         public abstract Task<AgentMessage> OnMessage(AgentMessage message);
@@ -482,6 +608,14 @@ namespace FabrCore.Sdk
         /// <returns>Custom metrics dictionary or null.</returns>
         protected virtual Dictionary<string, string>? GetCustomHealthMetrics(HealthDetailLevel detailLevel)
         {
+            if (_mcpClients.Count > 0)
+            {
+                return new Dictionary<string, string>
+                {
+                    ["McpServerConnections"] = _mcpClients.Count.ToString()
+                };
+            }
+
             return null;
         }
 
