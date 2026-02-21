@@ -1,0 +1,12 @@
+{
+  "Handle": "cli-user",
+  "Port": 5846,
+  "Agents": [
+    {
+      "Handle": "assistant",
+      "AgentType": "DefaultAgent",
+      "Models": "default",
+      "SystemPrompt": "You are a helpful assistant."
+    }
+  ]
+}

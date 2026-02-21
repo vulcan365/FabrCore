@@ -1,5 +1,7 @@
 using FabrCore.Core;
 using Spectre.Console;
+using Color = Spectre.Console.Color;
+using Panel = Spectre.Console.Panel;
 
 namespace FabrCore.Console.CliHost.Services;
 
@@ -130,6 +132,33 @@ public class ConsoleRenderer : IConsoleRenderer
                 aliases.Length > 0 ? string.Join(", ", aliases.Select(a => $"/{Markup.Escape(a)}")) : "[dim]-[/]",
                 Markup.Escape(description),
                 Markup.Escape(usage)
+            );
+        }
+
+        AnsiConsole.WriteLine();
+        AnsiConsole.Write(table);
+        AnsiConsole.WriteLine();
+    }
+
+    public void ShowAgentCreationResults(List<AgentCreationResult> results)
+    {
+        var table = new Table()
+            .Title("[bold]Agent Creation Results[/]")
+            .AddColumn("Handle")
+            .AddColumn("Type")
+            .AddColumn("Status")
+            .BorderColor(Color.Blue);
+
+        foreach (var result in results)
+        {
+            var status = result.Success
+                ? "[green]Created[/]"
+                : $"[red]Failed: {Markup.Escape(result.Error ?? "Unknown error")}[/]";
+
+            table.AddRow(
+                Markup.Escape(result.Handle),
+                Markup.Escape(result.AgentType),
+                status
             );
         }
 

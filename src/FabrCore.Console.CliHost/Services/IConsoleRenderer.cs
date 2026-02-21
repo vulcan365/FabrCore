@@ -17,4 +17,5 @@ public interface IConsoleRenderer
     void ShowStatus(string userHandle, string? agentHandle, int port);
     Task ShowThinkingAsync(Func<Action<string>, CancellationToken, Task> work, CancellationToken ct);
     string? ShowAgentSelectionPrompt(IEnumerable<string> agentHandles);
+    void ShowAgentCreationResults(List<AgentCreationResult> results);
 }

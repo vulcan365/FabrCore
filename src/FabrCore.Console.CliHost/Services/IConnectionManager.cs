@@ -21,4 +21,7 @@ public interface IConnectionManager
     Task<AgentsListResponse> GetAgentsAsync(string? status = null, CancellationToken ct = default);
     Task<List<TrackedAgentInfo>> GetTrackedAgentsAsync(CancellationToken ct = default);
     Task<AgentHealthStatus> GetHealthAsync(string? handle = null, CancellationToken ct = default);
+    Task<List<AgentCreationResult>> CreateAgentsAsync(List<AgentConfiguration> agents, CancellationToken ct = default);
 }
+
+public record AgentCreationResult(string Handle, string AgentType, bool Success, string? Error = null);

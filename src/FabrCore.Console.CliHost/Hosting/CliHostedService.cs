@@ -1,5 +1,7 @@
+using System.Text.Json;
 using FabrCore.Console.CliHost.Commands;
 using FabrCore.Console.CliHost.Services;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -11,6 +13,7 @@ public class CliHostedService : BackgroundService
     private readonly IConsoleRenderer _renderer;
     private readonly IInputReader _inputReader;
     private readonly CommandRegistry _commandRegistry;
+    private readonly IWebHostEnvironment _env;
     private readonly ILogger<CliHostedService> _logger;
 
     public CliHostedService(
@@ -18,12 +21,14 @@ public class CliHostedService : BackgroundService
         IConsoleRenderer renderer,
         IInputReader inputReader,
         CommandRegistry commandRegistry,
+        IWebHostEnvironment env,
         ILogger<CliHostedService> logger)
     {
         _connection = connection;
         _renderer = renderer;
         _inputReader = inputReader;
         _commandRegistry = commandRegistry;
+        _env = env;
         _logger = logger;
     }
 
@@ -49,7 +54,44 @@ public class CliHostedService : BackgroundService
             return;
         }
 
+        await AutoLoadConfigAsync(stoppingToken);
+
         await RunReplAsync(stoppingToken);
+    }
+
+    private async Task AutoLoadConfigAsync(CancellationToken ct)
+    {
+        var fabrCorePath = Path.Combine(_env.ContentRootPath, "fabrcore.json");
+        var cliHostPath = Path.Combine(_env.ContentRootPath, "fabrcore-clihost.json");
+
+        if (!File.Exists(fabrCorePath) || !File.Exists(cliHostPath))
+            return;
+
+        try
+        {
+            var json = await File.ReadAllTextAsync(cliHostPath, ct);
+            var config = JsonSerializer.Deserialize<CliHostConfiguration>(json);
+
+            if (config?.Agents == null || config.Agents.Count == 0)
+                return;
+
+            _renderer.ShowInfo($"Found fabrcore-clihost.json — creating {config.Agents.Count} agent(s)...");
+            var results = await _connection.CreateAgentsAsync(config.Agents, ct);
+            _renderer.ShowAgentCreationResults(results);
+
+            var firstSuccess = results.FirstOrDefault(r => r.Success);
+            if (firstSuccess != null)
+            {
+                _renderer.ShowSuccess($"Connected to {firstSuccess.Handle}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _renderer.ShowWarning($"Auto-load of fabrcore-clihost.json failed: {ex.Message}");
+            _logger.LogWarning(ex, "Failed to auto-load fabrcore-clihost.json");
+        }
+
+        System.Console.WriteLine();
     }
 
     private async Task RunReplAsync(CancellationToken ct)

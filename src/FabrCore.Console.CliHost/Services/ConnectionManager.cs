@@ -127,6 +127,45 @@ public class ConnectionManager : IConnectionManager
         return await _context!.GetTrackedAgents();
     }
 
+    public async Task<List<AgentCreationResult>> CreateAgentsAsync(List<AgentConfiguration> agents, CancellationToken ct = default)
+    {
+        EnsureInitialized();
+
+        var results = new List<AgentCreationResult>();
+
+        foreach (var agentConfig in agents)
+        {
+            var handle = agentConfig.Handle ?? agentConfig.AgentType?.ToLowerInvariant() ?? "unknown";
+            var agentType = agentConfig.AgentType ?? "unknown";
+
+            try
+            {
+                // Inject userId if not already present
+                if (!agentConfig.Args.ContainsKey("userId"))
+                    agentConfig.Args["userId"] = _options.Handle;
+
+                await _context!.CreateAgent(agentConfig);
+                results.Add(new AgentCreationResult(handle, agentType, true));
+                _logger.LogInformation("Batch-created agent: {Handle} ({Type})", handle, agentType);
+            }
+            catch (Exception ex)
+            {
+                results.Add(new AgentCreationResult(handle, agentType, false, ex.Message));
+                _logger.LogWarning(ex, "Failed to create agent: {Handle} ({Type})", handle, agentType);
+            }
+        }
+
+        // Auto-connect to first successfully created agent
+        var firstSuccess = results.FirstOrDefault(r => r.Success);
+        if (firstSuccess != null)
+        {
+            CurrentAgentHandle = firstSuccess.Handle;
+            _logger.LogInformation("Auto-connected to first created agent: {Handle}", firstSuccess.Handle);
+        }
+
+        return results;
+    }
+
     public async Task<AgentHealthStatus> GetHealthAsync(string? handle = null, CancellationToken ct = default)
     {
         EnsureInitialized();

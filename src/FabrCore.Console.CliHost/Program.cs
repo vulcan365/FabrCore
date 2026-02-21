@@ -22,6 +22,7 @@ builder.Services.AddSingleton(cliOptions);
 builder.Services.AddSingleton<IConnectionManager, ConnectionManager>();
 builder.Services.AddSingleton<IConsoleRenderer, ConsoleRenderer>();
 builder.Services.AddSingleton<IInputReader, InputReader>();
+builder.Services.AddSingleton<FileDialogService>();
 
 // Register commands
 builder.Services.AddSingleton<ICliCommand, HelpCommand>();
@@ -32,6 +33,7 @@ builder.Services.AddSingleton<ICliCommand, ConnectCommand>();
 builder.Services.AddSingleton<ICliCommand, CreateCommand>();
 builder.Services.AddSingleton<ICliCommand, HealthCommand>();
 builder.Services.AddSingleton<ICliCommand, StatusCommand>();
+builder.Services.AddSingleton<ICliCommand, ConfigCommand>();
 
 // CommandRegistry depends on all ICliCommand instances
 builder.Services.AddSingleton<CommandRegistry>();
