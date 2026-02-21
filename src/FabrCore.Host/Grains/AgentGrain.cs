@@ -170,6 +170,19 @@ namespace FabrCore.Host.Grains
                 }
             }
 
+            // Dispose MCP clients
+            if (fabrcoreAgentProxy != null)
+            {
+                try
+                {
+                    await fabrcoreAgentProxy.InternalDisposeAsync();
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to dispose MCP clients");
+                }
+            }
+
             // Notify management grain of deactivation
             if (agentConfiguration != null)
             {
