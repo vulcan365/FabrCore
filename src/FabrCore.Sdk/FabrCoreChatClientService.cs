@@ -116,10 +116,11 @@ namespace FabrCore.Sdk
                                 NetworkTimeout = TimeSpan.FromSeconds(timeoutSeconds),
                                 ClientLoggingOptions = new System.ClientModel.Primitives.ClientLoggingOptions
                                 {
-                                    EnableLogging = false,
-                                    EnableMessageContentLogging = false,
+                                    EnableLogging = true,
+                                    EnableMessageContentLogging = true,
                                     LoggerFactory = _loggerFactory,
-                                    EnableMessageLogging = false
+                                    EnableMessageLogging = true
+                                    
                                 }
                             }
                         );

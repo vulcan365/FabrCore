@@ -21,33 +21,28 @@ public record ForkedSessionResult(
 public static class ChatClientAgentExtensions
 {
     /// <summary>
-    /// Forks an AgentSession, creating a new in-memory session that references
+    /// Forks a FabrCoreChatHistoryProvider, creating a new in-memory provider that references
     /// the original messages (read-only) and stores only new messages in memory.
     ///
     /// - Memory efficient: original messages are not copied
     /// - Original session is completely unaffected
     /// - New messages are in-memory until PersistAsync() is called on the provider
     /// </summary>
-    /// <param name="session">The session to fork.</param>
+    /// <param name="originalProvider">The history provider to fork from.</param>
     /// <param name="chatClient">The chat client to use for the forked agent.</param>
     /// <param name="options">Optional ChatOptions (instructions, tools, etc.).</param>
     /// <param name="logger">Optional logger.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A ForkedSessionResult containing the new agent and session.</returns>
     public static async Task<ForkedSessionResult> ForkAsync(
-        this AgentSession session,
+        this FabrCoreChatHistoryProvider originalProvider,
         IChatClient chatClient,
         ChatOptions? options = null,
         ILogger? logger = null,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(originalProvider);
         ArgumentNullException.ThrowIfNull(chatClient);
-
-        // Get the original history provider
-        var originalProvider = session.GetService<FabrCoreChatHistoryProvider>()
-            ?? throw new InvalidOperationException(
-                "ForkAsync requires a session with FabrCoreChatHistoryProvider.");
 
         // Fork the provider (loads messages from Orleans if needed)
         var forkedProvider = await originalProvider.ForkAsync(logger, cancellationToken);
@@ -56,11 +51,11 @@ public static class ChatClientAgentExtensions
         var agentOptions = new ChatClientAgentOptions
         {
             ChatOptions = options,
-            ChatHistoryProviderFactory = forkedProvider.CreateFactory()
+            ChatHistoryProvider = forkedProvider
         };
 
         var forkedAgent = new ChatClientAgent(chatClient, agentOptions);
-        var forkedSession = await forkedAgent.GetNewSessionAsync(cancellationToken);
+        var forkedSession = await forkedAgent.CreateSessionAsync(cancellationToken);
 
         return new ForkedSessionResult(forkedAgent, forkedSession, forkedProvider);
     }
@@ -84,21 +79,13 @@ public static class ChatClientAgentExtensions
     {
         ArgumentNullException.ThrowIfNull(originalProvider);
 
-        // Get current messages from original provider (this loads from Orleans if needed)
-        var dummyContext = new ChatHistoryProvider.InvokingContext(Array.Empty<ChatMessage>());
-        var originalMessages = (await originalProvider.InvokingAsync(dummyContext, cancellationToken)).ToList();
+        // Get current messages from original provider
+        var originalMessages = await originalProvider.GetMessagesAsync(cancellationToken);
 
         // Create forked provider with read-only reference to original messages
         return new ForkedChatHistoryProvider(
-            originalMessages,
+            originalMessages.ToList(),
             originalProvider.ThreadId,
             logger);
     }
 }
-
-// Keep old names as aliases for backward compatibility during migration
-[Obsolete("Use ForkedSessionResult instead")]
-public record ForkedThreadResult(
-    ChatClientAgent Agent,
-    AgentSession Session,
-    ForkedChatHistoryProvider HistoryProvider) : ForkedSessionResult(Agent, Session, HistoryProvider);

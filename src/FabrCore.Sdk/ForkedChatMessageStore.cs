@@ -76,14 +76,10 @@ public class ForkedChatHistoryProvider : ChatHistoryProvider
     }
 
     /// <inheritdoc/>
-    public override ValueTask InvokedAsync(ChatHistoryProvider.InvokedContext context, CancellationToken cancellationToken = default)
+    protected override ValueTask StoreChatHistoryAsync(ChatHistoryProvider.InvokedContext context, CancellationToken cancellationToken = default)
     {
-        if (context.InvokeException is not null)
-            return ValueTask.CompletedTask;
-
         // Only store NEW messages in memory - original messages are read-only
         var allNewMessages = context.RequestMessages
-            .Concat(context.AIContextProviderMessages ?? [])
             .Concat(context.ResponseMessages ?? []);
 
         lock (_syncLock)
@@ -98,7 +94,7 @@ public class ForkedChatHistoryProvider : ChatHistoryProvider
     }
 
     /// <inheritdoc/>
-    public override ValueTask<IEnumerable<ChatMessage>> InvokingAsync(
+    protected override ValueTask<IEnumerable<ChatMessage>> ProvideChatHistoryAsync(
         ChatHistoryProvider.InvokingContext context,
         CancellationToken cancellationToken = default)
     {
@@ -110,7 +106,7 @@ public class ForkedChatHistoryProvider : ChatHistoryProvider
             allMessages = _originalMessages.Concat(_newMessages).ToList();
         }
 
-        _logger?.LogDebug("InvokingAsync: Returning {OriginalCount} original + {NewCount} new = {Total} total messages",
+        _logger?.LogDebug("ProvideChatHistoryAsync: Returning {OriginalCount} original + {NewCount} new = {Total} total messages",
             _originalMessages.Count, _newMessages.Count, allMessages.Count());
 
         return ValueTask.FromResult(allMessages);
@@ -189,37 +185,6 @@ public class ForkedChatHistoryProvider : ChatHistoryProvider
         await agentHost.AddThreadMessagesAsync(threadId, storedMessages);
 
         _logger?.LogDebug("Persisted {Count} new messages to thread {ThreadId}", storedMessages.Count, threadId);
-    }
-
-    /// <summary>
-    /// Creates a ChatHistoryProviderFactory that returns this ForkedChatHistoryProvider.
-    /// Use this factory when creating a new ChatClientAgent for forked conversations.
-    /// </summary>
-    /// <returns>A factory function compatible with ChatClientAgentOptions.ChatHistoryProviderFactory.</returns>
-    public Func<ChatClientAgentOptions.ChatHistoryProviderFactoryContext, CancellationToken, ValueTask<ChatHistoryProvider>> CreateFactory()
-    {
-        return (_, _) => ValueTask.FromResult<ChatHistoryProvider>(this);
-    }
-
-    /// <inheritdoc/>
-    public override JsonElement Serialize(JsonSerializerOptions? jsonSerializerOptions = null)
-    {
-        var jso = jsonSerializerOptions ?? ChatMessageSerializerOptions.Instance;
-
-        List<ChatMessage> newMessages;
-        lock (_syncLock)
-        {
-            newMessages = _newMessages.ToList();
-        }
-
-        var state = new
-        {
-            OriginalThreadId = _originalThreadId,
-            OriginalMessages = _originalMessages,
-            NewMessages = newMessages
-        };
-
-        return JsonSerializer.SerializeToElement(state, jso);
     }
 }
 

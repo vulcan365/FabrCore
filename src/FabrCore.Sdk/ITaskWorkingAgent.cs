@@ -89,9 +89,9 @@ public interface ITaskWorkingAgent
 public interface ITaskWorkingAgentFactory
 {
     /// <summary>
-    /// Creates a TaskWorkingAgent for the specified session.
+    /// Creates a TaskWorkingAgent for the specified history provider.
     /// </summary>
-    /// <param name="session">The session to analyze for task tracking.</param>
+    /// <param name="historyProvider">The history provider to fork and analyze for task tracking.</param>
     /// <returns>A new TaskWorkingAgent instance.</returns>
-    ITaskWorkingAgent Create(AgentSession session);
+    ITaskWorkingAgent Create(FabrCoreChatHistoryProvider historyProvider);
 }

@@ -135,9 +135,8 @@ namespace FabrCore.Sdk
         {
             var chatClient = await GetChatClient(chatClientConfigName);
 
-            // Capture the provider reference so callers can use it for compaction
-            FabrCoreChatHistoryProvider? capturedProvider = null;
-            var originalFactory = FabrCoreChatHistoryProvider.CreateFactory(fabrcoreAgentHost, threadId, logger);
+            // Create the history provider for automatic message persistence
+            var historyProvider = FabrCoreChatHistoryProvider.Create(fabrcoreAgentHost, threadId, logger);
 
             var options = new ChatClientAgentOptions
             {
@@ -147,16 +146,10 @@ namespace FabrCore.Sdk
                     Tools = tools
                 },
                 Name = fabrcoreAgentHost.GetHandle(),
-                // Wire up FabrCoreChatHistoryProvider for automatic message persistence
-                ChatHistoryProviderFactory = async (ctx, ct) =>
-                {
-                    var provider = await originalFactory(ctx, ct);
-                    capturedProvider = provider as FabrCoreChatHistoryProvider;
-                    return provider;
-                }
+                ChatHistoryProvider = historyProvider
             };
 
-            // Allow caller to configure options (including AIContextProviderFactory)
+            // Allow caller to configure options (including AIContextProviders)
             configureOptions?.Invoke(options);
 
             var agent = new ChatClientAgent(chatClient, options)
@@ -164,16 +157,16 @@ namespace FabrCore.Sdk
                 .UseOpenTelemetry(null, cfg => cfg.EnableSensitiveData = true)
                 .Build(serviceProvider);
 
-            var session = await agent.GetNewSessionAsync();
+            var session = await agent.CreateSessionAsync();
 
             // Auto-store for compaction support
-            _chatHistoryProvider = capturedProvider;
+            _chatHistoryProvider = historyProvider;
             _chatClientConfigName = chatClientConfigName;
 
             logger.LogDebug("Created ChatClientAgent - Config: {Config}, ThreadId: {ThreadId}",
                 chatClientConfigName, threadId);
 
-            return new ChatClientAgentResult(agent, session, capturedProvider);
+            return new ChatClientAgentResult(agent, session, historyProvider);
         }
 
 #pragma warning disable MEAI001 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.

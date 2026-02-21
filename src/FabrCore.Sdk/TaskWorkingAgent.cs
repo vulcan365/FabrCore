@@ -17,7 +17,7 @@ namespace FabrCore.Sdk;
 public class TaskWorkingAgent : ITaskWorkingAgent
 {
     private readonly IChatClient _chatClient;
-    private readonly AgentSession _originalSession;
+    private readonly FabrCoreChatHistoryProvider _historyProvider;
     private readonly ILogger? _logger;
     private readonly Func<string, string, Task>? _onProgress;
     private readonly ExecutionOptions? _executionOptions;
@@ -397,30 +397,30 @@ public class TaskWorkingAgent : ITaskWorkingAgent
     #endregion
 
     /// <summary>
-    /// Creates a TaskWorkingAgent that references the original session.
+    /// Creates a TaskWorkingAgent that references the original session's history provider.
     /// </summary>
     /// <param name="chatClient">The chat client to use for extraction.</param>
-    /// <param name="originalSession">The session to fork and analyze.</param>
+    /// <param name="historyProvider">The history provider to fork and analyze.</param>
     /// <param name="logger">Optional logger.</param>
     /// <param name="onProgress">Optional async callback for progress reporting: (phase, message) => Task.</param>
     /// <param name="executionOptions">Optional execution options for running the execution loop.</param>
     public TaskWorkingAgent(
         IChatClient chatClient,
-        AgentSession originalSession,
+        FabrCoreChatHistoryProvider historyProvider,
         ILogger? logger = null,
         Func<string, string, Task>? onProgress = null,
         ExecutionOptions? executionOptions = null)
     {
         ArgumentNullException.ThrowIfNull(chatClient);
-        ArgumentNullException.ThrowIfNull(originalSession);
+        ArgumentNullException.ThrowIfNull(historyProvider);
 
         _chatClient = chatClient;
-        _originalSession = originalSession;
+        _historyProvider = historyProvider;
         _logger = logger;
         _onProgress = onProgress;
         _executionOptions = executionOptions;
 
-        _logger?.LogDebug("Created TaskWorkingAgent for session");
+        _logger?.LogDebug("Created TaskWorkingAgent for history provider");
     }
 
     private async Task ReportProgressAsync(string phase, string message)
@@ -586,7 +586,7 @@ public class TaskWorkingAgent : ITaskWorkingAgent
 
     private async Task<PlanningSession> CreatePlanningSessionAsync(CancellationToken cancellationToken)
     {
-        var forked = await _originalSession.ForkAsync(_chatClient, logger: _logger, cancellationToken: cancellationToken);
+        var forked = await _historyProvider.ForkAsync(_chatClient, logger: _logger, cancellationToken: cancellationToken);
         _logger?.LogDebug("Forked session with {MessageCount} messages", forked.HistoryProvider.OriginalMessageCount);
 
         var runningExtractions = new ConcurrentDictionary<string, DateTime>();
@@ -902,11 +902,11 @@ public class TaskWorkingAgent : ITaskWorkingAgent
             var agentOptions = new ChatClientAgentOptions
             {
                 ChatOptions = chatOptions,
-                ChatHistoryProviderFactory = forked.HistoryProvider.CreateFactory()
+                ChatHistoryProvider = forked.HistoryProvider
             };
 
             var agent = new ChatClientAgent(_chatClient, agentOptions);
-            var session = await agent.GetNewSessionAsync(cancellationToken);
+            var session = await agent.CreateSessionAsync(cancellationToken);
 
             var response = await agent.RunAsync(
                 new ChatMessage(ChatRole.User, userPrompt),

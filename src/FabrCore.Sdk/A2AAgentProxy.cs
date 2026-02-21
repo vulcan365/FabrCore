@@ -6,11 +6,9 @@ using System.Text.Json;
 namespace FabrCore.Sdk
 {
 
-    public class A2AAgentSession : InMemoryAgentSession
+    public class A2AAgentSession : AgentSession
     {
         internal A2AAgentSession() : base() { }
-        internal A2AAgentSession(JsonElement serializedSessionState, JsonSerializerOptions? jsonSerializerOptions = null)
-            : base(serializedSessionState, jsonSerializerOptions) { }
     }
 
     public class A2AAgentProxy : AIAgent
@@ -24,16 +22,19 @@ namespace FabrCore.Sdk
             this.handle = handle;
         }
 
-        public override ValueTask<AgentSession> GetNewSessionAsync(CancellationToken cancellationToken = default)
+        protected override ValueTask<AgentSession> CreateSessionCoreAsync(CancellationToken cancellationToken = default)
         {
-            var session = new A2AAgentSession();
-            return ValueTask.FromResult<AgentSession>(session);
+            return ValueTask.FromResult<AgentSession>(new A2AAgentSession());
         }
 
-        public override ValueTask<AgentSession> DeserializeSessionAsync(JsonElement serializedSession, JsonSerializerOptions? jsonSerializerOptions = null, CancellationToken cancellationToken = default)
+        protected override ValueTask<JsonElement> SerializeSessionCoreAsync(AgentSession session, JsonSerializerOptions? jsonSerializerOptions = null, CancellationToken cancellationToken = default)
         {
-            var session = new A2AAgentSession(serializedSession, jsonSerializerOptions);
-            return ValueTask.FromResult<AgentSession>(session);
+            return ValueTask.FromResult(JsonSerializer.SerializeToElement(session.StateBag, jsonSerializerOptions));
+        }
+
+        protected override ValueTask<AgentSession> DeserializeSessionCoreAsync(JsonElement serializedState, JsonSerializerOptions? jsonSerializerOptions = null, CancellationToken cancellationToken = default)
+        {
+            return ValueTask.FromResult<AgentSession>(new A2AAgentSession());
         }
 
         protected override async Task<AgentResponse> RunCoreAsync(IEnumerable<ChatMessage> messages, AgentSession? session = null, AgentRunOptions? options = null, CancellationToken cancellationToken = default)
@@ -67,13 +68,5 @@ namespace FabrCore.Sdk
                 yield return update;
             }
         }
-    }
-
-    // Keep old names as aliases for backward compatibility during migration
-    public class A2AAgentThread : A2AAgentSession
-    {
-        internal A2AAgentThread() : base() { }
-        internal A2AAgentThread(JsonElement serializedThreadState, JsonSerializerOptions? jsonSerializerOptions = null)
-            : base(serializedThreadState, jsonSerializerOptions) { }
     }
 }

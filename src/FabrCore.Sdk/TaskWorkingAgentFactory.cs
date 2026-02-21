@@ -1,4 +1,3 @@
-using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
@@ -35,8 +34,8 @@ public class TaskWorkingAgentFactory : ITaskWorkingAgentFactory
     }
 
     /// <inheritdoc />
-    public ITaskWorkingAgent Create(AgentSession session)
+    public ITaskWorkingAgent Create(FabrCoreChatHistoryProvider historyProvider)
     {
-        return new TaskWorkingAgent(_chatClient, session, _logger, _onProgress, _executionOptions);
+        return new TaskWorkingAgent(_chatClient, historyProvider, _logger, _onProgress, _executionOptions);
     }
 }

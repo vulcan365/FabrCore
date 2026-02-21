@@ -43,7 +43,6 @@ namespace FabrCore.Sdk
 
         /// <summary>
         /// Creates a FabrCoreChatHistoryProvider from serialized state.
-        /// Used for session resumption via ChatHistoryProviderFactory.
         /// </summary>
         /// <param name="agentHost">The agent host for persistence operations.</param>
         /// <param name="serializedState">Previously serialized state containing ThreadId.</param>
@@ -71,40 +70,20 @@ namespace FabrCore.Sdk
         }
 
         /// <summary>
-        /// Factory method for use with ChatClientAgentOptions.ChatHistoryProviderFactory.
-        /// Creates a new provider with the specified threadId, or restores from serialized state if available.
-        /// The created provider is automatically registered with the agent host for tracking and auto-flush on deactivation.
+        /// Creates a new FabrCoreChatHistoryProvider and registers it with the agent host.
         /// </summary>
         /// <param name="agentHost">The agent host for persistence operations.</param>
         /// <param name="threadId">The thread ID to use for new sessions.</param>
         /// <param name="logger">Optional logger for diagnostics.</param>
-        /// <returns>A factory function compatible with ChatHistoryProviderFactory.</returns>
-        public static Func<ChatClientAgentOptions.ChatHistoryProviderFactoryContext, CancellationToken, ValueTask<ChatHistoryProvider>> CreateFactory(
+        /// <returns>A configured FabrCoreChatHistoryProvider instance.</returns>
+        public static FabrCoreChatHistoryProvider Create(
             IFabrCoreAgentHost agentHost,
             string threadId,
             ILogger? logger = null)
         {
-            return (ctx, ct) =>
-            {
-                FabrCoreChatHistoryProvider provider;
-
-                // If we have serialized state, restore from it (session resumption)
-                if (ctx.SerializedState.ValueKind != JsonValueKind.Undefined &&
-                    ctx.SerializedState.ValueKind != JsonValueKind.Null)
-                {
-                    provider = new FabrCoreChatHistoryProvider(agentHost, ctx.SerializedState, ctx.JsonSerializerOptions, logger);
-                }
-                else
-                {
-                    // Create new provider with provided threadId
-                    provider = new FabrCoreChatHistoryProvider(agentHost, threadId, logger);
-                }
-
-                // Register with agent host for tracking (enables auto-flush on deactivation)
-                agentHost.TrackChatHistoryProvider(provider);
-
-                return ValueTask.FromResult<ChatHistoryProvider>(provider);
-            };
+            var provider = new FabrCoreChatHistoryProvider(agentHost, threadId, logger);
+            agentHost.TrackChatHistoryProvider(provider);
+            return provider;
         }
 
         /// <summary>
@@ -113,18 +92,10 @@ namespace FabrCore.Sdk
         public string ThreadId => _threadId;
 
 
-        public override ValueTask InvokedAsync(ChatHistoryProvider.InvokedContext context, CancellationToken cancellationToken = default)
+        protected override ValueTask StoreChatHistoryAsync(ChatHistoryProvider.InvokedContext context, CancellationToken cancellationToken = default)
         {
-            // Don't store anything if there was an exception
-            if (context.InvokeException is not null)
-            {
-                return ValueTask.CompletedTask;
-            }
-
-            // Store request messages, AI context provider messages, and response messages
-            // This matches Microsoft's InMemoryChatHistoryProvider behavior
+            // Store request messages and response messages
             var allNewMessages = context.RequestMessages
-                .Concat(context.AIContextProviderMessages ?? [])
                 .Concat(context.ResponseMessages ?? []);
 
             var storedMessages = allNewMessages.Select(m => new StoredChatMessage
@@ -139,20 +110,19 @@ namespace FabrCore.Sdk
             {
                 _pendingMessages.AddRange(storedMessages);
 
-                // Also add to cache so GetMessagesAsync returns complete history
+                // Also add to cache so subsequent reads return complete history
                 _cachedMessages?.AddRange(storedMessages);
             }
             return ValueTask.CompletedTask;  // No persistence yet - will be flushed later
         }
 
         /// <summary>
-        /// Gets all messages (persisted + pending).
-        /// Thread-safe with fallback to pending messages on failure.
-        /// Reconstructs full ChatMessage with Contents (including FunctionCallContent, FunctionResultContent).
+        /// Provides chat history messages for the current invocation.
+        /// Messages are loaded from Orleans storage on first access, then served from cache.
         /// </summary>
-        public override async ValueTask<IEnumerable<ChatMessage>> InvokingAsync(ChatHistoryProvider.InvokingContext context, CancellationToken cancellationToken = default)
+        protected override async ValueTask<IEnumerable<ChatMessage>> ProvideChatHistoryAsync(ChatHistoryProvider.InvokingContext context, CancellationToken cancellationToken = default)
         {
-            _logger?.LogDebug("InvokingAsync called for thread {ThreadId}", _threadId);
+            _logger?.LogDebug("ProvideChatHistoryAsync called for thread {ThreadId}", _threadId);
 
             // If we have cached messages, return from cache (no grain call needed)
             if (_cachedMessages != null)
@@ -161,13 +131,6 @@ namespace FabrCore.Sdk
                 {
                     var cachedResult = _cachedMessages.Select(DeserializeChatMessage).ToList();
                     _logger?.LogDebug("Returning {Count} cached messages for thread {ThreadId}", cachedResult.Count, _threadId);
-                    foreach (var msg in cachedResult)
-                    {
-                        _logger?.LogDebug("  Cached message: Role={Role}, Contents={ContentCount} items, FirstContent={FirstContent}",
-                            msg.Role.Value,
-                            msg.Contents.Count,
-                            msg.Contents.FirstOrDefault()?.GetType().Name ?? "none");
-                    }
                     return cachedResult;
                 }
             }
@@ -177,13 +140,6 @@ namespace FabrCore.Sdk
                 // Load from storage
                 _cachedMessages = await _agentHost.GetThreadMessagesAsync(_threadId);
                 _logger?.LogDebug("Loaded {Count} messages from storage for thread {ThreadId}", _cachedMessages.Count, _threadId);
-
-                foreach (var stored in _cachedMessages)
-                {
-                    _logger?.LogDebug("  Stored message: Role={Role}, ContentsJson length={Length}",
-                        stored.Role,
-                        stored.ContentsJson?.Length ?? 0);
-                }
 
                 lock (_syncLock)
                 {
@@ -206,6 +162,41 @@ namespace FabrCore.Sdk
             var result = _cachedMessages.Select(DeserializeChatMessage).ToList();
             _logger?.LogDebug("Returning {Count} total messages for thread {ThreadId}", result.Count, _threadId);
             return result;
+        }
+
+        /// <summary>
+        /// Gets all messages (persisted + pending) as ChatMessage objects.
+        /// Used by ForkAsync to get a snapshot of the conversation.
+        /// </summary>
+        public async Task<IReadOnlyList<ChatMessage>> GetMessagesAsync(CancellationToken cancellationToken = default)
+        {
+            // If we have cached messages, return from cache
+            if (_cachedMessages != null)
+            {
+                lock (_syncLock)
+                {
+                    return _cachedMessages.Select(DeserializeChatMessage).ToList();
+                }
+            }
+
+            try
+            {
+                _cachedMessages = await _agentHost.GetThreadMessagesAsync(_threadId);
+                lock (_syncLock)
+                {
+                    _cachedMessages.AddRange(_pendingMessages);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Failed to load messages from storage for thread {ThreadId}, using pending only", _threadId);
+                lock (_syncLock)
+                {
+                    return _pendingMessages.Select(DeserializeChatMessage).ToList();
+                }
+            }
+
+            return _cachedMessages.Select(DeserializeChatMessage).ToList();
         }
 
         /// <summary>
@@ -232,11 +223,6 @@ namespace FabrCore.Sdk
 
                     _logger?.LogDebug("DeserializeChatMessage: Role={Role}, Deserialized {Count} contents from JSON (length={Length})",
                         m.Role, contents.Count, m.ContentsJson.Length);
-
-                    foreach (var content in contents)
-                    {
-                        _logger?.LogDebug("  Content type: {Type}", content.GetType().Name);
-                    }
                 }
                 catch (Exception ex)
                 {
@@ -317,15 +303,6 @@ namespace FabrCore.Sdk
                     return _pendingMessages.Count > 0;
                 }
             }
-        }
-
-        /// <summary>
-        /// Serializes the provider state to JSON.
-        /// </summary>
-        public override JsonElement Serialize(JsonSerializerOptions? jsonSerializerOptions = null)
-        {
-            var state = new { ThreadId = _threadId };
-            return JsonSerializer.SerializeToElement(state, jsonSerializerOptions);
         }
     }
 
