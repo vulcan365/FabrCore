@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "FabrCore.Console.CliHost": {
+      "commandName": "Project",
+      "launchBrowser": false,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:49909;http://localhost:49910"
+    }
+  }
+}
