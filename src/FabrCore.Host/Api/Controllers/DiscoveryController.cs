@@ -1,4 +1,4 @@
-using FabrCore.Sdk;
+using FabrCore.Host.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 
@@ -8,12 +8,12 @@ namespace FabrCore.Host.Api.Controllers
     [Route("fabrcoreapi/[controller]")]
     public class DiscoveryController : Controller
     {
-        private readonly IFabrCoreRegistry _registry;
+        private readonly IFabrCoreAgentService _agentService;
         private readonly ILogger<DiscoveryController> _logger;
 
-        public DiscoveryController(IFabrCoreRegistry registry, ILogger<DiscoveryController> logger)
+        public DiscoveryController(IFabrCoreAgentService agentService, ILogger<DiscoveryController> logger)
         {
-            _registry = registry;
+            _agentService = agentService;
             _logger = logger;
         }
 
@@ -24,9 +24,9 @@ namespace FabrCore.Host.Api.Controllers
             {
                 var result = new
                 {
-                    agents = _registry.GetAgentTypes(),
-                    plugins = _registry.GetPlugins(),
-                    tools = _registry.GetTools()
+                    agents = _agentService.GetAgentTypes(),
+                    plugins = _agentService.GetPlugins(),
+                    tools = _agentService.GetTools()
                 };
 
                 return Ok(result);
