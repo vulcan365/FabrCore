@@ -1,22 +1,20 @@
-using FabrCore.Core.Interfaces;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Orleans;
 
 namespace FabrCore.Host.Services
 {
     public class AgentRegistryCleanupService : BackgroundService
     {
-        private readonly IClusterClient _clusterClient;
+        private readonly IFabrCoreAgentService _agentService;
         private readonly ILogger<AgentRegistryCleanupService> _logger;
         private readonly TimeSpan _purgeInterval = TimeSpan.FromHours(6);
         private readonly TimeSpan _purgeAge = TimeSpan.FromDays(7);
 
         public AgentRegistryCleanupService(
-            IClusterClient clusterClient,
+            IFabrCoreAgentService agentService,
             ILogger<AgentRegistryCleanupService> logger)
         {
-            _clusterClient = clusterClient;
+            _agentService = agentService;
             _logger = logger;
         }
 
@@ -33,8 +31,7 @@ namespace FabrCore.Host.Services
 
                     _logger.LogInformation("Running agent registry cleanup");
 
-                    var registry = _clusterClient.GetGrain<IAgentManagementGrain>(0);
-                    var purgedCount = await registry.PurgeDeactivatedAgentsOlderThan(_purgeAge);
+                    var purgedCount = await _agentService.PurgeDeactivatedAgentsAsync(_purgeAge);
 
                     if (purgedCount > 0)
                     {
