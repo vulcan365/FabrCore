@@ -227,6 +227,20 @@
     public bool LazyLoad { get; set; }
 
     /// <summary>
+    /// Callback invoked when the agent sends a message to this chat dock.
+    /// Provides the full AgentMessage including metadata such as FromHandle, MessageType, and State.
+    /// </summary>
+    [Parameter]
+    public EventCallback<AgentMessage> OnMessageReceived { get; set; }
+
+    /// <summary>
+    /// Callback invoked when the user sends a message from this chat dock.
+    /// Provides the trimmed message text that was sent.
+    /// </summary>
+    [Parameter]
+    public EventCallback<string> OnMessageSent { get; set; }
+
+    /// <summary>
     /// Manager for coordinating multiple chat docks.
     /// </summary>
     [CascadingParameter]
@@ -472,7 +486,7 @@
 
         if (message.FromHandle == expectedFromHandle && message.ToHandle == UserHandle)
         {
-            InvokeAsync(() =>
+            InvokeAsync(async () =>
             {
                 // Handle "thinking" messages - update the thinking status instead of adding to chat
                 if (message.MessageType == "thinking")
@@ -517,6 +531,12 @@
                 if (!_isExpanded)
                 {
                     _hasUnreadMessages = true;
+                }
+
+                // Notify parent component
+                if (OnMessageReceived.HasDelegate)
+                {
+                    await OnMessageReceived.InvokeAsync(message);
                 }
 
                 StateHasChanged();
@@ -564,6 +584,12 @@
             };
 
             await _clientContext.SendMessage(request);
+
+            // Notify parent component
+            if (OnMessageSent.HasDelegate)
+            {
+                await OnMessageSent.InvokeAsync(messageText);
+            }
 
             // Refresh health non-blocking after send
             _ = RefreshHealthAsync();
