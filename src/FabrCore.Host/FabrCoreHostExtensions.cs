@@ -140,6 +140,10 @@ namespace FabrCore.Host
                 builder.Services.AddHostedService<FileCleanupBackgroundService>();
                 logger.LogInformation("File storage services configured");
 
+                // Configure Agent Service
+                builder.Services.AddSingleton<IFabrCoreAgentService, FabrCoreAgentService>();
+                logger.LogDebug("FabrCoreAgentService added");
+
                 // Configure Agent Registry Cleanup
                 builder.Services.AddHostedService<AgentRegistryCleanupService>();
                 logger.LogInformation("Agent registry cleanup service configured");
