@@ -1,11 +1,8 @@
-using FabrCore.Core;
-using FabrCore.Core.Interfaces;
+using FabrCore.Host.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
-using Orleans;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 
 namespace FabrCore.Host.Api.Controllers
@@ -14,13 +11,13 @@ namespace FabrCore.Host.Api.Controllers
     [Route("fabrcoreapi/[controller]")]
     public class DiagnosticsController : Controller
     {
-        private readonly IClusterClient clusterClient;
-        private readonly ILogger<DiagnosticsController> logger;
+        private readonly IFabrCoreAgentService _agentService;
+        private readonly ILogger<DiagnosticsController> _logger;
 
-        public DiagnosticsController(IClusterClient clusterClient, ILogger<DiagnosticsController> logger)
+        public DiagnosticsController(IFabrCoreAgentService agentService, ILogger<DiagnosticsController> logger)
         {
-            this.clusterClient = clusterClient;
-            this.logger = logger;
+            _agentService = agentService;
+            _logger = logger;
         }
 
         [HttpGet("agents")]
@@ -28,16 +25,9 @@ namespace FabrCore.Host.Api.Controllers
         {
             try
             {
-                var registry = clusterClient.GetGrain<IAgentManagementGrain>(0);
+                var agents = await _agentService.GetAgentsAsync(status);
 
-                List<AgentInfo> agents = status?.ToLower() switch
-                {
-                    "active" => await registry.GetActiveAgents(),
-                    "deactivated" => await registry.GetDeactivatedAgents(),
-                    _ => await registry.GetAllAgents()
-                };
-
-                logger.LogInformation("Retrieved {Count} agents with status filter: {Status}",
+                _logger.LogInformation("Retrieved {Count} agents with status filter: {Status}",
                     agents.Count, status ?? "all");
 
                 return Ok(new
@@ -48,7 +38,7 @@ namespace FabrCore.Host.Api.Controllers
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error retrieving agents with status: {Status}", status);
+                _logger.LogError(ex, "Error retrieving agents with status: {Status}", status);
                 return StatusCode(500, new { Error = "Failed to retrieve agents", Message = ex.Message });
             }
         }
@@ -58,21 +48,20 @@ namespace FabrCore.Host.Api.Controllers
         {
             try
             {
-                var registry = clusterClient.GetGrain<IAgentManagementGrain>(0);
-                var agent = await registry.GetAgentInfo(key);
+                var agent = await _agentService.GetAgentInfoAsync(key);
 
                 if (agent == null)
                 {
-                    logger.LogWarning("Agent not found in registry: {Key}", key);
+                    _logger.LogWarning("Agent not found in registry: {Key}", key);
                     return NotFound(new { Message = $"Agent '{key}' not found in registry" });
                 }
 
-                logger.LogInformation("Retrieved agent info for: {Key}", key);
+                _logger.LogInformation("Retrieved agent info for: {Key}", key);
                 return Ok(agent);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error retrieving agent: {Key}", key);
+                _logger.LogError(ex, "Error retrieving agent: {Key}", key);
                 return StatusCode(500, new { Error = "Failed to retrieve agent", Message = ex.Message });
             }
         }
@@ -82,10 +71,9 @@ namespace FabrCore.Host.Api.Controllers
         {
             try
             {
-                var registry = clusterClient.GetGrain<IAgentManagementGrain>(0);
-                var stats = await registry.GetAgentStatistics();
+                var stats = await _agentService.GetAgentStatisticsAsync();
 
-                logger.LogInformation("Retrieved agent statistics - Total: {Total}, Active: {Active}, Deactivated: {Deactivated}",
+                _logger.LogInformation("Retrieved agent statistics - Total: {Total}, Active: {Active}, Deactivated: {Deactivated}",
                     stats.GetValueOrDefault("Total", 0),
                     stats.GetValueOrDefault("Active", 0),
                     stats.GetValueOrDefault("Deactivated", 0));
@@ -94,7 +82,7 @@ namespace FabrCore.Host.Api.Controllers
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error retrieving agent statistics");
+                _logger.LogError(ex, "Error retrieving agent statistics");
                 return StatusCode(500, new { Error = "Failed to retrieve statistics", Message = ex.Message });
             }
         }
@@ -109,11 +97,10 @@ namespace FabrCore.Host.Api.Controllers
                     return BadRequest(new { Error = "olderThanHours must be greater than 0" });
                 }
 
-                var registry = clusterClient.GetGrain<IAgentManagementGrain>(0);
-                var purgedCount = await registry.PurgeDeactivatedAgentsOlderThan(
+                var purgedCount = await _agentService.PurgeDeactivatedAgentsAsync(
                     TimeSpan.FromHours(olderThanHours));
 
-                logger.LogInformation("Purged {Count} agents older than {Hours} hours",
+                _logger.LogInformation("Purged {Count} agents older than {Hours} hours",
                     purgedCount, olderThanHours);
 
                 return Ok(new
@@ -124,7 +111,7 @@ namespace FabrCore.Host.Api.Controllers
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error purging old agents");
+                _logger.LogError(ex, "Error purging old agents");
                 return StatusCode(500, new { Error = "Failed to purge agents", Message = ex.Message });
             }
         }
