@@ -227,11 +227,14 @@
     public bool LazyLoad { get; set; }
 
     /// <summary>
-    /// Callback invoked when the agent sends a message to this chat dock.
-    /// Provides the full AgentMessage including metadata such as FromHandle, MessageType, and State.
+    /// Callback invoked when the agent sends a non-thinking message to this chat dock.
+    /// Receives the full AgentMessage including metadata such as FromHandle, MessageType, and State.
+    /// Return <c>true</c> to display the message in the chat history, or <c>false</c> to suppress it
+    /// (e.g., for status/state messages that should only update parent component state).
+    /// When not set, all non-thinking messages are displayed in chat.
     /// </summary>
     [Parameter]
-    public EventCallback<AgentMessage> OnMessageReceived { get; set; }
+    public Func<AgentMessage, Task<bool>>? OnMessageReceived { get; set; }
 
     /// <summary>
     /// Callback invoked when the user sends a message from this chat dock.
@@ -514,7 +517,15 @@
                     return;
                 }
 
-                // Regular message - add to chat history with pre-rendered markdown
+                // Let parent component decide whether to show this message in chat
+                bool showInChat = true;
+                if (OnMessageReceived != null)
+                    showInChat = await OnMessageReceived(message);
+
+                if (!showInChat)
+                    return;
+
+                // Add to chat history with pre-rendered markdown
                 var messageText = message.Message ?? string.Empty;
                 _messages.Add(new ChatMessage
                 {
@@ -531,12 +542,6 @@
                 if (!_isExpanded)
                 {
                     _hasUnreadMessages = true;
-                }
-
-                // Notify parent component
-                if (OnMessageReceived.HasDelegate)
-                {
-                    await OnMessageReceived.InvokeAsync(message);
                 }
 
                 StateHasChanged();
