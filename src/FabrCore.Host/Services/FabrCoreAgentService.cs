@@ -36,7 +36,7 @@ namespace FabrCore.Host.Services
         {
             var key = BuildAgentKey(userId, config.Handle!);
             var proxy = _clusterClient.GetGrain<IAgentGrain>(key);
-            return await proxy.ConfigureAgent(config, detailLevel: detailLevel);
+            return await proxy.ConfigureAgent(config, config.ForceReconfigure, detailLevel);
         }
 
         public async Task<List<AgentHealthStatus>> ConfigureAgentsAsync(string userId, List<AgentConfiguration> configs, HealthDetailLevel detailLevel = HealthDetailLevel.Basic)
