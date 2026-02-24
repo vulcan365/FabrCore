@@ -1,43 +1,53 @@
-﻿using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.DependencyInjection;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace FabrCore.Sdk
 {
     public interface IEmbeddings
     {
         Task<Embedding<float>> GetEmbeddings(string text);
+        Task<IReadOnlyList<Embedding<float>>> GetBatchEmbeddings(IReadOnlyList<string> texts);
     }
 
     public class Embeddings : IEmbeddings
     {
         private IEmbeddingGenerator<string, Embedding<float>>? embeddingClient;
+        private readonly SemaphoreSlim _initLock = new(1, 1);
 
         private readonly IFabrCoreChatClientService fabrcoreChatClientService;
-        private readonly IServiceProvider serviceProvider;
 
-        public Embeddings(IFabrCoreChatClientService fabrcoreChatClientService, IServiceProvider serviceProvider)
+        public Embeddings(IFabrCoreChatClientService fabrcoreChatClientService)
         {
             this.fabrcoreChatClientService = fabrcoreChatClientService;
-            this.serviceProvider = serviceProvider;
+        }
+
+        private async Task<IEmbeddingGenerator<string, Embedding<float>>> GetClientAsync()
+        {
+            if (embeddingClient != null)
+                return embeddingClient;
+
+            await _initLock.WaitAsync();
+            try
+            {
+                embeddingClient ??= await fabrcoreChatClientService.GetEmbeddingsClient("OpenAIEmbeddings");
+                return embeddingClient;
+            }
+            finally
+            {
+                _initLock.Release();
+            }
         }
 
         public async Task<Embedding<float>> GetEmbeddings(string text)
         {
-            if (embeddingClient == null)
-            {
-                embeddingClient = await fabrcoreChatClientService.GetEmbeddingsClient("OpenAIEmbeddings");
-            }
+            var client = await GetClientAsync();
+            return await client.GenerateAsync(text);
+        }
 
-            var val = await embeddingClient.GenerateAsync(text);
-
-
-            return val;
+        public async Task<IReadOnlyList<Embedding<float>>> GetBatchEmbeddings(IReadOnlyList<string> texts)
+        {
+            var client = await GetClientAsync();
+            var result = await client.GenerateAsync(texts);
+            return result;
         }
     }
 }

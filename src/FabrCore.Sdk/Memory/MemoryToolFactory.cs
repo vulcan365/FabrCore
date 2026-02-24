@@ -73,21 +73,18 @@ public sealed class MemoryToolFactory : IMemoryToolFactory
                     await _memoryStore.DeleteBySourceAsync(source);
 
                     var chunks = TextChunker.ChunkText(content, _options.ChunkSize, _options.ChunkOverlap);
-                    var records = new List<MemoryChunk>();
+                    var batchEmbeddings = await _embeddings.GetBatchEmbeddings(chunks);
+                    var sourceType = source.Contains("MEMORY.md", StringComparison.OrdinalIgnoreCase) ? "longterm" : "daily";
 
-                    for (int i = 0; i < chunks.Count; i++)
+                    var records = chunks.Select((chunk, i) => new MemoryChunk
                     {
-                        var embedding = await _embeddings.GetEmbeddings(chunks[i]);
-                        records.Add(new MemoryChunk
-                        {
-                            Content = chunks[i],
-                            SourcePath = source,
-                            SourceType = source.Contains("MEMORY.md", StringComparison.OrdinalIgnoreCase) ? "longterm" : "daily",
-                            Title = title,
-                            ChunkIndex = i,
-                            Embedding = embedding.Vector.ToArray()
-                        });
-                    }
+                        Content = chunk,
+                        SourcePath = source,
+                        SourceType = sourceType,
+                        Title = title,
+                        ChunkIndex = i,
+                        Embedding = batchEmbeddings[i].Vector.ToArray()
+                    }).ToList();
 
                     if (records.Count > 0)
                     {
