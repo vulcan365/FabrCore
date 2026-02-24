@@ -132,7 +132,7 @@ namespace FabrCore.Host
                 logger.LogDebug("FabrCoreRegistry added");
 
                 // Configure Embeddings
-                builder.Services.AddTransient<IEmbeddings, Embeddings>();
+                builder.Services.AddSingleton<IEmbeddings, Embeddings>();
 
                 // Configure File Storage
                 builder.Services.Configure<FileStorageSettings>(builder.Configuration.GetSection("FileStorage"));
