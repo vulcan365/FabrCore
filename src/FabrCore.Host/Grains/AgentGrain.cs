@@ -1070,32 +1070,39 @@ namespace FabrCore.Host.Grains
             var stream = this.GetStream<AgentMessage>(streamName);
             var streamId = StreamId.Create(streamName.Namespace, streamName.Handle);
 
-            var handles = await stream.GetAllSubscriptionHandles();
+            var existingHandles = await stream.GetAllSubscriptionHandles();
             logger.LogTrace("Found {HandleCount} existing subscription handles for stream: {StreamName}",
-                handles.Count, streamName);
+                existingHandles.Count, streamName);
 
-            foreach (var existingHandle in handles)
+            // Determine the appropriate handler based on namespace
+            Func<AgentMessage, StreamSequenceToken?, Task> handler = streamName.IsAgentEvent
+                ? ReceivedEventMessage
+                : ReceivedChatMessage;
+
+            // Resume existing handles instead of unsubscribe/resubscribe to avoid
+            // a window where incoming messages have no handler and get dropped.
+            bool resumed = false;
+            foreach (var existingHandle in existingHandles)
             {
                 if (existingHandle.StreamId == streamId)
                 {
-                    await existingHandle.UnsubscribeAsync();
-                    logger.LogTrace("Unsubscribed from existing handle for stream: {StreamName}", streamName);
+                    if (!resumed)
+                    {
+                        await existingHandle.ResumeAsync(handler);
+                        resumed = true;
+                        logger.LogTrace("Resumed existing handle for stream: {StreamName}", streamName);
+                    }
+                    else
+                    {
+                        await existingHandle.UnsubscribeAsync();
+                        logger.LogTrace("Removed duplicate handle for stream: {StreamName}", streamName);
+                    }
                 }
             }
 
-            // Subscribe with the appropriate handler based on namespace
-            if (streamName.IsAgentChat)
+            if (!resumed)
             {
-                await stream.SubscribeAsync(ReceivedChatMessage);
-            }
-            else if (streamName.IsAgentEvent)
-            {
-                await stream.SubscribeAsync(ReceivedEventMessage);
-            }
-            else
-            {
-                // For custom namespaces, default to chat message handling
-                await stream.SubscribeAsync(ReceivedChatMessage);
+                await stream.SubscribeAsync(handler);
             }
 
             logger.LogInformation("Subscribed to stream: {StreamName}", streamName);

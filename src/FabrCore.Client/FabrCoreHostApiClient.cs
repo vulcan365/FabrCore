@@ -83,6 +83,41 @@ namespace FabrCore.Client
     }
 
     /// <summary>
+    /// Request item for batch embeddings.
+    /// </summary>
+    public class BatchEmbeddingItem
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Text { get; set; } = string.Empty;
+    }
+
+    /// <summary>
+    /// Request for batch embeddings endpoint.
+    /// </summary>
+    public class BatchEmbeddingRequest
+    {
+        public List<BatchEmbeddingItem> Items { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Result item from batch embeddings endpoint.
+    /// </summary>
+    public class BatchEmbeddingResultItem
+    {
+        public string Id { get; set; } = string.Empty;
+        public float[] Vector { get; set; } = [];
+        public int Dimensions { get; set; }
+    }
+
+    /// <summary>
+    /// Response from batch embeddings endpoint.
+    /// </summary>
+    public class BatchEmbeddingResponse
+    {
+        public List<BatchEmbeddingResultItem> Results { get; set; } = new();
+    }
+
+    /// <summary>
     /// Response from batch agent creation endpoint.
     /// </summary>
     public class CreateAgentsResponse
@@ -186,6 +221,11 @@ namespace FabrCore.Client
         /// Generates embeddings for the given text.
         /// </summary>
         Task<EmbeddingResponse> GetEmbeddingsAsync(string text, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Generates embeddings for a batch of texts in a single request.
+        /// </summary>
+        Task<BatchEmbeddingResponse> GetBatchEmbeddingsAsync(List<BatchEmbeddingItem> items, CancellationToken cancellationToken = default);
     }
 
     /// <summary>
@@ -683,6 +723,36 @@ namespace FabrCore.Client
             {
                 RecordError(activity, startTime, "GetEmbeddings", ex);
                 _logger.LogError(ex, "Failed to generate embeddings");
+                throw;
+            }
+        }
+
+        public async Task<BatchEmbeddingResponse> GetBatchEmbeddingsAsync(List<BatchEmbeddingItem> items, CancellationToken cancellationToken = default)
+        {
+            using var activity = ActivitySource.StartActivity("GetBatchEmbeddings", ActivityKind.Client);
+            activity?.SetTag("batch.size", items.Count);
+
+            var url = $"{_baseUrl}/fabrcoreapi/Embeddings/batch";
+            var startTime = Stopwatch.GetTimestamp();
+
+            try
+            {
+                var request = new BatchEmbeddingRequest { Items = items };
+                var response = await _httpClient.PostAsJsonAsync(url, request, JsonOptions, cancellationToken);
+                response.EnsureSuccessStatusCode();
+
+                var result = await response.Content.ReadFromJsonAsync<BatchEmbeddingResponse>(JsonOptions, cancellationToken)
+                    ?? throw new InvalidOperationException("Failed to deserialize batch embeddings response");
+
+                RecordSuccess(activity, startTime, "GetBatchEmbeddings");
+                _logger.LogDebug("Generated batch embeddings for {Count} items", result.Results.Count);
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                RecordError(activity, startTime, "GetBatchEmbeddings", ex);
+                _logger.LogError(ex, "Failed to generate batch embeddings for {Count} items", items.Count);
                 throw;
             }
         }
