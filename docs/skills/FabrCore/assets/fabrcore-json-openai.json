@@ -1,0 +1,19 @@
+{
+  "ModelConfigurations": [
+    {
+      "Name": "default",
+      "Provider": "OpenAI",
+      "Model": "gpt-4o",
+      "ApiKeyAlias": "openai-key",
+      "TimeoutSeconds": 120,
+      "MaxOutputTokens": 16384,
+      "ContextWindowTokens": 128000
+    }
+  ],
+  "ApiKeys": [
+    {
+      "Alias": "openai-key",
+      "Value": "sk-your-openai-api-key-here"
+    }
+  ]
+}

@@ -33,7 +33,7 @@
 		<PackageReference Include="Microsoft.Orleans.Clustering.AdoNet" Version="10.0.1" />
 		<PackageReference Include="Microsoft.Orleans.Persistence.AdoNet" Version="10.0.1" />
 		<PackageReference Include="Microsoft.Orleans.Reminders.AdoNet" Version="10.0.1" />
-		<PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.4" />
+		<PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.0" />
 	</ItemGroup>
 
 	<ItemGroup>

@@ -42,6 +42,7 @@ namespace FabrCore.Sdk
             var message = new AgentMessage
             {
                 ToHandle = handle,
+                FromHandle = fabrcoreAgentHost.GetHandle(),
                 Message = string.Join("\r\n", messages.Select(m => m.Text))
             };
             var response = await fabrcoreAgentHost.SendAndReceiveMessage(message);
@@ -61,6 +62,7 @@ namespace FabrCore.Sdk
                 var message = new AgentMessage
                 {
                     ToHandle = handle,
+                    FromHandle = fabrcoreAgentHost.GetHandle(),
                     Message = string.Join("\r\n", messages.Select(m => m.Text))
                 };
                 var response = await fabrcoreAgentHost.SendAndReceiveMessage(message);

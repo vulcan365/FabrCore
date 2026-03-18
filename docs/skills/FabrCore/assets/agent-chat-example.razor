@@ -1,0 +1,93 @@
+@page "/chat"
+@using FabrCore.Client
+@using FabrCore.Core
+@implements IDisposable
+
+<PageTitle>Agent Chat</PageTitle>
+
+<h1>Agent Chat</h1>
+
+<div class="chat-container">
+    @foreach (var msg in _messages)
+    {
+        <div class="message @(msg.IsUser ? "user" : "agent")">
+            <strong>@(msg.IsUser ? "You" : "Agent"):</strong>
+            <p>@msg.Text</p>
+        </div>
+    }
+</div>
+
+<div class="input-area">
+    <input @bind="_input" @onkeypress="HandleKeyPress" placeholder="Type a message..." />
+    <button @onclick="SendMessage" disabled="@_isSending">Send</button>
+</div>
+
+@code {
+    [Inject] IClientContextFactory ContextFactory { get; set; } = default!;
+
+    private IClientContext? _context;
+    private string _input = "";
+    private bool _isSending;
+    private readonly List<ChatDisplayMessage> _messages = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _context = await ContextFactory.CreateAsync("user1");
+        _context.AgentMessageReceived += OnAgentMessage;
+
+        // Create the agent on first load
+        await _context.CreateAgent(
+            handle: "chat-agent",
+            agentType: "my-agent",
+            systemPrompt: "You are a helpful assistant.");
+    }
+
+    private async Task SendMessage()
+    {
+        if (string.IsNullOrWhiteSpace(_input) || _isSending) return;
+
+        var text = _input;
+        _input = "";
+        _isSending = true;
+
+        _messages.Add(new ChatDisplayMessage(text, true));
+        StateHasChanged();
+
+        try
+        {
+            var response = await _context!.SendAndReceiveMessage("chat-agent", text);
+            _messages.Add(new ChatDisplayMessage(response.Message, false));
+        }
+        catch (Exception ex)
+        {
+            _messages.Add(new ChatDisplayMessage($"Error: {ex.Message}", false));
+        }
+        finally
+        {
+            _isSending = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SendMessage();
+    }
+
+    private void OnAgentMessage(object? sender, AgentMessage message)
+    {
+        InvokeAsync(() =>
+        {
+            _messages.Add(new ChatDisplayMessage(message.Message, false));
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        if (_context is not null)
+            _context.AgentMessageReceived -= OnAgentMessage;
+    }
+
+    private record ChatDisplayMessage(string Text, bool IsUser);
+}
