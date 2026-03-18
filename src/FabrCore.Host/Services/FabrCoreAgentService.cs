@@ -86,6 +86,7 @@ namespace FabrCore.Host.Services
         public async Task SendMessageAsync(string userId, string handle, AgentMessage message)
         {
             var key = BuildAgentKey(userId, handle);
+            message.ToHandle = key;
             var stream = _clusterClient.GetAgentChatStream(key);
             await stream.OnNextAsync(message);
             _logger.LogDebug("Fire-and-forget message sent to agent {Handle} for user {UserId}", handle, userId);
@@ -106,6 +107,7 @@ namespace FabrCore.Host.Services
         public async Task<AgentMessage> SendAndReceiveMessageAsync(string userId, string handle, AgentMessage message)
         {
             var key = BuildAgentKey(userId, handle);
+            message.ToHandle = key;
             var proxy = _clusterClient.GetGrain<IAgentGrain>(key);
             return await proxy.OnMessage(message);
         }

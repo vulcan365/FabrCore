@@ -610,6 +610,21 @@ namespace FabrCore.Host.Grains
             }
         }
 
+        /// <summary>
+        /// Resolves a target agent handle. If it already contains ':', uses as-is (fully qualified or cross-owner).
+        /// Otherwise, prefixes with this agent's owner to form a fully-qualified handle.
+        /// </summary>
+        private string ResolveTargetHandle(string? handle)
+        {
+            if (string.IsNullOrEmpty(handle))
+                throw new ArgumentException("Handle cannot be null or empty", nameof(handle));
+
+            var myHandle = this.GetPrimaryKeyString();
+            var ownerId = myHandle.Contains(':') ? myHandle[..myHandle.IndexOf(':')] : myHandle;
+            var prefix = HandleUtilities.BuildPrefix(ownerId);
+            return HandleUtilities.EnsurePrefix(handle, prefix);
+        }
+
         public async Task<AgentMessage> SendAndReceiveMessage(AgentMessage request)
         {
             // Ensure FromHandle is set to this agent's handle if not provided
@@ -617,6 +632,9 @@ namespace FabrCore.Host.Grains
             {
                 request.FromHandle = this.GetPrimaryKeyString();
             }
+
+            // Resolve ToHandle - if bare alias, prefix with this agent's owner
+            request.ToHandle = ResolveTargetHandle(request.ToHandle);
 
             using var activity = ActivitySource.StartActivity("SendAndReceiveMessage", ActivityKind.Client);
             activity?.SetTag("message.from", request.FromHandle);
@@ -629,7 +647,7 @@ namespace FabrCore.Host.Grains
 
             try
             {
-                var agentProxy = clusterClient.GetGrain<IAgentGrain>(request.ToHandle ?? throw new ArgumentException("ToHandle cannot be null", nameof(request)));
+                var agentProxy = clusterClient.GetGrain<IAgentGrain>(request.ToHandle);
                 var response = await agentProxy.OnMessage(request);
                 logger.LogDebug("SendAndReceiveMessage completed - Response received from: {ToHandle}",
                     request.ToHandle);
@@ -657,6 +675,9 @@ namespace FabrCore.Host.Grains
                 request.FromHandle = this.GetPrimaryKeyString();
             }
 
+            // Resolve ToHandle - if bare alias, prefix with this agent's owner
+            request.ToHandle = ResolveTargetHandle(request.ToHandle);
+
             using var activity = ActivitySource.StartActivity("SendMessage", ActivityKind.Producer);
             activity?.SetTag("message.from", request.FromHandle);
             activity?.SetTag("message.to", request.ToHandle);
@@ -669,7 +690,7 @@ namespace FabrCore.Host.Grains
 
             try
             {
-                var stream = clusterClient.GetAgentChatStream(request.ToHandle ?? throw new ArgumentException("ToHandle cannot be null", nameof(request)));
+                var stream = clusterClient.GetAgentChatStream(request.ToHandle);
                 await stream.OnNextAsync(request);
                 logger.LogTrace("Message sent to stream for: {ToHandle}", request.ToHandle);
 
@@ -717,13 +738,14 @@ namespace FabrCore.Host.Grains
                 }
                 else
                 {
-                    // Default agent event stream
+                    // Default agent event stream — resolve handle
+                    request.ToHandle = ResolveTargetHandle(request.ToHandle);
                     activity?.SetTag("message.to", request.ToHandle);
 
                     logger.LogTrace("SendEvent to stream - From: {FromHandle}, To: {ToHandle}",
                         request.FromHandle, request.ToHandle);
 
-                    var stream = clusterClient.GetAgentEventStream(request.ToHandle ?? throw new ArgumentException("ToHandle cannot be null", nameof(request)));
+                    var stream = clusterClient.GetAgentEventStream(request.ToHandle);
                     await stream.OnNextAsync(request);
 
                     logger.LogTrace("Event sent to stream for: {ToHandle}", request.ToHandle);
@@ -1019,19 +1041,20 @@ namespace FabrCore.Host.Grains
                 StreamName.ForAgentEvent(handle)
             };
 
-            // Parse and add any configured streams
+            // Parse and add any configured streams (accepts "Namespace.Channel" or "Provider.Namespace.Channel")
             foreach (var streamConfig in configuredStreams)
             {
-                if (StreamName.TryParse(streamConfig, out var parsedStream))
+                try
                 {
+                    var parsedStream = StreamName.ParseConfigEntry(streamConfig);
                     if (!streamNames.Contains(parsedStream))
                     {
                         streamNames.Add(parsedStream);
                     }
                 }
-                else
+                catch (Exception ex) when (ex is FormatException or ArgumentException)
                 {
-                    logger.LogWarning("Invalid stream name format: {StreamName}", streamConfig);
+                    logger.LogWarning("Invalid stream config format: {StreamConfig} - {Error}", streamConfig, ex.Message);
                 }
             }
 

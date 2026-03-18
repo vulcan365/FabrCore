@@ -1,0 +1,312 @@
+# Configuration Reference
+
+## Configuration Files
+
+FabrCore uses several configuration files:
+
+| File | Location | Purpose | Git-tracked? |
+|------|----------|---------|--------------|
+| `appsettings.json` | Server & Client | Orleans clustering, logging, URLs | Yes |
+| `fabrcore.json` | Server root | LLM providers and API keys | **No** (add to .gitignore) |
+| `appsettings.Development.json` | Server & Client | Development overrides | Yes |
+
+## fabrcore.json — Complete Schema
+
+```json
+{
+  "ModelConfigurations": [
+    {
+      "Name": "string",              // Required: unique model name
+      "Provider": "string",          // Required: OpenAI | Azure | OpenRouter | Grok | Gemini
+      "Uri": "string",               // Required for Azure, optional for others
+      "Model": "string",             // Required: model identifier
+      "ApiKeyAlias": "string",       // Required: references an entry in ApiKeys
+      "TimeoutSeconds": 120,         // Optional: HTTP timeout (default 120)
+      "MaxOutputTokens": 16384,      // Optional: max tokens in response
+      "ContextWindowTokens": 128000  // Optional: total context window size
+    }
+  ],
+  "ApiKeys": [
+    {
+      "Alias": "string",             // Required: unique key alias
+      "Value": "string"              // Required: the actual API key
+    }
+  ]
+}
+```
+
+### Supported Providers
+
+| Provider | Uri Required | Notes |
+|----------|-------------|-------|
+| `OpenAI` | No | Uses default OpenAI endpoint |
+| `Azure` | Yes | Azure OpenAI resource URL |
+| `OpenRouter` | No | Uses OpenRouter endpoint |
+| `Grok` | No | xAI Grok models |
+| `Gemini` | No | Google Gemini models |
+
+Any OpenAI-compatible endpoint can be used by setting `Provider: "OpenAI"` and a custom `Uri`.
+
+### Common Model Configurations
+
+```json
+{
+  "ModelConfigurations": [
+    {
+      "Name": "default",
+      "Provider": "OpenAI",
+      "Model": "gpt-4o",
+      "ApiKeyAlias": "openai",
+      "TimeoutSeconds": 120,
+      "MaxOutputTokens": 16384,
+      "ContextWindowTokens": 128000
+    },
+    {
+      "Name": "fast",
+      "Provider": "OpenAI",
+      "Model": "gpt-4o-mini",
+      "ApiKeyAlias": "openai",
+      "MaxOutputTokens": 4096,
+      "ContextWindowTokens": 128000
+    },
+    {
+      "Name": "embeddings",
+      "Provider": "Azure",
+      "Uri": "https://resource.openai.azure.com/",
+      "Model": "text-embedding-ada-002",
+      "ApiKeyAlias": "azure"
+    },
+    {
+      "Name": "reasoning",
+      "Provider": "OpenAI",
+      "Model": "o1",
+      "ApiKeyAlias": "openai",
+      "TimeoutSeconds": 300,
+      "MaxOutputTokens": 32768,
+      "ContextWindowTokens": 200000
+    }
+  ]
+}
+```
+
+## AgentConfiguration — Complete Schema
+
+```csharp
+public class AgentConfiguration
+{
+    public string Handle { get; set; }           // Agent instance identifier
+    public string AgentType { get; set; }        // Must match [AgentAlias] value
+    public List<string> Models { get; set; }     // Model names from fabrcore.json
+    public List<string> Streams { get; set; }    // Orleans stream subscriptions
+    public string SystemPrompt { get; set; }     // System instructions for the LLM
+    public string Description { get; set; }      // Agent description
+    public Dictionary<string, string> Args { get; set; }  // Key-value settings
+    public List<string> Plugins { get; set; }    // Plugin aliases to enable
+    public List<string> Tools { get; set; }      // Standalone tool aliases to enable
+    public List<McpServerConfig> McpServers { get; set; } // MCP server configs
+    public bool ForceReconfigure { get; set; }   // Force re-initialization
+}
+```
+
+### Args — Built-in Keys
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `CompactionEnabled` | `"true"` | Enable chat history compaction |
+| `CompactionKeepLastN` | `"20"` | Keep last N messages during compaction |
+| `CompactionThreshold` | `"0.75"` | Trigger compaction at this % of context window |
+| `ModelConfig` | (from Models[0]) | Override model name for this agent |
+
+### Args — Plugin Settings Convention
+
+Use `"PluginAlias:Key"` format:
+```json
+{
+  "Args": {
+    "weather:ApiKey": "abc123",
+    "weather:DefaultCity": "Seattle",
+    "filesystem:RootPath": "C:\\data",
+    "filesystem:ReadOnly": "true"
+  }
+}
+```
+
+## McpServerConfig — Complete Schema
+
+```csharp
+public class McpServerConfig
+{
+    public string Name { get; set; }                    // Server identifier
+    public McpTransportType TransportType { get; set; } // Stdio or Http
+    public string Command { get; set; }                 // Stdio: executable path
+    public List<string> Arguments { get; set; }         // Stdio: command arguments
+    public Dictionary<string, string> Env { get; set; } // Stdio: environment variables
+    public string Url { get; set; }                     // Http: server URL
+    public Dictionary<string, string> Headers { get; set; } // Http: request headers
+}
+
+public enum McpTransportType
+{
+    Stdio,
+    Http
+}
+```
+
+### MCP Examples
+
+```json
+{
+  "McpServers": [
+    {
+      "Name": "filesystem",
+      "TransportType": "Stdio",
+      "Command": "npx",
+      "Arguments": ["-y", "@anthropic/mcp-filesystem", "/data"],
+      "Env": { "NODE_ENV": "production" }
+    },
+    {
+      "Name": "database",
+      "TransportType": "Http",
+      "Url": "https://mcp.example.com/db",
+      "Headers": { "Authorization": "Bearer token123" }
+    }
+  ]
+}
+```
+
+## Orleans Clustering — Complete Schema
+
+### appsettings.json (Server)
+
+```json
+{
+  "Orleans": {
+    "ClusterId": "string",              // Cluster identifier (must match across silos)
+    "ServiceId": "string",              // Service identifier (must match across silos)
+    "ClusteringMode": "string",         // Localhost | SqlServer | AzureStorage
+    "ConnectionString": "string",       // Required for SqlServer/AzureStorage
+    "StorageConnectionString": "string" // Optional: separate storage connection
+  }
+}
+```
+
+### appsettings.json (Client)
+
+```json
+{
+  "Orleans": {
+    "ClusterId": "string",              // Must match server
+    "ServiceId": "string",              // Must match server
+    "ClusteringMode": "string",         // Must match server
+    "ConnectionString": "string",       // Must match server
+    "ConnectionRetryCount": 5,          // Max connection retries
+    "ConnectionRetryDelay": "00:00:03", // Base retry delay
+    "GatewayListRefreshPeriod": "00:00:30" // Gateway refresh interval
+  },
+  "FabrCoreHostUrl": "http://localhost:5000" // Server REST API URL
+}
+```
+
+## HandleUtilities
+
+Centralized handle normalization used by AgentGrain, ChatDock, and TaskWorkingAgent:
+
+```csharp
+public static class HandleUtilities
+{
+    // Build the "owner:" prefix from an owner ID
+    static string BuildPrefix(string ownerId);           // "user1" → "user1:"
+
+    // Normalize a handle: bare alias gets prefixed, fully-qualified passes through
+    static string EnsurePrefix(string handle, string ownerPrefix);
+    // EnsurePrefix("assistant", "user1:")      → "user1:assistant"
+    // EnsurePrefix("user2:assistant", "user1:") → "user2:assistant"
+
+    // Strip the owner prefix from a handle
+    static string StripPrefix(string handle, string ownerPrefix);
+    // StripPrefix("user1:assistant", "user1:") → "assistant"
+}
+```
+
+**Routing rules:**
+- Bare alias (no colon) → auto-prefixed with caller's owner → routes to same-owner agent
+- Fully-qualified handle (contains colon) → used as-is → enables cross-owner routing
+
+## AgentMessage — Complete Schema
+
+```csharp
+public class AgentMessage
+{
+    // Routing
+    public string ToHandle { get; set; }           // Target handle (bare alias or "owner:agent")
+    public string FromHandle { get; set; }         // Sender handle (auto-filled by AgentGrain if empty)
+    public string OnBehalfOfHandle { get; set; }   // Original requester (for delegation)
+    public string DeliverToHandle { get; set; }    // Final delivery target
+    public string Channel { get; set; }            // Optional channel identifier
+
+    // Content
+    public string Message { get; set; }            // Text content
+    public string MessageType { get; set; }        // Custom type identifier
+    public MessageKind MessageKind { get; set; }   // Request, OneWay, Response
+
+    // Metadata
+    public Dictionary<string, string> State { get; set; }  // Metadata key-values
+    public Dictionary<string, string> Args { get; set; }   // Parameter key-values
+    public Dictionary<string, string> Data { get; set; }   // Structured data
+    public Dictionary<string, byte[]> Files { get; set; }  // File attachments
+    public string TraceId { get; set; }            // Correlation ID
+
+    // Helper method
+    public AgentMessage Response();  // Creates a response with routing pre-filled
+}
+
+public enum MessageKind
+{
+    Request,   // Expects a response
+    OneWay,    // Fire-and-forget
+    Response   // Reply to a request
+}
+```
+
+## Health Status — Complete Schema
+
+```csharp
+public record AgentHealthStatus
+{
+    // Basic (always included)
+    public string Handle { get; init; }
+    public HealthState State { get; init; }
+    public DateTime Timestamp { get; init; }
+    public bool IsConfigured { get; init; }
+    public string? Message { get; init; }
+
+    // Detailed (HealthDetailLevel.Detailed+)
+    public string? AgentType { get; init; }
+    public TimeSpan? Uptime { get; init; }
+    public long MessagesProcessed { get; init; }
+    public int ActiveTimers { get; init; }
+    public int ActiveReminders { get; init; }
+    public int ActiveStreams { get; init; }
+    public AgentConfiguration? Configuration { get; init; }
+
+    // Full (HealthDetailLevel.Full)
+    public AgentHealthStatus? ProxyHealth { get; init; }
+    public List<string>? ActiveStreamNames { get; init; }
+    public Dictionary<string, object>? Diagnostics { get; init; }
+}
+
+public enum HealthState
+{
+    Healthy,
+    Degraded,
+    Unhealthy,
+    NotConfigured
+}
+
+public enum HealthDetailLevel
+{
+    Basic,
+    Detailed,
+    Full
+}
+```
