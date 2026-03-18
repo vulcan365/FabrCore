@@ -1,0 +1,33 @@
+@page "/"
+@using FabrCore.Client.Components
+
+<PageTitle>Home</PageTitle>
+
+<h1>Welcome</h1>
+
+<p>Chat with your AI agent using the dock in the bottom-right corner.</p>
+
+<!-- Basic ChatDock usage -->
+<ChatDock UserHandle="user1"
+          AgentHandle="assistant"
+          AgentType="my-agent"
+          SystemPrompt="You are a helpful assistant."
+          Title="Assistant"
+          Position="ChatDockPosition.BottomRight" />
+
+<!-- ChatDock with plugins and tools -->
+<!--
+<ChatDock UserHandle="user1"
+          AgentHandle="research-agent"
+          AgentType="researcher"
+          SystemPrompt="You are a research assistant with access to web and file tools."
+          Title="Research"
+          Plugins="@(new List<string> { "web-browser", "filesystem" })"
+          Tools="@(new List<string> { "format-json" })"
+          AdditionalArgs="@(new Dictionary<string, string>
+          {
+              ["web-browser:Headless"] = "true",
+              ["filesystem:RootPath"] = "/data"
+          })"
+          Position="ChatDockPosition.BottomLeft" />
+-->

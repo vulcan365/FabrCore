@@ -2,15 +2,28 @@ namespace FabrCore.Core
 {
     /// <summary>
     /// Utility methods for agent handle normalization.
-    /// Handle format: "owner:agentAlias" (e.g., "user123:assistant")
+    /// <para>
+    /// Handle format: <c>"owner:agentAlias"</c> (e.g., <c>"user123:assistant"</c>).
+    /// </para>
+    /// <para>
+    /// <strong>Routing rules:</strong>
+    /// <list type="bullet">
+    ///   <item>Bare alias (no colon): auto-prefixed with the caller's owner — routes to the caller's own agent.</item>
+    ///   <item>Fully-qualified handle (contains colon): used as-is — enables cross-owner routing override.</item>
+    /// </list>
+    /// To send a message to another owner's agent, supply the full <c>"otherOwner:agent"</c> handle.
+    /// The system will not re-prefix it because it already contains a colon.
+    /// </para>
     /// </summary>
     public static class HandleUtilities
     {
         /// <summary>
         /// Normalizes an agent handle by ensuring it has the correct owner prefix.
-        /// - If handle already has the exact prefix, returns as-is.
-        /// - If handle has a different prefix (colon present), returns as-is (cross-client ref).
-        /// - If handle has no prefix, adds the owner prefix.
+        /// <list type="bullet">
+        ///   <item>If handle already has the exact <paramref name="ownerPrefix"/>, returns as-is.</item>
+        ///   <item>If handle contains <c>':'</c> with a different prefix, returns as-is (cross-owner routing override).</item>
+        ///   <item>If handle has no <c>':'</c>, prepends <paramref name="ownerPrefix"/> to scope it to the owner.</item>
+        /// </list>
         /// </summary>
         public static string EnsurePrefix(string handle, string ownerPrefix)
         {

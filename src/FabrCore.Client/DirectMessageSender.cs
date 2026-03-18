@@ -11,6 +11,11 @@ namespace FabrCore.Client
     /// <summary>
     /// Sends messages directly to agents via Orleans streams without using ClientContext or ClientGrain infrastructure.
     /// All messages are automatically marked as OneWay since there is no mechanism to receive responses.
+    /// <para>
+    /// <strong>Important:</strong> This sender performs no handle normalization. All handles must be
+    /// fully-qualified in <c>"owner:agent"</c> format. Bare aliases will be rejected with an
+    /// <see cref="ArgumentException"/>.
+    /// </para>
     /// </summary>
     public class DirectMessageSender : IDirectMessageSender
     {
@@ -46,6 +51,11 @@ namespace FabrCore.Client
 
             if (string.IsNullOrEmpty(message.ToHandle))
                 throw new ArgumentException("ToHandle must be set on the message", nameof(message));
+
+            if (!message.ToHandle.Contains(':'))
+                throw new ArgumentException(
+                    $"DirectMessageSender requires fully-qualified handles (owner:agent). Got '{message.ToHandle}'. " +
+                    "Use ClientContext.SendMessage for automatic handle resolution.", nameof(message));
 
             using var activity = ActivitySource.StartActivity("SendDirectMessage", ActivityKind.Producer);
             activity?.SetTag("message.from", message.FromHandle);
@@ -93,6 +103,11 @@ namespace FabrCore.Client
 
             if (streamName == null && string.IsNullOrEmpty(message.ToHandle))
                 throw new ArgumentException("ToHandle must be set on the message (unless using streamName)", nameof(message));
+
+            if (streamName == null && !message.ToHandle!.Contains(':'))
+                throw new ArgumentException(
+                    $"DirectMessageSender requires fully-qualified handles (owner:agent). Got '{message.ToHandle}'. " +
+                    "Use ClientContext.SendEvent for automatic handle resolution.", nameof(message));
 
             using var activity = ActivitySource.StartActivity("SendDirectEvent", ActivityKind.Producer);
             activity?.SetTag("message.from", message.FromHandle);

@@ -21,12 +21,12 @@
 		<PackageReference Include="Microsoft.Orleans.Streaming" Version="10.0.1" />
 		<!-- SQL Server (ADO.NET) Clustering -->
 		<PackageReference Include="Microsoft.Orleans.Clustering.AdoNet" Version="10.0.1" />
-		<PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.4" />
+		<PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.0" />
 		<!-- Azure Storage Clustering -->
 		<PackageReference Include="Microsoft.Orleans.Clustering.AzureStorage" Version="10.0.1" />
 		<PackageReference Include="OpenTelemetry.Api" Version="1.15.0" />
 		<!-- Markdown rendering for chat components -->
-		<PackageReference Include="Markdig" Version="0.44.0" />
+		<PackageReference Include="Markdig" Version="1.1.1" />
 	</ItemGroup>
 
 </Project>
