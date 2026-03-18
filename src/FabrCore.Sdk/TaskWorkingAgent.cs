@@ -1600,8 +1600,9 @@ public class TaskWorkingAgent : ITaskWorkingAgent
         var myHandle = _executionOptions!.AgentHost.GetHandle();
         if (_executionOptions.ResolveAgentHandle != null)
             return _executionOptions.ResolveAgentHandle(myHandle, agentId);
-        var prefix = myHandle.Contains(':') ? myHandle[..(myHandle.IndexOf(':') + 1)] : "";
-        return $"{prefix}{agentId}";
+        var ownerId = myHandle.Contains(':') ? myHandle[..myHandle.IndexOf(':')] : myHandle;
+        var prefix = HandleUtilities.BuildPrefix(ownerId);
+        return HandleUtilities.EnsurePrefix(agentId, prefix);
     }
 
     #endregion
