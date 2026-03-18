@@ -484,8 +484,8 @@
 
     private void OnAgentMessageReceived(object? sender, AgentMessage message)
     {
-        // Resolve the expected agent handle - if AgentHandle contains ':', use as-is; otherwise prefix with UserHandle
-        var expectedFromHandle = AgentHandle.Contains(':') ? AgentHandle : $"{UserHandle}:{AgentHandle}";
+        // Resolve the expected agent handle using centralized handle utilities
+        var expectedFromHandle = HandleUtilities.EnsurePrefix(AgentHandle, HandleUtilities.BuildPrefix(UserHandle));
 
         if (message.FromHandle == expectedFromHandle && message.ToHandle == UserHandle)
         {

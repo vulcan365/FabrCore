@@ -61,6 +61,28 @@ namespace FabrCore.Core.Streaming
         }
 
         /// <summary>
+        /// Parses a stream configuration entry. Accepts simplified "Namespace.Channel" format
+        /// (auto-fills StreamProvider) or full "Provider.Namespace.Channel" format.
+        /// Use this for parsing developer-supplied stream configuration strings.
+        /// </summary>
+        /// <exception cref="ArgumentException">Thrown when config is null or empty.</exception>
+        /// <exception cref="FormatException">Thrown when the format is invalid.</exception>
+        public static StreamName ParseConfigEntry(string config)
+        {
+            if (string.IsNullOrWhiteSpace(config))
+                throw new ArgumentException("Stream config cannot be null or empty", nameof(config));
+
+            var parts = config.Split(StreamConstants.Delimiter);
+            return parts.Length switch
+            {
+                2 => new StreamName(StreamConstants.ProviderName, parts[0], parts[1]),
+                3 => new StreamName(parts[0], parts[1], parts[2]),
+                _ => throw new FormatException(
+                    $"Invalid stream config '{config}'. Expected 'Namespace.Channel' or 'Provider.Namespace.Channel'")
+            };
+        }
+
+        /// <summary>
         /// Tries to parse a stream name string, returning false if invalid.
         /// </summary>
         public static bool TryParse(string? streamName, out StreamName result)
