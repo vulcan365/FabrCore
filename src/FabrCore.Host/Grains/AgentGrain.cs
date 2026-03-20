@@ -11,13 +11,15 @@ using OpenTelemetry.Trace;
 using Orleans;
 using Orleans.Runtime;
 using Orleans.Streams;
+using Orleans.Streams.Core;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Text.Json;
 
 namespace FabrCore.Host.Grains
 {
-    internal class AgentGrain : Grain, IAgentGrain, IFabrCoreAgentHost, IRemindable
+    [ImplicitStreamSubscription(StreamConstants.AgentChatNamespace)]
+    internal class AgentGrain : Grain, IAgentGrain, IFabrCoreAgentHost, IRemindable, IStreamSubscriptionObserver
     {
         private static readonly ActivitySource ActivitySource = new("FabrCore.Host.AgentGrain");
         private static readonly Meter Meter = new("FabrCore.Host.AgentGrain");
@@ -96,6 +98,16 @@ namespace FabrCore.Host.Grains
             _messageState = messageState;
 
             logger = loggerFactory.CreateLogger<AgentGrain>();
+        }
+
+        /// <summary>
+        /// IStreamSubscriptionObserver — called by Orleans when a message arrives on the
+        /// AgentChat implicit subscription and no handler is attached yet.
+        /// </summary>
+        public async Task OnSubscribed(IStreamSubscriptionHandleFactory handleFactory)
+        {
+            var handle = handleFactory.Create<AgentMessage>();
+            await handle.ResumeAsync(ReceivedChatMessage);
         }
 
         public override async Task OnActivateAsync(CancellationToken cancellationToken)
@@ -450,12 +462,16 @@ namespace FabrCore.Host.Grains
             activity?.SetTag("message.from", request.FromHandle);
             activity?.SetTag("message.to", request.ToHandle);
             activity?.SetTag("message.kind", request.Kind.ToString());
-            activity?.SetTag("to.type", "Agent");  // Receiving entity is always an agent
+            activity?.SetTag("to.type", "Agent");
 
             logger.LogTrace("OnMessage received - From: {FromHandle}, To: {ToHandle}, Kind: {Kind}",
                 request.FromHandle, request.ToHandle, request.Kind);
 
             var startTime = Stopwatch.GetTimestamp();
+
+            // Start heartbeat: send _status every 3 seconds to original sender
+            using var heartbeatCts = new CancellationTokenSource();
+            var heartbeatTask = SendStatusHeartbeatAsync(request, heartbeatCts.Token);
 
             try
             {
@@ -465,6 +481,10 @@ namespace FabrCore.Host.Grains
                 }
 
                 var response = await fabrcoreAgentProxy.InternalOnMessage(request);
+
+                // Stop heartbeat
+                heartbeatCts.Cancel();
+
                 _messagesProcessed++;
                 logger.LogTrace("OnMessage completed - Response ToHandle: {ToHandle}", response?.ToHandle);
 
@@ -484,8 +504,15 @@ namespace FabrCore.Host.Grains
             }
             catch (Exception ex)
             {
+                // Stop heartbeat
+                heartbeatCts.Cancel();
+
                 logger.LogError(ex, "Error processing message from {FromHandle} to {ToHandle}",
                     request.FromHandle, request.ToHandle);
+
+                // Send _error message to original sender's stream
+                await SendSystemErrorAsync(request, ex);
+
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
                 ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "message_processing_failed"),
@@ -494,8 +521,98 @@ namespace FabrCore.Host.Grains
             }
             finally
             {
+                // Ensure heartbeat is stopped
+                if (!heartbeatCts.IsCancellationRequested)
+                    heartbeatCts.Cancel();
+
+                // Await heartbeat task to ensure clean shutdown
+                try { await heartbeatTask; } catch (OperationCanceledException) { }
+
                 // Auto-flush all tracked message stores after each message
                 await FlushAllChatHistoryProvidersAsync();
+            }
+        }
+
+        /// <summary>
+        /// Sends periodic _status heartbeat messages to the original sender while a message is being processed.
+        /// Uses clusterClient stream publishing directly (thread-safe, bypasses grain scheduler).
+        /// </summary>
+        private async Task SendStatusHeartbeatAsync(AgentMessage request, CancellationToken cancellationToken)
+        {
+            var myHandle = this.GetPrimaryKeyString();
+            var targetHandle = request.FromHandle;
+
+            // Don't send heartbeats if no sender or sending to self
+            if (string.IsNullOrEmpty(targetHandle) || targetHandle == myHandle)
+                return;
+
+            try
+            {
+                // Wait 3 seconds before first heartbeat — fast responses never trigger one
+                await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken);
+
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    var statusMessage = new AgentMessage
+                    {
+                        FromHandle = myHandle,
+                        ToHandle = targetHandle,
+                        MessageType = SystemMessageTypes.Status,
+                        Message = "Thinking..",
+                        Kind = MessageKind.Response,
+                        TraceId = request.TraceId
+                    };
+
+                    try
+                    {
+                        var stream = clusterClient.GetAgentChatStream(targetHandle);
+                        await stream.OnNextAsync(statusMessage);
+                        logger.LogTrace("Sent _status heartbeat to {TargetHandle}", targetHandle);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "Failed to send _status heartbeat to {TargetHandle}", targetHandle);
+                    }
+
+                    await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when OnMessage completes
+            }
+        }
+
+        /// <summary>
+        /// Sends a _error system message to the original sender's stream.
+        /// </summary>
+        private async Task SendSystemErrorAsync(AgentMessage request, Exception ex)
+        {
+            var myHandle = this.GetPrimaryKeyString();
+            var targetHandle = request.FromHandle;
+
+            if (string.IsNullOrEmpty(targetHandle))
+                return;
+
+            try
+            {
+                var errorMessage = new AgentMessage
+                {
+                    FromHandle = myHandle,
+                    ToHandle = targetHandle,
+                    MessageType = SystemMessageTypes.Error,
+                    Message = ex.Message,
+                    Kind = MessageKind.Response,
+                    TraceId = request.TraceId
+                };
+
+                var stream = clusterClient.GetAgentChatStream(targetHandle);
+                await stream.OnNextAsync(errorMessage);
+                logger.LogDebug("Sent _error message to {TargetHandle}: {ErrorMessage}", targetHandle, ex.Message);
+            }
+            catch (Exception streamEx)
+            {
+                logger.LogError(streamEx, "Failed to send _error message to {TargetHandle}", targetHandle);
             }
         }
 
@@ -1034,10 +1151,10 @@ namespace FabrCore.Host.Grains
 
             logger.LogDebug("Creating streams for agent: {Handle}", handle);
 
-            // Build list of all streams to subscribe to
+            // Build list of explicit streams to subscribe to.
+            // AgentChat is handled by [ImplicitStreamSubscription] — do NOT add here.
             var streamNames = new List<StreamName>
             {
-                StreamName.ForAgentChat(handle),
                 StreamName.ForAgentEvent(handle)
             };
 
@@ -1223,6 +1340,10 @@ namespace FabrCore.Host.Grains
             catch (Exception ex)
             {
                 logger.LogError(ex, "Error processing event message from: {FromHandle}", request.FromHandle);
+
+                // Notify the original sender so the client isn't left hanging
+                await SendSystemErrorAsync(request, ex);
+
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
                 ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "event_message_failed"),

@@ -183,6 +183,10 @@ namespace FabrCore.Host.Grains
             // Resolve the ToHandle - if it contains ':', use as-is; otherwise prefix with client ID
             var resolvedToHandle = ResolveAgentHandle(request.ToHandle, clientId);
 
+            // Defense-in-depth: ensure FromHandle is set so the agent can route responses back
+            if (string.IsNullOrEmpty(request.FromHandle))
+                request.FromHandle = clientId;
+
             activity?.SetTag("message.from", request.FromHandle);
             activity?.SetTag("message.to", resolvedToHandle);
             activity?.SetTag("client.id", clientId);
@@ -238,6 +242,10 @@ namespace FabrCore.Host.Grains
             // Resolve the ToHandle - if it contains ':', use as-is; otherwise prefix with client ID
             var resolvedToHandle = ResolveAgentHandle(request.ToHandle, clientId);
 
+            // Defense-in-depth: ensure FromHandle is set so the agent can route responses back
+            if (string.IsNullOrEmpty(request.FromHandle))
+                request.FromHandle = clientId;
+
             activity?.SetTag("message.from", request.FromHandle);
             activity?.SetTag("message.to", resolvedToHandle);
             activity?.SetTag("client.id", clientId);
@@ -254,6 +262,8 @@ namespace FabrCore.Host.Grains
 
             try
             {
+                // AgentChat uses [ImplicitStreamSubscription] — Orleans auto-activates the
+                // target AgentGrain on first message. If unconfigured, the grain sends _error back.
                 var stream = clusterClient.GetAgentChatStream(resolvedToHandle);
                 await stream.OnNextAsync(request);
 

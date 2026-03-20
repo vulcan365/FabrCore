@@ -29,7 +29,7 @@ app.UseAntiforgery();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
-await app.UseFabrCoreClient();
+app.UseFabrCoreClient(); // Returns IHost, NOT awaitable
 app.Run();
 ```
 
@@ -145,6 +145,13 @@ For custom UI that doesn't use ChatDock, use `IClientContextFactory` directly:
 
 ### Creating a Context
 
+`IClientContextFactory` provides two methods:
+
+| Method | Behavior | Use Case |
+|--------|----------|----------|
+| `GetOrCreateAsync(handle)` | Returns cached context or creates new. Factory manages lifecycle. | Blazor Server components, long-lived pages |
+| `CreateAsync(handle)` | New context each call. Caller manages disposal. | Short-lived / scoped usage |
+
 ```csharp
 @inject IClientContextFactory ContextFactory
 
@@ -153,8 +160,12 @@ For custom UI that doesn't use ChatDock, use `IClientContextFactory` directly:
 
     protected override async Task OnInitializedAsync()
     {
-        _context = await ContextFactory.CreateAsync("user1");
+        // Recommended for Blazor Server — cached, factory-managed lifecycle
+        _context = await ContextFactory.GetOrCreateAsync("user1");
         _context.AgentMessageReceived += OnAgentMessage;
+
+        // Alternative: new context each time (caller must dispose)
+        // await using var scopedContext = await ContextFactory.CreateAsync("user1");
     }
 
     private void OnAgentMessage(object? sender, AgentMessage message)
@@ -167,40 +178,59 @@ For custom UI that doesn't use ChatDock, use `IClientContextFactory` directly:
 
 ### Creating Agents
 
+`CreateAgent` takes an `AgentConfiguration` object (not individual named parameters):
+
 ```csharp
-await _context.CreateAgent(
-    handle: "my-agent",
-    agentType: "my-agent",
-    systemPrompt: "You are helpful.",
-    plugins: ["weather"],
-    tools: ["calculate"],
-    args: new Dictionary<string, string>
+await _context.CreateAgent(new AgentConfiguration
+{
+    Handle = "my-agent",
+    AgentType = "my-agent",
+    SystemPrompt = "You are helpful.",
+    Plugins = ["weather"],
+    Tools = ["calculate"],
+    Args = new Dictionary<string, string>
     {
         ["weather:ApiKey"] = "abc123"
-    });
+    }
+});
 ```
 
 ### Sending Messages
 
+All messaging methods take `AgentMessage` — there are no `(string, string)` convenience overloads.
+
+**FromHandle auto-fill:** `ClientContext` automatically sets `FromHandle` to the client's handle on all outgoing messages (`SendMessage`, `SendAndReceiveMessage`, `SendEvent`) if not already set. You do **not** need to set `FromHandle` manually — the framework handles routing back to the client.
+
+| Method | Behavior | Preferred For |
+|--------|----------|---------------|
+| `SendMessage` | Fire-and-forget. Response arrives via `AgentMessageReceived` event. | **Client-to-agent** (recommended) |
+| `SendAndReceiveMessage` | Async RPC. Blocks until agent responds. | **Agent-to-agent** |
+
 ```csharp
-// Request-response (waits for reply)
-var response = await _context.SendAndReceiveMessage(
-    agentHandle: "my-agent",
-    message: "What's the weather?");
+// SendMessage — fire-and-forget (preferred for client-to-agent)
+// Response arrives asynchronously via AgentMessageReceived event
+await _context.SendMessage(new AgentMessage
+{
+    ToHandle = "my-agent",
+    Message = "What's the weather?"
+});
 
-// Fire-and-forget
-await _context.SendMessage(
-    agentHandle: "my-agent",
-    message: "Log this event");
+// SendAndReceiveMessage — async RPC (preferred for agent-to-agent)
+// Can be used from client but blocks the calling thread until response
+var request = new AgentMessage
+{
+    ToHandle = "my-agent",
+    Message = "What's the weather?"
+};
+var response = await _context.SendAndReceiveMessage(request);
 
-// Event
-await _context.SendEvent(
-    agentHandle: "my-agent",
-    eventMessage: new AgentMessage
-    {
-        MessageType = "status-update",
-        Message = "User logged in"
-    });
+// Event (optional streamName parameter)
+await _context.SendEvent(new AgentMessage
+{
+    ToHandle = "my-agent",
+    MessageType = "status-update",
+    Message = "User logged in"
+});
 ```
 
 ### Health Monitoring

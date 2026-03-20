@@ -94,35 +94,42 @@ Agents extend `FabrCoreAgentProxy` and override three lifecycle methods:
 ```csharp
 using FabrCore.Core;
 using FabrCore.Sdk;
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
 [AgentAlias("my-agent")]
 public class MyAgent : FabrCoreAgentProxy
 {
-    private ChatClientAgent? _agent;
-    private AgentThread? _thread;
+    private AIAgent? _agent;
+    private AgentSession? _session;
 
     public MyAgent(
         AgentConfiguration config,
         IServiceProvider serviceProvider,
-        IFabrCoreAgentHost fabrAgentHost)
-        : base(config, serviceProvider, fabrAgentHost) { }
+        IFabrCoreAgentHost fabrcoreAgentHost)
+        : base(config, serviceProvider, fabrcoreAgentHost) { }
 
     public override async Task OnInitialize()
     {
-        var result = await CreateChatClientAgent("default");
+        // Resolve plugins, standalone tools, and MCP tools from config
+        var tools = await ResolveConfiguredToolsAsync();
+
+        var result = await CreateChatClientAgent(
+            "default",
+            threadId: config.Handle ?? fabrcoreAgentHost.GetHandle(),
+            tools: tools);
         _agent = result.Agent;
-        _thread = result.Thread;
+        _session = result.Session;
     }
 
     public override async Task<AgentMessage> OnMessage(AgentMessage message)
     {
         var response = message.Response();
         var chatMessage = new ChatMessage(ChatRole.User, message.Message);
-        await foreach (var msg in _agent!.InvokeStreamingAsync(
-            [chatMessage], _thread!))
+        await foreach (var update in _agent!.RunStreamingAsync(
+            chatMessage, _session!))
         {
-            response.Message += msg.Text;
+            response.Message += update.Text;
         }
         return response;
     }
@@ -236,7 +243,7 @@ builder.Services.AddFabrCoreClientComponents();
 var app = builder.Build();
 app.UseAntiforgery();
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
-await app.UseFabrCoreClient();
+app.UseFabrCoreClient(); // Returns IHost, NOT awaitable
 app.Run();
 ```
 
@@ -253,9 +260,13 @@ app.Run();
 ```csharp
 @inject IClientContextFactory ContextFactory
 
-var context = await ContextFactory.CreateAsync("user1");
+var context = await ContextFactory.GetOrCreateAsync("user1");
 await context.CreateAgent("my-agent", "my-agent", "System prompt", plugins: ["weather"]);
-var response = await context.SendAndReceiveMessage("my-agent", "Hello!");
+
+// SendMessage — fire-and-forget, preferred for client-to-agent
+// Response arrives asynchronously via AgentMessageReceived event
+var request = new AgentMessage { ToHandle = "my-agent", Message = "Hello!" };
+await context.SendMessage(request);
 ```
 
 See `references/client-integration.md` for ChatDock parameters, ClientContext API, and health monitoring.
@@ -329,10 +340,10 @@ All communication uses `AgentMessage`:
 
 ```csharp
 // Fields
-message.FromHandle    // Sender handle (auto-filled by AgentGrain if empty)
+message.FromHandle    // Sender handle (auto-filled by ClientContext and AgentGrain)
 message.ToHandle      // Target handle (bare alias or fully-qualified "owner:agent")
 message.Message       // Text content
-message.MessageType   // Custom type identifier
+message.MessageType   // Custom type identifier (see system message types below)
 message.MessageKind   // Request, OneWay, or Response
 message.State         // Dictionary<string, string> for metadata
 message.Args          // Dictionary<string, string> for parameters
@@ -344,22 +355,58 @@ message.TraceId       // Correlation ID
 var response = message.Response(); // Pre-fills routing fields
 ```
 
-### 9. Inter-Agent Communication
+**System Message Types (`_` prefix convention):**
 
-Agents communicate through `IFabrCoreAgentHost`. Bare aliases are auto-resolved to same-owner targets:
+All `MessageType` values starting with `_` are reserved for FabrCore internal use. They route normally through streams but clients handle them differently — not displayed as regular chat messages.
+
+| MessageType | Constant | Description |
+|-------------|----------|-------------|
+| `_status` | `SystemMessageTypes.Status` | Heartbeat sent every 3 seconds while agent processes a message. Message = "Thinking.." |
+| `_error` | `SystemMessageTypes.Error` | Sent when agent encounters an exception. Message = exception text |
 
 ```csharp
-// Request-response — "analyst" resolves to "user1:analyst" if caller is user1
-var reply = await fabrAgentHost.SendAndReceiveMessage("analyst", message);
+// Check if a message is a system message
+SystemMessageTypes.IsSystemMessage(message.MessageType); // true for "_status", "_error", etc.
+```
 
-// Fire-and-forget
-await fabrAgentHost.SendMessage("analyst", message);
+**Automatic behavior (no agent code required):**
+- `AgentGrain` automatically sends `_status` heartbeats every 3 seconds while `OnMessage` runs. If the agent responds in under 3 seconds, no heartbeat is sent.
+- On exception, `AgentGrain` automatically sends `_error` to the original sender before rethrowing.
+- `ChatDock` automatically displays `_status` as a thinking indicator and `_error` as an error message.
 
-// Event broadcast
-await fabrAgentHost.SendEvent("analyst", eventMessage);
+### 9. Messaging Patterns
+
+Two messaging methods are available on both `IClientContext` and `IFabrCoreAgentHost`:
+
+| Method | Behavior | Preferred For |
+|--------|----------|---------------|
+| `SendMessage(AgentMessage)` | Fire-and-forget. Response arrives asynchronously via stream/observer. | **Client-to-agent** communication |
+| `SendAndReceiveMessage(AgentMessage)` | Async RPC. Blocks until the agent returns a response. | **Agent-to-agent** communication |
+
+**Client-to-agent** — Use `SendMessage` (fire-and-forget):
+```csharp
+// Client sends message; response arrives via AgentMessageReceived event
+var request = new AgentMessage { ToHandle = "my-agent", Message = "Hello!" };
+await context.SendMessage(request);
+
+// Handle the async response in an event handler
+context.AgentMessageReceived += (sender, response) => { /* process response */ };
+```
+
+**Agent-to-agent** — Use `SendAndReceiveMessage` (async RPC):
+```csharp
+// Inside an agent's OnMessage — waits for the target agent to respond
+var request = new AgentMessage { Message = "Analyze this" };
+var reply = await fabrcoreAgentHost.SendAndReceiveMessage("analyst", request);
+// reply.Message contains the response
 
 // Cross-owner: use fully-qualified handle
-var reply = await fabrAgentHost.SendAndReceiveMessage("user2:analyst", message);
+var reply = await fabrcoreAgentHost.SendAndReceiveMessage("user2:analyst", request);
+```
+
+**Event broadcast** — Use `SendEvent` (fire-and-forget, no response):
+```csharp
+await fabrcoreAgentHost.SendEvent("listener", eventMessage);
 ```
 
 See `references/inter-agent-communication.md` for orchestration patterns.

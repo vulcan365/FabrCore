@@ -4,9 +4,13 @@
 
 FabrCore agents communicate through `IFabrCoreAgentHost`, which provides three communication patterns:
 
-1. **Request-Response** — Send a message and wait for a reply
-2. **Fire-and-Forget** — Send a message without waiting
-3. **Events** — Broadcast via Orleans streams
+| Method | Behavior | Preferred For |
+|--------|----------|---------------|
+| `SendAndReceiveMessage` | Async RPC — blocks until target agent responds | **Agent-to-agent** (recommended) |
+| `SendMessage` | Fire-and-forget — response arrives via stream/observer | **Client-to-agent** |
+| `SendEvent` | Fire-and-forget event — no response expected | Event broadcasting |
+
+For agent-to-agent, prefer `SendAndReceiveMessage` because agents typically need the response to continue processing. For client-to-agent, prefer `SendMessage` because responses arrive asynchronously via the `AgentMessageReceived` event on `ClientContext`.
 
 ## Handle Routing
 
@@ -19,10 +23,10 @@ All messaging methods accept bare aliases or fully-qualified handles:
 
 ```csharp
 // Same-owner: bare alias resolves to "user1:analyst"
-await fabrAgentHost.SendAndReceiveMessage("analyst", request);
+await fabrcoreAgentHost.SendAndReceiveMessage("analyst", request);
 
 // Cross-owner: fully-qualified handle used as-is
-await fabrAgentHost.SendAndReceiveMessage("user2:analyst", request);
+await fabrcoreAgentHost.SendAndReceiveMessage("user2:analyst", request);
 ```
 
 The `HandleUtilities` class centralizes this logic:
@@ -53,7 +57,7 @@ public override async Task<AgentMessage> OnMessage(AgentMessage message)
         }
     };
 
-    var reply = await fabrAgentHost.SendAndReceiveMessage("analyst-agent", request);
+    var reply = await fabrcoreAgentHost.SendAndReceiveMessage("analyst-agent", request);
     response.Message = "Analysis result: " + reply.Message;
 
     return response;
@@ -78,7 +82,7 @@ var notification = new AgentMessage
     }
 };
 
-await fabrAgentHost.SendMessage("monitor-agent", notification);
+await fabrcoreAgentHost.SendMessage("monitor-agent", notification);
 ```
 
 ## Events (Stream-Based)
@@ -94,7 +98,7 @@ var eventMsg = new AgentMessage
     MessageKind = MessageKind.OneWay
 };
 
-await fabrAgentHost.SendEvent("listener-agent", eventMsg);
+await fabrcoreAgentHost.SendEvent("listener-agent", eventMsg);
 ```
 
 The target agent handles events in `OnEvent()`:
@@ -133,7 +137,7 @@ public class RouterAgent : FabrCoreAgentProxy
         string target = DetermineTarget(message);
 
         // Forward the message
-        var reply = await fabrAgentHost.SendAndReceiveMessage(target, message);
+        var reply = await fabrcoreAgentHost.SendAndReceiveMessage(target, message);
         response.Message = reply.Message;
 
         return response;
@@ -167,9 +171,9 @@ public class AggregatorAgent : FabrCoreAgentProxy
         // Fan out to multiple agents
         var tasks = new[]
         {
-            fabrAgentHost.SendAndReceiveMessage("analyst-1", message),
-            fabrAgentHost.SendAndReceiveMessage("analyst-2", message),
-            fabrAgentHost.SendAndReceiveMessage("analyst-3", message)
+            fabrcoreAgentHost.SendAndReceiveMessage("analyst-1", message),
+            fabrcoreAgentHost.SendAndReceiveMessage("analyst-2", message),
+            fabrcoreAgentHost.SendAndReceiveMessage("analyst-3", message)
         };
 
         var replies = await Task.WhenAll(tasks);
@@ -200,7 +204,7 @@ public class PipelineAgent : FabrCoreAgentProxy
 
         foreach (var stage in _stages)
         {
-            currentMessage = await fabrAgentHost.SendAndReceiveMessage(
+            currentMessage = await fabrcoreAgentHost.SendAndReceiveMessage(
                 $"{stage}-agent", currentMessage);
         }
 
@@ -233,7 +237,7 @@ public class SupervisorAgent : FabrCoreAgentProxy
 
         // Use the host API to create the worker (via plugin or direct grain call)
         // Then send the task
-        var result = await fabrAgentHost.SendAndReceiveMessage(
+        var result = await fabrcoreAgentHost.SendAndReceiveMessage(
             workerConfig.Handle, message);
 
         response.Message = result.Message;
@@ -290,7 +294,7 @@ var message = new AgentMessage
     }
 };
 
-var reply = await fabrAgentHost.SendAndReceiveMessage("document-analyzer", message);
+var reply = await fabrcoreAgentHost.SendAndReceiveMessage("document-analyzer", message);
 ```
 
 ## Correlation and Tracing
