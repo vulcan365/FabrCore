@@ -1,5 +1,6 @@
 using FabrCore.Core;
 using FabrCore.Sdk;
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
 /// <summary>
@@ -24,7 +25,7 @@ public class {{AGENT_NAME}} : FabrCoreAgentProxy
 
         var result = await CreateChatClientAgent(
             "default",
-            threadId: config.Handle ?? fabrAgentHost.GetHandle(),
+            threadId: config.Handle ?? fabrcoreAgentHost.GetHandle(),
             tools: tools);
         _agent = result.Agent;
         _session = result.Session;
@@ -54,7 +55,7 @@ public class {{AGENT_NAME}} : FabrCoreAgentProxy
 // {
 //   "Handle": "{{AGENT_ALIAS}}",
 //   "AgentType": "{{AGENT_ALIAS}}",
-//   "Models": ["default"],
+//   "Models": "default",
 //   "SystemPrompt": "{{AGENT_DESCRIPTION}}",
 //   "Plugins": [],
 //   "Tools": [],

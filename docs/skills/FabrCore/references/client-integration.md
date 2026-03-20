@@ -29,7 +29,7 @@ app.UseAntiforgery();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
-await app.UseFabrCoreClient();
+app.UseFabrCoreClient(); // Returns IHost, NOT awaitable
 app.Run();
 ```
 
@@ -178,17 +178,21 @@ For custom UI that doesn't use ChatDock, use `IClientContextFactory` directly:
 
 ### Creating Agents
 
+`CreateAgent` takes an `AgentConfiguration` object (not individual named parameters):
+
 ```csharp
-await _context.CreateAgent(
-    handle: "my-agent",
-    agentType: "my-agent",
-    systemPrompt: "You are helpful.",
-    plugins: ["weather"],
-    tools: ["calculate"],
-    args: new Dictionary<string, string>
+await _context.CreateAgent(new AgentConfiguration
+{
+    Handle = "my-agent",
+    AgentType = "my-agent",
+    SystemPrompt = "You are helpful.",
+    Plugins = ["weather"],
+    Tools = ["calculate"],
+    Args = new Dictionary<string, string>
     {
         ["weather:ApiKey"] = "abc123"
-    });
+    }
+});
 ```
 
 ### Sending Messages

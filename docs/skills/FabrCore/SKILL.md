@@ -94,6 +94,7 @@ Agents extend `FabrCoreAgentProxy` and override three lifecycle methods:
 ```csharp
 using FabrCore.Core;
 using FabrCore.Sdk;
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
 [AgentAlias("my-agent")]
@@ -105,8 +106,8 @@ public class MyAgent : FabrCoreAgentProxy
     public MyAgent(
         AgentConfiguration config,
         IServiceProvider serviceProvider,
-        IFabrCoreAgentHost fabrAgentHost)
-        : base(config, serviceProvider, fabrAgentHost) { }
+        IFabrCoreAgentHost fabrcoreAgentHost)
+        : base(config, serviceProvider, fabrcoreAgentHost) { }
 
     public override async Task OnInitialize()
     {
@@ -115,7 +116,7 @@ public class MyAgent : FabrCoreAgentProxy
 
         var result = await CreateChatClientAgent(
             "default",
-            threadId: config.Handle ?? fabrAgentHost.GetHandle(),
+            threadId: config.Handle ?? fabrcoreAgentHost.GetHandle(),
             tools: tools);
         _agent = result.Agent;
         _session = result.Session;
@@ -242,7 +243,7 @@ builder.Services.AddFabrCoreClientComponents();
 var app = builder.Build();
 app.UseAntiforgery();
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
-await app.UseFabrCoreClient();
+app.UseFabrCoreClient(); // Returns IHost, NOT awaitable
 app.Run();
 ```
 
@@ -396,16 +397,16 @@ context.AgentMessageReceived += (sender, response) => { /* process response */ }
 ```csharp
 // Inside an agent's OnMessage — waits for the target agent to respond
 var request = new AgentMessage { Message = "Analyze this" };
-var reply = await fabrAgentHost.SendAndReceiveMessage("analyst", request);
+var reply = await fabrcoreAgentHost.SendAndReceiveMessage("analyst", request);
 // reply.Message contains the response
 
 // Cross-owner: use fully-qualified handle
-var reply = await fabrAgentHost.SendAndReceiveMessage("user2:analyst", request);
+var reply = await fabrcoreAgentHost.SendAndReceiveMessage("user2:analyst", request);
 ```
 
 **Event broadcast** — Use `SendEvent` (fire-and-forget, no response):
 ```csharp
-await fabrAgentHost.SendEvent("listener", eventMessage);
+await fabrcoreAgentHost.SendEvent("listener", eventMessage);
 ```
 
 See `references/inter-agent-communication.md` for orchestration patterns.
