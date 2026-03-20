@@ -491,8 +491,8 @@
         {
             InvokeAsync(async () =>
             {
-                // Handle "thinking" messages - update the thinking status instead of adding to chat
-                if (message.MessageType == "thinking")
+                // Handle _status messages (thinking heartbeat from AgentGrain)
+                if (message.MessageType == SystemMessageTypes.Status || message.MessageType == "thinking")
                 {
                     // Cancel any previous fade timer
                     _thinkingFadeCts?.Cancel();
@@ -501,9 +501,9 @@
                     _thinkingMessage = message.Message;
                     StateHasChanged();
 
-                    // Auto-fade after 3 seconds
+                    // Auto-fade after 5 seconds (longer than 3s heartbeat interval to avoid flicker)
                     var cts = _thinkingFadeCts;
-                    _ = Task.Delay(3000, cts.Token).ContinueWith(t =>
+                    _ = Task.Delay(5000, cts.Token).ContinueWith(t =>
                     {
                         if (!t.IsCanceled)
                         {
@@ -516,6 +516,34 @@
                     });
                     return;
                 }
+
+                // Handle _error messages from AgentGrain
+                if (message.MessageType == SystemMessageTypes.Error)
+                {
+                    _isWaitingForResponse = false;
+                    _thinkingMessage = null;
+                    _thinkingFadeCts?.Cancel();
+
+                    // Display error as a chat message
+                    var errorText = message.Message ?? "An error occurred";
+                    _messages.Add(new ChatMessage
+                    {
+                        Text = errorText,
+                        RenderedHtml = $"<div class=\"chat-dock-error\">Error: {System.Net.WebUtility.HtmlEncode(errorText)}</div>",
+                        IsFromUser = false,
+                        Timestamp = DateTime.Now
+                    });
+
+                    if (!_isExpanded)
+                        _hasUnreadMessages = true;
+
+                    StateHasChanged();
+                    return;
+                }
+
+                // Skip any other system messages (MessageType starting with '_')
+                if (SystemMessageTypes.IsSystemMessage(message.MessageType))
+                    return;
 
                 // Let parent component decide whether to show this message in chat
                 bool showInChat = true;

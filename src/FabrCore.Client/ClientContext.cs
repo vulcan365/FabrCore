@@ -150,6 +150,10 @@ namespace FabrCore.Client
         {
             ThrowIfDisposed();
 
+            // Auto-fill FromHandle so agents can route responses back to this client
+            if (string.IsNullOrEmpty(request.FromHandle))
+                request.FromHandle = _handle;
+
             using var activity = ActivitySource.StartActivity("SendAndReceiveMessage", ActivityKind.Client);
             activity?.SetTag("client.handle", _handle);
             activity?.SetTag("message.from", request.FromHandle);
@@ -196,6 +200,10 @@ namespace FabrCore.Client
         {
             ThrowIfDisposed();
 
+            // Auto-fill FromHandle so agents can route responses back to this client
+            if (string.IsNullOrEmpty(request.FromHandle))
+                request.FromHandle = _handle;
+
             using var activity = ActivitySource.StartActivity("SendMessage", ActivityKind.Producer);
             activity?.SetTag("client.handle", _handle);
             activity?.SetTag("message.from", request.FromHandle);
@@ -228,6 +236,10 @@ namespace FabrCore.Client
         public async Task SendEvent(AgentMessage request, string? streamName = null)
         {
             ThrowIfDisposed();
+
+            // Auto-fill FromHandle so agents can identify the event source
+            if (string.IsNullOrEmpty(request.FromHandle))
+                request.FromHandle = _handle;
 
             using var activity = ActivitySource.StartActivity("SendEvent", ActivityKind.Producer);
             activity?.SetTag("client.handle", _handle);

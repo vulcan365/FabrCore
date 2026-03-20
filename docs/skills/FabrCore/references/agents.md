@@ -12,8 +12,8 @@ using Microsoft.Extensions.AI;
 [AgentAlias("my-agent")]
 public class MyAgent : FabrCoreAgentProxy
 {
-    private ChatClientAgent? _agent;
-    private AgentThread? _thread;
+    private AIAgent? _agent;
+    private AgentSession? _session;
 
     public MyAgent(
         AgentConfiguration config,
@@ -46,37 +46,44 @@ Called once before the first message is processed, or when the agent is reconfig
 ```csharp
 public override async Task OnInitialize()
 {
-    // Option A: Use CreateChatClientAgent helper (recommended)
-    var result = await CreateChatClientAgent("default");
-    _agent = result.Agent;
-    _thread = result.Thread;
-
-    // Option B: Manual setup for more control
-    var chatClient = await GetChatClient("default");
+    // Step 1: Resolve tools from configured plugins, standalone tools, and MCP servers
     var tools = await ResolveConfiguredToolsAsync();
 
-    _agent = new ChatClientAgent(chatClient, new ChatClientAgentOptions
-    {
-        ChatOptions = new ChatOptions
-        {
-            Instructions = config.SystemPrompt,
-            Tools = tools
-        },
-        Name = fabrAgentHost.GetHandle()
-    })
-    .AsBuilder()
-    .UseOpenTelemetry(null, cfg => cfg.EnableSensitiveData = true)
-    .Build(serviceProvider);
+    // Step 2: Create the chat client agent with tools
+    var result = await CreateChatClientAgent(
+        "default",                                              // model config name from fabrcore.json
+        threadId: config.Handle ?? fabrAgentHost.GetHandle(),   // thread ID for history persistence
+        tools: tools);                                          // resolved tools
 
-    _thread = _agent.GetNewThread();
+    _agent = result.Agent;
+    _session = result.Session;
 }
 ```
 
-**`CreateChatClientAgent`** handles:
+**Important:** `ResolveConfiguredToolsAsync()` must be called before `CreateChatClientAgent` — tools are NOT auto-resolved. This method:
+- Resolves plugins from `config.Plugins` via `[PluginAlias]` (calls `InitializeAsync` on each)
+- Resolves standalone tools from `config.Tools` via `[ToolAlias]`
+- Connects MCP servers from `config.McpServers` and discovers their tools
+- Returns all tools as `List<AITool>`
+
+**`CreateChatClientAgent`** signature:
+```csharp
+protected Task<ChatClientAgentResult> CreateChatClientAgent(
+    string chatClientConfigName,          // Required: model name from fabrcore.json
+    string threadId,                      // Required: ID for chat history persistence
+    IList<AITool>? tools = null,          // Optional: resolved tools
+    Action<ChatClientAgentOptions>? configureOptions = null)  // Optional: further configuration
+```
+
+**`ChatClientAgentResult`** contains:
+- `Agent` (`AIAgent`) — The configured agent instance
+- `Session` (`AgentSession`) — The conversation session for message history
+- `ChatHistoryProvider` (`FabrCoreChatHistoryProvider?`) — For compaction support
+
+`CreateChatClientAgent` handles:
 - Creating the chat client for the specified model
-- Resolving all configured tools (plugins, standalone tools, MCP servers)
-- Setting up chat history persistence
-- Configuring compaction
+- Setting up automatic chat history persistence
+- Applying the system prompt from `config.SystemPrompt`
 - Applying OpenTelemetry instrumentation
 
 ### OnMessage(AgentMessage)
@@ -87,18 +94,18 @@ Called for every `Request` or `OneWay` message. Must return an `AgentMessage` re
 public override async Task<AgentMessage> OnMessage(AgentMessage message)
 {
     var response = message.Response();
-
-    // Streaming response
     var chatMessage = new ChatMessage(ChatRole.User, message.Message);
-    await foreach (var msg in _agent!.InvokeStreamingAsync(
-        [chatMessage], _thread!))
+
+    // Streaming response (recommended)
+    await foreach (var update in _agent!.RunStreamingAsync(
+        chatMessage, _session!))
     {
-        response.Message += msg.Text;
+        response.Message += update.Text;
     }
 
     // Or non-streaming
-    var result = await _agent!.InvokeAsync([chatMessage], _thread!);
-    response.Message = result.Messages.Last().Text;
+    // var result = await _agent!.RunAsync(chatMessage, _session!);
+    // response.Message = result.Messages.Last().Text;
 
     return response;
 }
@@ -119,48 +126,53 @@ public override Task OnEvent(AgentMessage eventMessage)
 
 ## Thread Management Patterns
 
-### Single Thread (Default)
+### Single Session (Default)
 
 One conversation per agent instance. Simplest pattern.
 
 ```csharp
-private AgentThread? _thread;
+private AIAgent? _agent;
+private AgentSession? _session;
 
 public override async Task OnInitialize()
 {
-    var result = await CreateChatClientAgent("default");
+    var tools = await ResolveConfiguredToolsAsync();
+    var result = await CreateChatClientAgent(
+        "default",
+        threadId: config.Handle ?? fabrAgentHost.GetHandle(),
+        tools: tools);
     _agent = result.Agent;
-    _thread = result.Thread;
+    _session = result.Session;
 }
 ```
 
-### Per-User Thread
+### Per-User Session
 
-Separate conversation history per user (useful for shared agents).
+Separate conversation history per user. Use different `threadId` values to isolate history.
 
 ```csharp
-private readonly Dictionary<string, AgentThread> _threads = new();
+private readonly Dictionary<string, AgentSession> _sessions = new();
 
 public override async Task<AgentMessage> OnMessage(AgentMessage message)
 {
     var userId = message.FromHandle;
-    if (!_threads.TryGetValue(userId, out var thread))
+    if (!_sessions.TryGetValue(userId, out var session))
     {
-        thread = _agent!.GetNewThread();
-        _threads[userId] = thread;
+        session = await _agent!.CreateSessionAsync();
+        _sessions[userId] = session;
     }
-    // Use thread for this user's conversation
+    // Use session for this user's conversation
 }
 ```
 
-### Per-Message Thread
+### Per-Message Session
 
 No conversation history — each message is independent.
 
 ```csharp
 public override async Task<AgentMessage> OnMessage(AgentMessage message)
 {
-    var thread = _agent!.GetNewThread();
+    var session = await _agent!.CreateSessionAsync();
     // Process with fresh context every time
 }
 ```
@@ -186,7 +198,7 @@ When conversation history grows too large for the context window, use compaction
 
 ```csharp
 // In OnMessage, before processing
-await TryCompactAsync(_agent!, _thread!);
+await TryCompactAsync(_agent!, _session!);
 ```
 
 Compaction summarizes older messages using the LLM and replaces them with a compact summary. Configure via `AgentConfiguration.Args`:
@@ -269,13 +281,17 @@ public class MyAgent : FabrCoreAgentProxy
 
     public override async Task OnInitialize()
     {
-        var result = await CreateChatClientAgent("default",
-            additionalTools: [
-                AIFunctionFactory.Create(SearchDatabase),
-                AIFunctionFactory.Create(SendNotification)
-            ]);
+        // Resolve configured plugins/tools, then add local tool methods
+        var tools = await ResolveConfiguredToolsAsync();
+        tools.Add(AIFunctionFactory.Create(SearchDatabase));
+        tools.Add(AIFunctionFactory.Create(SendNotification));
+
+        var result = await CreateChatClientAgent(
+            "default",
+            threadId: config.Handle ?? fabrAgentHost.GetHandle(),
+            tools: tools);
         _agent = result.Agent;
-        _thread = result.Thread;
+        _session = result.Session;
     }
 
     [Description("Search the database for records matching the query")]

@@ -4,9 +4,13 @@
 
 FabrCore agents communicate through `IFabrCoreAgentHost`, which provides three communication patterns:
 
-1. **Request-Response** — Send a message and wait for a reply
-2. **Fire-and-Forget** — Send a message without waiting
-3. **Events** — Broadcast via Orleans streams
+| Method | Behavior | Preferred For |
+|--------|----------|---------------|
+| `SendAndReceiveMessage` | Async RPC — blocks until target agent responds | **Agent-to-agent** (recommended) |
+| `SendMessage` | Fire-and-forget — response arrives via stream/observer | **Client-to-agent** |
+| `SendEvent` | Fire-and-forget event — no response expected | Event broadcasting |
+
+For agent-to-agent, prefer `SendAndReceiveMessage` because agents typically need the response to continue processing. For client-to-agent, prefer `SendMessage` because responses arrive asynchronously via the `AgentMessageReceived` event on `ClientContext`.
 
 ## Handle Routing
 

@@ -23,6 +23,24 @@ namespace FabrCore.Core
         Response = 2
     }
 
+    /// <summary>
+    /// Reserved system message type constants. All MessageTypes starting with '_' are
+    /// reserved for FabrCore internal use. They route normally but clients handle them
+    /// differently (not displayed as chat messages).
+    /// </summary>
+    public static class SystemMessageTypes
+    {
+        /// <summary>Periodic heartbeat sent while an agent is processing a message.</summary>
+        public const string Status = "_status";
+
+        /// <summary>Sent when an agent encounters an error processing a message.</summary>
+        public const string Error = "_error";
+
+        /// <summary>Returns true if the message type is a FabrCore internal/system message (starts with '_').</summary>
+        public static bool IsSystemMessage(string? messageType)
+            => messageType != null && messageType.StartsWith('_');
+    }
+
     public class AgentMessage
     {
         public string Id { get; set; } = Guid.NewGuid().ToString();
