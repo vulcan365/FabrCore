@@ -32,7 +32,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _context = await ContextFactory.CreateAsync("user1");
+        _context = await ContextFactory.GetOrCreateAsync("user1");
         _context.AgentMessageReceived += OnAgentMessage;
 
         // Create the agent on first load
@@ -55,15 +55,14 @@
 
         try
         {
-            var response = await _context!.SendAndReceiveMessage("chat-agent", text);
-            _messages.Add(new ChatDisplayMessage(response.Message, false));
+            // SendMessage is preferred for client-to-agent (fire-and-forget)
+            // Response arrives asynchronously via OnAgentMessage handler
+            var request = new AgentMessage { ToHandle = "chat-agent", Message = text };
+            await _context!.SendMessage(request);
         }
         catch (Exception ex)
         {
             _messages.Add(new ChatDisplayMessage($"Error: {ex.Message}", false));
-        }
-        finally
-        {
             _isSending = false;
             StateHasChanged();
         }
@@ -78,7 +77,12 @@
     {
         InvokeAsync(() =>
         {
+            // Skip system messages (e.g., _status heartbeats)
+            if (SystemMessageTypes.IsSystemMessage(message.MessageType))
+                return;
+
             _messages.Add(new ChatDisplayMessage(message.Message, false));
+            _isSending = false;
             StateHasChanged();
         });
     }

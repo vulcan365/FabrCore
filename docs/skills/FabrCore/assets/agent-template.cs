@@ -1,5 +1,6 @@
 using FabrCore.Core;
 using FabrCore.Sdk;
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
 /// <summary>
@@ -8,8 +9,8 @@ using Microsoft.Extensions.AI;
 [AgentAlias("{{AGENT_ALIAS}}")]
 public class {{AGENT_NAME}} : FabrCoreAgentProxy
 {
-    private ChatClientAgent? _agent;
-    private AgentThread? _thread;
+    private AIAgent? _agent;
+    private AgentSession? _session;
 
     public {{AGENT_NAME}}(
         AgentConfiguration config,
@@ -19,9 +20,15 @@ public class {{AGENT_NAME}} : FabrCoreAgentProxy
 
     public override async Task OnInitialize()
     {
-        var result = await CreateChatClientAgent("default");
+        // Resolve plugins, standalone tools, and MCP tools from config
+        var tools = await ResolveConfiguredToolsAsync();
+
+        var result = await CreateChatClientAgent(
+            "default",
+            threadId: config.Handle ?? fabrcoreAgentHost.GetHandle(),
+            tools: tools);
         _agent = result.Agent;
-        _thread = result.Thread;
+        _session = result.Session;
     }
 
     public override async Task<AgentMessage> OnMessage(AgentMessage message)
@@ -29,10 +36,10 @@ public class {{AGENT_NAME}} : FabrCoreAgentProxy
         var response = message.Response();
         var chatMessage = new ChatMessage(ChatRole.User, message.Message);
 
-        await foreach (var msg in _agent!.InvokeStreamingAsync(
-            [chatMessage], _thread!))
+        await foreach (var update in _agent!.RunStreamingAsync(
+            chatMessage, _session!))
         {
-            response.Message += msg.Text;
+            response.Message += update.Text;
         }
 
         return response;
@@ -48,7 +55,7 @@ public class {{AGENT_NAME}} : FabrCoreAgentProxy
 // {
 //   "Handle": "{{AGENT_ALIAS}}",
 //   "AgentType": "{{AGENT_ALIAS}}",
-//   "Models": ["default"],
+//   "Models": "default",
 //   "SystemPrompt": "{{AGENT_DESCRIPTION}}",
 //   "Plugins": [],
 //   "Tools": [],

@@ -16,5 +16,6 @@ app.UseAntiforgery();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
-await app.UseFabrCoreClient();
+// UseFabrCoreClient returns IHost (NOT awaitable)
+app.UseFabrCoreClient();
 app.Run();

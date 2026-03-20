@@ -232,6 +232,27 @@ public static class HandleUtilities
 - Bare alias (no colon) → auto-prefixed with caller's owner → routes to same-owner agent
 - Fully-qualified handle (contains colon) → used as-is → enables cross-owner routing
 
+## SystemMessageTypes — Reserved Message Types
+
+All `MessageType` values starting with `_` are reserved for FabrCore internal/system use. They route through streams like normal messages but clients handle them differently.
+
+```csharp
+public static class SystemMessageTypes
+{
+    public const string Status = "_status";   // Thinking heartbeat (every 3s during OnMessage)
+    public const string Error = "_error";     // Error notification (exception in OnMessage)
+
+    public static bool IsSystemMessage(string? messageType)
+        => messageType != null && messageType.StartsWith('_');
+}
+```
+
+**Automatic behavior:**
+- `AgentGrain.OnMessage` sends `_status` heartbeats every 3 seconds while processing. No heartbeat if response is under 3 seconds.
+- On exception, `AgentGrain` sends `_error` with `ex.Message` to the original sender's stream, then rethrows.
+- `ChatDock` shows `_status` as a thinking indicator and `_error` as an error message in the chat.
+- System messages are NOT stored in chat history.
+
 ## AgentMessage — Complete Schema
 
 ```csharp
@@ -246,7 +267,7 @@ public class AgentMessage
 
     // Content
     public string Message { get; set; }            // Text content
-    public string MessageType { get; set; }        // Custom type identifier
+    public string MessageType { get; set; }        // Custom type identifier (values starting with '_' are reserved)
     public MessageKind MessageKind { get; set; }   // Request, OneWay, Response
 
     // Metadata
