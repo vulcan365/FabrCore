@@ -7,6 +7,7 @@ Every FabrCore agent extends `FabrCoreAgentProxy` and is decorated with `[AgentA
 ```csharp
 using FabrCore.Core;
 using FabrCore.Sdk;
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
 [AgentAlias("my-agent")]
@@ -18,8 +19,8 @@ public class MyAgent : FabrCoreAgentProxy
     public MyAgent(
         AgentConfiguration config,
         IServiceProvider serviceProvider,
-        IFabrCoreAgentHost fabrAgentHost)
-        : base(config, serviceProvider, fabrAgentHost) { }
+        IFabrCoreAgentHost fabrcoreAgentHost)
+        : base(config, serviceProvider, fabrcoreAgentHost) { }
 
     public override async Task OnInitialize() { /* ... */ }
     public override async Task<AgentMessage> OnMessage(AgentMessage message) { /* ... */ }
@@ -52,7 +53,7 @@ public override async Task OnInitialize()
     // Step 2: Create the chat client agent with tools
     var result = await CreateChatClientAgent(
         "default",                                              // model config name from fabrcore.json
-        threadId: config.Handle ?? fabrAgentHost.GetHandle(),   // thread ID for history persistence
+        threadId: config.Handle ?? fabrcoreAgentHost.GetHandle(),   // thread ID for history persistence
         tools: tools);                                          // resolved tools
 
     _agent = result.Agent;
@@ -139,7 +140,7 @@ public override async Task OnInitialize()
     var tools = await ResolveConfiguredToolsAsync();
     var result = await CreateChatClientAgent(
         "default",
-        threadId: config.Handle ?? fabrAgentHost.GetHandle(),
+        threadId: config.Handle ?? fabrcoreAgentHost.GetHandle(),
         tools: tools);
     _agent = result.Agent;
     _session = result.Session;
@@ -217,7 +218,7 @@ Active only while the grain is activated. Lost on deactivation.
 
 ```csharp
 // In OnInitialize or OnMessage
-fabrAgentHost.RegisterTimer(
+fabrcoreAgentHost.RegisterTimer(
     "timer-name",
     async () => { /* periodic work */ },
     TimeSpan.FromSeconds(5),   // due time
@@ -229,7 +230,7 @@ fabrAgentHost.RegisterTimer(
 Survive grain deactivation and silo restarts. Override `OnReminder`:
 
 ```csharp
-await fabrAgentHost.RegisterReminder(
+await fabrcoreAgentHost.RegisterReminder(
     "daily-check",
     TimeSpan.FromMinutes(1),   // due time
     TimeSpan.FromHours(24));   // period
@@ -288,7 +289,7 @@ public class MyAgent : FabrCoreAgentProxy
 
         var result = await CreateChatClientAgent(
             "default",
-            threadId: config.Handle ?? fabrAgentHost.GetHandle(),
+            threadId: config.Handle ?? fabrcoreAgentHost.GetHandle(),
             tools: tools);
         _agent = result.Agent;
         _session = result.Session;

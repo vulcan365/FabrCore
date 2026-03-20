@@ -170,7 +170,7 @@ Client (Blazor)
 
 ```
 AgentA.OnMessage()
-  └─> fabrAgentHost.SendAndReceiveMessage("agentB", message)
+  └─> fabrcoreAgentHost.SendAndReceiveMessage("agentB", message)
         └─> AgentGrain.ResolveTargetHandle("agentB") → "user1:agentB"
         └─> AgentGrain(user1:agentB).OnMessage()
               └─> AgentB.OnMessage()
@@ -185,7 +185,7 @@ Note: Bare alias `"agentB"` is auto-resolved to `"user1:agentB"` by `ResolveTarg
 
 ```
 AgentA sends event
-  └─> fabrAgentHost.SendEvent("agentB", event)
+  └─> fabrcoreAgentHost.SendEvent("agentB", event)
         └─> Orleans Stream (AgentEvent namespace)
               └─> AgentGrain(B) subscription
                     └─> AgentB.OnEvent()
