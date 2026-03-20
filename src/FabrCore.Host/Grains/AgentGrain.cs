@@ -11,18 +11,25 @@ using OpenTelemetry.Trace;
 using Orleans;
 using Orleans.Runtime;
 using Orleans.Streams;
-using Orleans.Streams.Core;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Text.Json;
 
 namespace FabrCore.Host.Grains
 {
-    [ImplicitStreamSubscription(StreamConstants.AgentChatNamespace)]
-    internal class AgentGrain : Grain, IAgentGrain, IFabrCoreAgentHost, IRemindable, IStreamSubscriptionObserver
+    internal class AgentGrain : Grain, IAgentGrain, IFabrCoreAgentHost, IRemindable
     {
         private static readonly ActivitySource ActivitySource = new("FabrCore.Host.AgentGrain");
         private static readonly Meter Meter = new("FabrCore.Host.AgentGrain");
+        private static readonly JsonSerializerOptions DebugJsonOptions = new() { WriteIndented = false };
+
+        /// <summary>Serializes an AgentMessage for debug logging, excluding binary Data to keep logs readable.</summary>
+        private static string SerializeForLog(AgentMessage msg) => JsonSerializer.Serialize(new
+        {
+            msg.Id, msg.ToHandle, msg.FromHandle, msg.OnBehalfOfHandle, msg.DeliverToHandle,
+            msg.Channel, msg.MessageType, msg.Message, msg.Kind, msg.DataType,
+            DataLength = msg.Data?.Length, msg.Files, msg.State, msg.Args, msg.TraceId
+        }, DebugJsonOptions);
 
         // Metrics
         private static readonly Counter<long> AgentConfiguredCounter = Meter.CreateCounter<long>(
@@ -98,16 +105,6 @@ namespace FabrCore.Host.Grains
             _messageState = messageState;
 
             logger = loggerFactory.CreateLogger<AgentGrain>();
-        }
-
-        /// <summary>
-        /// IStreamSubscriptionObserver — called by Orleans when a message arrives on the
-        /// AgentChat implicit subscription and no handler is attached yet.
-        /// </summary>
-        public async Task OnSubscribed(IStreamSubscriptionHandleFactory handleFactory)
-        {
-            var handle = handleFactory.Create<AgentMessage>();
-            await handle.ResumeAsync(ReceivedChatMessage);
         }
 
         public override async Task OnActivateAsync(CancellationToken cancellationToken)
@@ -464,8 +461,7 @@ namespace FabrCore.Host.Grains
             activity?.SetTag("message.kind", request.Kind.ToString());
             activity?.SetTag("to.type", "Agent");
 
-            logger.LogTrace("OnMessage received - From: {FromHandle}, To: {ToHandle}, Kind: {Kind}",
-                request.FromHandle, request.ToHandle, request.Kind);
+            logger.LogDebug("OnMessage received: {AgentMessage}", SerializeForLog(request));
 
             var startTime = Stopwatch.GetTimestamp();
 
@@ -486,7 +482,7 @@ namespace FabrCore.Host.Grains
                 heartbeatCts.Cancel();
 
                 _messagesProcessed++;
-                logger.LogTrace("OnMessage completed - Response ToHandle: {ToHandle}", response?.ToHandle);
+                logger.LogDebug("OnMessage response: {AgentMessage}", response != null ? SerializeForLog(response) : "null");
 
                 var elapsed = Stopwatch.GetElapsedTime(startTime).TotalMilliseconds;
                 MessageProcessingDuration.Record(elapsed,
@@ -545,6 +541,9 @@ namespace FabrCore.Host.Grains
             // Don't send heartbeats if no sender or sending to self
             if (string.IsNullOrEmpty(targetHandle) || targetHandle == myHandle)
                 return;
+
+            logger.LogDebug("Starting _status heartbeat from {MyHandle} to stream AgentChat/{TargetHandle} (original request: {AgentMessage})",
+                myHandle, targetHandle, SerializeForLog(request));
 
             try
             {
@@ -606,9 +605,9 @@ namespace FabrCore.Host.Grains
                     TraceId = request.TraceId
                 };
 
+                logger.LogDebug("Sending _error system message to stream AgentChat/{TargetHandle}: {AgentMessage}", targetHandle, SerializeForLog(errorMessage));
                 var stream = clusterClient.GetAgentChatStream(targetHandle);
                 await stream.OnNextAsync(errorMessage);
-                logger.LogDebug("Sent _error message to {TargetHandle}: {ErrorMessage}", targetHandle, ex.Message);
             }
             catch (Exception streamEx)
             {
@@ -737,9 +736,28 @@ namespace FabrCore.Host.Grains
                 throw new ArgumentException("Handle cannot be null or empty", nameof(handle));
 
             var myHandle = this.GetPrimaryKeyString();
+
+            // Already fully qualified — use as-is
+            if (handle.Contains(':'))
+            {
+                logger.LogDebug("ResolveTargetHandle: '{Handle}' is fully qualified, using as-is (agent: {MyHandle})", handle, myHandle);
+                return handle;
+            }
+
             var ownerId = myHandle.Contains(':') ? myHandle[..myHandle.IndexOf(':')] : myHandle;
+
+            // Target IS the owner (client handle) — don't prefix it
+            if (handle == ownerId)
+            {
+                logger.LogDebug("ResolveTargetHandle: '{Handle}' matches owner, routing to client (agent: {MyHandle})", handle, myHandle);
+                return handle;
+            }
+
+            // Bare agent alias — prefix with owner
             var prefix = HandleUtilities.BuildPrefix(ownerId);
-            return HandleUtilities.EnsurePrefix(handle, prefix);
+            var resolved = HandleUtilities.EnsurePrefix(handle, prefix);
+            logger.LogDebug("ResolveTargetHandle: '{Handle}' resolved to '{Resolved}' (agent: {MyHandle})", handle, resolved, myHandle);
+            return resolved;
         }
 
         public async Task<AgentMessage> SendAndReceiveMessage(AgentMessage request)
@@ -759,8 +777,7 @@ namespace FabrCore.Host.Grains
             activity?.SetTag("from.type", "Agent");  // Agent-to-agent communication
             activity?.SetTag("to.type", "Agent");
 
-            logger.LogDebug("SendAndReceiveMessage - From: {FromHandle}, To: {ToHandle}",
-                request.FromHandle, request.ToHandle);
+            logger.LogDebug("SendAndReceiveMessage: {AgentMessage}", SerializeForLog(request));
 
             try
             {
@@ -802,8 +819,7 @@ namespace FabrCore.Host.Grains
             activity?.SetTag("stream.provider", StreamConstants.ProviderName);
             activity?.SetTag("stream.namespace", StreamConstants.AgentChatNamespace);
 
-            logger.LogTrace("SendMessage to stream - From: {FromHandle}, To: {ToHandle}",
-                request.FromHandle, request.ToHandle);
+            logger.LogDebug("SendMessage to stream AgentChat/{ToHandle}: {AgentMessage}", request.ToHandle, SerializeForLog(request));
 
             try
             {
@@ -845,13 +861,10 @@ namespace FabrCore.Host.Grains
                     // Named event stream — publish directly
                     activity?.SetTag("stream.name", streamName);
 
-                    logger.LogTrace("SendEvent to named stream - From: {FromHandle}, StreamName: {StreamName}",
-                        request.FromHandle, streamName);
+                    logger.LogDebug("SendEvent to named stream AgentEvent/{StreamName}: {AgentMessage}", streamName, SerializeForLog(request));
 
                     var stream = clusterClient.GetAgentEventStream(streamName);
                     await stream.OnNextAsync(request);
-
-                    logger.LogTrace("Event sent to named stream: {StreamName}", streamName);
                 }
                 else
                 {
@@ -859,8 +872,7 @@ namespace FabrCore.Host.Grains
                     request.ToHandle = ResolveTargetHandle(request.ToHandle);
                     activity?.SetTag("message.to", request.ToHandle);
 
-                    logger.LogTrace("SendEvent to stream - From: {FromHandle}, To: {ToHandle}",
-                        request.FromHandle, request.ToHandle);
+                    logger.LogDebug("SendEvent to stream AgentEvent/{ToHandle}: {AgentMessage}", request.ToHandle, SerializeForLog(request));
 
                     var stream = clusterClient.GetAgentEventStream(request.ToHandle);
                     await stream.OnNextAsync(request);
@@ -1152,9 +1164,9 @@ namespace FabrCore.Host.Grains
             logger.LogDebug("Creating streams for agent: {Handle}", handle);
 
             // Build list of explicit streams to subscribe to.
-            // AgentChat is handled by [ImplicitStreamSubscription] — do NOT add here.
             var streamNames = new List<StreamName>
             {
+                StreamName.ForAgentChat(handle),
                 StreamName.ForAgentEvent(handle)
             };
 
@@ -1268,8 +1280,7 @@ namespace FabrCore.Host.Grains
                 activity?.SetTag("stream.sequence", token.SequenceNumber);
             }
 
-            logger.LogDebug("Received chat message - From: {FromHandle}, To: {ToHandle}, Kind: {Kind}",
-                request.FromHandle, request.ToHandle, request.Kind);
+            logger.LogDebug("Received chat message: {AgentMessage}", SerializeForLog(request));
 
             StreamMessagesCounter.Add(1,
                 new KeyValuePair<string, object?>("message.from", request.FromHandle),
@@ -1282,7 +1293,7 @@ namespace FabrCore.Host.Grains
 
                 if (response != null && request.Kind == MessageKind.Request && response.ToHandle == request.FromHandle)
                 {
-                    logger.LogDebug("Sending response back to original sender: {FromHandle}", request.FromHandle);
+                    logger.LogDebug("Sending response back to original sender via stream: {AgentMessage}", SerializeForLog(response));
                     await SendMessage(response);
                 }
                 else
@@ -1316,8 +1327,7 @@ namespace FabrCore.Host.Grains
                 activity?.SetTag("stream.sequence", token.SequenceNumber);
             }
 
-            logger.LogDebug("Received event message - From: {FromHandle}, To: {ToHandle}, Type: {MessageType}",
-                request.FromHandle, request.ToHandle, request.MessageType);
+            logger.LogDebug("Received event message: {AgentMessage}", SerializeForLog(request));
 
             StreamMessagesCounter.Add(1,
                 new KeyValuePair<string, object?>("message.from", request.FromHandle),
