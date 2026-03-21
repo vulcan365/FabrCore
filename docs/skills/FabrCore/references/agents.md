@@ -112,6 +112,35 @@ public override async Task<AgentMessage> OnMessage(AgentMessage message)
 }
 ```
 
+**LLM Usage Tracking:** Token counts and other LLM metrics are automatically captured and attached to the response `Args` (e.g., `_tokens_input`, `_tokens_output`, `_llm_calls`). See [configuration.md](configuration.md#llm-usage-tracking--response-args) for the full list.
+
+### SetStatusMessage(string? message)
+
+Controls the text sent in `_status` heartbeat messages (every 3 seconds during processing). By default the heartbeat sends "Thinking..". Use this to show progress to the client:
+
+```csharp
+public override async Task<AgentMessage> OnMessage(AgentMessage message)
+{
+    SetStatusMessage("Searching documents..");
+    var docs = await SearchRelevantDocs(message.Message);
+
+    SetStatusMessage("Analyzing results..");
+    var analysis = await AnalyzeResults(docs);
+
+    SetStatusMessage(null); // reverts to "Thinking.."
+    var result = await _agent!.RunAsync(
+        new ChatMessage(ChatRole.User, message.Message), _session!);
+
+    // Compaction automatically sets "Compacting.." when it runs
+
+    var response = message.Response();
+    response.Message = result.Messages.Last().Text;
+    return response;
+}
+```
+
+The heartbeat reads the status message each tick, so changes are reflected on the next 3-second interval. `ChatDock` displays the status as a thinking indicator.
+
 ### OnEvent(AgentMessage)
 
 Called for fire-and-forget event messages. No response expected.
@@ -195,14 +224,22 @@ State is stored as `JsonElement` in the grain's persistent state, keyed by strin
 
 ## Chat History Compaction
 
-When conversation history grows too large for the context window, use compaction:
+Compaction runs automatically after every `OnMessage`. When stored chat history exceeds the configured token threshold, older messages are summarized via an LLM call and replaced with a compact summary.
 
-```csharp
-// In OnMessage, before processing
-await TryCompactAsync();
-```
+**No agent code is needed** — compaction is handled by the framework. The threshold is based on `ContextWindowTokens` from `fabrcore.json` (or the `CompactionMaxContextTokens` agent arg) multiplied by `CompactionThreshold`.
 
-`TryCompactAsync()` checks the token threshold and delegates to `OnCompaction()` when compaction is needed. Override `OnCompaction` to customize the compaction process:
+Configure via `AgentConfiguration.Args`:
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `CompactionEnabled` | `true` | Enable/disable compaction |
+| `CompactionKeepLastN` | `20` | Keep this many recent messages |
+| `CompactionThreshold` | `0.75` | Trigger at this % of context window |
+| `CompactionMaxContextTokens` | (from model config) | Override the context window size for threshold calculation |
+
+### Custom Compaction
+
+Override `OnCompaction` to customize the compaction strategy:
 
 ```csharp
 public override async Task<CompactionResult?> OnCompaction(
@@ -219,13 +256,7 @@ public override async Task<CompactionResult?> OnCompaction(
 }
 ```
 
-The default `OnCompaction` implementation summarizes older messages using the LLM via `CompactionService` and replaces them with a compact summary. Configure via `AgentConfiguration.Args`:
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `CompactionEnabled` | `true` | Enable/disable compaction |
-| `CompactionKeepLastN` | `20` | Keep this many recent messages |
-| `CompactionThreshold` | `0.75` | Trigger at this % of context window |
+Compaction LLM calls are tracked in the same `LlmUsageScope` and appear in the response's `_tokens_*` metrics.
 
 ## Timers and Reminders
 

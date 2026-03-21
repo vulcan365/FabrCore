@@ -242,6 +242,68 @@ Base: `/fabrcoreapi/`
 
 Connect at `/ws` for real-time bidirectional communication. The WebSocket middleware handles session management and message routing.
 
+## Advanced Orleans Configuration
+
+For full control over Orleans (custom providers, Event Hubs, Cosmos DB, Redis, etc.), use the decomposed API instead of `AddFabrCoreServer`:
+
+```csharp
+using FabrCore.Host;
+using FabrCore.Host.Configuration;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// 1. Register FabrCore's non-Orleans services (DI, controllers, background services)
+builder.AddFabrCoreServices(new FabrCoreServerOptions
+{
+    AdditionalAssemblies = [typeof(MyAgent).Assembly]
+});
+
+// 2. Configure Orleans with full control
+builder.UseOrleans(siloBuilder =>
+{
+    // Clustering — pick any provider
+    siloBuilder.UseAzureStorageClustering(o => o.ConfigureTableServiceClient(connStr));
+    siloBuilder.Configure<ClusterOptions>(o => { o.ClusterId = "my-cluster"; o.ServiceId = "my-svc"; });
+
+    // Storage — must register these two named providers
+    siloBuilder.AddAzureTableGrainStorage(FabrCoreOrleansConstants.StorageProviderName, o =>
+        o.ConfigureTableServiceClient(storageConnStr));
+    siloBuilder.AddAzureTableGrainStorage(FabrCoreOrleansConstants.PubSubStoreName, o =>
+        o.ConfigureTableServiceClient(storageConnStr));
+
+    // Streams — must register with this name
+    siloBuilder.AddEventHubStreams(FabrCoreOrleansConstants.StreamProviderName, o => { /* ... */ });
+
+    // Reminders — must register a reminder service
+    siloBuilder.UseAzureTableReminderService(o => o.ConfigureTableServiceClient(connStr));
+
+    // Register FabrCore grains
+    siloBuilder.AddFabrCore([typeof(MyAgent).Assembly]);
+});
+
+var app = builder.Build();
+app.UseFabrCoreServer();
+app.Run();
+```
+
+### Required Orleans Providers
+
+When using the advanced path, you must register these providers:
+
+| Constant | Value | Purpose |
+|----------|-------|---------|
+| `FabrCoreOrleansConstants.StorageProviderName` | `"fabrcoreStorage"` | Grain state for agents, clients, and management |
+| `FabrCoreOrleansConstants.PubSubStoreName` | `"PubSubStore"` | Orleans streaming pub/sub state |
+| `FabrCoreOrleansConstants.StreamProviderName` | `"fabrcoreStreams"` | Agent-to-agent and agent-to-client messaging |
+| Reminder service | (any) | Required for agent timers and reminders |
+
+### Simple vs Advanced Path
+
+- **`AddFabrCoreServer()`** — calls `AddFabrCoreServices()` + `UseOrleans()` + `AddFabrCore()` internally. Orleans is configured from `OrleansClusterOptions` in `appsettings.json`. Use this when Localhost/SqlServer/AzureStorage modes are sufficient.
+- **`AddFabrCoreServices()` + `UseOrleans()` + `AddFabrCore()`** — you own the `UseOrleans()` call and configure any Orleans providers you want. Use this for Event Hubs, Cosmos DB, Redis, custom dashboards, placement strategies, etc.
+
+**Do not combine both paths.** `UseOrleans()` can only be called once per host.
+
 ## Deployment Considerations
 
 1. **Single Server (Dev)** — Use `Localhost` clustering, runs on any machine

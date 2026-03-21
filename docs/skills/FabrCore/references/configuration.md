@@ -112,9 +112,10 @@ public class AgentConfiguration
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `CompactionEnabled` | `"true"` | Enable chat history compaction |
+| `CompactionEnabled` | `"true"` | Enable/disable automatic chat history compaction |
 | `CompactionKeepLastN` | `"20"` | Keep last N messages during compaction |
 | `CompactionThreshold` | `"0.75"` | Trigger compaction at this % of context window |
+| `CompactionMaxContextTokens` | (from model config) | Override context window size for threshold calculation |
 | `ModelConfig` | (from Models[0]) | Override model name for this agent |
 
 ### Args — Plugin Settings Convention
@@ -175,6 +176,8 @@ public enum McpTransportType
 ```
 
 ## Orleans Clustering — Complete Schema
+
+> **Note:** These settings are used by `AddFabrCoreServer()` (the simple path). If you use the advanced path (`AddFabrCoreServices()` + `UseOrleans()` + `AddFabrCore()`), you configure Orleans directly in code and these settings are not read. See [server-setup.md](server-setup.md#advanced-orleans-configuration) for details.
 
 ### appsettings.json (Server)
 
@@ -249,9 +252,31 @@ public static class SystemMessageTypes
 
 **Automatic behavior:**
 - `AgentGrain.OnMessage` sends `_status` heartbeats every 3 seconds while processing. No heartbeat if response is under 3 seconds.
+- The default status message is "Thinking..". Agents can change it via `SetStatusMessage("Searching..")` and revert with `SetStatusMessage(null)`. Compaction automatically sets "Compacting.." while running.
 - On exception, `AgentGrain` sends `_error` with `ex.Message` to the original sender's stream, then rethrows.
 - `ChatDock` shows `_status` as a thinking indicator and `_error` as an error message in the chat.
 - System messages are NOT stored in chat history.
+
+## LLM Usage Tracking — Response Args
+
+FabrCore automatically tracks LLM usage metrics across all LLM calls within a single `OnMessage` invocation. Metrics are attached to the response `AgentMessage.Args` with `_`-prefixed keys.
+
+| Args Key | Description |
+|----------|-------------|
+| `_tokens_input` | Total input tokens across all LLM calls |
+| `_tokens_output` | Total output tokens across all LLM calls |
+| `_tokens_reasoning` | Thinking/reasoning tokens (o1, Claude extended thinking) |
+| `_tokens_cached_input` | Input tokens served from cache |
+| `_llm_calls` | Number of LLM calls made (includes tool loops) |
+| `_llm_duration_ms` | Total wall-clock time spent waiting on LLM responses |
+| `_model` | Model ID from the last LLM call |
+| `_finish_reason` | Finish reason from the last LLM call (`stop`, `length`, `tool_calls`, `content_filter`) |
+
+**Automatic behavior:**
+- All calls via `GetChatClient()`, `CreateChatClientAgent()` → `RunAsync()`, and compaction are tracked.
+- Only keys with non-zero/non-null values are set.
+- Uses `AsyncLocal` scoping — each `OnMessage` invocation has its own independent scope.
+- Token counts from `FunctionInvokingChatClient` tool loops are pre-aggregated by the underlying client.
 
 ## AgentMessage — Complete Schema
 

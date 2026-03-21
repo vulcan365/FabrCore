@@ -1,4 +1,3 @@
-using FabrCore.Core.Streaming;
 using FabrCore.Host.Configuration;
 using FabrCore.Host.Services;
 using FabrCore.Sdk;
@@ -36,10 +35,6 @@ namespace FabrCore.Host
         private static readonly Counter<long> ServerConfiguredCounter = Meter.CreateCounter<long>(
             "fabrcore.host.server.configured",
             description: "Number of standalone servers configured");
-
-        private static readonly Counter<long> AssembliesLoadedCounter = Meter.CreateCounter<long>(
-            "fabrcore.host.assemblies.loaded",
-            description: "Number of additional assemblies loaded");
 
         private static readonly Counter<long> ErrorCounter = Meter.CreateCounter<long>(
             "fabrcore.host.errors",
@@ -95,13 +90,17 @@ namespace FabrCore.Host
         public static WebApplication UseFabrCoreStandaloneServer(this WebApplication app, FabrCoreServerOptions? options = null)
             => UseFabrCoreServer(app, options);
 
-        public static WebApplicationBuilder AddFabrCoreServer(this WebApplicationBuilder builder, FabrCoreServerOptions? options = null)
+        /// <summary>
+        /// Registers FabrCore's non-Orleans services (DI, controllers, background services).
+        /// <para>
+        /// Use this when you are calling <c>builder.UseOrleans()</c> yourself and using
+        /// <see cref="FabrCoreSiloBuilderExtensions.AddFabrCore"/> for the Orleans-specific parts.
+        /// </para>
+        /// </summary>
+        public static WebApplicationBuilder AddFabrCoreServices(this WebApplicationBuilder builder, FabrCoreServerOptions? options = null)
         {
-            using var activity = ActivitySource.StartActivity("AddFabrCoreServer", ActivityKind.Internal);
+            using var activity = ActivitySource.StartActivity("AddFabrCoreServices", ActivityKind.Internal);
             options ??= new FabrCoreServerOptions();
-
-            activity?.SetTag("options.assembly_count", options.AdditionalAssemblies.Count);
-            activity?.SetTag("environment", builder.Environment.EnvironmentName);
 
             // Create a temporary logger factory to log during setup
             using var loggerFactory = LoggerFactory.Create(loggingBuilder =>
@@ -110,8 +109,7 @@ namespace FabrCore.Host
             });
             var logger = loggerFactory.CreateLogger("FabrCore.Host.Extensions");
 
-            logger.LogInformation("Adding FabrCore server - Environment: {Environment}", builder.Environment.EnvironmentName);
-            logger.LogDebug("Additional assemblies to load: {AssemblyCount}", options.AdditionalAssemblies.Count);
+            logger.LogInformation("Adding FabrCore services - Environment: {Environment}", builder.Environment.EnvironmentName);
 
             try
             {
@@ -140,6 +138,10 @@ namespace FabrCore.Host
                 builder.Services.AddHostedService<FileCleanupBackgroundService>();
                 logger.LogInformation("File storage services configured");
 
+                // Configure Compaction
+                builder.Services.AddSingleton<FabrCore.Sdk.CompactionService>();
+                logger.LogDebug("CompactionService added");
+
                 // Configure Agent Service
                 builder.Services.AddSingleton<IFabrCoreAgentService, FabrCoreAgentService>();
                 logger.LogDebug("FabrCoreAgentService added");
@@ -147,6 +149,52 @@ namespace FabrCore.Host
                 // Configure Agent Registry Cleanup
                 builder.Services.AddHostedService<AgentRegistryCleanupService>();
                 logger.LogInformation("Agent registry cleanup service configured");
+
+                logger.LogInformation("FabrCore services added successfully");
+                activity?.SetStatus(ActivityStatusCode.Ok);
+
+                return builder;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error adding FabrCore services");
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                activity?.AddException(ex);
+                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "services_add_failed"));
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Configures a complete FabrCore server with Orleans silo using <see cref="OrleansClusterOptions"/> from configuration.
+        /// <para>
+        /// This is the simple path — it calls <see cref="AddFabrCoreServices"/> and configures Orleans internally.
+        /// For full Orleans control, use <see cref="AddFabrCoreServices"/> + <c>builder.UseOrleans()</c> +
+        /// <see cref="FabrCoreSiloBuilderExtensions.AddFabrCore"/> instead.
+        /// </para>
+        /// </summary>
+        public static WebApplicationBuilder AddFabrCoreServer(this WebApplicationBuilder builder, FabrCoreServerOptions? options = null)
+        {
+            using var activity = ActivitySource.StartActivity("AddFabrCoreServer", ActivityKind.Internal);
+            options ??= new FabrCoreServerOptions();
+
+            activity?.SetTag("options.assembly_count", options.AdditionalAssemblies.Count);
+            activity?.SetTag("environment", builder.Environment.EnvironmentName);
+
+            // Create a temporary logger factory to log during setup
+            using var loggerFactory = LoggerFactory.Create(loggingBuilder =>
+            {
+                loggingBuilder.AddConsole();
+            });
+            var logger = loggerFactory.CreateLogger("FabrCore.Host.Extensions");
+
+            logger.LogInformation("Adding FabrCore server - Environment: {Environment}", builder.Environment.EnvironmentName);
+            logger.LogDebug("Additional assemblies to load: {AssemblyCount}", options.AdditionalAssemblies.Count);
+
+            try
+            {
+                // Register non-Orleans services
+                builder.AddFabrCoreServices(options);
 
                 // Load Orleans cluster options from configuration
                 var orleansOptions = builder.Configuration
@@ -171,46 +219,14 @@ namespace FabrCore.Host
                     ConfigureReminders(siloBuilder, orleansOptions, logger);
 
                     // Streaming always uses memory streams (no SQL Server streaming provider exists)
-                    siloBuilder.AddMemoryStreams(StreamConstants.ProviderName);
+                    siloBuilder.AddMemoryStreams(FabrCoreOrleansConstants.StreamProviderName);
                     logger.LogDebug("Orleans memory streams configured");
 
                     logger.LogInformation("Orleans clustering, persistence, and reminders configured");
 
-                    // Add additional assemblies to Orleans
-                    var loadedCount = 0;
-                    foreach (var assembly in options.AdditionalAssemblies)
-                    {
-                        using var assemblyActivity = ActivitySource.StartActivity("LoadAssembly", ActivityKind.Internal);
-                        assemblyActivity?.SetTag("assembly.name", assembly.GetName().Name);
+                    // Register FabrCore grain assemblies
+                    siloBuilder.AddFabrCore(options.AdditionalAssemblies);
 
-                        logger.LogInformation("Loading assembly: {AssemblyName}", assembly.GetName().Name);
-
-                        try
-                        {
-                            //load assembly into .net
-                            Assembly.Load(assembly.GetName().Name!);
-                            loadedCount++;
-
-                            AssembliesLoadedCounter.Add(1,
-                                new KeyValuePair<string, object?>("assembly.name", assembly.GetName().Name));
-
-                            logger.LogInformation("Assembly loaded successfully: {AssemblyName}", assembly.GetName().Name);
-                            assemblyActivity?.SetStatus(ActivityStatusCode.Ok);
-                        }
-                        catch (Exception ex)
-                        {
-                            logger.LogError(ex, "Failed to load assembly: {AssemblyName}", assembly.GetName().Name);
-                            assemblyActivity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                            assemblyActivity?.AddException(ex);
-                            ErrorCounter.Add(1,
-                                new KeyValuePair<string, object?>("error.type", "assembly_load_failed"),
-                                new KeyValuePair<string, object?>("assembly.name", assembly.GetName().Name));
-                            throw;
-                        }
-                    }
-
-                    logger.LogInformation("Orleans configuration completed - Assemblies loaded: {LoadedCount}", loadedCount);
-                    orleansActivity?.SetTag("assemblies.loaded", loadedCount);
                     orleansActivity?.SetStatus(ActivityStatusCode.Ok);
                 });
 
@@ -309,12 +325,12 @@ namespace FabrCore.Host
                         throw new InvalidOperationException("Orleans:ConnectionString or Orleans:StorageConnectionString is required when using SqlServer clustering mode.");
                     }
 
-                    siloBuilder.AddAdoNetGrainStorage("fabrcoreStorage", storage =>
+                    siloBuilder.AddAdoNetGrainStorage(FabrCoreOrleansConstants.StorageProviderName, storage =>
                     {
                         storage.Invariant = "Microsoft.Data.SqlClient";
                         storage.ConnectionString = storageConnectionString;
                     });
-                    siloBuilder.AddAdoNetGrainStorage("PubSubStore", storage =>
+                    siloBuilder.AddAdoNetGrainStorage(FabrCoreOrleansConstants.PubSubStoreName, storage =>
                     {
                         storage.Invariant = "Microsoft.Data.SqlClient";
                         storage.ConnectionString = storageConnectionString;
@@ -328,11 +344,11 @@ namespace FabrCore.Host
                         throw new InvalidOperationException("Orleans:ConnectionString or Orleans:StorageConnectionString is required when using AzureStorage clustering mode.");
                     }
 
-                    siloBuilder.AddAzureTableGrainStorage("fabrcoreStorage", storage =>
+                    siloBuilder.AddAzureTableGrainStorage(FabrCoreOrleansConstants.StorageProviderName, storage =>
                     {
                         storage.ConfigureTableServiceClient(storageConnectionString);
                     });
-                    siloBuilder.AddAzureTableGrainStorage("PubSubStore", storage =>
+                    siloBuilder.AddAzureTableGrainStorage(FabrCoreOrleansConstants.PubSubStoreName, storage =>
                     {
                         storage.ConfigureTableServiceClient(storageConnectionString);
                     });
@@ -341,8 +357,8 @@ namespace FabrCore.Host
 
                 case ClusteringMode.Localhost:
                 default:
-                    siloBuilder.AddMemoryGrainStorage("fabrcoreStorage");
-                    siloBuilder.AddMemoryGrainStorage("PubSubStore");
+                    siloBuilder.AddMemoryGrainStorage(FabrCoreOrleansConstants.StorageProviderName);
+                    siloBuilder.AddMemoryGrainStorage(FabrCoreOrleansConstants.PubSubStoreName);
                     logger.LogDebug("Orleans memory grain storage configured");
                     break;
             }

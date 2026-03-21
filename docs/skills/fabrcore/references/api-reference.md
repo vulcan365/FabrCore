@@ -53,10 +53,8 @@ protected async Task<ChatClientAgentResult> CreateChatClientAgent(
     IList<AITool>? tools = null,
     Action<ChatClientAgentOptions>? configureOptions = null)
 
-// Trigger compaction if token threshold exceeded — delegates to OnCompaction()
-protected async Task<CompactionResult?> TryCompactAsync(Func<Task>? onCompacting = null)
-
-// Override to customize compaction logic (default uses CompactionService with LLM summarization)
+// Override to customize compaction logic (runs automatically after each OnMessage)
+// Default implementation uses CompactionService with LLM summarization
 public virtual async Task<CompactionResult?> OnCompaction(
     FabrCoreChatHistoryProvider chatHistoryProvider,
     CompactionConfig compactionConfig)
@@ -64,6 +62,9 @@ public virtual async Task<CompactionResult?> OnCompaction(
 // Access compaction internals from OnCompaction overrides
 protected CompactionService? CompactionServiceInstance { get; }
 protected string? CompactionChatClientConfigName { get; }
+
+// Set the heartbeat status message (default "Thinking..", null reverts to default)
+protected void SetStatusMessage(string? message)
 ```
 
 ### ChatClientAgentResult
