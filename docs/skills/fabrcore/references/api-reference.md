@@ -52,6 +52,18 @@ protected async Task<ChatClientAgentResult> CreateChatClientAgent(
     string threadId,                // Thread ID for chat history persistence
     IList<AITool>? tools = null,
     Action<ChatClientAgentOptions>? configureOptions = null)
+
+// Trigger compaction if token threshold exceeded — delegates to OnCompaction()
+protected async Task<CompactionResult?> TryCompactAsync(Func<Task>? onCompacting = null)
+
+// Override to customize compaction logic (default uses CompactionService with LLM summarization)
+public virtual async Task<CompactionResult?> OnCompaction(
+    FabrCoreChatHistoryProvider chatHistoryProvider,
+    CompactionConfig compactionConfig)
+
+// Access compaction internals from OnCompaction overrides
+protected CompactionService? CompactionServiceInstance { get; }
+protected string? CompactionChatClientConfigName { get; }
 ```
 
 ### ChatClientAgentResult

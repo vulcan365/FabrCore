@@ -40,6 +40,16 @@ namespace FabrCore.Sdk
         /// <param name="detailLevel">Level of detail requested.</param>
         /// <returns>Proxy health status.</returns>
         Task<ProxyHealthStatus> GetHealth(HealthDetailLevel detailLevel);
+
+        /// <summary>
+        /// Called when compaction is triggered (token threshold exceeded).
+        /// Override to implement custom compaction logic. The default implementation
+        /// uses CompactionService to summarize old messages via LLM.
+        /// </summary>
+        /// <param name="chatHistoryProvider">The chat history provider containing messages to compact.</param>
+        /// <param name="compactionConfig">Compaction configuration (thresholds, keep count, etc.).</param>
+        /// <returns>The compaction result, or null if compaction was skipped.</returns>
+        Task<CompactionResult?> OnCompaction(FabrCoreChatHistoryProvider chatHistoryProvider, CompactionConfig compactionConfig);
     }
 
 
@@ -88,6 +98,12 @@ namespace FabrCore.Sdk
 
         private DateTime? _initializedAt;
 
+        // Tracks the message currently being processed (set by InternalOnMessage)
+        private AgentMessage? _activeMessage;
+
+        /// <summary>The message currently being processed. Set automatically by InternalOnMessage.</summary>
+        protected AgentMessage? ActiveMessage => _activeMessage;
+
         // MCP client lifecycle tracking
         private readonly List<McpClient> _mcpClients = new();
 
@@ -97,6 +113,12 @@ namespace FabrCore.Sdk
         private CompactionService? _compactionService;
         private CompactionConfig? _compactionConfig;
         private bool _compactionInitialized;
+
+        /// <summary>The lazily-resolved CompactionService instance, available after the first TryCompactAsync() call.</summary>
+        protected CompactionService? CompactionServiceInstance => _compactionService;
+
+        /// <summary>The chat client configuration name used for compaction LLM calls.</summary>
+        protected string? CompactionChatClientConfigName => _chatClientConfigName;
 
         // Custom state persistence
         private Dictionary<string, JsonElement>? _customStateCache;
@@ -292,6 +314,77 @@ namespace FabrCore.Sdk
         #region Compaction
 
         /// <summary>
+        /// Called when compaction is triggered (token threshold exceeded).
+        /// Override to implement custom compaction logic (e.g., different prompts, models, or summarization strategies).
+        /// The default implementation uses CompactionService to summarize old messages via LLM.
+        /// </summary>
+        /// <param name="chatHistoryProvider">The chat history provider containing messages to compact.</param>
+        /// <param name="compactionConfig">Compaction configuration (thresholds, keep count, etc.).</param>
+        /// <returns>The compaction result, or null if compaction was skipped.</returns>
+        public virtual async Task<CompactionResult?> OnCompaction(
+            FabrCoreChatHistoryProvider chatHistoryProvider,
+            CompactionConfig compactionConfig)
+        {
+            if (_compactionService is null || _chatClientConfigName is null)
+                return null;
+
+            // Send _status heartbeats to the caller while compaction runs
+            using var heartbeatCts = new CancellationTokenSource();
+            var heartbeatTask = SendCompactionHeartbeatAsync(heartbeatCts.Token);
+
+            try
+            {
+                return await _compactionService.CompactIfNeededAsync(
+                    chatHistoryProvider, compactionConfig, _chatClientConfigName);
+            }
+            finally
+            {
+                heartbeatCts.Cancel();
+                try { await heartbeatTask; } catch (OperationCanceledException) { }
+            }
+        }
+
+        private async Task SendCompactionHeartbeatAsync(CancellationToken cancellationToken)
+        {
+            var callerHandle = _activeMessage?.FromHandle;
+            var myHandle = fabrcoreAgentHost.GetHandle();
+
+            if (string.IsNullOrEmpty(callerHandle) || callerHandle == myHandle)
+                return;
+
+            try
+            {
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken);
+
+                    var statusMessage = new AgentMessage
+                    {
+                        FromHandle = myHandle,
+                        ToHandle = callerHandle,
+                        MessageType = SystemMessageTypes.Status,
+                        Message = "Compacting..",
+                        Kind = MessageKind.Response
+                    };
+
+                    try
+                    {
+                        await fabrcoreAgentHost.SendMessage(statusMessage);
+                        logger.LogTrace("Sent compaction _status heartbeat to {CallerHandle}", callerHandle);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "Failed to send compaction _status heartbeat to {CallerHandle}", callerHandle);
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when compaction completes
+            }
+        }
+
+        /// <summary>
         /// Attempts to compact the chat history if the token count exceeds the configured threshold.
         /// Safe to call on every message — returns null if compaction is not configured or not needed.
         /// On first call, lazily resolves CompactionService from DI and builds CompactionConfig from agent args.
@@ -307,20 +400,20 @@ namespace FabrCore.Sdk
                 if (!_compactionInitialized)
                 {
                     _compactionService = serviceProvider.GetService<CompactionService>();
-                    if (_compactionService is not null)
-                    {
-                        _compactionConfig = await BuildCompactionConfigAsync();
-                    }
+                    _compactionConfig = await BuildCompactionConfigAsync();
                     _compactionInitialized = true;
                 }
 
-                if (_compactionService is null || _compactionConfig is null)
+                if (_compactionConfig is null)
                     return null;
 
-                var result = await _compactionService.CompactIfNeededAsync(
-                    _chatHistoryProvider, _compactionConfig, _chatClientConfigName, onCompacting);
+                if (onCompacting is not null)
+                    await onCompacting();
 
-                if (result.WasCompacted)
+                // Delegate to OnCompaction — overridable by agent developers
+                var result = await OnCompaction(_chatHistoryProvider, _compactionConfig);
+
+                if (result?.WasCompacted == true)
                 {
                     logger.LogInformation(
                         "Compacted history for '{Handle}': {Before} → {After} messages (~{TokensBefore} → ~{TokensAfter} tokens)",
@@ -699,6 +792,7 @@ namespace FabrCore.Sdk
             logger.LogTrace("Agent proxy processing message - From: {FromHandle}, To: {ToHandle}",
                 message.FromHandle, message.ToHandle);
 
+            _activeMessage = message;
             var startTime = Stopwatch.GetTimestamp();
 
             try

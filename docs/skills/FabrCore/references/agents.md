@@ -199,10 +199,27 @@ When conversation history grows too large for the context window, use compaction
 
 ```csharp
 // In OnMessage, before processing
-await TryCompactAsync(_agent!, _session!);
+await TryCompactAsync();
 ```
 
-Compaction summarizes older messages using the LLM and replaces them with a compact summary. Configure via `AgentConfiguration.Args`:
+`TryCompactAsync()` checks the token threshold and delegates to `OnCompaction()` when compaction is needed. Override `OnCompaction` to customize the compaction process:
+
+```csharp
+public override async Task<CompactionResult?> OnCompaction(
+    FabrCoreChatHistoryProvider chatHistoryProvider,
+    CompactionConfig compactionConfig)
+{
+    // Custom compaction logic — use your own prompt, model, or strategy
+    // Or call the default CompactionService:
+    if (CompactionServiceInstance is null || CompactionChatClientConfigName is null)
+        return null;
+
+    return await CompactionServiceInstance.CompactIfNeededAsync(
+        chatHistoryProvider, compactionConfig, CompactionChatClientConfigName);
+}
+```
+
+The default `OnCompaction` implementation summarizes older messages using the LLM via `CompactionService` and replaces them with a compact summary. Configure via `AgentConfiguration.Args`:
 
 | Key | Default | Description |
 |-----|---------|-------------|
