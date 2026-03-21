@@ -30,7 +30,8 @@ The foundation layer containing interfaces and models shared by all other layers
 
 **Key Models:**
 - `AgentConfiguration` — Agent definition (handle, type, models, system prompt, plugins, tools, MCP servers, args)
-- `AgentMessage` — Universal message type (routing, content, metadata, files, state, args)
+- `AgentMessage` — Chat message type (routing, content, metadata, files, state, args)
+- `EventMessage` — CloudEvents-inspired event type (Type, Source, Subject, Namespace, Channel, Data, Args)
 - `AgentGrainState` — Persistent grain state (configuration, message threads, custom state)
 - `AgentHealthStatus` — Health reporting at basic/detailed/full levels
 - `McpServerConfig` — MCP server connection configuration (Stdio or Http transport)
@@ -67,10 +68,17 @@ The SDK layer provides the tools for building agents, plugins, and tools.
 **Agent Host Interface:**
 - `IFabrCoreAgentHost` — The interface agents use to interact with the framework
   - `GetHandle()` — Get the agent's handle
-  - `SendAndReceiveMessage()` / `SendMessage()` / `SendEvent()` — Inter-agent communication
+  - `SendAndReceiveMessage()` / `SendMessage()` — Inter-agent chat messaging (AgentMessage)
+  - `SendEvent()` — Event broadcasting (EventMessage)
   - `RegisterTimer()` / `RegisterReminder()` — Scheduling
   - Chat history providers and thread management
   - Custom state persistence
+
+**Agent Management:**
+- `IAgentManagementProvider` — Pluggable provider for agent/client registration, tracking, and lifecycle
+  - Default: `OrleansAgentManagementProvider` (delegates to `AgentManagementGrain`)
+  - Custom: Implement for MSSQL, Azure Table Storage, etc.
+  - Configured via `FabrCoreServerOptions.UseAgentManagementProvider<T>()`
 
 ### FabrCore.Host — Server Infrastructure
 
@@ -80,26 +88,33 @@ The host layer provides the Orleans silo and REST API.
 - `AgentGrain` — Core actor implementing `IAgentGrain` + `IFabrCoreAgentHost` + `IRemindable`
   - Persistent state via `IPersistentState<AgentGrainState>`
   - Auto-restores configuration on reactivation
-  - Stream subscriptions for chat and event namespaces
+  - Stream subscriptions for chat (AgentMessage) and event (EventMessage) namespaces
   - Timer and reminder management
-  - Registers with `AgentManagementGrain` on activation
+  - Registers with `IAgentManagementProvider` (via `IFabrCoreAgentService`) on activation
 
 - `ClientGrain` — Client connection management
   - Observer pattern for async message delivery
   - Pending message queue for offline clients
   - Tracked agent cache
+  - Registers with `IAgentManagementProvider` (via `IFabrCoreAgentService`) on activation
 
-- `AgentManagementGrain` — Global agent/client registry
+- `AgentManagementGrain` — Default backing store for `OrleansAgentManagementProvider`
   - Single-instance grain (key: 0)
   - Tracks active/deactivated agents with timestamps
+  - Not called directly by grains — accessed through `IAgentManagementProvider`
 
 **Services:**
 - `FabrCoreAgentService` — Unified facade for agent operations
   - Agent configuration and batch creation
   - Message routing (sync and async)
-  - Health status queries
+  - Agent/client registration and lifecycle (delegates to `IAgentManagementProvider`)
+  - Health status queries and diagnostics
   - Thread and custom state management
   - Discovery (agent types, plugins, tools)
+
+- `OrleansAgentManagementProvider` — Default `IAgentManagementProvider` implementation
+  - Delegates to `AgentManagementGrain` for Orleans-backed storage
+  - Override with `FabrCoreServerOptions.UseAgentManagementProvider<T>()` for custom storage
 
 **REST API Controllers:**
 - `AgentController` — Agent CRUD, messaging, health
@@ -183,12 +198,14 @@ Note: Bare alias `"agentB"` is auto-resolved to `"user1:agentB"` by `ResolveTarg
 
 ### Stream-Based Events
 
+Events use `EventMessage` (CloudEvents-inspired) instead of `AgentMessage`:
+
 ```
 AgentA sends event
-  └─> fabrcoreAgentHost.SendEvent("agentB", event)
-        └─> Orleans Stream (AgentEvent namespace)
+  └─> fabrcoreAgentHost.SendEvent(eventMessage)
+        └─> Orleans Stream (AgentEvent namespace, typed as EventMessage)
               └─> AgentGrain(B) subscription
-                    └─> AgentB.OnEvent()
+                    └─> AgentB.OnEvent(EventMessage)
 ```
 
 ## Orleans Key Concepts for FabrCore

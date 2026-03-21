@@ -55,6 +55,20 @@ namespace FabrCore.Host.Services
         /// </summary>
         Task SendEventAsync(string userId, string handle, EventMessage message, string? streamName = null);
 
+        // ── Agent Management (registration / lifecycle) ──
+
+        /// <summary>Registers an agent as active in the management provider.</summary>
+        Task RegisterAgentAsync(string key, string agentType, string handle);
+
+        /// <summary>Marks an agent as deactivated in the management provider.</summary>
+        Task DeactivateAgentAsync(string key, string reason);
+
+        /// <summary>Registers a client as active in the management provider.</summary>
+        Task RegisterClientAsync(string clientId);
+
+        /// <summary>Marks a client as deactivated in the management provider.</summary>
+        Task DeactivateClientAsync(string clientId, string reason);
+
         // ── Diagnostics ──
 
         /// <summary>

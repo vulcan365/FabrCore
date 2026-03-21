@@ -267,12 +267,12 @@ var request = new AgentMessage
 };
 var response = await _context.SendAndReceiveMessage(request);
 
-// Event (optional streamName parameter)
-await _context.SendEvent(new AgentMessage
+// Event (optional streamName parameter) — uses EventMessage, not AgentMessage
+await _context.SendEvent(new EventMessage
 {
-    ToHandle = "my-agent",
-    MessageType = "status-update",
-    Message = "User logged in"
+    Channel = "my-agent",
+    Type = "status-update",
+    Data = "User logged in"
 });
 ```
 

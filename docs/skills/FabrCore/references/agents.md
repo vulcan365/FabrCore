@@ -24,7 +24,7 @@ public class MyAgent : FabrCoreAgentProxy
 
     public override async Task OnInitialize() { /* ... */ }
     public override async Task<AgentMessage> OnMessage(AgentMessage message) { /* ... */ }
-    public override Task OnEvent(AgentMessage eventMessage) { /* ... */ }
+    public override Task OnEvent(EventMessage eventMessage) { /* ... */ }
 }
 ```
 
@@ -141,14 +141,15 @@ public override async Task<AgentMessage> OnMessage(AgentMessage message)
 
 The heartbeat reads the status message each tick, so changes are reflected on the next 3-second interval. `ChatDock` displays the status as a thinking indicator.
 
-### OnEvent(AgentMessage)
+### OnEvent(EventMessage)
 
-Called for fire-and-forget event messages. No response expected.
+Called for fire-and-forget event messages delivered via the AgentEvent stream. Events use `EventMessage` (CloudEvents-inspired), not `AgentMessage`.
 
 ```csharp
-public override Task OnEvent(AgentMessage eventMessage)
+public override Task OnEvent(EventMessage eventMessage)
 {
-    var eventType = eventMessage.MessageType;
+    var eventType = eventMessage.Type;
+    var source = eventMessage.Source;
     // Handle the event (logging, state updates, etc.)
     return Task.CompletedTask;
 }

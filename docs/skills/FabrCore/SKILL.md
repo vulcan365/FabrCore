@@ -134,7 +134,7 @@ public class MyAgent : FabrCoreAgentProxy
         return response;
     }
 
-    public override Task OnEvent(AgentMessage eventMessage)
+    public override Task OnEvent(EventMessage eventMessage)
     {
         return Task.CompletedTask;
     }

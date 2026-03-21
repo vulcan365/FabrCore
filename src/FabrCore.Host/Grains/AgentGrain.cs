@@ -2,6 +2,7 @@
 using FabrCore.Core.Interfaces;
 using FabrCore.Core.Streaming;
 using FabrCore.Host.Configuration;
+using FabrCore.Host.Services;
 using FabrCore.Host.Streaming;
 using FabrCore.Sdk;
 using Microsoft.Agents.AI;
@@ -75,6 +76,7 @@ namespace FabrCore.Host.Grains
         private readonly ILogger<AgentGrain> logger;
         private readonly IConfiguration configuration;
         private readonly IFabrCoreRegistry _registry;
+        private readonly IFabrCoreAgentService _agentService;
 
         // Message persistence state
         private readonly IPersistentState<AgentGrainState> _messageState;
@@ -95,6 +97,7 @@ namespace FabrCore.Host.Grains
             ILoggerFactory loggerFactory,
             IConfiguration configuration,
             IFabrCoreRegistry registry,
+            IFabrCoreAgentService agentService,
             [PersistentState("agentMessages", FabrCoreOrleansConstants.StorageProviderName)]
             IPersistentState<AgentGrainState> messageState)
         {
@@ -103,6 +106,7 @@ namespace FabrCore.Host.Grains
             this.loggerFactory = loggerFactory;
             this.configuration = configuration;
             _registry = registry;
+            _agentService = agentService;
             _messageState = messageState;
 
             logger = loggerFactory.CreateLogger<AgentGrain>();
@@ -134,7 +138,7 @@ namespace FabrCore.Host.Grains
                         _configuredAt = DateTime.UtcNow;
 
                         await CreateStreams(persistedConfig.Streams ?? new List<string>());
-                        await RegisterWithManagementGrain();
+                        await RegisterWithManagement();
 
                         logger.LogInformation("Agent restored successfully from persisted state: {Handle}", persistedConfig.Handle);
                     }
@@ -154,7 +158,7 @@ namespace FabrCore.Host.Grains
             // If agent was already configured in-memory, register with management grain
             else if (agentConfiguration != null && fabrcoreAgentProxy != null)
             {
-                await RegisterWithManagementGrain();
+                await RegisterWithManagement();
             }
         }
 
@@ -193,13 +197,12 @@ namespace FabrCore.Host.Grains
                 }
             }
 
-            // Notify management grain of deactivation
+            // Notify management provider of deactivation
             if (agentConfiguration != null)
             {
                 try
                 {
-                    var registry = GrainFactory.GetGrain<IAgentManagementGrain>(0);
-                    await registry.DeactivateAgent(
+                    await _agentService.DeactivateAgentAsync(
                         this.GetPrimaryKeyString(),
                         reason.Description);
                 }
@@ -213,22 +216,21 @@ namespace FabrCore.Host.Grains
             await base.OnDeactivateAsync(reason, cancellationToken);
         }
 
-        private async Task RegisterWithManagementGrain()
+        private async Task RegisterWithManagement()
         {
             try
             {
-                var registry = GrainFactory.GetGrain<IAgentManagementGrain>(0);
-                await registry.RegisterAgent(
+                await _agentService.RegisterAgentAsync(
                     this.GetPrimaryKeyString(),
                     agentConfiguration!.AgentType!,
                     agentConfiguration.Handle!);
 
-                logger.LogInformation("Registered agent with management grain: {Key}",
+                logger.LogInformation("Registered agent with management provider: {Key}",
                     this.GetPrimaryKeyString());
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to register agent with management grain: {Key}",
+                logger.LogError(ex, "Failed to register agent with management provider: {Key}",
                     this.GetPrimaryKeyString());
             }
         }
@@ -285,7 +287,7 @@ namespace FabrCore.Host.Grains
                 await CreateStreams(config.Streams ?? new List<string>());
 
                 // Register with management grain after successful initialization
-                await RegisterWithManagementGrain();
+                await RegisterWithManagement();
 
                 logger.LogInformation("Agent configuration completed successfully: {Handle}", config.Handle);
 
