@@ -224,30 +224,41 @@ namespace FabrCore.Host.WebSocket
 
             try
             {
-                var agentMessage = JsonSerializer.Deserialize<AgentMessage>(messageJson);
+                // Peek at the message type to determine how to deserialize
+                using var jsonDoc = JsonDocument.Parse(messageJson);
+                var messageType = jsonDoc.RootElement.TryGetProperty("MessageType", out var mtProp)
+                    ? mtProp.GetString()
+                    : jsonDoc.RootElement.TryGetProperty("messageType", out var mtProp2)
+                        ? mtProp2.GetString()
+                        : null;
 
-                if (agentMessage == null)
-                {
-                    throw new InvalidOperationException("Failed to deserialize message");
-                }
+                activity?.SetTag("message.type", messageType);
 
-                activity?.SetTag("message.type", agentMessage.MessageType);
-                activity?.SetTag("message.from", agentMessage.FromHandle);
-                activity?.SetTag("message.to", agentMessage.ToHandle);
+                if (messageType?.ToLower() == "event")
+                {
+                    var eventMessage = JsonSerializer.Deserialize<EventMessage>(messageJson);
+                    if (eventMessage == null)
+                        throw new InvalidOperationException("Failed to deserialize event message");
 
-                // Check if this is a command message
-                if (agentMessage.MessageType?.ToLower() == "command")
-                {
-                    await ProcessCommandAsync(agentMessage, cancellationToken);
-                }
-                else if (agentMessage.MessageType?.ToLower() == "event")
-                {
-                    await ProcessEventMessageAsync(agentMessage, cancellationToken);
+                    await ProcessEventMessageAsync(eventMessage, cancellationToken);
                 }
                 else
                 {
-                    // Regular message - route through ClientGrain
-                    await ProcessRegularMessageAsync(agentMessage, cancellationToken);
+                    var agentMessage = JsonSerializer.Deserialize<AgentMessage>(messageJson);
+                    if (agentMessage == null)
+                        throw new InvalidOperationException("Failed to deserialize message");
+
+                    activity?.SetTag("message.from", agentMessage.FromHandle);
+                    activity?.SetTag("message.to", agentMessage.ToHandle);
+
+                    if (messageType?.ToLower() == "command")
+                    {
+                        await ProcessCommandAsync(agentMessage, cancellationToken);
+                    }
+                    else
+                    {
+                        await ProcessRegularMessageAsync(agentMessage, cancellationToken);
+                    }
                 }
 
                 activity?.SetStatus(ActivityStatusCode.Ok);
@@ -435,19 +446,19 @@ namespace FabrCore.Host.WebSocket
             }
         }
 
-        private async Task ProcessEventMessageAsync(AgentMessage message, CancellationToken cancellationToken)
+        private async Task ProcessEventMessageAsync(EventMessage message, CancellationToken cancellationToken)
         {
             using var activity = ActivitySource.StartActivity("ProcessEventMessage", ActivityKind.Internal);
-            activity?.SetTag("message.from", message.FromHandle);
-            activity?.SetTag("message.to", message.ToHandle);
+            activity?.SetTag("event.source", message.Source);
+            activity?.SetTag("event.channel", message.Channel);
 
             if (clientGrain == null)
             {
                 throw new InvalidOperationException("Client not initialized.");
             }
 
-            logger.LogDebug("Processing event message - From: {FromHandle}, To: {ToHandle}",
-                message.FromHandle, message.ToHandle);
+            logger.LogDebug("Processing event message - Source: {Source}, Channel: {Channel}",
+                message.Source, message.Channel);
 
             try
             {

@@ -233,21 +233,21 @@ namespace FabrCore.Client
         }
 
         /// <inheritdoc/>
-        public async Task SendEvent(AgentMessage request, string? streamName = null)
+        public async Task SendEvent(EventMessage request, string? streamName = null)
         {
             ThrowIfDisposed();
 
-            // Auto-fill FromHandle so agents can identify the event source
-            if (string.IsNullOrEmpty(request.FromHandle))
-                request.FromHandle = _handle;
+            // Auto-fill Source so agents can identify the event source
+            if (string.IsNullOrEmpty(request.Source))
+                request.Source = _handle;
 
             using var activity = ActivitySource.StartActivity("SendEvent", ActivityKind.Producer);
             activity?.SetTag("client.handle", _handle);
-            activity?.SetTag("message.from", request.FromHandle);
-            activity?.SetTag("message.to", request.ToHandle);
+            activity?.SetTag("event.source", request.Source);
+            activity?.SetTag("event.channel", request.Channel);
 
-            _logger.LogTrace("Sending event - From: {FromHandle}, To: {ToHandle}, StreamName: {StreamName}",
-                request.FromHandle, request.ToHandle, streamName);
+            _logger.LogTrace("Sending event - Source: {Source}, Channel: {Channel}, StreamName: {StreamName}",
+                request.Source, request.Channel, streamName);
 
             try
             {
@@ -255,14 +255,14 @@ namespace FabrCore.Client
 
                 await _clientGrain.SendEvent(request, streamName);
 
-                _logger.LogTrace("Event sent successfully - To: {ToHandle}, StreamName: {StreamName}",
-                    request.ToHandle, streamName);
+                _logger.LogTrace("Event sent successfully - Channel: {Channel}, StreamName: {StreamName}",
+                    request.Channel, streamName);
                 activity?.SetStatus(ActivityStatusCode.Ok);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error sending event from {FromHandle} to {ToHandle}",
-                    request.FromHandle, request.ToHandle);
+                _logger.LogError(ex, "Error sending event from {Source} to {Channel}",
+                    request.Source, request.Channel);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
                 ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "send_event_failed"));

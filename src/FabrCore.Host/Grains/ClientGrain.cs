@@ -282,13 +282,14 @@ namespace FabrCore.Host.Grains
             }
         }
 
-        public async Task SendEvent(AgentMessage request, string? streamName = null)
+        public async Task SendEvent(EventMessage request, string? streamName = null)
         {
             using var activity = ActivitySource.StartActivity("SendEvent", ActivityKind.Producer);
             var clientId = this.GetPrimaryKeyString();
 
             activity?.SetTag("client.id", clientId);
-            activity?.SetTag("message.from", request.FromHandle);
+            activity?.SetTag("event.source", request.Source);
+            activity?.SetTag("event.type", request.Type);
             activity?.SetTag("stream.provider", StreamConstants.ProviderName);
             activity?.SetTag("stream.namespace", StreamConstants.AgentEventNamespace);
 
@@ -299,8 +300,8 @@ namespace FabrCore.Host.Grains
                     // Named event stream — publish directly, no handle normalization
                     activity?.SetTag("stream.name", streamName);
 
-                    logger.LogTrace("Client sending event to named stream - From: {FromHandle}, StreamName: {StreamName}",
-                        request.FromHandle, streamName);
+                    logger.LogTrace("Client sending event to named stream - Source: {Source}, StreamName: {StreamName}",
+                        request.Source, streamName);
 
                     var stream = clusterClient.GetAgentEventStream(streamName);
                     await stream.OnNextAsync(request);
@@ -309,19 +310,19 @@ namespace FabrCore.Host.Grains
                 }
                 else
                 {
-                    // Default agent event stream — resolve handle
-                    var resolvedToHandle = ResolveAgentHandle(request.ToHandle, clientId);
-                    request.ToHandle = resolvedToHandle;
+                    // Default agent event stream — resolve handle from Channel
+                    var resolvedChannel = ResolveAgentHandle(request.Channel, clientId);
+                    request.Channel = resolvedChannel;
 
-                    activity?.SetTag("message.to", resolvedToHandle);
+                    activity?.SetTag("event.channel", resolvedChannel);
 
-                    logger.LogTrace("Client sending event to stream - From: {FromHandle}, To: {ToHandle}",
-                        request.FromHandle, resolvedToHandle);
+                    logger.LogTrace("Client sending event to stream - Source: {Source}, Channel: {Channel}",
+                        request.Source, resolvedChannel);
 
-                    var stream = clusterClient.GetAgentEventStream(resolvedToHandle);
+                    var stream = clusterClient.GetAgentEventStream(resolvedChannel);
                     await stream.OnNextAsync(request);
 
-                    logger.LogTrace("Client event sent to stream for: {ToHandle}", resolvedToHandle);
+                    logger.LogTrace("Client event sent to stream for: {Channel}", resolvedChannel);
                 }
 
                 activity?.SetStatus(ActivityStatusCode.Ok);

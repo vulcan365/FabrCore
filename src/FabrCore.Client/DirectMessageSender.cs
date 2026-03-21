@@ -96,26 +96,23 @@ namespace FabrCore.Client
         }
 
         /// <inheritdoc />
-        public async Task SendEventAsync(AgentMessage message, string? streamName = null)
+        public async Task SendEventAsync(EventMessage message, string? streamName = null)
         {
             if (message == null)
                 throw new ArgumentNullException(nameof(message));
 
-            if (streamName == null && string.IsNullOrEmpty(message.ToHandle))
-                throw new ArgumentException("ToHandle must be set on the message (unless using streamName)", nameof(message));
+            if (streamName == null && string.IsNullOrEmpty(message.Channel))
+                throw new ArgumentException("Channel must be set on the event (unless using streamName)", nameof(message));
 
-            if (streamName == null && !message.ToHandle!.Contains(':'))
+            if (streamName == null && !message.Channel!.Contains(':'))
                 throw new ArgumentException(
-                    $"DirectMessageSender requires fully-qualified handles (owner:agent). Got '{message.ToHandle}'. " +
+                    $"DirectMessageSender requires fully-qualified handles (owner:agent). Got '{message.Channel}'. " +
                     "Use ClientContext.SendEvent for automatic handle resolution.", nameof(message));
 
             using var activity = ActivitySource.StartActivity("SendDirectEvent", ActivityKind.Producer);
-            activity?.SetTag("message.from", message.FromHandle);
-            activity?.SetTag("message.to", message.ToHandle);
+            activity?.SetTag("event.source", message.Source);
+            activity?.SetTag("event.channel", message.Channel);
             activity?.SetTag("stream.namespace", StreamConstants.AgentEventNamespace);
-
-            // Force OneWay - no response possible with direct sending
-            message.Kind = MessageKind.OneWay;
 
             try
             {
@@ -123,8 +120,8 @@ namespace FabrCore.Client
                 {
                     activity?.SetTag("stream.name", streamName);
 
-                    _logger.LogDebug("Sending direct event to named stream {StreamName} from {FromHandle}",
-                        streamName, message.FromHandle);
+                    _logger.LogDebug("Sending direct event to named stream {StreamName} from {Source}",
+                        streamName, message.Source);
 
                     var stream = GetAgentEventStream(streamName);
                     await stream.OnNextAsync(message);
@@ -133,31 +130,31 @@ namespace FabrCore.Client
                 }
                 else
                 {
-                    _logger.LogDebug("Sending direct event to {ToHandle} from {FromHandle}",
-                        message.ToHandle, message.FromHandle);
+                    _logger.LogDebug("Sending direct event to {Channel} from {Source}",
+                        message.Channel, message.Source);
 
-                    var stream = GetAgentEventStream(message.ToHandle!);
+                    var stream = GetAgentEventStream(message.Channel!);
                     await stream.OnNextAsync(message);
 
-                    _logger.LogDebug("Direct event sent successfully to {ToHandle}", message.ToHandle);
+                    _logger.LogDebug("Direct event sent successfully to {Channel}", message.Channel);
                 }
 
                 EventsSentCounter.Add(1,
-                    new KeyValuePair<string, object?>("message.to", message.ToHandle),
-                    new KeyValuePair<string, object?>("message.from", message.FromHandle));
+                    new KeyValuePair<string, object?>("event.channel", message.Channel),
+                    new KeyValuePair<string, object?>("event.source", message.Source));
 
                 activity?.SetStatus(ActivityStatusCode.Ok);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error sending direct event to {ToHandle}, StreamName: {StreamName}",
-                    message.ToHandle, streamName);
+                _logger.LogError(ex, "Error sending direct event to {Channel}, StreamName: {StreamName}",
+                    message.Channel, streamName);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
 
                 ErrorCounter.Add(1,
                     new KeyValuePair<string, object?>("error.type", "send_event_failed"),
-                    new KeyValuePair<string, object?>("message.to", message.ToHandle));
+                    new KeyValuePair<string, object?>("event.channel", message.Channel));
 
                 throw;
             }
@@ -171,12 +168,12 @@ namespace FabrCore.Client
             return provider.GetStream<AgentMessage>(streamId);
         }
 
-        private IAsyncStream<AgentMessage> GetAgentEventStream(string handle)
+        private IAsyncStream<EventMessage> GetAgentEventStream(string handle)
         {
             var streamName = StreamName.ForAgentEvent(handle);
             var provider = _clusterClient.GetStreamProvider(streamName.Provider);
             var streamId = StreamId.Create(streamName.Namespace, streamName.Handle);
-            return provider.GetStream<AgentMessage>(streamId);
+            return provider.GetStream<EventMessage>(streamId);
         }
     }
 }

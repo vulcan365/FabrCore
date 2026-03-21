@@ -119,7 +119,7 @@ namespace FabrCore.Host.Services
             return await proxy.GetHealth(detailLevel);
         }
 
-        public async Task SendEventAsync(string userId, string handle, AgentMessage message, string? streamName = null)
+        public async Task SendEventAsync(string userId, string handle, EventMessage message, string? streamName = null)
         {
             if (streamName != null)
             {

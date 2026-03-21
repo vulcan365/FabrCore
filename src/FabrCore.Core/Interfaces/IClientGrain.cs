@@ -15,7 +15,7 @@ namespace FabrCore.Core.Interfaces
         /// If streamName is provided, publishes to the named event stream instead of the agent's default stream.
         /// </summary>
         [AlwaysInterleave]
-        Task SendEvent(AgentMessage request, string? streamName = null);
+        Task SendEvent(EventMessage request, string? streamName = null);
 
         /// <summary>
         /// Creates a new agent with the specified configuration.

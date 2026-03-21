@@ -25,7 +25,7 @@ namespace FabrCore.Sdk
         /// </summary>
         /// <param name="request">The event message to send</param>
         /// <param name="streamName">Optional named event stream to publish to (bypasses handle normalization)</param>
-        Task SendEvent(AgentMessage request, string? streamName = null);
+        Task SendEvent(EventMessage request, string? streamName = null);
 
         /// <summary>
         /// Registers a timer that will send a message to the agent at specified intervals.

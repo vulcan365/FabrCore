@@ -55,7 +55,7 @@ namespace FabrCore.Client
         /// <param name="request">The event message to send.</param>
         /// <param name="streamName">Optional named event stream to publish to.</param>
         /// <exception cref="ObjectDisposedException">Thrown if the context has been disposed.</exception>
-        Task SendEvent(AgentMessage request, string? streamName = null);
+        Task SendEvent(EventMessage request, string? streamName = null);
 
         /// <summary>
         /// Creates a new agent with the specified configuration.
