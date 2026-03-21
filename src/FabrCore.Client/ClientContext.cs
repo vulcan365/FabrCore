@@ -403,8 +403,12 @@ namespace FabrCore.Client
             activity?.SetTag("message.from", message.FromHandle);
             activity?.SetTag("message.to", message.ToHandle);
 
-            _logger.LogInformation("Observer received message - From: {FromHandle}, To: {ToHandle}",
-                message.FromHandle, message.ToHandle);
+            _logger.LogInformation("Observer received message - From: {FromHandle}, To: {ToHandle}, MessageType: {MessageType}, Kind: {Kind}",
+                message.FromHandle, message.ToHandle, message.MessageType, message.Kind);
+            _logger.LogDebug("Observer message details - From: {FromHandle}, Message: {Message}, Args: {Args}",
+                message.FromHandle,
+                message.Message?.Length > 200 ? message.Message[..200] + "..." : message.Message,
+                message.Args is { Count: > 0 } ? string.Join(", ", message.Args.Select(kv => $"{kv.Key}={kv.Value}")) : "none");
 
             try
             {

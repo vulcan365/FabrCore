@@ -4,7 +4,7 @@ description: >
   Build distributed AI agent systems with FabrCore — an open-source .NET framework powered by Orleans.
   Use when building FabrCore agents, plugins, tools, servers (Orleans silo), clients (Blazor UI),
   or complete multi-agent systems. Triggers on: "FabrCore", "agent grain", "FabrCoreAgentProxy",
-  "Orleans agent", "ChatDock", "fabrcore.json", "AddFabrCoreServer", "AddFabrCoreClient",
+  "Orleans agent", "ChatDock", "fabrcore.json", "AddFabrCoreServer", "AddFabrCoreServices", "AddFabrCore", "AddFabrCoreClient",
   "AgentConfiguration", "IFabrCorePlugin", scaffold agent/server/client/system,
   or any .NET AI agent development using the FabrCore framework.
   Do NOT use for general Orleans questions unrelated to FabrCore, or for other AI frameworks
@@ -27,7 +27,7 @@ Build distributed AI agent systems with FabrCore — an open-source .NET 10 fram
 | Agent | Business logic actor | `FabrCoreAgentProxy` (extend this) |
 | Plugin | Stateful tool collection | `IFabrCorePlugin` (implement this) |
 | Standalone Tool | Single static method | `[ToolAlias]` attribute |
-| Server/Host | Orleans silo + REST API | `AddFabrCoreServer()` / `UseFabrCoreServer()` |
+| Server/Host | Orleans silo + REST API | `AddFabrCoreServer()` (simple) or `AddFabrCoreServices()` + `AddFabrCore()` (advanced) |
 | Client | Blazor UI + Orleans client | `AddFabrCoreClient()` / `UseFabrCoreClient()` |
 | ChatDock | Floating icon → chat overlay | `<ChatDock>` Blazor component |
 | Configuration | Agent definition | `AgentConfiguration` class |

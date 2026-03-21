@@ -60,8 +60,13 @@ public class CompactionService
         var estimatedTokens = EstimateTokens(messages);
         var threshold = (int)(config.MaxContextTokens.Value * config.Threshold);
 
+        _logger.LogDebug(
+            "Compaction check: {MessageCount} messages, ~{EstimatedTokens} estimated tokens, threshold {Threshold} ({Ratio:P0} of {MaxContext})",
+            messages.Count, estimatedTokens, threshold, config.Threshold, config.MaxContextTokens.Value);
+
         if (estimatedTokens <= threshold)
         {
+            _logger.LogDebug("Compaction not needed: {EstimatedTokens} tokens <= {Threshold} threshold", estimatedTokens, threshold);
             return new CompactionResult
             {
                 WasCompacted = false,
@@ -116,7 +121,12 @@ public class CompactionService
             };
         }
 
+        _logger.LogDebug("Summarizing {Count} older messages using model config '{ModelConfig}', keeping {KeepCount} recent messages",
+            toSummarize.Count, modelConfigName, toKeep.Count);
+
         var summary = await SummarizeAsync(toSummarize, modelConfigName, ct);
+
+        _logger.LogDebug("Summarization complete — summary length: {Length} chars", summary.Length);
 
         var summaryMessage = new StoredChatMessage
         {
@@ -167,7 +177,8 @@ public class CompactionService
         string modelConfigName,
         CancellationToken ct)
     {
-        var chatClient = await _chatClientService.GetChatClient(modelConfigName);
+        var chatClient = new TokenTrackingChatClient(
+            await _chatClientService.GetChatClient(modelConfigName));
 
         var formattedMessages = string.Join("\n", messages.Select(m =>
         {

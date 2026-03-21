@@ -2,6 +2,7 @@
 using FabrCore.Core;
 using FabrCore.Core.Interfaces;
 using FabrCore.Core.Streaming;
+using FabrCore.Host.Configuration;
 using FabrCore.Host.Streaming;
 using FabrCore.Sdk;
 using Microsoft.Extensions.Logging;
@@ -80,7 +81,7 @@ namespace FabrCore.Host.Grains
         public ClientGrain(
             IClusterClient clusterClient,
             ILoggerFactory loggerFactory,
-            [PersistentState("clientState", "fabrcoreStorage")]
+            [PersistentState("clientState", FabrCoreOrleansConstants.StorageProviderName)]
             IPersistentState<ClientGrainState> state)
         {
             this.clusterClient = clusterClient;

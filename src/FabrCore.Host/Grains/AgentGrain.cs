@@ -1,6 +1,7 @@
 ﻿using FabrCore.Core;
 using FabrCore.Core.Interfaces;
 using FabrCore.Core.Streaming;
+using FabrCore.Host.Configuration;
 using FabrCore.Host.Streaming;
 using FabrCore.Sdk;
 using Microsoft.Agents.AI;
@@ -94,7 +95,7 @@ namespace FabrCore.Host.Grains
             ILoggerFactory loggerFactory,
             IConfiguration configuration,
             IFabrCoreRegistry registry,
-            [PersistentState("agentMessages", "fabrcoreStorage")]
+            [PersistentState("agentMessages", FabrCoreOrleansConstants.StorageProviderName)]
             IPersistentState<AgentGrainState> messageState)
         {
             this.clusterClient = clusterClient;
@@ -484,6 +485,30 @@ namespace FabrCore.Host.Grains
                 _messagesProcessed++;
                 logger.LogDebug("OnMessage response: {AgentMessage}", response != null ? SerializeForLog(response) : "null");
 
+                // Log LLM usage metrics if present
+                if (response?.Args is { } args)
+                {
+                    args.TryGetValue("_tokens_input", out var tokIn);
+                    args.TryGetValue("_tokens_output", out var tokOut);
+                    args.TryGetValue("_tokens_reasoning", out var tokReasoning);
+                    args.TryGetValue("_tokens_cached_input", out var tokCached);
+                    args.TryGetValue("_llm_calls", out var llmCalls);
+                    args.TryGetValue("_llm_duration_ms", out var llmDuration);
+                    args.TryGetValue("_model", out var model);
+                    args.TryGetValue("_finish_reason", out var finishReason);
+
+                    if (llmCalls is not null)
+                    {
+                        logger.LogDebug(
+                            "LLM usage — Calls: {LlmCalls}, InputTokens: {InputTokens}, OutputTokens: {OutputTokens}, " +
+                            "ReasoningTokens: {ReasoningTokens}, CachedInputTokens: {CachedInputTokens}, " +
+                            "Duration: {LlmDurationMs}ms, Model: {Model}, FinishReason: {FinishReason}",
+                            llmCalls, tokIn ?? "0", tokOut ?? "0",
+                            tokReasoning ?? "0", tokCached ?? "0",
+                            llmDuration ?? "0", model ?? "n/a", finishReason ?? "n/a");
+                    }
+                }
+
                 var elapsed = Stopwatch.GetElapsedTime(startTime).TotalMilliseconds;
                 MessageProcessingDuration.Record(elapsed,
                     new KeyValuePair<string, object?>("message.from", request.FromHandle),
@@ -552,12 +577,13 @@ namespace FabrCore.Host.Grains
 
                 while (!cancellationToken.IsCancellationRequested)
                 {
+                    var statusText = fabrcoreAgentProxy?.StatusMessage ?? "Thinking..";
                     var statusMessage = new AgentMessage
                     {
                         FromHandle = myHandle,
                         ToHandle = targetHandle,
                         MessageType = SystemMessageTypes.Status,
-                        Message = "Thinking..",
+                        Message = statusText,
                         Kind = MessageKind.Response,
                         TraceId = request.TraceId
                     };

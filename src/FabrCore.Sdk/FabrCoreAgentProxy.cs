@@ -49,7 +49,13 @@ namespace FabrCore.Sdk
         /// <param name="chatHistoryProvider">The chat history provider containing messages to compact.</param>
         /// <param name="compactionConfig">Compaction configuration (thresholds, keep count, etc.).</param>
         /// <returns>The compaction result, or null if compaction was skipped.</returns>
-        Task<CompactionResult?> OnCompaction(FabrCoreChatHistoryProvider chatHistoryProvider, CompactionConfig compactionConfig);
+        Task<CompactionResult?> OnCompaction(FabrCoreChatHistoryProvider chatHistoryProvider, CompactionConfig compactionConfig, int estimatedTokens = 0);
+
+        /// <summary>
+        /// The current status message for heartbeat display. When set, the grain's heartbeat loop
+        /// uses this instead of the default "Thinking.." message. Set to null to revert to default.
+        /// </summary>
+        string? StatusMessage { get; set; }
     }
 
 
@@ -104,6 +110,22 @@ namespace FabrCore.Sdk
         /// <summary>The message currently being processed. Set automatically by InternalOnMessage.</summary>
         protected AgentMessage? ActiveMessage => _activeMessage;
 
+        private volatile string? _statusMessage;
+
+        /// <summary>
+        /// Sets the status message shown in the heartbeat loop.
+        /// The grain's _status heartbeat sends this instead of "Thinking..".
+        /// Pass null to revert to the default.
+        /// </summary>
+        protected void SetStatusMessage(string? message) => _statusMessage = message;
+
+        /// <inheritdoc/>
+        string? IFabrCoreAgentProxy.StatusMessage
+        {
+            get => _statusMessage;
+            set => _statusMessage = value;
+        }
+
         // MCP client lifecycle tracking
         private readonly List<McpClient> _mcpClients = new();
 
@@ -145,7 +167,8 @@ namespace FabrCore.Sdk
 
         protected async Task<Microsoft.Extensions.AI.IChatClient> GetChatClient(string name, int networkTimeoutSeconds = 100)
         {
-            return await chatClientService.GetChatClient(name, networkTimeoutSeconds);
+            var client = await chatClientService.GetChatClient(name, networkTimeoutSeconds);
+            return new TokenTrackingChatClient(client);
         }
 
 #pragma warning disable MEAI001 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
@@ -315,23 +338,24 @@ namespace FabrCore.Sdk
 
         /// <summary>
         /// Called when compaction is triggered (token threshold exceeded).
+        /// Called only when the token threshold is exceeded and compaction is needed.
         /// Override to implement custom compaction logic (e.g., different prompts, models, or summarization strategies).
         /// The default implementation uses CompactionService to summarize old messages via LLM.
         /// </summary>
         /// <param name="chatHistoryProvider">The chat history provider containing messages to compact.</param>
         /// <param name="compactionConfig">Compaction configuration (thresholds, keep count, etc.).</param>
+        /// <param name="estimatedTokens">The estimated token count that triggered compaction.</param>
         /// <returns>The compaction result, or null if compaction was skipped.</returns>
         public virtual async Task<CompactionResult?> OnCompaction(
             FabrCoreChatHistoryProvider chatHistoryProvider,
-            CompactionConfig compactionConfig)
+            CompactionConfig compactionConfig,
+            int estimatedTokens = 0)
         {
             if (_compactionService is null || _chatClientConfigName is null)
                 return null;
 
-            // Send _status heartbeats to the caller while compaction runs
-            using var heartbeatCts = new CancellationTokenSource();
-            var heartbeatTask = SendCompactionHeartbeatAsync(heartbeatCts.Token);
-
+            // Set status so the grain's heartbeat loop shows "Compacting.." instead of "Thinking.."
+            _statusMessage = "Compacting..";
             try
             {
                 return await _compactionService.CompactIfNeededAsync(
@@ -339,58 +363,16 @@ namespace FabrCore.Sdk
             }
             finally
             {
-                heartbeatCts.Cancel();
-                try { await heartbeatTask; } catch (OperationCanceledException) { }
-            }
-        }
-
-        private async Task SendCompactionHeartbeatAsync(CancellationToken cancellationToken)
-        {
-            var callerHandle = _activeMessage?.FromHandle;
-            var myHandle = fabrcoreAgentHost.GetHandle();
-
-            if (string.IsNullOrEmpty(callerHandle) || callerHandle == myHandle)
-                return;
-
-            try
-            {
-                while (!cancellationToken.IsCancellationRequested)
-                {
-                    await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken);
-
-                    var statusMessage = new AgentMessage
-                    {
-                        FromHandle = myHandle,
-                        ToHandle = callerHandle,
-                        MessageType = SystemMessageTypes.Status,
-                        Message = "Compacting..",
-                        Kind = MessageKind.Response
-                    };
-
-                    try
-                    {
-                        await fabrcoreAgentHost.SendMessage(statusMessage);
-                        logger.LogTrace("Sent compaction _status heartbeat to {CallerHandle}", callerHandle);
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogWarning(ex, "Failed to send compaction _status heartbeat to {CallerHandle}", callerHandle);
-                    }
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                // Expected when compaction completes
+                _statusMessage = null;
             }
         }
 
         /// <summary>
         /// Attempts to compact the chat history if the token count exceeds the configured threshold.
-        /// Safe to call on every message — returns null if compaction is not configured or not needed.
+        /// Called automatically after each OnMessage. Returns null if compaction is not configured or not needed.
         /// On first call, lazily resolves CompactionService from DI and builds CompactionConfig from agent args.
         /// </summary>
-        /// <returns>The compaction result if compaction ran, or null if skipped/not configured.</returns>
-        protected async Task<CompactionResult?> TryCompactAsync(Func<Task>? onCompacting = null)
+        private async Task<CompactionResult?> TryCompactAsync(Func<Task>? onCompacting = null)
         {
             if (_chatHistoryProvider is null || _chatClientConfigName is null)
                 return null;
@@ -402,16 +384,43 @@ namespace FabrCore.Sdk
                     _compactionService = serviceProvider.GetService<CompactionService>();
                     _compactionConfig = await BuildCompactionConfigAsync();
                     _compactionInitialized = true;
+
+                    logger.LogDebug(
+                        "Compaction initialized for '{Handle}': Enabled={Enabled}, MaxContextTokens={MaxTokens}, Threshold={Threshold}, KeepLastN={KeepLastN}",
+                        config.Handle, _compactionConfig.Enabled, _compactionConfig.MaxContextTokens, _compactionConfig.Threshold, _compactionConfig.KeepLastN);
                 }
 
-                if (_compactionConfig is null)
+                if (_compactionConfig is null || !_compactionConfig.Enabled)
                     return null;
+
+                if (_compactionConfig.MaxContextTokens is null or <= 0)
+                    return null;
+
+                // Check threshold before calling OnCompaction
+                if (_chatHistoryProvider.HasPendingMessages)
+                    await _chatHistoryProvider.FlushAsync();
+
+                var messages = await _chatHistoryProvider.GetStoredMessagesAsync();
+                var estimatedTokens = CompactionService.EstimateTokens(messages);
+                var threshold = (int)(_compactionConfig.MaxContextTokens.Value * _compactionConfig.Threshold);
+
+                if (estimatedTokens <= threshold)
+                {
+                    logger.LogDebug(
+                        "Compaction not needed for '{Handle}': ~{EstimatedTokens} estimated tokens <= {Threshold} threshold ({MessageCount} messages)",
+                        config.Handle, estimatedTokens, threshold, messages.Count);
+                    return null;
+                }
+
+                logger.LogInformation(
+                    "Compaction needed for '{Handle}': ~{EstimatedTokens} estimated tokens exceeds {Threshold} threshold ({Ratio:P0} of {Max})",
+                    config.Handle, estimatedTokens, threshold, _compactionConfig.Threshold, _compactionConfig.MaxContextTokens.Value);
 
                 if (onCompacting is not null)
                     await onCompacting();
 
-                // Delegate to OnCompaction — overridable by agent developers
-                var result = await OnCompaction(_chatHistoryProvider, _compactionConfig);
+                // Delegate to OnCompaction — only called when threshold is exceeded
+                var result = await OnCompaction(_chatHistoryProvider, _compactionConfig, estimatedTokens);
 
                 if (result?.WasCompacted == true)
                 {
@@ -797,7 +806,21 @@ namespace FabrCore.Sdk
 
             try
             {
-                var response = await OnMessage(message);
+                AgentMessage response;
+                using (var llmScope = LlmUsageScope.Begin())
+                {
+                    response = await OnMessage(message);
+
+                    // Auto-compact chat history if threshold exceeded
+                    await TryCompactAsync();
+
+                    // Attach LLM usage metrics to the response
+                    if (llmScope.CallCount > 0)
+                    {
+                        response.Args ??= new Dictionary<string, string>();
+                        llmScope.ApplyTo(response.Args);
+                    }
+                }
 
                 var elapsed = Stopwatch.GetElapsedTime(startTime).TotalMilliseconds;
                 MessageProcessingDuration.Record(elapsed,
