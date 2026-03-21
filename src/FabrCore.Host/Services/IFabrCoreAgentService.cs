@@ -53,7 +53,7 @@ namespace FabrCore.Host.Services
         /// Sends a fire-and-forget event via the agent's event stream.
         /// When streamName is provided, publishes to that named stream instead.
         /// </summary>
-        Task SendEventAsync(string userId, string handle, AgentMessage message, string? streamName = null);
+        Task SendEventAsync(string userId, string handle, EventMessage message, string? streamName = null);
 
         // ── Diagnostics ──
 

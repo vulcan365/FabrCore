@@ -18,7 +18,7 @@ namespace FabrCore.Sdk
     {
         internal Task InternalInitialize();
         internal Task<AgentMessage> InternalOnMessage(AgentMessage message);
-        internal Task InternalOnEvent(AgentMessage message);
+        internal Task InternalOnEvent(EventMessage message);
         internal Task<ProxyHealthStatus> InternalGetHealth(HealthDetailLevel detailLevel);
         internal Task InternalFlushStateAsync();
         internal Task InternalDisposeAsync();
@@ -31,7 +31,7 @@ namespace FabrCore.Sdk
         /// Called when an event message is received on the AgentEvent stream.
         /// Events are fire-and-forget notifications that don't expect a response.
         /// </summary>
-        Task OnEvent(AgentMessage message);
+        Task OnEvent(EventMessage message);
 
         /// <summary>
         /// Gets the health status for this proxy.
@@ -677,10 +677,10 @@ namespace FabrCore.Sdk
         /// Override this method to handle events separately from chat messages.
         /// Default implementation logs and ignores the event.
         /// </summary>
-        public virtual Task OnEvent(AgentMessage message)
+        public virtual Task OnEvent(EventMessage message)
         {
-            logger.LogDebug("Event received but not handled - From: {FromHandle}, Type: {MessageType}",
-                message.FromHandle, message.MessageType);
+            logger.LogDebug("Event received but not handled - Source: {Source}, Type: {EventType}",
+                message.Source, message.Type);
             return Task.CompletedTask;
         }
 
@@ -851,16 +851,16 @@ namespace FabrCore.Sdk
             }
         }
 
-        async Task IFabrCoreAgentProxy.InternalOnEvent(AgentMessage message)
+        async Task IFabrCoreAgentProxy.InternalOnEvent(EventMessage message)
         {
             using var activity = ActivitySource.StartActivity("InternalOnEvent", ActivityKind.Server);
             activity?.SetTag("agent.type", config.AgentType);
             activity?.SetTag("agent.handle", config.Handle);
-            activity?.SetTag("message.from", message.FromHandle);
-            activity?.SetTag("message.type", message.MessageType);
+            activity?.SetTag("event.source", message.Source);
+            activity?.SetTag("event.type", message.Type);
 
-            logger.LogTrace("Agent proxy processing event - From: {FromHandle}, Type: {MessageType}",
-                message.FromHandle, message.MessageType);
+            logger.LogTrace("Agent proxy processing event - Source: {Source}, Type: {EventType}",
+                message.Source, message.Type);
 
             try
             {
@@ -876,8 +876,8 @@ namespace FabrCore.Sdk
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error processing event in agent proxy - From: {FromHandle}, Type: {MessageType}",
-                    message.FromHandle, message.MessageType);
+                logger.LogError(ex, "Error processing event in agent proxy - Source: {Source}, Type: {EventType}",
+                    message.Source, message.Type);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
                 ErrorCounter.Add(1,

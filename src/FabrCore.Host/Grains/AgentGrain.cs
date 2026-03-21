@@ -866,16 +866,17 @@ namespace FabrCore.Host.Grains
             }
         }
 
-        public async Task SendEvent(AgentMessage request, string? streamName = null)
+        public async Task SendEvent(EventMessage request, string? streamName = null)
         {
-            // Ensure FromHandle is set to this agent's handle if not provided
-            if (string.IsNullOrEmpty(request.FromHandle))
+            // Ensure Source is set to this agent's handle if not provided
+            if (string.IsNullOrEmpty(request.Source))
             {
-                request.FromHandle = this.GetPrimaryKeyString();
+                request.Source = this.GetPrimaryKeyString();
             }
 
             using var activity = ActivitySource.StartActivity("SendEvent", ActivityKind.Producer);
-            activity?.SetTag("message.from", request.FromHandle);
+            activity?.SetTag("event.source", request.Source);
+            activity?.SetTag("event.type", request.Type);
             activity?.SetTag("from.type", "Agent");  // Sending agent
             activity?.SetTag("stream.provider", StreamConstants.ProviderName);
             activity?.SetTag("stream.namespace", StreamConstants.AgentEventNamespace);
@@ -887,35 +888,37 @@ namespace FabrCore.Host.Grains
                     // Named event stream — publish directly
                     activity?.SetTag("stream.name", streamName);
 
-                    logger.LogDebug("SendEvent to named stream AgentEvent/{StreamName}: {AgentMessage}", streamName, SerializeForLog(request));
+                    logger.LogDebug("SendEvent to named stream AgentEvent/{StreamName}: Type={EventType}, Source={Source}",
+                        streamName, request.Type, request.Source);
 
                     var stream = clusterClient.GetAgentEventStream(streamName);
                     await stream.OnNextAsync(request);
                 }
                 else
                 {
-                    // Default agent event stream — resolve handle
-                    request.ToHandle = ResolveTargetHandle(request.ToHandle);
-                    activity?.SetTag("message.to", request.ToHandle);
+                    // Default agent event stream — resolve handle from Channel
+                    var targetHandle = ResolveTargetHandle(request.Channel);
+                    activity?.SetTag("event.channel", targetHandle);
 
-                    logger.LogDebug("SendEvent to stream AgentEvent/{ToHandle}: {AgentMessage}", request.ToHandle, SerializeForLog(request));
+                    logger.LogDebug("SendEvent to stream AgentEvent/{Channel}: Type={EventType}, Source={Source}",
+                        targetHandle, request.Type, request.Source);
 
-                    var stream = clusterClient.GetAgentEventStream(request.ToHandle);
+                    var stream = clusterClient.GetAgentEventStream(targetHandle);
                     await stream.OnNextAsync(request);
 
-                    logger.LogTrace("Event sent to stream for: {ToHandle}", request.ToHandle);
+                    logger.LogTrace("Event sent to stream for: {Channel}", targetHandle);
                 }
 
                 activity?.SetStatus(ActivityStatusCode.Ok);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error sending event to stream - From: {FromHandle}, To: {ToHandle}, StreamName: {StreamName}",
-                    request.FromHandle, request.ToHandle, streamName);
+                logger.LogError(ex, "Error sending event to stream - Source: {Source}, Channel: {Channel}, StreamName: {StreamName}",
+                    request.Source, request.Channel, streamName);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
                 ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "stream_event_send_failed"),
-                    new KeyValuePair<string, object?>("message.to", request.ToHandle));
+                    new KeyValuePair<string, object?>("event.channel", request.Channel));
                 throw;
             }
         }
@@ -1245,20 +1248,31 @@ namespace FabrCore.Host.Grains
 
             logger.LogTrace("Processing stream: {StreamName}", streamName);
 
+            if (streamName.IsAgentEvent)
+            {
+                await SubscribeToEventStream(streamName);
+            }
+            else
+            {
+                await SubscribeToChatStream(streamName);
+            }
+
+            logger.LogInformation("Subscribed to stream: {StreamName}", streamName);
+
+            StreamsCreatedCounter.Add(1,
+                new KeyValuePair<string, object?>("stream.name", streamName.ToString()),
+                new KeyValuePair<string, object?>("stream.namespace", streamName.Namespace),
+                new KeyValuePair<string, object?>("agent.handle", handle));
+
+            streamActivity?.SetStatus(ActivityStatusCode.Ok);
+        }
+
+        private async Task SubscribeToChatStream(StreamName streamName)
+        {
             var stream = this.GetStream<AgentMessage>(streamName);
             var streamId = StreamId.Create(streamName.Namespace, streamName.Handle);
-
             var existingHandles = await stream.GetAllSubscriptionHandles();
-            logger.LogTrace("Found {HandleCount} existing subscription handles for stream: {StreamName}",
-                existingHandles.Count, streamName);
 
-            // Determine the appropriate handler based on namespace
-            Func<AgentMessage, StreamSequenceToken?, Task> handler = streamName.IsAgentEvent
-                ? ReceivedEventMessage
-                : ReceivedChatMessage;
-
-            // Resume existing handles instead of unsubscribe/resubscribe to avoid
-            // a window where incoming messages have no handler and get dropped.
             bool resumed = false;
             foreach (var existingHandle in existingHandles)
             {
@@ -1266,7 +1280,7 @@ namespace FabrCore.Host.Grains
                 {
                     if (!resumed)
                     {
-                        await existingHandle.ResumeAsync(handler);
+                        await existingHandle.ResumeAsync(ReceivedChatMessage);
                         resumed = true;
                         logger.LogTrace("Resumed existing handle for stream: {StreamName}", streamName);
                     }
@@ -1280,17 +1294,39 @@ namespace FabrCore.Host.Grains
 
             if (!resumed)
             {
-                await stream.SubscribeAsync(handler);
+                await stream.SubscribeAsync(ReceivedChatMessage);
+            }
+        }
+
+        private async Task SubscribeToEventStream(StreamName streamName)
+        {
+            var stream = this.GetStream<EventMessage>(streamName);
+            var streamId = StreamId.Create(streamName.Namespace, streamName.Handle);
+            var existingHandles = await stream.GetAllSubscriptionHandles();
+
+            bool resumed = false;
+            foreach (var existingHandle in existingHandles)
+            {
+                if (existingHandle.StreamId == streamId)
+                {
+                    if (!resumed)
+                    {
+                        await existingHandle.ResumeAsync(ReceivedEventMessage);
+                        resumed = true;
+                        logger.LogTrace("Resumed existing handle for stream: {StreamName}", streamName);
+                    }
+                    else
+                    {
+                        await existingHandle.UnsubscribeAsync();
+                        logger.LogTrace("Removed duplicate handle for stream: {StreamName}", streamName);
+                    }
+                }
             }
 
-            logger.LogInformation("Subscribed to stream: {StreamName}", streamName);
-
-            StreamsCreatedCounter.Add(1,
-                new KeyValuePair<string, object?>("stream.name", streamName.ToString()),
-                new KeyValuePair<string, object?>("stream.namespace", streamName.Namespace),
-                new KeyValuePair<string, object?>("agent.handle", handle));
-
-            streamActivity?.SetStatus(ActivityStatusCode.Ok);
+            if (!resumed)
+            {
+                await stream.SubscribeAsync(ReceivedEventMessage);
+            }
         }
 
         private async Task ReceivedChatMessage(AgentMessage request, StreamSequenceToken? token = null)
@@ -1340,12 +1376,13 @@ namespace FabrCore.Host.Grains
             }
         }
 
-        private async Task ReceivedEventMessage(AgentMessage request, StreamSequenceToken? token = null)
+        private async Task ReceivedEventMessage(EventMessage request, StreamSequenceToken? token = null)
         {
             using var activity = ActivitySource.StartActivity("ReceivedEventMessage", ActivityKind.Consumer);
-            activity?.SetTag("message.from", request.FromHandle);
-            activity?.SetTag("message.to", request.ToHandle);
-            activity?.SetTag("message.type", request.MessageType);
+            activity?.SetTag("event.source", request.Source);
+            activity?.SetTag("event.type", request.Type);
+            activity?.SetTag("event.namespace", request.Namespace);
+            activity?.SetTag("event.channel", request.Channel);
             activity?.SetTag("stream.namespace", StreamConstants.AgentEventNamespace);
             activity?.SetTag("to.type", "Agent");  // Receiving entity is always an agent
             if (token != null)
@@ -1353,11 +1390,12 @@ namespace FabrCore.Host.Grains
                 activity?.SetTag("stream.sequence", token.SequenceNumber);
             }
 
-            logger.LogDebug("Received event message: {AgentMessage}", SerializeForLog(request));
+            logger.LogDebug("Received event message: Type={EventType}, Source={Source}, Namespace={Namespace}, Channel={Channel}",
+                request.Type, request.Source, request.Namespace, request.Channel);
 
             StreamMessagesCounter.Add(1,
-                new KeyValuePair<string, object?>("message.from", request.FromHandle),
-                new KeyValuePair<string, object?>("message.to", request.ToHandle),
+                new KeyValuePair<string, object?>("event.source", request.Source),
+                new KeyValuePair<string, object?>("event.type", request.Type),
                 new KeyValuePair<string, object?>("stream.namespace", StreamConstants.AgentEventNamespace));
 
             try
@@ -1368,22 +1406,19 @@ namespace FabrCore.Host.Grains
                 }
                 else
                 {
-                    logger.LogWarning("Agent proxy not initialized, cannot process event from: {FromHandle}", request.FromHandle);
+                    logger.LogWarning("Agent proxy not initialized, cannot process event from: {Source}", request.Source);
                 }
 
                 activity?.SetStatus(ActivityStatusCode.Ok);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error processing event message from: {FromHandle}", request.FromHandle);
-
-                // Notify the original sender so the client isn't left hanging
-                await SendSystemErrorAsync(request, ex);
+                logger.LogError(ex, "Error processing event message from: {Source}", request.Source);
 
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
                 ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "event_message_failed"),
-                    new KeyValuePair<string, object?>("message.from", request.FromHandle));
+                    new KeyValuePair<string, object?>("event.source", request.Source));
             }
         }
     }

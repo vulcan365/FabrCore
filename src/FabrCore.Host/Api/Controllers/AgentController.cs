@@ -91,7 +91,7 @@ namespace FabrCore.Host.Api.Controllers
         public async Task<IActionResult> PostEvent(
             [FromHeader(Name = "x-user")] string userId,
             [FromRoute] string handle,
-            [FromBody] AgentMessage message,
+            [FromBody] EventMessage message,
             [FromQuery] string? streamName = null)
         {
             try

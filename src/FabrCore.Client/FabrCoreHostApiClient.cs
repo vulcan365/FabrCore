@@ -170,7 +170,7 @@ namespace FabrCore.Client
         /// Sends a fire-and-forget event to an agent's AgentEvent stream.
         /// If streamName is provided, publishes to the named event stream.
         /// </summary>
-        Task SendEventAsync(string userId, string handle, AgentMessage message, string? streamName = null, CancellationToken cancellationToken = default);
+        Task SendEventAsync(string userId, string handle, EventMessage message, string? streamName = null, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Gets the model configuration by name.
@@ -379,7 +379,7 @@ namespace FabrCore.Client
             }
         }
 
-        public async Task SendEventAsync(string userId, string handle, AgentMessage message, string? streamName = null, CancellationToken cancellationToken = default)
+        public async Task SendEventAsync(string userId, string handle, EventMessage message, string? streamName = null, CancellationToken cancellationToken = default)
         {
             using var activity = ActivitySource.StartActivity("SendEvent", ActivityKind.Client);
             activity?.SetTag("user.id", userId);
