@@ -70,7 +70,11 @@ app.Run();
 
 ## ChatDock Component
 
-The `ChatDock` is a drop-in chat component that handles agent communication, message rendering, and health monitoring.
+The `ChatDock` is a **floating icon button** that expands into a chat panel overlay. When collapsed, it shows a small circular icon (36x36px). When clicked, a chat panel slides in from the configured position. The panel is moved to `document.body` via JS to escape CSS stacking contexts.
+
+**Visual states:**
+- **Collapsed**: Circular icon with Bootstrap icon class. Color indicates state: blue (connected), green pulsing (open), orange pulsing (unread messages), gray (lazy/not loaded).
+- **Expanded**: Full chat panel with header (title + clear/minimize buttons), scrollable message area with markdown rendering, thinking/typing indicators, and input area with send button.
 
 ### Basic Usage
 
@@ -86,43 +90,68 @@ The `ChatDock` is a drop-in chat component that handles agent communication, mes
 
 ### All Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `UserHandle` | `string` | Yes | Unique identifier for the user |
-| `AgentHandle` | `string` | No | Agent instance handle (auto-generated if omitted) |
-| `AgentType` | `string` | No | Agent type matching `[AgentAlias]` |
-| `SystemPrompt` | `string` | No | System instructions for the agent |
-| `Title` | `string` | No | Display title for the chat panel |
-| `Icon` | `string` | No | Icon class for the chat toggle button |
-| `Position` | `ChatDockPosition` | No | UI position (BottomRight default) |
-| `AdditionalArgs` | `Dictionary<string,string>` | No | Additional args for AgentConfiguration |
-| `Plugins` | `List<string>` | No | Plugin names to enable |
-| `Tools` | `List<string>` | No | Standalone tool names to enable |
-| `OnMessageReceived` | `EventCallback<AgentMessage>` | No | Callback when agent responds |
-| `OnMessageSent` | `EventCallback<AgentMessage>` | No | Callback when user sends |
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `UserHandle` | `string` | Yes | — | User/client identifier |
+| `AgentHandle` | `string` | Yes | — | Agent instance handle (unique per agent) |
+| `AgentType` | `string` | Yes | — | Agent type matching `[AgentAlias]` |
+| `SystemPrompt` | `string` | No | "You are a helpful AI assistant." | System instructions |
+| `Title` | `string` | No | "Assistant" | Display title in panel header |
+| `Icon` | `string` | No | "bi bi-chat-dots" | Bootstrap icon class for the floating button |
+| `WelcomeMessage` | `string` | No | "How can I help you today?" | Empty state message |
+| `Tooltip` | `string` | No | "Open chat" | Hover tooltip on icon |
+| `Position` | `ChatDockPosition` | No | `BottomRight` | Panel position (see below) |
+| `AdditionalArgs` | `Dictionary<string,string>` | No | null | Extra args for AgentConfiguration |
+| `LazyLoad` | `bool` | No | false | Defer agent creation until first expand |
+| `Plugins` | `List<string>` | No | null | Plugin aliases to enable |
+| `Tools` | `List<string>` | No | null | Standalone tool aliases to enable |
+| `OnMessageReceived` | `Func<AgentMessage, Task<bool>>` | No | null | Callback when agent responds. Return `true` to display the message, `false` to suppress it. |
+| `OnMessageSent` | `EventCallback<string>` | No | — | Callback when user sends a message |
 
 ### Positions
 
 ```csharp
 public enum ChatDockPosition
 {
-    BottomLeft,
-    BottomRight,
-    Left,
-    Right
+    BottomRight,    // Floating icon bottom-right, panel slides up (default)
+    BottomLeft,     // Floating icon bottom-left, panel slides up
+    Right,          // Floating icon right edge, panel slides in from right (full height)
+    Left            // Floating icon left edge, panel slides in from left (full height)
 }
 ```
 
+**Responsive:** On mobile (<480px), the panel expands to full width regardless of position.
+
+**CSS customization** via variables:
+```css
+--chat-dock-primary: #3b82f6;
+--chat-dock-width: 380px;
+--chat-dock-icon-size: 36px;
+```
+
+### Agent Lifecycle
+
+ChatDock manages the full agent lifecycle internally:
+
+1. **Connect**: Gets or creates `IClientContext` via `IClientContextFactory`, subscribes to `AgentMessageReceived`
+2. **Check Existing Agent**: Calls `IsAgentTracked()` then `GetAgentHealth()` to check if the agent is already configured. This avoids unnecessary reconfiguration on page reloads or when another component already created the agent.
+3. **Create Agent (if needed)**: Only calls `context.CreateAgent(agentConfig)` if `IsConfigured == false`. Passes Handle, AgentType, SystemPrompt, Plugins, Tools, and Args.
+4. **Send Messages**: Uses `context.SendMessage()` (fire-and-forget). Responses arrive via the `AgentMessageReceived` event.
+5. **Message Filtering**: Filters by `FromHandle` (must match expected agent) and `ToHandle` (must be UserHandle). System messages (`_status`, `_error`) are handled internally.
+6. **Cleanup**: `IDisposable` — unregisters from DockManager, unsubscribes events, disposes context
+
 ### Multiple ChatDocks
 
-Use `ChatDockManager` (registered via `AddFabrCoreClientComponents()`) to coordinate multiple chat instances:
+Use `ChatDockManager` (registered via `AddFabrCoreClientComponents()`) to coordinate multiple chat instances — **only one can be expanded at a time**:
 
 ```razor
 <CascadingValue Value="chatDockManager">
     <ChatDock UserHandle="user1" AgentHandle="coding-agent"
-              AgentType="code-reviewer" Title="Code Review" />
+              AgentType="code-reviewer" Title="Code Review"
+              Position="ChatDockPosition.BottomRight" />
     <ChatDock UserHandle="user1" AgentHandle="writing-agent"
-              AgentType="writer" Title="Writing Help" />
+              AgentType="writer" Title="Writing Help"
+              Position="ChatDockPosition.BottomLeft" />
 </CascadingValue>
 
 @code {
@@ -132,12 +161,26 @@ Use `ChatDockManager` (registered via `AddFabrCoreClientComponents()`) to coordi
 
 ### ChatDock Features
 
+- **Floating icon** — Small circular button, always visible, toggles the chat panel
 - **Markdown rendering** — Uses Markdig for rich message display
-- **Thinking indicators** — Shows when agent is processing
+- **Thinking indicators** — Shows when agent is processing (auto-fades after 5s)
+- **Typing indicators** — Bouncing dots animation while waiting for response
 - **Health status** — Displays agent health (Healthy/Degraded/Unhealthy/NotConfigured)
-- **Lazy loading** — Initializes only when first opened
+- **Lazy loading** — Defer agent creation until first opened (`LazyLoad="true"`)
 - **Unread badges** — Shows unread message count when minimized
 - **Keyboard shortcuts** — Enter to send, Shift+Enter for newline
+- **Panel escape** — Panel moved to `document.body` via JS to avoid stacking context issues
+
+### Static Assets
+
+ChatDock requires FabrCore.Client static assets. Include in your layout or `_Imports.razor`:
+
+```html
+<!-- In App.razor or _Host.cshtml -->
+<link href="_content/FabrCore.Client/fabrcore.css" rel="stylesheet" />
+```
+
+The JS module (`fabrcore.js`) is loaded dynamically by the component.
 
 ## ClientContext API
 

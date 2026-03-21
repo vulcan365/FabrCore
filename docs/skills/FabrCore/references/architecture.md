@@ -48,7 +48,8 @@ The SDK layer provides the tools for building agents, plugins, and tools.
 - `FabrCoreAgentProxy` — Abstract base class all agents extend
   - `CreateChatClientAgent(modelName)` — Creates a ChatClientAgent with automatic tool resolution, history persistence, and compaction
   - `ResolveConfiguredToolsAsync()` — Resolves plugins, standalone tools, and MCP tools
-  - `TryCompactAsync()` — Triggers message compaction when context window fills
+  - `TryCompactAsync()` — Triggers message compaction when context window fills (delegates to `OnCompaction()`)
+  - `OnCompaction()` — Virtual method for custom compaction logic (default uses CompactionService with LLM summarization)
   - `GetStateAsync<T>(key)` / `SetState(key, value)` / `FlushStateAsync()` — Custom state persistence
   - OpenTelemetry metrics: `agent.configured`, `agent.messages.processed`, `agent.stream.messages`
 

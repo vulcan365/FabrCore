@@ -227,6 +227,18 @@
     public bool LazyLoad { get; set; }
 
     /// <summary>
+    /// Plugin aliases to enable for this agent.
+    /// </summary>
+    [Parameter]
+    public List<string>? Plugins { get; set; }
+
+    /// <summary>
+    /// Standalone tool aliases to enable for this agent.
+    /// </summary>
+    [Parameter]
+    public List<string>? Tools { get; set; }
+
+    /// <summary>
     /// Callback invoked when the agent sends a non-thinking message to this chat dock.
     /// Receives the full AgentMessage including metadata such as FromHandle, MessageType, and State.
     /// Return <c>true</c> to display the message in the chat history, or <c>false</c> to suppress it
@@ -438,31 +450,46 @@
             _clientContext = await ClientContextFactory.GetOrCreateAsync(UserHandle);
             _clientContext.AgentMessageReceived += OnAgentMessageReceived;
 
-            var args = new Dictionary<string, string>
-            {
-                { "userId", UserHandle }
-            };
+            // Step 1: Quick check if agent is tracked by this client
+            var isTracked = await _clientContext.IsAgentTracked(AgentHandle);
 
-            // Merge additional args if provided
-            if (AdditionalArgs != null)
+            if (isTracked)
             {
-                foreach (var kvp in AdditionalArgs)
-                {
-                    args[kvp.Key] = kvp.Value;
-                }
+                // Step 2: Agent is tracked — check its actual health/configured state
+                _agentHealth = await _clientContext.GetAgentHealth(AgentHandle, HealthDetailLevel.Basic);
             }
 
-            var agentConfig = new AgentConfiguration
+            // Step 3: Create only if not configured (covers both "not tracked" and "tracked but not configured")
+            if (_agentHealth is null || !_agentHealth.IsConfigured)
             {
-                Handle = AgentHandle,
-                AgentType = AgentType,
-                SystemPrompt = SystemPrompt,
-                Args = args
-            };
+                var args = new Dictionary<string, string>
+                {
+                    { "userId", UserHandle }
+                };
 
-            _agentHealth = await _clientContext.CreateAgent(agentConfig);
+                // Merge additional args if provided
+                if (AdditionalArgs != null)
+                {
+                    foreach (var kvp in AdditionalArgs)
+                    {
+                        args[kvp.Key] = kvp.Value;
+                    }
+                }
 
-            // Check if agent created successfully
+                var agentConfig = new AgentConfiguration
+                {
+                    Handle = AgentHandle,
+                    AgentType = AgentType,
+                    SystemPrompt = SystemPrompt,
+                    Args = args,
+                    Plugins = Plugins ?? new(),
+                    Tools = Tools ?? new()
+                };
+
+                _agentHealth = await _clientContext.CreateAgent(agentConfig);
+            }
+
+            // Check if agent is healthy
             if (_agentHealth.State == HealthState.Unhealthy)
             {
                 _error = $"Agent issue: {_agentHealth.Message}";

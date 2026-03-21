@@ -29,7 +29,7 @@ Build distributed AI agent systems with FabrCore — an open-source .NET 10 fram
 | Standalone Tool | Single static method | `[ToolAlias]` attribute |
 | Server/Host | Orleans silo + REST API | `AddFabrCoreServer()` / `UseFabrCoreServer()` |
 | Client | Blazor UI + Orleans client | `AddFabrCoreClient()` / `UseFabrCoreClient()` |
-| ChatDock | Drop-in chat component | `<ChatDock>` Blazor component |
+| ChatDock | Floating icon → chat overlay | `<ChatDock>` Blazor component |
 | Configuration | Agent definition | `AgentConfiguration` class |
 | Messaging | Agent communication | `AgentMessage` class |
 
@@ -148,6 +148,7 @@ public class MyAgent : FabrCoreAgentProxy
 | `OnInitialize()` | First message or reconfigure | Set up LLM client, tools, state |
 | `OnMessage()` | Request or OneWay message | Process user messages, return response |
 | `OnEvent()` | Event message | Handle fire-and-forget notifications |
+| `OnCompaction()` | Token threshold exceeded | Custom compaction logic (default: LLM summarization) |
 
 **Agent naming:** Use `[AgentAlias("kebab-case-name")]`. The alias is used in `AgentConfiguration.AgentType`.
 
@@ -247,14 +248,38 @@ app.UseFabrCoreClient(); // Returns IHost, NOT awaitable
 app.Run();
 ```
 
-**ChatDock component** — drop-in chat UI:
+**ChatDock component** — floating icon that expands into a chat panel overlay:
+
+ChatDock renders as a small circular icon button (36x36px). Clicking it expands a chat panel that slides in from the configured position. The panel includes a header, scrollable message area with markdown rendering, thinking/typing indicators, and input area. The panel is moved to `document.body` via JS to escape CSS stacking contexts.
+
 ```razor
+@using FabrCore.Client.Components
+
 <ChatDock UserHandle="user1"
           AgentHandle="my-agent"
           AgentType="my-agent"
           SystemPrompt="You are a helpful assistant."
-          Title="My Agent" />
+          Title="My Agent"
+          Plugins="@(new List<string> { "weather" })"
+          Position="ChatDockPosition.BottomRight" />
 ```
+
+**Positions:** `BottomRight` (default), `BottomLeft`, `Right` (full-height right edge), `Left` (full-height left edge).
+
+**Scoped ChatDock** — scope an agent to a specific context by embedding IDs in the handle and system prompt:
+```razor
+<ChatDock UserHandle="user1"
+          AgentHandle="@($"project-{ProjectId}")"
+          AgentType="project-agent"
+          SystemPrompt="@($"You manage project {ProjectId}. Use this ID automatically.")"
+          Title="Project Assistant"
+          OnMessageSent="@(async (msg) => { await RefreshData(); StateHasChanged(); })"
+          Position="ChatDockPosition.Right" />
+```
+
+**Key parameters:** `UserHandle`, `AgentHandle`, `AgentType` (required). Optional: `SystemPrompt`, `Title`, `Icon`, `WelcomeMessage`, `Tooltip`, `Position`, `Plugins` (List<string>), `Tools` (List<string>), `AdditionalArgs` (Dictionary<string,string>), `LazyLoad` (bool), `OnMessageReceived` (Func<AgentMessage, Task<bool>> — return true to display), `OnMessageSent` (EventCallback<string>).
+
+**Multiple ChatDocks:** Use `ChatDockManager` (registered via `AddFabrCoreClientComponents()`) — only one can be expanded at a time. Wrap in `<CascadingValue Value="chatDockManager">`.
 
 **Manual messaging** via `IClientContextFactory`:
 ```csharp
