@@ -3,6 +3,7 @@ using FabrCore.Core;
 using FabrCore.Core.Interfaces;
 using FabrCore.Core.Streaming;
 using FabrCore.Host.Configuration;
+using FabrCore.Host.Services;
 using FabrCore.Host.Streaming;
 using FabrCore.Sdk;
 using Microsoft.Extensions.Logging;
@@ -73,6 +74,7 @@ namespace FabrCore.Host.Grains
 
         private readonly IClusterClient clusterClient;
         private readonly ILogger<ClientGrain> logger;
+        private readonly IFabrCoreAgentService _agentService;
         private readonly ObserverManager<IClientGrainObserver> observerManager;
         private readonly Queue<AgentMessage> pendingMessages = new();
         private readonly Dictionary<string, TrackedAgentInfo> _trackedAgents = new();
@@ -81,11 +83,13 @@ namespace FabrCore.Host.Grains
         public ClientGrain(
             IClusterClient clusterClient,
             ILoggerFactory loggerFactory,
+            IFabrCoreAgentService agentService,
             [PersistentState("clientState", FabrCoreOrleansConstants.StorageProviderName)]
             IPersistentState<ClientGrainState> state)
         {
             this.clusterClient = clusterClient;
             this.logger = loggerFactory.CreateLogger<ClientGrain>();
+            _agentService = agentService;
             this.observerManager = new ObserverManager<IClientGrainObserver>(TimeSpan.FromMinutes(5), logger);
             _state = state;
         }
@@ -392,7 +396,7 @@ namespace FabrCore.Host.Grains
                 }
 
                 await CreateStreams();
-                await RegisterWithManagementGrain();
+                await RegisterWithManagement();
 
                 logger.LogInformation("Client activated and streams created: {ClientId}", clientId);
 
@@ -445,8 +449,7 @@ namespace FabrCore.Host.Grains
 
             try
             {
-                var registry = GrainFactory.GetGrain<IAgentManagementGrain>(0);
-                await registry.DeactivateClient(clientId, reason.Description);
+                await _agentService.DeactivateClientAsync(clientId, reason.Description);
             }
             catch (Exception ex)
             {
@@ -456,19 +459,18 @@ namespace FabrCore.Host.Grains
             await base.OnDeactivateAsync(reason, cancellationToken);
         }
 
-        private async Task RegisterWithManagementGrain()
+        private async Task RegisterWithManagement()
         {
             var clientId = this.GetPrimaryKeyString();
             try
             {
-                var registry = GrainFactory.GetGrain<IAgentManagementGrain>(0);
-                await registry.RegisterClient(clientId);
+                await _agentService.RegisterClientAsync(clientId);
 
-                logger.LogInformation("Registered client with management grain: {ClientId}", clientId);
+                logger.LogInformation("Registered client with management provider: {ClientId}", clientId);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to register client with management grain: {ClientId}", clientId);
+                logger.LogError(ex, "Failed to register client with management provider: {ClientId}", clientId);
             }
         }
 

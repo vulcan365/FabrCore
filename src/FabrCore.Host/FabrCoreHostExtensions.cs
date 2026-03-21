@@ -1,3 +1,4 @@
+using FabrCore.Core;
 using FabrCore.Host.Configuration;
 using FabrCore.Host.Services;
 using FabrCore.Sdk;
@@ -18,6 +19,24 @@ namespace FabrCore.Host
     public class FabrCoreServerOptions
     {
         public List<Assembly> AdditionalAssemblies { get; set; } = new();
+
+        /// <summary>
+        /// The implementation type for <see cref="IAgentManagementProvider"/>.
+        /// Defaults to <see cref="OrleansAgentManagementProvider"/> which delegates to
+        /// the <c>AgentManagementGrain</c> Orleans grain.
+        /// </summary>
+        internal Type AgentManagementProviderType { get; private set; } = typeof(OrleansAgentManagementProvider);
+
+        /// <summary>
+        /// Configures a custom <see cref="IAgentManagementProvider"/> implementation for
+        /// agent/client registration, tracking, and lifecycle management.
+        /// </summary>
+        /// <typeparam name="T">The provider implementation type.</typeparam>
+        public FabrCoreServerOptions UseAgentManagementProvider<T>() where T : class, IAgentManagementProvider
+        {
+            AgentManagementProviderType = typeof(T);
+            return this;
+        }
     }
 
     /// <summary>
@@ -141,6 +160,10 @@ namespace FabrCore.Host
                 // Configure Compaction
                 builder.Services.AddSingleton<FabrCore.Sdk.CompactionService>();
                 logger.LogDebug("CompactionService added");
+
+                // Configure Agent Management Provider (pluggable — default is Orleans grain-backed)
+                builder.Services.AddSingleton(typeof(IAgentManagementProvider), options.AgentManagementProviderType);
+                logger.LogDebug("AgentManagementProvider added: {ProviderType}", options.AgentManagementProviderType.Name);
 
                 // Configure Agent Service
                 builder.Services.AddSingleton<IFabrCoreAgentService, FabrCoreAgentService>();

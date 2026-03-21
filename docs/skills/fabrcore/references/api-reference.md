@@ -131,6 +131,63 @@ public enum MessageKind
 }
 ```
 
+## EventMessage
+
+**Namespace:** `FabrCore.Core`
+
+CloudEvents-inspired message for fire-and-forget event delivery. Used by `SendEvent()` and `OnEvent()`.
+
+```csharp
+public class EventMessage
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString();
+    public string Type { get; set; }               // Event type (e.g. "order.created")
+    public string Source { get; set; }              // Producer handle
+    public string? Subject { get; set; }            // Optional subject/topic
+    public DateTimeOffset Time { get; set; } = DateTimeOffset.UtcNow;
+
+    // Routing
+    public string Namespace { get; set; }           // Stream namespace for delivery
+    public string Channel { get; set; }             // Channel within namespace
+
+    // Payload
+    public string? Data { get; set; }               // String payload
+    public string? DataContentType { get; set; }    // MIME type (e.g. "application/json")
+    public byte[]? BinaryData { get; set; }         // Binary payload
+
+    // Extensions
+    public Dictionary<string, string>? Args { get; set; }
+    public string? TraceId { get; set; } = Guid.NewGuid().ToString();
+}
+```
+
+## IAgentManagementProvider
+
+**Namespace:** `FabrCore.Core`
+
+Pluggable provider for agent/client registration, tracking, and lifecycle. The default implementation (`OrleansAgentManagementProvider`) delegates to the `AgentManagementGrain`. Override via `FabrCoreServerOptions.UseAgentManagementProvider<T>()`.
+
+```csharp
+public interface IAgentManagementProvider
+{
+    // Registration
+    Task RegisterAgentAsync(string key, string agentType, string handle);
+    Task DeactivateAgentAsync(string key, string reason);
+    Task RegisterClientAsync(string clientId);
+    Task DeactivateClientAsync(string clientId, string reason);
+
+    // Queries
+    Task<List<AgentInfo>> GetAllAsync();
+    Task<List<AgentInfo>> GetByStatusAsync(AgentStatus status);
+    Task<AgentInfo?> GetByKeyAsync(string key);
+    Task<List<AgentInfo>> GetByEntityTypeAsync(EntityType entityType, AgentStatus? status = null);
+
+    // Maintenance
+    Task<int> PurgeDeactivatedAsync(TimeSpan olderThan);
+    Task<Dictionary<string, int>> GetStatisticsAsync();
+}
+```
+
 ### System Message Detection
 
 Messages with `MessageType` starting with `_` are FabrCore system messages (heartbeats, errors).
@@ -163,7 +220,7 @@ public interface IClientContext
 
     Task<AgentMessage> SendAndReceiveMessage(AgentMessage request);
     Task SendMessage(AgentMessage request);
-    Task SendEvent(AgentMessage request, string? streamName = null);
+    Task SendEvent(EventMessage request, string? streamName = null);
 
     // CreateAgent takes AgentConfiguration object (NOT individual params)
     Task<AgentHealthStatus> CreateAgent(AgentConfiguration agentConfiguration);
@@ -212,7 +269,7 @@ public interface IFabrCoreAgentHost
     Task<AgentMessage> SendAndReceiveMessage(AgentMessage request);
     Task SendMessage(AgentMessage request);
     Task<AgentHealthStatus> GetAgentHealth(string? handle = null, HealthDetailLevel detailLevel = HealthDetailLevel.Detailed);
-    Task SendEvent(AgentMessage request, string? streamName = null);
+    Task SendEvent(EventMessage request, string? streamName = null);
     void RegisterTimer(string timerName, string messageType, string? message, TimeSpan dueTime, TimeSpan period);
     void UnregisterTimer(string timerName);
     Task RegisterReminder(string reminderName, string messageType, string? message, TimeSpan dueTime, TimeSpan period);
@@ -246,6 +303,10 @@ public static WebApplication UseFabrCoreServer(
 public class FabrCoreServerOptions
 {
     public List<Assembly> AdditionalAssemblies { get; set; } = new();
+
+    // Configure a custom agent management provider (default: OrleansAgentManagementProvider)
+    public FabrCoreServerOptions UseAgentManagementProvider<T>()
+        where T : class, IAgentManagementProvider;
 }
 ```
 

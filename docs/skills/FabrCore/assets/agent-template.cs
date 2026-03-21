@@ -45,7 +45,7 @@ public class {{AGENT_NAME}} : FabrCoreAgentProxy
         return response;
     }
 
-    public override Task OnEvent(AgentMessage eventMessage)
+    public override Task OnEvent(EventMessage eventMessage)
     {
         return Task.CompletedTask;
     }

@@ -87,26 +87,27 @@ await fabrcoreAgentHost.SendMessage("monitor-agent", notification);
 
 ## Events (Stream-Based)
 
-Events are broadcast via Orleans streams. The target agent receives them in `OnEvent()`.
+Events are broadcast via Orleans streams using `EventMessage` (CloudEvents-inspired), not `AgentMessage`. The target agent receives them in `OnEvent()`.
 
 ```csharp
-// Send an event — bare alias auto-resolves
-var eventMsg = new AgentMessage
+// Send an event
+var eventMsg = new EventMessage
 {
-    MessageType = "status-changed",
-    Message = "Agent status updated",
-    MessageKind = MessageKind.OneWay
+    Type = "status-changed",
+    Channel = "listener-agent",     // Target agent handle (bare alias auto-resolves)
+    Namespace = "AgentEvent",
+    Data = "Agent status updated"
 };
 
-await fabrcoreAgentHost.SendEvent("listener-agent", eventMsg);
+await fabrcoreAgentHost.SendEvent(eventMsg);
 ```
 
 The target agent handles events in `OnEvent()`:
 
 ```csharp
-public override Task OnEvent(AgentMessage eventMessage)
+public override Task OnEvent(EventMessage eventMessage)
 {
-    switch (eventMessage.MessageType)
+    switch (eventMessage.Type)
     {
         case "status-changed":
             // Handle status change

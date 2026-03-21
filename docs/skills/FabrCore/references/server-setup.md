@@ -55,10 +55,23 @@ builder.AddFabrCoreServer(new FabrCoreServerOptions
 
 The `AdditionalAssemblies` property tells FabrCore which assemblies to scan for `[AgentAlias]`, `[PluginAlias]`, and `[ToolAlias]` types.
 
+### Custom Agent Management Provider
+
+By default, FabrCore tracks agents and clients using an Orleans grain (`OrleansAgentManagementProvider`). To use a custom storage backend (MSSQL, Azure Table Storage, etc.), implement `IAgentManagementProvider` and register it via options:
+
+```csharp
+builder.AddFabrCoreServer(new FabrCoreServerOptions
+{
+    AdditionalAssemblies = [typeof(MyAgent).Assembly]
+}.UseAgentManagementProvider<SqlAgentManagementProvider>());
+```
+
+The `IAgentManagementProvider` interface defines registration, query, and maintenance methods for agent/client lifecycle tracking. See [api-reference.md](api-reference.md#iagentmanagementprovider) for the full interface.
+
 ## What AddFabrCoreServer Configures
 
 1. **Orleans Silo** — Clustering, persistence, reminders, streaming based on `OrleansClusterOptions`
-2. **Services** — `FabrCoreChatClientService`, `FabrCoreToolRegistry`, `FabrCoreRegistry`, `FabrCoreAgentService`
+2. **Services** — `FabrCoreChatClientService`, `FabrCoreToolRegistry`, `FabrCoreRegistry`, `FabrCoreAgentService`, `IAgentManagementProvider`
 3. **Background Services** — `AgentRegistryCleanupService`, `FileCleanupService`
 4. **Assembly Discovery** — Scans `AdditionalAssemblies` for agent, plugin, and tool types
 
