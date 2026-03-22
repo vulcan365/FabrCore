@@ -67,7 +67,9 @@ Any OpenAI-compatible endpoint can be used by setting `Provider: "OpenAI"` and a
       "Model": "gpt-4o-mini",
       "ApiKeyAlias": "openai",
       "MaxOutputTokens": 4096,
-      "ContextWindowTokens": 128000
+      "ContextWindowTokens": 128000,
+      "CompactionKeepLastN": 10,
+      "CompactionThreshold": 0.6
     },
     {
       "Name": "embeddings",
@@ -83,7 +85,8 @@ Any OpenAI-compatible endpoint can be used by setting `Provider: "OpenAI"` and a
       "ApiKeyAlias": "openai",
       "TimeoutSeconds": 300,
       "MaxOutputTokens": 32768,
-      "ContextWindowTokens": 200000
+      "ContextWindowTokens": 200000,
+      "CompactionEnabled": false
     }
   ]
 }
@@ -108,14 +111,29 @@ public class AgentConfiguration
 }
 ```
 
+### Compaction Configuration Hierarchy
+
+Compaction settings resolve in order: **hardcoded defaults → fabrcore.json model config → agent Args overrides**.
+
+**Model-level settings** (in `fabrcore.json` ModelConfigurations):
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `ContextWindowTokens` | `25000` | Total context window size in tokens |
+| `CompactionEnabled` | `true` | Enable/disable automatic compaction |
+| `CompactionKeepLastN` | `20` | Recent messages to preserve during compaction |
+| `CompactionThreshold` | `0.75` | Trigger at this fraction of context window |
+
 ### Args — Built-in Keys
+
+Agent Args override model-level settings. Compaction keys are prefixed with `_`:
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `CompactionEnabled` | `"true"` | Enable/disable automatic chat history compaction |
-| `CompactionKeepLastN` | `"20"` | Keep last N messages during compaction |
-| `CompactionThreshold` | `"0.75"` | Trigger compaction at this % of context window |
-| `CompactionMaxContextTokens` | (from model config) | Override context window size for threshold calculation |
+| `_CompactionEnabled` | `"true"` | Enable/disable automatic chat history compaction |
+| `_CompactionKeepLastN` | `"20"` | Keep last N messages during compaction |
+| `_CompactionThreshold` | `"0.75"` | Trigger compaction at this % of context window |
+| `_CompactionMaxContextTokens` | `"25000"` | Override context window size for threshold calculation |
 | `ModelConfig` | (from Models[0]) | Override model name for this agent |
 
 ### Args — Plugin Settings Convention

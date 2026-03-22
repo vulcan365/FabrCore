@@ -8,7 +8,7 @@ public record CompactionConfig
 {
     public bool Enabled { get; init; } = true;
     public int KeepLastN { get; init; } = 20;
-    public int? MaxContextTokens { get; init; }
+    public int MaxContextTokens { get; init; } = 25000;
     public double Threshold { get; init; } = 0.75;
 }
 
@@ -44,7 +44,7 @@ public class CompactionService
             return new CompactionResult { WasCompacted = false };
         }
 
-        if (config.MaxContextTokens is null or <= 0)
+        if (config.MaxContextTokens <= 0)
         {
             _logger.LogDebug("Compaction enabled but MaxContextTokens not configured — skipping");
             return new CompactionResult { WasCompacted = false };
@@ -58,11 +58,11 @@ public class CompactionService
 
         var messages = await provider.GetStoredMessagesAsync();
         var estimatedTokens = EstimateTokens(messages);
-        var threshold = (int)(config.MaxContextTokens.Value * config.Threshold);
+        var threshold = (int)(config.MaxContextTokens * config.Threshold);
 
         _logger.LogDebug(
             "Compaction check: {MessageCount} messages, ~{EstimatedTokens} estimated tokens, threshold {Threshold} ({Ratio:P0} of {MaxContext})",
-            messages.Count, estimatedTokens, threshold, config.Threshold, config.MaxContextTokens.Value);
+            messages.Count, estimatedTokens, threshold, config.Threshold, config.MaxContextTokens);
 
         if (estimatedTokens <= threshold)
         {
@@ -77,7 +77,7 @@ public class CompactionService
 
         _logger.LogInformation(
             "Compaction triggered: {Tokens} estimated tokens exceeds threshold {Threshold} ({Ratio:P0} of {Max})",
-            estimatedTokens, threshold, config.Threshold, config.MaxContextTokens.Value);
+            estimatedTokens, threshold, config.Threshold, config.MaxContextTokens);
 
         if (onCompacting is not null)
             await onCompacting();
