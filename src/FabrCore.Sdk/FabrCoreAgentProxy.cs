@@ -258,6 +258,8 @@ namespace FabrCore.Sdk
                     {
                         var mcpTools = await ConnectMcpServerAsync(mcpConfig);
                         tools.AddRange(mcpTools);
+                        logger.LogInformation("MCP server '{Name}' provided {ToolCount} tools",
+                            mcpConfig.Name ?? "(unnamed)", mcpTools.Count);
                     }
                     catch (Exception ex)
                     {
@@ -269,6 +271,11 @@ namespace FabrCore.Sdk
                     }
                 }
             }
+
+            logger.LogInformation("Agent '{Handle}' resolved {ToolCount} total tools: [{ToolNames}]",
+                config.Handle,
+                tools.Count,
+                string.Join(", ", tools.Select(t => (t as AIFunction)?.Name ?? t.GetType().Name)));
 
             return tools;
         }
@@ -393,7 +400,7 @@ namespace FabrCore.Sdk
                 if (_compactionConfig is null || !_compactionConfig.Enabled)
                     return null;
 
-                if (_compactionConfig.MaxContextTokens is null or <= 0)
+                if (_compactionConfig.MaxContextTokens <= 0)
                     return null;
 
                 // Check threshold before calling OnCompaction
@@ -402,7 +409,7 @@ namespace FabrCore.Sdk
 
                 var messages = await _chatHistoryProvider.GetStoredMessagesAsync();
                 var estimatedTokens = CompactionService.EstimateTokens(messages);
-                var threshold = (int)(_compactionConfig.MaxContextTokens.Value * _compactionConfig.Threshold);
+                var threshold = (int)(_compactionConfig.MaxContextTokens * _compactionConfig.Threshold);
 
                 if (estimatedTokens <= threshold)
                 {
@@ -414,7 +421,7 @@ namespace FabrCore.Sdk
 
                 logger.LogInformation(
                     "Compaction needed for '{Handle}': ~{EstimatedTokens} estimated tokens exceeds {Threshold} threshold ({Ratio:P0} of {Max})",
-                    config.Handle, estimatedTokens, threshold, _compactionConfig.Threshold, _compactionConfig.MaxContextTokens.Value);
+                    config.Handle, estimatedTokens, threshold, _compactionConfig.Threshold, _compactionConfig.MaxContextTokens);
 
                 if (onCompacting is not null)
                     await onCompacting();
@@ -444,33 +451,40 @@ namespace FabrCore.Sdk
         {
             var args = config.Args ?? new Dictionary<string, string>();
 
-            var enabled = !args.TryGetValue("CompactionEnabled", out var enabledStr)
-                || !bool.TryParse(enabledStr, out var enabledVal)
-                || enabledVal;
+            // Defaults
+            var enabled = true;
+            var maxContextTokens = 25000;
+            var keepLastN = 20;
+            var threshold = 0.75;
 
-            var keepLastN = args.TryGetValue("CompactionKeepLastN", out var keepStr)
-                && int.TryParse(keepStr, out var keepVal) ? keepVal : 20;
-
-            int? maxContextTokens = args.TryGetValue("CompactionMaxContextTokens", out var maxStr)
-                && int.TryParse(maxStr, out var maxVal) ? maxVal : null;
-
-            // Fall back to model configuration's ContextWindowTokens
-            if (maxContextTokens is null)
+            // Layer 2: Model configuration overrides defaults
+            try
             {
-                try
-                {
-                    var modelConfig = await chatClientService.GetModelConfigurationAsync(_chatClientConfigName!);
-                    maxContextTokens = modelConfig.ContextWindowTokens;
-                }
-                catch (Exception ex)
-                {
-                    logger.LogDebug(ex, "Could not load model configuration for compaction context window fallback");
-                }
+                var modelConfig = await chatClientService.GetModelConfigurationAsync(_chatClientConfigName!);
+                if (modelConfig.ContextWindowTokens is { } ctxTokens)
+                    maxContextTokens = ctxTokens;
+                if (modelConfig.CompactionEnabled is { } mcEnabled)
+                    enabled = mcEnabled;
+                if (modelConfig.CompactionKeepLastN is { } mcKeep)
+                    keepLastN = mcKeep;
+                if (modelConfig.CompactionThreshold is { } mcThresh)
+                    threshold = mcThresh;
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "Could not load model configuration for compaction settings fallback");
             }
 
-            var threshold = args.TryGetValue("CompactionThreshold", out var threshStr)
-                && double.TryParse(threshStr, System.Globalization.CultureInfo.InvariantCulture, out var threshVal)
-                ? threshVal : 0.75;
+            // Layer 3: Agent args override model config (prefixed with _)
+            if (args.TryGetValue("_CompactionEnabled", out var enabledStr) && bool.TryParse(enabledStr, out var enabledVal))
+                enabled = enabledVal;
+            if (args.TryGetValue("_CompactionMaxContextTokens", out var maxStr) && int.TryParse(maxStr, out var maxVal))
+                maxContextTokens = maxVal;
+            if (args.TryGetValue("_CompactionKeepLastN", out var keepStr) && int.TryParse(keepStr, out var keepVal))
+                keepLastN = keepVal;
+            if (args.TryGetValue("_CompactionThreshold", out var threshStr)
+                && double.TryParse(threshStr, System.Globalization.CultureInfo.InvariantCulture, out var threshVal))
+                threshold = threshVal;
 
             return new CompactionConfig
             {

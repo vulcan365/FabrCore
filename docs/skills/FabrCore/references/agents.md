@@ -227,16 +227,25 @@ State is stored as `JsonElement` in the grain's persistent state, keyed by strin
 
 Compaction runs automatically after every `OnMessage`. When stored chat history exceeds the configured token threshold, older messages are summarized via an LLM call and replaced with a compact summary.
 
-**No agent code is needed** — compaction is handled by the framework. The threshold is based on `ContextWindowTokens` from `fabrcore.json` (or the `CompactionMaxContextTokens` agent arg) multiplied by `CompactionThreshold`.
+**No agent code is needed** — compaction is handled by the framework. Settings resolve in order: **defaults → fabrcore.json model config → agent Args overrides**.
 
-Configure via `AgentConfiguration.Args`:
+**Model-level** (in `fabrcore.json` on each model entry):
 
-| Key | Default | Description |
-|-----|---------|-------------|
+| Field | Default | Description |
+|-------|---------|-------------|
+| `ContextWindowTokens` | `25000` | Total context window size in tokens |
 | `CompactionEnabled` | `true` | Enable/disable compaction |
 | `CompactionKeepLastN` | `20` | Keep this many recent messages |
-| `CompactionThreshold` | `0.75` | Trigger at this % of context window |
-| `CompactionMaxContextTokens` | (from model config) | Override the context window size for threshold calculation |
+| `CompactionThreshold` | `0.75` | Trigger at this fraction of context window |
+
+**Agent-level overrides** (in `AgentConfiguration.Args`, prefixed with `_`):
+
+| Key | Description |
+|-----|-------------|
+| `_CompactionEnabled` | Override enable/disable |
+| `_CompactionMaxContextTokens` | Override context window size |
+| `_CompactionKeepLastN` | Override keep-last-N |
+| `_CompactionThreshold` | Override threshold ratio |
 
 ### Custom Compaction
 
@@ -385,7 +394,7 @@ var config = new AgentConfiguration
     Args = new Dictionary<string, string>
     {
         ["weather:ApiKey"] = "abc123",
-        ["CompactionEnabled"] = "true"
+        ["_CompactionEnabled"] = "true"
     }
 };
 ```

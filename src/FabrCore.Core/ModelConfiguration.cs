@@ -24,6 +24,21 @@ namespace FabrCore.Core
         /// Used by compaction to determine when to summarize conversation history.
         /// </summary>
         public int? ContextWindowTokens { get; set; }
+
+        /// <summary>
+        /// Enable/disable automatic compaction for agents using this model. Default is null (uses system default: true).
+        /// </summary>
+        public bool? CompactionEnabled { get; set; }
+
+        /// <summary>
+        /// Number of recent messages to keep during compaction. Default is null (uses system default: 20).
+        /// </summary>
+        public int? CompactionKeepLastN { get; set; }
+
+        /// <summary>
+        /// Trigger compaction when estimated tokens exceed this fraction of ContextWindowTokens. Default is null (uses system default: 0.75).
+        /// </summary>
+        public double? CompactionThreshold { get; set; }
     }
 
     public class ApiKeyConfiguration

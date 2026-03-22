@@ -3,28 +3,41 @@
 @using FabrCore.Core
 @using Markdig
 @using Microsoft.AspNetCore.Components.Web
+@using Microsoft.Extensions.Logging
 @inject IClientContextFactory ClientContextFactory
 @inject IJSRuntime JSRuntime
+@inject ILogger<ChatDock> Logger
 @implements IAsyncDisposable
 
-<div class="chat-dock-icon @GetIconStateClass()" @onclick="ToggleDock" title="@GetIconTooltip()">
+<button type="button"
+        class="chat-dock-icon @GetIconStateClass()"
+        @onclick="ToggleDock"
+        aria-label="@GetIconTooltip()"
+        aria-expanded="@(_isExpanded ? "true" : "false")"
+        aria-haspopup="dialog"
+        title="@GetIconTooltip()">
     <i class="@Icon"></i>
     @if (_hasUnreadMessages)
     {
-        <span class="chat-dock-badge"></span>
+        <span class="chat-dock-badge" aria-label="Unread messages"></span>
     }
-</div>
+</button>
 
-@if (_isExpanded)
-{
-    <div @ref="_panelElement" class="chat-dock-panel @GetPositionClass()" id="@_panelId">
+<div @ref="_panelElement"
+     class="chat-dock-panel @GetPositionClass() @GetSizeClass() @(_isExpanded ? "" : "chat-dock-panel-hidden")"
+     id="@_panelId"
+     role="dialog"
+     aria-labelledby="@_titleId">
         <div class="chat-dock-header">
-            <div class="chat-dock-title">
+            <div class="chat-dock-title" id="@_titleId">
                 <i class="@Icon me-2"></i>
                 <span>@Title</span>
             </div>
             <div class="chat-dock-actions">
-                <button class="chat-dock-btn" @onclick="ClearMessages" title="Clear chat">
+                <button class="chat-dock-btn" @onclick="CycleSize" title="@GetSizeTooltip()">
+                    <i class="@GetSizeIcon()"></i>
+                </button>
+                <button class="chat-dock-btn" @onclick="ClearMessages" title="Clear chat history (agent memory retained)">
                     <i class="bi bi-trash"></i>
                 </button>
                 <button class="chat-dock-btn" @onclick="ToggleDock" title="Minimize">
@@ -33,7 +46,7 @@
             </div>
         </div>
 
-        <div class="chat-dock-messages" @ref="_messagesContainer">
+        <div class="chat-dock-messages" @ref="_messagesContainer" role="log" aria-live="polite">
             @if (_messages.Count == 0 && !_isWaitingForResponse && string.IsNullOrEmpty(_thinkingMessage))
             {
                 <div class="chat-dock-welcome">
@@ -115,9 +128,9 @@
         <div class="chat-dock-input-container">
             <div class="chat-dock-input-wrapper">
                 <textarea class="chat-dock-input"
-                          @bind="_currentMessage"
-                          @bind:event="oninput"
-                          @onkeydown="HandleKeyDown"
+                          @ref="_textareaElement"
+                          value="@_currentMessage"
+                          @oninput="OnInput"
                           placeholder="Type a message..."
                           disabled="@(_isWaitingForResponse || !_isConnected)"
                           rows="1"></textarea>
@@ -154,7 +167,6 @@
             </div>
         </div>
     </div>
-}
 
 @code {
     /// <summary>
@@ -276,15 +288,19 @@
     private bool _isExpanded;
     private bool _hasUnreadMessages;
     private bool _agentExists;
+    private bool _needsScroll;
+    private ChatDockSize _currentSize = ChatDockSize.Medium;
     private ElementReference _messagesContainer;
     private ElementReference _panelElement;
+    private ElementReference _textareaElement;
     private CancellationTokenSource? _thinkingFadeCts;
     private AgentHealthStatus? _agentHealth;
     private readonly string _panelId = $"chat-dock-panel-{Guid.NewGuid():N}";
-    private bool _panelMovedToBody;
+    private readonly string _titleId = $"chat-dock-title-{Guid.NewGuid():N}";
     private IJSObjectReference? _jsModule;
 
-    private string DockId => $"{AgentHandle}_{GetHashCode()}";
+    // B3: Use _panelId (GUID-based) instead of GetHashCode() to avoid collisions
+    private string DockId => $"{AgentHandle}_{_panelId}";
 
     private string GetPositionClass() => Position switch
     {
@@ -292,6 +308,71 @@
         ChatDockPosition.Right => "chat-dock-right",
         ChatDockPosition.Left => "chat-dock-left",
         _ => "chat-dock-bottom-right"
+    };
+
+    private string GetSizeClass() => _currentSize switch
+    {
+        ChatDockSize.Medium => "chat-dock-size-md",
+        ChatDockSize.Large => "chat-dock-size-lg",
+        _ => ""
+    };
+
+    private async Task CycleSize()
+    {
+        _currentSize = _currentSize switch
+        {
+            ChatDockSize.Small => ChatDockSize.Medium,
+            ChatDockSize.Medium => ChatDockSize.Large,
+            ChatDockSize.Large => ChatDockSize.Small,
+            _ => ChatDockSize.Small
+        };
+        await SaveSizePreference();
+    }
+
+    private string SizeStorageKey => $"chatdock-size-{AgentHandle}";
+
+    private async Task SaveSizePreference()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("localStorage.setItem", SizeStorageKey, _currentSize.ToString());
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Failed to save size preference");
+        }
+    }
+
+    private async Task LoadSizePreference()
+    {
+        try
+        {
+            var stored = await JSRuntime.InvokeAsync<string?>("localStorage.getItem", SizeStorageKey);
+            if (stored != null && Enum.TryParse<ChatDockSize>(stored, out var size))
+            {
+                _currentSize = size;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Failed to load size preference");
+        }
+    }
+
+    private string GetSizeIcon() => _currentSize switch
+    {
+        ChatDockSize.Small => "bi bi-arrows-angle-expand",
+        ChatDockSize.Medium => "bi bi-arrows-fullscreen",
+        ChatDockSize.Large => "bi bi-arrows-angle-contract",
+        _ => "bi bi-arrows-angle-expand"
+    };
+
+    private string GetSizeTooltip() => _currentSize switch
+    {
+        ChatDockSize.Small => "Expand to medium",
+        ChatDockSize.Medium => "Expand to large",
+        ChatDockSize.Large => "Shrink to small",
+        _ => "Resize"
     };
 
     private string GetIconStateClass()
@@ -349,45 +430,61 @@
             var context = await ClientContextFactory.GetOrCreateAsync(UserHandle);
             _agentExists = await context.IsAgentTracked(AgentHandle);
         }
-        catch
+        catch (Exception ex)
         {
-            // Silently ignore - we'll just show the default lazy state
+            // D3: Log instead of silently swallowing
+            Logger.LogDebug(ex, "Failed to check agent existence for {AgentHandle}", AgentHandle);
             _agentExists = false;
         }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // Import JS module on first render
+        // Import JS module, load preferences, and set up keydown handler on first render
         if (firstRender)
         {
             try
             {
                 _jsModule = await JSRuntime.InvokeAsync<IJSObjectReference>(
                     "import", "./_content/FabrCore.Client/fabrcore.js");
+
+                // Load saved size preference from localStorage
+                await LoadSizePreference();
+                StateHasChanged();
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignore JS errors during prerendering
+                // D3: Log JS import errors (expected during prerendering)
+                Logger.LogDebug(ex, "Failed to import JS module (expected during prerendering)");
             }
         }
 
-        // Move panel to document.body to escape any CSS stacking context issues
-        if (_isExpanded && !_panelMovedToBody && _jsModule != null)
+        // P2: Register JS keydown handler for the textarea (Enter key filter)
+        if (firstRender && _jsModule != null)
         {
             try
             {
-                await _jsModule.InvokeVoidAsync("moveToBody", _panelId);
-                _panelMovedToBody = true;
+                var dotNetRef = DotNetObjectReference.Create(this);
+                await _jsModule.InvokeVoidAsync("registerKeyHandler", _textareaElement, dotNetRef);
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignore JS errors during prerendering
+                Logger.LogDebug(ex, "Failed to register key handler");
             }
         }
-        else if (!_isExpanded)
+
+        // B6: Auto-scroll to bottom when new messages arrive
+        if (_needsScroll && _jsModule != null)
         {
-            _panelMovedToBody = false;
+            _needsScroll = false;
+            try
+            {
+                await _jsModule.InvokeVoidAsync("scrollToBottom", _messagesContainer);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogDebug(ex, "Failed to scroll to bottom");
+            }
         }
     }
 
@@ -397,15 +494,12 @@
         if (expanded)
         {
             _hasUnreadMessages = false;
+            _needsScroll = _messages.Count > 0; // B6: Scroll on expand if messages exist
             // Connect on first expand if lazy loading
             if (LazyLoad && !_isConnected && !_isConnecting)
             {
                 InvokeAsync(ConnectAsync);
             }
-        }
-        else
-        {
-            _panelMovedToBody = false;
         }
         InvokeAsync(StateHasChanged);
     }
@@ -423,15 +517,12 @@
             if (_isExpanded)
             {
                 _hasUnreadMessages = false;
+                _needsScroll = _messages.Count > 0; // B6: Scroll on expand
                 // Connect on first expand if lazy loading
                 if (LazyLoad && !_isConnected && !_isConnecting)
                 {
                     await ConnectAsync();
                 }
-            }
-            else
-            {
-                _panelMovedToBody = false;
             }
             StateHasChanged();
         }
@@ -439,11 +530,12 @@
 
     private async Task ConnectAsync()
     {
+        // B5: Guard against concurrent calls
         if (_isConnecting || _isConnected) return;
+        _isConnecting = true;
 
         try
         {
-            _isConnecting = true;
             _error = null;
             StateHasChanged();
 
@@ -509,6 +601,28 @@
         }
     }
 
+    // P1: Manual input handler — only triggers StateHasChanged when empty/non-empty state changes
+    private void OnInput(ChangeEventArgs e)
+    {
+        var newValue = e.Value?.ToString() ?? string.Empty;
+        var wasEmpty = string.IsNullOrWhiteSpace(_currentMessage);
+        _currentMessage = newValue;
+        var isEmpty = string.IsNullOrWhiteSpace(_currentMessage);
+
+        // Only re-render when the send button disabled state would change
+        if (wasEmpty != isEmpty)
+        {
+            StateHasChanged();
+        }
+    }
+
+    // P2: Called from JS when Enter is pressed without Shift
+    [JSInvokable]
+    public async Task OnEnterPressed()
+    {
+        await SendMessage();
+    }
+
     private void OnAgentMessageReceived(object? sender, AgentMessage message)
     {
         // Resolve the expected agent handle using centralized handle utilities
@@ -521,26 +635,16 @@
                 // Handle _status messages (thinking heartbeat from AgentGrain)
                 if (message.MessageType == SystemMessageTypes.Status || message.MessageType == "thinking")
                 {
-                    // Cancel any previous fade timer
+                    // P3: Cancel and dispose previous fade timer before creating new one
                     _thinkingFadeCts?.Cancel();
+                    _thinkingFadeCts?.Dispose();
                     _thinkingFadeCts = new CancellationTokenSource();
 
                     _thinkingMessage = message.Message;
                     StateHasChanged();
 
-                    // Auto-fade after 5 seconds (longer than 3s heartbeat interval to avoid flicker)
-                    var cts = _thinkingFadeCts;
-                    _ = Task.Delay(5000, cts.Token).ContinueWith(t =>
-                    {
-                        if (!t.IsCanceled)
-                        {
-                            InvokeAsync(() =>
-                            {
-                                _thinkingMessage = null;
-                                StateHasChanged();
-                            });
-                        }
-                    });
+                    // P3: Use proper async method instead of Task.Delay.ContinueWith
+                    _ = FadeThinkingAsync(_thinkingFadeCts.Token);
                     return;
                 }
 
@@ -556,7 +660,7 @@
                     _messages.Add(new ChatMessage
                     {
                         Text = errorText,
-                        RenderedHtml = $"<div class=\"chat-dock-error\">Error: {System.Net.WebUtility.HtmlEncode(errorText)}</div>",
+                        RenderedHtml = $"<span class=\"chat-dock-message-error\">Error: {System.Net.WebUtility.HtmlEncode(errorText)}</span>",
                         IsFromUser = false,
                         Timestamp = DateTime.Now
                     });
@@ -564,6 +668,7 @@
                     if (!_isExpanded)
                         _hasUnreadMessages = true;
 
+                    _needsScroll = true; // B6
                     StateHasChanged();
                     return;
                 }
@@ -599,17 +704,39 @@
                     _hasUnreadMessages = true;
                 }
 
+                _needsScroll = true; // B6
                 StateHasChanged();
             });
         }
     }
 
-    private async Task HandleKeyDown(KeyboardEventArgs e)
+    // P3: Proper async thinking fade with cancellation
+    private async Task FadeThinkingAsync(CancellationToken token)
     {
-        if (e.Key == "Enter" && !e.ShiftKey)
+        try
         {
-            await SendMessage();
+            // Auto-fade after 5 seconds (longer than 3s heartbeat interval to avoid flicker)
+            await Task.Delay(5000, token);
+            await InvokeAsync(() =>
+            {
+                _thinkingMessage = null;
+                StateHasChanged();
+            });
         }
+        catch (OperationCanceledException)
+        {
+            // Expected when a new thinking message arrives or component is disposed
+        }
+    }
+
+    /// <summary>
+    /// D2: Programmatic send API — allows parent components to inject messages via @ref.
+    /// </summary>
+    public async Task SendMessageAsync(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return;
+        _currentMessage = message;
+        await SendMessage();
     }
 
     private async Task SendMessage()
@@ -631,6 +758,7 @@
         });
 
         _isWaitingForResponse = true;
+        _needsScroll = true; // B6
         StateHasChanged();
 
         try
@@ -662,9 +790,14 @@
         }
     }
 
+    // D1: Clear local state with UX clarity — tooltip indicates agent memory is retained
     private void ClearMessages()
     {
         _messages.Clear();
+        _isWaitingForResponse = false;
+        _thinkingMessage = null;
+        _thinkingFadeCts?.Cancel();
+        _error = null;
         StateHasChanged();
     }
 
@@ -677,9 +810,10 @@
             _agentHealth = await _clientContext.GetAgentHealth(AgentHandle, HealthDetailLevel.Detailed);
             await InvokeAsync(StateHasChanged);
         }
-        catch
+        catch (Exception ex)
         {
-            // Silently ignore health refresh failures
+            // D3: Log instead of silently swallowing
+            Logger.LogDebug(ex, "Failed to refresh agent health for {AgentHandle}", AgentHandle);
         }
     }
 
@@ -733,19 +867,6 @@
         _thinkingFadeCts?.Cancel();
         _thinkingFadeCts?.Dispose();
 
-        // Remove panel from body if it was moved there
-        if (_panelMovedToBody && _jsModule != null)
-        {
-            try
-            {
-                await _jsModule.InvokeVoidAsync("removePanel", _panelId);
-            }
-            catch
-            {
-                // Ignore errors during disposal
-            }
-        }
-
         // Dispose JS module
         if (_jsModule != null)
         {
@@ -753,17 +874,17 @@
             {
                 await _jsModule.DisposeAsync();
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignore errors during disposal
+                Logger.LogDebug(ex, "Failed to dispose JS module during disposal");
             }
             _jsModule = null;
         }
 
+        // B2: Only unsubscribe from events — do NOT dispose the shared cached context
         if (_clientContext != null)
         {
             _clientContext.AgentMessageReceived -= OnAgentMessageReceived;
-            await _clientContext.DisposeAsync();
             _clientContext = null;
         }
     }

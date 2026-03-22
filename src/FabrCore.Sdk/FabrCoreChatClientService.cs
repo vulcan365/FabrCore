@@ -414,7 +414,10 @@ namespace FabrCore.Sdk
                     ApiKeyAlias = result.ApiKeyAlias,
                     TimeoutSeconds = result.TimeoutSeconds,
                     MaxOutputTokens = result.MaxOutputTokens,
-                    ContextWindowTokens = result.ContextWindowTokens
+                    ContextWindowTokens = result.ContextWindowTokens,
+                    CompactionEnabled = result.CompactionEnabled,
+                    CompactionKeepLastN = result.CompactionKeepLastN,
+                    CompactionThreshold = result.CompactionThreshold
                 };
             }
             catch (Exception ex)
@@ -499,6 +502,9 @@ namespace FabrCore.Sdk
             public int TimeoutSeconds { get; set; }
             public int? MaxOutputTokens { get; set; }
             public int? ContextWindowTokens { get; set; }
+            public bool? CompactionEnabled { get; set; }
+            public int? CompactionKeepLastN { get; set; }
+            public double? CompactionThreshold { get; set; }
         }
 
         private class ApiKeyResponse
