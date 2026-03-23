@@ -246,12 +246,43 @@ public static class HandleUtilities
     // Strip the owner prefix from a handle
     static string StripPrefix(string handle, string ownerPrefix);
     // StripPrefix("user1:assistant", "user1:") → "assistant"
+
+    // Parse a handle into owner and alias components
+    static (string Owner, string Alias) ParseHandle(string handle);
+    // ParseHandle("user1:assistant") → ("user1", "assistant")
+    // ParseHandle("assistant")       → ("", "assistant")
 }
 ```
 
 **Routing rules:**
 - Bare alias (no colon) → auto-prefixed with caller's owner → routes to same-owner agent
 - Fully-qualified handle (contains colon) → used as-is → enables cross-owner routing
+
+## ACL Configuration
+
+Access control rules for cross-owner agent access. Configured in `fabrcore.json` alongside `ModelConfigurations` and `ApiKeys`. See [acl-shared-agents.md](acl-shared-agents.md) for full details.
+
+```json
+{
+  "ModelConfigurations": [ ... ],
+  "ApiKeys": [ ... ],
+  "Acl": {
+    "Rules": [
+      {
+        "OwnerPattern": "system",
+        "AgentPattern": "*",
+        "CallerPattern": "*",
+        "Permission": "Message,Read"
+      }
+    ],
+    "Groups": {
+      "admins": ["alice", "bob"]
+    }
+  }
+}
+```
+
+If no rules are configured, the default rule `system:* -> * -> Message,Read` is seeded automatically (all users can message system agents).
 
 ## SystemMessageTypes — Reserved Message Types
 

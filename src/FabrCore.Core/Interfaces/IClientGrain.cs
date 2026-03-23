@@ -42,5 +42,12 @@ namespace FabrCore.Core.Interfaces
         /// <returns>True if the agent is tracked, false otherwise.</returns>
         [AlwaysInterleave]
         Task<bool> IsAgentTracked(string handle);
+
+        /// <summary>
+        /// Gets shared agents that this client has permission to access (via ACL).
+        /// Returns agents owned by other owners where the caller has at least Message permission.
+        /// </summary>
+        [AlwaysInterleave]
+        Task<List<AgentInfo>> GetAccessibleSharedAgents();
     }
 }

@@ -16,5 +16,16 @@
       "Alias": "azure-key",
       "Value": "your-azure-openai-api-key-here"
     }
-  ]
+  ],
+  "Acl": {
+    "Rules": [
+      {
+        "OwnerPattern": "system",
+        "AgentPattern": "*",
+        "CallerPattern": "*",
+        "Permission": "Message,Read"
+      }
+    ],
+    "Groups": {}
+  }
 }

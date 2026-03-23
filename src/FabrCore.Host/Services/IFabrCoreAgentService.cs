@@ -18,6 +18,13 @@ namespace FabrCore.Host.Services
         Task<AgentHealthStatus> ConfigureAgentAsync(string userId, AgentConfiguration config, HealthDetailLevel detailLevel = HealthDetailLevel.Basic);
 
         /// <summary>
+        /// Configures a system-owned agent (owner = "system"). Use this for shared agents
+        /// that multiple users can access via ACL rules.
+        /// The agent grain key will be <c>"system:{config.Handle}"</c>.
+        /// </summary>
+        Task<AgentHealthStatus> ConfigureSystemAgentAsync(AgentConfiguration config, HealthDetailLevel detailLevel = HealthDetailLevel.Basic);
+
+        /// <summary>
         /// Configures multiple agents in batch. Failed configs get an Unhealthy entry.
         /// </summary>
         Task<List<AgentHealthStatus>> ConfigureAgentsAsync(string userId, List<AgentConfiguration> configs, HealthDetailLevel detailLevel = HealthDetailLevel.Basic);

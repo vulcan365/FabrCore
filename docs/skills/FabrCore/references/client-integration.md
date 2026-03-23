@@ -134,10 +134,10 @@ public enum ChatDockPosition
 ChatDock manages the full agent lifecycle internally:
 
 1. **Connect**: Gets or creates `IClientContext` via `IClientContextFactory`, subscribes to `AgentMessageReceived`
-2. **Check Existing Agent**: Calls `IsAgentTracked()` then `GetAgentHealth()` to check if the agent is already configured. This avoids unnecessary reconfiguration on page reloads or when another component already created the agent.
-3. **Create Agent (if needed)**: Only calls `context.CreateAgent(agentConfig)` if `IsConfigured == false`. Passes Handle, AgentType, SystemPrompt, Plugins, Tools, and Args.
+2. **Check Existing Agent**: Calls `IsAgentTracked()` then `GetAgentHealth()` to check if the agent is already configured. For cross-owner agents (handle contains `:`), ChatDock always calls `GetAgentHealth()` directly — the agent won't be in the user's tracked list, but `GetAgentHealth` goes straight to the grain to check the real state.
+3. **Create Agent (if needed)**: Only calls `context.CreateAgent(agentConfig)` if `IsConfigured == false` **and the agent is owned by the current user** (bare alias handle). For cross-owner agents, ChatDock will not attempt creation — it displays an error if the agent is not configured. Shared/system agents must be created server-side. See [acl-shared-agents.md](acl-shared-agents.md).
 4. **Send Messages**: Uses `context.SendMessage()` (fire-and-forget). Responses arrive via the `AgentMessageReceived` event.
-5. **Message Filtering**: Filters by `FromHandle` (must match expected agent) and `ToHandle` (must be UserHandle). System messages (`_status`, `_error`) are handled internally.
+5. **Message Filtering**: Filters by `FromHandle` (must match expected agent) and `ToHandle` (must be UserHandle). For cross-owner agents, `FromHandle` is matched using the full handle as-is (e.g., `"system:automation_agent-123"`). System messages (`_status`, `_error`) are handled internally.
 6. **Cleanup**: `IDisposable` — unregisters from DockManager, unsubscribes events, disposes context
 
 ### Multiple ChatDocks

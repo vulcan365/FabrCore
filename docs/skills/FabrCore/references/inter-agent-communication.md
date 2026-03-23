@@ -35,7 +35,10 @@ HandleUtilities.EnsurePrefix("analyst", "user1:");       // "user1:analyst"
 HandleUtilities.EnsurePrefix("user2:analyst", "user1:");  // "user2:analyst" (unchanged)
 HandleUtilities.BuildPrefix("user1");                      // "user1:"
 HandleUtilities.StripPrefix("user1:analyst", "user1:");    // "analyst"
+HandleUtilities.ParseHandle("user1:analyst");              // ("user1", "analyst")
 ```
+
+**ACL enforcement:** Cross-owner messages from clients are subject to ACL checks in `ClientGrain`. Agent-to-agent messages within the cluster are trusted and bypass ACL. See [acl-shared-agents.md](acl-shared-agents.md) for details on configuring cross-owner access rules.
 
 ## Request-Response
 

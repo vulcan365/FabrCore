@@ -796,8 +796,12 @@ namespace FabrCore.Host.Grains
                 request.FromHandle = this.GetPrimaryKeyString();
             }
 
-            // Resolve ToHandle - if bare alias, prefix with this agent's owner
-            request.ToHandle = ResolveTargetHandle(request.ToHandle);
+            // Resolve ToHandle - if bare alias, prefix with this agent's owner.
+            // Skip for Response messages (see SendMessage comment for rationale).
+            if (request.Kind != MessageKind.Response)
+            {
+                request.ToHandle = ResolveTargetHandle(request.ToHandle);
+            }
 
             using var activity = ActivitySource.StartActivity("SendAndReceiveMessage", ActivityKind.Client);
             activity?.SetTag("message.from", request.FromHandle);
@@ -837,8 +841,18 @@ namespace FabrCore.Host.Grains
                 request.FromHandle = this.GetPrimaryKeyString();
             }
 
-            // Resolve ToHandle - if bare alias, prefix with this agent's owner
-            request.ToHandle = ResolveTargetHandle(request.ToHandle);
+            // Resolve ToHandle - if bare alias, prefix with this agent's owner.
+            // Skip resolution for Response messages — the ToHandle was already set
+            // correctly by Response() (from the original FromHandle). Re-resolving
+            // would incorrectly prefix a client handle with this agent's owner
+            // (e.g., "default-user" → "system:default-user" for a system-owned agent).
+            if (request.Kind != MessageKind.Response)
+            {
+                request.ToHandle = ResolveTargetHandle(request.ToHandle);
+            }
+
+            if (string.IsNullOrEmpty(request.ToHandle))
+                throw new ArgumentException("ToHandle cannot be null or empty after resolution", nameof(request));
 
             using var activity = ActivitySource.StartActivity("SendMessage", ActivityKind.Producer);
             activity?.SetTag("message.from", request.FromHandle);

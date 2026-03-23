@@ -6,6 +6,7 @@ Complete type definitions and method signatures from the FabrCore source code.
 
 ```csharp
 using FabrCore.Core;          // AgentMessage, AgentConfiguration, MessageKind
+using FabrCore.Core.Acl;      // IAclProvider, AclRule, AclPermission, AclEvaluationResult, FabrCoreAclOptions
 using FabrCore.Sdk;           // FabrCoreAgentProxy, IFabrCoreAgentHost, IFabrCorePlugin, AgentAlias, PluginAlias
 using FabrCore.Client;        // IClientContextFactory, IClientContext, AddFabrCoreClient, UseFabrCoreClient
 using FabrCore.Host;          // AddFabrCoreServer, UseFabrCoreServer, FabrCoreServerOptions
@@ -206,6 +207,63 @@ System message type constants:
 - `"_status"` - Periodic heartbeat while agent processes
 - `"_error"` - Agent encountered an error
 
+## IAclProvider
+
+**Namespace:** `FabrCore.Core.Acl`
+
+Pluggable provider for agent access control. The default implementation (`InMemoryAclProvider`) loads rules from the `Acl` section in `fabrcore.json`. Override via `FabrCoreServerOptions.UseAclProvider<T>()`.
+
+```csharp
+public interface IAclProvider
+{
+    // Evaluation
+    Task<AclEvaluationResult> EvaluateAsync(
+        string callerOwner, string targetOwner, string agentAlias, AclPermission required);
+
+    // Rule management
+    Task<List<AclRule>> GetRulesAsync();
+    Task AddRuleAsync(AclRule rule);
+    Task RemoveRuleAsync(AclRule rule);
+
+    // Group management
+    Task<Dictionary<string, HashSet<string>>> GetGroupsAsync();
+    Task AddToGroupAsync(string groupName, string member);
+    Task RemoveFromGroupAsync(string groupName, string member);
+}
+
+public class AclRule
+{
+    public string OwnerPattern { get; set; }    // Target agent's owner ("system", "*", "alice")
+    public string AgentPattern { get; set; }    // Target agent's alias ("*", "automation_*")
+    public string CallerPattern { get; set; }   // Who is allowed ("*", "group:admins", "alice")
+    public AclPermission Permission { get; set; }
+}
+
+[Flags]
+public enum AclPermission
+{
+    None      = 0,
+    Message   = 1,   // Send messages
+    Configure = 2,   // Create/reconfigure
+    Read      = 4,   // Read threads, state, health
+    Admin     = 8,   // Modify ACL rules
+    All       = Message | Configure | Read | Admin
+}
+
+public record AclEvaluationResult(
+    bool Allowed,
+    AclPermission GrantedPermissions,
+    string? DeniedReason = null);
+
+public class FabrCoreAclOptions
+{
+    public List<AclRule> Rules { get; set; } = new();
+    public Dictionary<string, List<string>> Groups { get; set; } = new();
+}
+```
+
+See [acl-shared-agents.md](acl-shared-agents.md) for pattern matching rules, configuration, and usage examples.
+
 ## IClientContext
 
 **Namespace:** `FabrCore.Client`
@@ -228,6 +286,9 @@ public interface IClientContext
     Task<AgentHealthStatus> GetAgentHealth(string handle, HealthDetailLevel detailLevel = HealthDetailLevel.Basic);
     Task<List<TrackedAgentInfo>> GetTrackedAgents();
     Task<bool> IsAgentTracked(string handle);
+
+    // Discover shared agents this client has permission to access (via ACL)
+    Task<List<AgentInfo>> GetAccessibleSharedAgents();
 }
 ```
 
@@ -307,6 +368,10 @@ public class FabrCoreServerOptions
     // Configure a custom agent management provider (default: OrleansAgentManagementProvider)
     public FabrCoreServerOptions UseAgentManagementProvider<T>()
         where T : class, IAgentManagementProvider;
+
+    // Configure a custom ACL provider (default: InMemoryAclProvider)
+    public FabrCoreServerOptions UseAclProvider<T>()
+        where T : class, IAclProvider;
 }
 ```
 

@@ -547,13 +547,38 @@
 
             if (isTracked)
             {
-                // Step 2: Agent is tracked — check its actual health/configured state
+                // Step 2a: Agent is tracked — check its actual health/configured state
                 _agentHealth = await _clientContext.GetAgentHealth(AgentHandle, HealthDetailLevel.Basic);
             }
+            else if (AgentHandle.Contains(':'))
+            {
+                // Step 2b: Cross-owner agent — not in this user's tracked list, but may
+                // exist server-side. GetAgentHealth goes directly to the grain.
+                try
+                {
+                    _agentHealth = await _clientContext.GetAgentHealth(AgentHandle, HealthDetailLevel.Basic);
+                }
+                catch (Exception ex)
+                {
+                    // Agent grain doesn't exist or is unreachable — will be handled below
+                    Logger.LogDebug(ex, "Cross-owner agent health check failed for {AgentHandle}", AgentHandle);
+                }
+            }
 
-            // Step 3: Create only if not configured (covers both "not tracked" and "tracked but not configured")
+            // Step 3: Create only if not configured AND this client owns the agent.
+            // Cross-owner agents (e.g., "system:automation_agent-123") must be created
+            // server-side — the ChatDock should never attempt to configure them.
+            var isCrossOwner = AgentHandle.Contains(':');
+
             if (_agentHealth is null || !_agentHealth.IsConfigured)
             {
+                if (isCrossOwner)
+                {
+                    // Cross-owner agent not configured — cannot create from here
+                    _error = $"Shared agent '{AgentHandle}' is not configured. It must be created server-side.";
+                    return;
+                }
+
                 var args = new Dictionary<string, string>
                 {
                     { "userId", UserHandle }
@@ -625,8 +650,12 @@
 
     private void OnAgentMessageReceived(object? sender, AgentMessage message)
     {
-        // Resolve the expected agent handle using centralized handle utilities
-        var expectedFromHandle = HandleUtilities.EnsurePrefix(AgentHandle, HandleUtilities.BuildPrefix(UserHandle));
+        // Resolve the expected agent handle using centralized handle utilities.
+        // For cross-owner agents (handle contains ':'), use as-is since the agent's
+        // FromHandle will be its full handle (e.g., "system:automation_agent-123").
+        var expectedFromHandle = AgentHandle.Contains(':')
+            ? AgentHandle
+            : HandleUtilities.EnsurePrefix(AgentHandle, HandleUtilities.BuildPrefix(UserHandle));
 
         if (message.FromHandle == expectedFromHandle && message.ToHandle == UserHandle)
         {
