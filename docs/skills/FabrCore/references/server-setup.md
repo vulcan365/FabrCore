@@ -68,12 +68,63 @@ builder.AddFabrCoreServer(new FabrCoreServerOptions
 
 The `IAgentManagementProvider` interface defines registration, query, and maintenance methods for agent/client lifecycle tracking. See [api-reference.md](api-reference.md#iagentmanagementprovider) for the full interface.
 
+### Custom ACL Provider
+
+By default, FabrCore evaluates agent access control rules in memory using `InMemoryAclProvider`, which loads rules from the `FabrCore:Acl` configuration section. To use a custom storage backend (database, distributed cache, etc.), implement `IAclProvider` and register it via options:
+
+```csharp
+builder.AddFabrCoreServer(new FabrCoreServerOptions
+{
+    AdditionalAssemblies = [typeof(MyAgent).Assembly]
+}.UseAclProvider<SqlAclProvider>());
+```
+
+Both providers can be chained:
+
+```csharp
+builder.AddFabrCoreServer(new FabrCoreServerOptions
+{
+    AdditionalAssemblies = [typeof(MyAgent).Assembly]
+}
+.UseAgentManagementProvider<SqlAgentManagementProvider>()
+.UseAclProvider<SqlAclProvider>());
+```
+
+See [acl-shared-agents.md](acl-shared-agents.md) for the full `IAclProvider` interface and configuration details.
+
+### System Agents
+
+System agents are shared agents owned by `"system"` that multiple users can access. Create them server-side using `IFabrCoreAgentService`:
+
+```csharp
+// In a hosted service, controller, or startup code
+await agentService.ConfigureSystemAgentAsync(new AgentConfiguration
+{
+    Handle = "automation_agent-123",
+    AgentType = "automation-agent",
+    SystemPrompt = "You are an automation assistant."
+});
+```
+
+This creates an agent with grain key `"system:automation_agent-123"`. Any user can message it (ACL permitting) using the full handle:
+
+```csharp
+var response = await clientContext.SendAndReceiveMessage(new AgentMessage
+{
+    ToHandle = "system:automation_agent-123",
+    Message = "Run the report"
+});
+```
+
+See [acl-shared-agents.md](acl-shared-agents.md) for complete shared agent patterns.
+
 ## What AddFabrCoreServer Configures
 
 1. **Orleans Silo** — Clustering, persistence, reminders, streaming based on `OrleansClusterOptions`
-2. **Services** — `FabrCoreChatClientService`, `FabrCoreToolRegistry`, `FabrCoreRegistry`, `FabrCoreAgentService`, `IAgentManagementProvider`
+2. **Services** — `FabrCoreChatClientService`, `FabrCoreToolRegistry`, `FabrCoreRegistry`, `FabrCoreAgentService`, `IAgentManagementProvider`, `IAclProvider`
 3. **Background Services** — `AgentRegistryCleanupService`, `FileCleanupService`
 4. **Assembly Discovery** — Scans `AdditionalAssemblies` for agent, plugin, and tool types
+5. **ACL Configuration** — Loads `Acl` section from `fabrcore.json`, registers `IAclProvider`
 
 ## What UseFabrCoreServer Configures
 

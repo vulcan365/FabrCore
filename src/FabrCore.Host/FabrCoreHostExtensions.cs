@@ -1,4 +1,5 @@
 using FabrCore.Core;
+using FabrCore.Core.Acl;
 using FabrCore.Host.Configuration;
 using FabrCore.Host.Services;
 using FabrCore.Sdk;
@@ -28,6 +29,12 @@ namespace FabrCore.Host
         internal Type AgentManagementProviderType { get; private set; } = typeof(OrleansAgentManagementProvider);
 
         /// <summary>
+        /// The implementation type for <see cref="IAclProvider"/>.
+        /// Defaults to <see cref="InMemoryAclProvider"/> which loads rules from configuration.
+        /// </summary>
+        internal Type AclProviderType { get; private set; } = typeof(InMemoryAclProvider);
+
+        /// <summary>
         /// Configures a custom <see cref="IAgentManagementProvider"/> implementation for
         /// agent/client registration, tracking, and lifecycle management.
         /// </summary>
@@ -35,6 +42,17 @@ namespace FabrCore.Host
         public FabrCoreServerOptions UseAgentManagementProvider<T>() where T : class, IAgentManagementProvider
         {
             AgentManagementProviderType = typeof(T);
+            return this;
+        }
+
+        /// <summary>
+        /// Configures a custom <see cref="IAclProvider"/> implementation for
+        /// agent access control. The default is <see cref="InMemoryAclProvider"/>.
+        /// </summary>
+        /// <typeparam name="T">The provider implementation type.</typeparam>
+        public FabrCoreServerOptions UseAclProvider<T>() where T : class, IAclProvider
+        {
+            AclProviderType = typeof(T);
             return this;
         }
     }
@@ -164,6 +182,11 @@ namespace FabrCore.Host
                 // Configure Agent Management Provider (pluggable — default is Orleans grain-backed)
                 builder.Services.AddSingleton(typeof(IAgentManagementProvider), options.AgentManagementProviderType);
                 logger.LogDebug("AgentManagementProvider added: {ProviderType}", options.AgentManagementProviderType.Name);
+
+                // Configure ACL Provider (pluggable — default is in-memory from config)
+                builder.Services.Configure<FabrCoreAclOptions>(builder.Configuration.GetSection("FabrCore:Acl"));
+                builder.Services.AddSingleton(typeof(IAclProvider), options.AclProviderType);
+                logger.LogDebug("AclProvider added: {ProviderType}", options.AclProviderType.Name);
 
                 // Configure Agent Service
                 builder.Services.AddSingleton<IFabrCoreAgentService, FabrCoreAgentService>();

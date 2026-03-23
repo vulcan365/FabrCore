@@ -9,7 +9,11 @@ builder.AddFabrCoreServer(new FabrCoreServerOptions
     AdditionalAssemblies = [
         // typeof(MyAgent).Assembly
     ]
-});
+}
+// Optional: custom providers (defaults work for most cases)
+// .UseAgentManagementProvider<SqlAgentManagementProvider>()
+// .UseAclProvider<SqlAclProvider>()
+);
 
 // ── Advanced path: full Orleans control ──
 // Use AddFabrCoreServices + UseOrleans + AddFabrCore instead of AddFabrCoreServer.

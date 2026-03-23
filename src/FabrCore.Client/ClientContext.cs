@@ -386,6 +386,14 @@ namespace FabrCore.Client
                    _trackedAgentsCache.Contains($"{_handlePrefix}{agentHandle}");
         }
 
+        /// <inheritdoc/>
+        public async Task<List<AgentInfo>> GetAccessibleSharedAgents()
+        {
+            ThrowIfDisposed();
+
+            return await _clientGrain.GetAccessibleSharedAgents();
+        }
+
         /// <summary>
         /// IClientGrainObserver implementation - called by Orleans when a message is received.
         /// </summary>

@@ -15,5 +15,16 @@
       "Alias": "openai-key",
       "Value": "sk-your-openai-api-key-here"
     }
-  ]
+  ],
+  "Acl": {
+    "Rules": [
+      {
+        "OwnerPattern": "system",
+        "AgentPattern": "*",
+        "CallerPattern": "*",
+        "Permission": "Message,Read"
+      }
+    ],
+    "Groups": {}
+  }
 }

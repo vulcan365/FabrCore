@@ -42,6 +42,11 @@ namespace FabrCore.Host.Services
             return await proxy.ConfigureAgent(config, config.ForceReconfigure, detailLevel);
         }
 
+        public Task<AgentHealthStatus> ConfigureSystemAgentAsync(AgentConfiguration config, HealthDetailLevel detailLevel = HealthDetailLevel.Basic)
+        {
+            return ConfigureAgentAsync("system", config, detailLevel);
+        }
+
         public async Task<List<AgentHealthStatus>> ConfigureAgentsAsync(string userId, List<AgentConfiguration> configs, HealthDetailLevel detailLevel = HealthDetailLevel.Basic)
         {
             var results = new List<AgentHealthStatus>();

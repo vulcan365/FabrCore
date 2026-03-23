@@ -88,5 +88,12 @@ namespace FabrCore.Client
         /// <returns>True if the agent is tracked, false otherwise.</returns>
         /// <exception cref="ObjectDisposedException">Thrown if the context has been disposed.</exception>
         Task<bool> IsAgentTracked(string handle);
+
+        /// <summary>
+        /// Gets shared agents that this client has permission to access (via ACL).
+        /// Returns agents owned by other owners where the caller has at least Message permission.
+        /// </summary>
+        /// <exception cref="ObjectDisposedException">Thrown if the context has been disposed.</exception>
+        Task<List<AgentInfo>> GetAccessibleSharedAgents();
     }
 }

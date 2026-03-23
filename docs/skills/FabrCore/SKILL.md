@@ -463,7 +463,52 @@ MCP tools are automatically resolved and available to the agent's LLM alongside 
 
 See `references/mcp-integration.md` for details.
 
-### 10. Health Monitoring
+### 10. Access Control & Shared Agents
+
+FabrCore supports shared agents — agents owned by one entity (e.g., `"system"`) accessible to multiple users via ACL rules.
+
+**Create a system agent** (server-side):
+```csharp
+await agentService.ConfigureSystemAgentAsync(new AgentConfiguration
+{
+    Handle = "automation_agent-123",
+    AgentType = "automation-agent",
+    SystemPrompt = "You are an automation assistant."
+});
+```
+
+**Message a system agent** (from any user's ClientContext):
+```csharp
+var response = await context.SendAndReceiveMessage(new AgentMessage
+{
+    ToHandle = "system:automation_agent-123",
+    Message = "Run the report"
+});
+```
+
+**Configure ACL rules** in `fabrcore.json`:
+```json
+{
+  "Acl": {
+    "Rules": [
+      { "OwnerPattern": "system", "AgentPattern": "*", "CallerPattern": "*", "Permission": "Message,Read" }
+    ],
+    "Groups": { "admins": ["alice", "bob"] }
+  }
+}
+```
+
+**Custom ACL provider** — swap the default in-memory provider:
+```csharp
+builder.AddFabrCoreServer(new FabrCoreServerOptions
+{
+    AdditionalAssemblies = [typeof(MyAgent).Assembly]
+}.UseAclProvider<SqlAclProvider>());
+```
+
+See `references/acl-shared-agents.md` for the full ACL system, pattern matching, groups, permissions, and custom provider implementation.
+
+### 11. Health Monitoring
 
 Override `GetHealth()` in your agent:
 ```csharp
