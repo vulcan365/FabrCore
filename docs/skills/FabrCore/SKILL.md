@@ -33,6 +33,7 @@ Build distributed AI agent systems with FabrCore — an open-source .NET 10 fram
 | Orleans | Distributed runtime | Clustering, Persistence | fabrcore-orleans |
 | Client | Blazor UI + Orleans client | `AddFabrCoreClient()` | fabrcore-client |
 | ChatDock | Floating icon → chat overlay | `<ChatDock>` component | fabrcore-chatdock |
+| Handle Access | Owner/agent handle parsing | `IFabrCoreAgentHost.GetOwnerHandle()`, `GetAgentHandle()` | fabrcore-agent |
 | Messaging | Agent communication | `AgentMessage`, `HandleUtilities` | fabrcore-messaging |
 | MCP | External tool protocol | `McpServerConfig` | fabrcore-mcp |
 | Configuration | Agent definition | `AgentConfiguration` | fabrcore-server |

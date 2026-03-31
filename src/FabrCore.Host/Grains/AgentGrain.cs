@@ -719,6 +719,18 @@ namespace FabrCore.Host.Grains
             return handle;
         }
 
+        public (string Owner, string AgentHandle) GetParsedHandle()
+            => HandleUtilities.ParseHandle(this.GetPrimaryKeyString());
+
+        public string GetOwnerHandle()
+            => HandleUtilities.ParseHandle(this.GetPrimaryKeyString()).Owner;
+
+        public string GetAgentHandle()
+            => HandleUtilities.ParseHandle(this.GetPrimaryKeyString()).Alias;
+
+        public bool HasOwner()
+            => this.GetPrimaryKeyString().Contains(':');
+
         public async Task<AgentHealthStatus> GetAgentHealth(string? handle = null, HealthDetailLevel detailLevel = HealthDetailLevel.Detailed)
         {
             var targetHandle = handle ?? this.GetPrimaryKeyString();

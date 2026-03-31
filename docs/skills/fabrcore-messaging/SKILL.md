@@ -122,6 +122,18 @@ HandleUtilities.ParseHandle("user1:assistant");           // ("user1", "assistan
 HandleUtilities.ParseHandle("assistant");                 // ("", "assistant")
 ```
 
+### IFabrCoreAgentHost Handle Methods
+
+Agents and plugins can access their own handle components directly:
+
+```csharp
+var full   = fabrcoreAgentHost.GetHandle();        // "user1:assistant"
+var owner  = fabrcoreAgentHost.GetOwnerHandle();   // "user1"
+var agent  = fabrcoreAgentHost.GetAgentHandle();   // "assistant"
+var (o, a) = fabrcoreAgentHost.GetParsedHandle();  // ("user1", "assistant")
+if (fabrcoreAgentHost.HasOwner()) { /* ... */ }
+```
+
 ### Routing Rules
 
 - **Bare alias** (no colon, e.g., `"assistant"`) — auto-prefixed with caller's owner
