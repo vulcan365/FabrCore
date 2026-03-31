@@ -18,6 +18,13 @@ namespace FabrCore.Host.Services
         Task<AgentHealthStatus> ConfigureAgentAsync(string userId, AgentConfiguration config, HealthDetailLevel detailLevel = HealthDetailLevel.Basic);
 
         /// <summary>
+        /// Configures a system-owned agent (owner = "system"). Use this for shared agents
+        /// that multiple users can access via ACL rules.
+        /// The agent grain key will be <c>"system:{config.Handle}"</c>.
+        /// </summary>
+        Task<AgentHealthStatus> ConfigureSystemAgentAsync(AgentConfiguration config, HealthDetailLevel detailLevel = HealthDetailLevel.Basic);
+
+        /// <summary>
         /// Configures multiple agents in batch. Failed configs get an Unhealthy entry.
         /// </summary>
         Task<List<AgentHealthStatus>> ConfigureAgentsAsync(string userId, List<AgentConfiguration> configs, HealthDetailLevel detailLevel = HealthDetailLevel.Basic);
@@ -53,7 +60,21 @@ namespace FabrCore.Host.Services
         /// Sends a fire-and-forget event via the agent's event stream.
         /// When streamName is provided, publishes to that named stream instead.
         /// </summary>
-        Task SendEventAsync(string userId, string handle, AgentMessage message, string? streamName = null);
+        Task SendEventAsync(string userId, string handle, EventMessage message, string? streamName = null);
+
+        // ── Agent Management (registration / lifecycle) ──
+
+        /// <summary>Registers an agent as active in the management provider.</summary>
+        Task RegisterAgentAsync(string key, string agentType, string handle);
+
+        /// <summary>Marks an agent as deactivated in the management provider.</summary>
+        Task DeactivateAgentAsync(string key, string reason);
+
+        /// <summary>Registers a client as active in the management provider.</summary>
+        Task RegisterClientAsync(string clientId);
+
+        /// <summary>Marks a client as deactivated in the management provider.</summary>
+        Task DeactivateClientAsync(string clientId, string reason);
 
         // ── Diagnostics ──
 

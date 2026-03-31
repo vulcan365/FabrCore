@@ -39,8 +39,8 @@ namespace FabrCore.Host.Streaming
         /// <summary>
         /// Gets the AgentEvent stream for a specific handle from a cluster client.
         /// </summary>
-        public static IAsyncStream<AgentMessage> GetAgentEventStream(this IClusterClient client, string handle)
-            => client.GetStream<AgentMessage>(StreamName.ForAgentEvent(handle));
+        public static IAsyncStream<EventMessage> GetAgentEventStream(this IClusterClient client, string handle)
+            => client.GetStream<EventMessage>(StreamName.ForAgentEvent(handle));
 
         /// <summary>
         /// Gets the AgentChat stream for a specific handle from a grain.
@@ -51,7 +51,7 @@ namespace FabrCore.Host.Streaming
         /// <summary>
         /// Gets the AgentEvent stream for a specific handle from a grain.
         /// </summary>
-        public static IAsyncStream<AgentMessage> GetAgentEventStream(this Grain grain, string handle)
-            => grain.GetStream<AgentMessage>(StreamName.ForAgentEvent(handle));
+        public static IAsyncStream<EventMessage> GetAgentEventStream(this Grain grain, string handle)
+            => grain.GetStream<EventMessage>(StreamName.ForAgentEvent(handle));
     }
 }

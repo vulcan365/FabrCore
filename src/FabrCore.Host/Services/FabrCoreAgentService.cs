@@ -16,15 +16,18 @@ namespace FabrCore.Host.Services
     {
         private readonly IClusterClient _clusterClient;
         private readonly IFabrCoreRegistry _registry;
+        private readonly IAgentManagementProvider _managementProvider;
         private readonly ILogger<FabrCoreAgentService> _logger;
 
         public FabrCoreAgentService(
             IClusterClient clusterClient,
             IFabrCoreRegistry registry,
+            IAgentManagementProvider managementProvider,
             ILogger<FabrCoreAgentService> logger)
         {
             _clusterClient = clusterClient;
             _registry = registry;
+            _managementProvider = managementProvider;
             _logger = logger;
         }
 
@@ -37,6 +40,11 @@ namespace FabrCore.Host.Services
             var key = BuildAgentKey(userId, config.Handle!);
             var proxy = _clusterClient.GetGrain<IAgentGrain>(key);
             return await proxy.ConfigureAgent(config, config.ForceReconfigure, detailLevel);
+        }
+
+        public Task<AgentHealthStatus> ConfigureSystemAgentAsync(AgentConfiguration config, HealthDetailLevel detailLevel = HealthDetailLevel.Basic)
+        {
+            return ConfigureAgentAsync("system", config, detailLevel);
         }
 
         public async Task<List<AgentHealthStatus>> ConfigureAgentsAsync(string userId, List<AgentConfiguration> configs, HealthDetailLevel detailLevel = HealthDetailLevel.Basic)
@@ -119,7 +127,7 @@ namespace FabrCore.Host.Services
             return await proxy.GetHealth(detailLevel);
         }
 
-        public async Task SendEventAsync(string userId, string handle, AgentMessage message, string? streamName = null)
+        public async Task SendEventAsync(string userId, string handle, EventMessage message, string? streamName = null)
         {
             if (streamName != null)
             {
@@ -136,43 +144,43 @@ namespace FabrCore.Host.Services
             }
         }
 
+        // ── Agent Management (registration / lifecycle) ──
+
+        public Task RegisterAgentAsync(string key, string agentType, string handle)
+            => _managementProvider.RegisterAgentAsync(key, agentType, handle);
+
+        public Task DeactivateAgentAsync(string key, string reason)
+            => _managementProvider.DeactivateAgentAsync(key, reason);
+
+        public Task RegisterClientAsync(string clientId)
+            => _managementProvider.RegisterClientAsync(clientId);
+
+        public Task DeactivateClientAsync(string clientId, string reason)
+            => _managementProvider.DeactivateClientAsync(clientId, reason);
+
         // ── Diagnostics ──
 
         public async Task<List<AgentInfo>> GetAgentsAsync(string? status = null)
         {
-            var registry = _clusterClient.GetGrain<IAgentManagementGrain>(0);
-
             return status?.ToLower() switch
             {
-                "active" => await registry.GetActiveAgents(),
-                "deactivated" => await registry.GetDeactivatedAgents(),
-                _ => await registry.GetAllAgents()
+                "active" => await _managementProvider.GetByStatusAsync(AgentStatus.Active),
+                "deactivated" => await _managementProvider.GetByStatusAsync(AgentStatus.Deactivated),
+                _ => await _managementProvider.GetAllAsync()
             };
         }
 
-        public async Task<AgentInfo?> GetAgentInfoAsync(string key)
-        {
-            var registry = _clusterClient.GetGrain<IAgentManagementGrain>(0);
-            return await registry.GetAgentInfo(key);
-        }
+        public Task<AgentInfo?> GetAgentInfoAsync(string key)
+            => _managementProvider.GetByKeyAsync(key);
 
-        public async Task<Dictionary<string, int>> GetAgentStatisticsAsync()
-        {
-            var registry = _clusterClient.GetGrain<IAgentManagementGrain>(0);
-            return await registry.GetAgentStatistics();
-        }
+        public Task<Dictionary<string, int>> GetAgentStatisticsAsync()
+            => _managementProvider.GetStatisticsAsync();
 
-        public async Task<int> PurgeDeactivatedAgentsAsync(TimeSpan olderThan)
-        {
-            var registry = _clusterClient.GetGrain<IAgentManagementGrain>(0);
-            return await registry.PurgeDeactivatedAgentsOlderThan(olderThan);
-        }
+        public Task<int> PurgeDeactivatedAgentsAsync(TimeSpan olderThan)
+            => _managementProvider.PurgeDeactivatedAsync(olderThan);
 
-        public async Task<List<AgentInfo>> GetAgentsByEntityTypeAsync(EntityType entityType)
-        {
-            var registry = _clusterClient.GetGrain<IAgentManagementGrain>(0);
-            return await registry.GetAllByEntityType(entityType);
-        }
+        public Task<List<AgentInfo>> GetAgentsByEntityTypeAsync(EntityType entityType)
+            => _managementProvider.GetByEntityTypeAsync(entityType);
 
         // ── Discovery ──
 

@@ -35,6 +35,6 @@ namespace FabrCore.Client
         /// <summary>
         /// Handles incoming event notifications.
         /// </summary>
-        Task OnEventAsync(AgentMessage message);
+        Task OnEventAsync(EventMessage message);
     }
 }

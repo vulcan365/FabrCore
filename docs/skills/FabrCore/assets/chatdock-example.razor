@@ -7,7 +7,7 @@
 
 <p>Chat with your AI agent using the dock in the bottom-right corner.</p>
 
-<!-- Basic ChatDock usage -->
+<!-- Basic ChatDock usage — floating icon that expands into a chat panel overlay -->
 <ChatDock UserHandle="user1"
           AgentHandle="assistant"
           AgentType="my-agent"
@@ -15,7 +15,7 @@
           Title="Assistant"
           Position="ChatDockPosition.BottomRight" />
 
-<!-- ChatDock with plugins and tools -->
+<!-- ChatDock with plugins, tools, and lazy loading -->
 <!--
 <ChatDock UserHandle="user1"
           AgentHandle="research-agent"
@@ -29,5 +29,47 @@
               ["web-browser:Headless"] = "true",
               ["filesystem:RootPath"] = "/data"
           })"
+          LazyLoad="true"
           Position="ChatDockPosition.BottomLeft" />
+-->
+
+<!-- ChatDock scoped to a specific context (e.g., a document, project, or meeting) -->
+<!--
+@page "/projects/{ProjectId:guid}"
+
+<ChatDock UserHandle="user1"
+          AgentHandle="@($"project-{ProjectId}")"
+          AgentType="project-agent"
+          SystemPrompt="@($"You are a project assistant. Current project ID: {ProjectId}. Use this ID automatically.")"
+          Title="Project Assistant"
+          Plugins="@(new List<string> { "project-management" })"
+          OnMessageSent="OnChatSent"
+          Position="ChatDockPosition.Right" />
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+
+    private async Task OnChatSent(string message)
+    {
+        // Refresh page data after user sends a message (agent may have changed data)
+        await LoadProjectDataAsync();
+        StateHasChanged();
+    }
+}
+-->
+
+<!-- Multiple ChatDocks with ChatDockManager (only one open at a time) -->
+<!--
+<CascadingValue Value="chatDockManager">
+    <ChatDock UserHandle="user1" AgentHandle="coding-agent"
+              AgentType="code-reviewer" Title="Code Review"
+              Position="ChatDockPosition.BottomRight" />
+    <ChatDock UserHandle="user1" AgentHandle="writing-agent"
+              AgentType="writer" Title="Writing Help"
+              Position="ChatDockPosition.BottomLeft" />
+</CascadingValue>
+
+@code {
+    [Inject] ChatDockManager chatDockManager { get; set; } = default!;
+}
 -->

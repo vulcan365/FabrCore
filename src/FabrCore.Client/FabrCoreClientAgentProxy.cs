@@ -153,7 +153,7 @@ namespace FabrCore.Client
         /// <summary>
         /// Override to handle incoming events.
         /// </summary>
-        public virtual Task OnEventAsync(AgentMessage message) => Task.CompletedTask;
+        public virtual Task OnEventAsync(EventMessage message) => Task.CompletedTask;
 
         /// <summary>
         /// Sends a message and waits for a response.
@@ -176,7 +176,7 @@ namespace FabrCore.Client
         /// Events are delivered to the agent's OnEvent handler, not OnMessage.
         /// If streamName is provided, publishes to the named event stream.
         /// </summary>
-        protected Task SendEventAsync(AgentMessage message, string? streamName = null)
+        protected Task SendEventAsync(EventMessage message, string? streamName = null)
         {
             return ClientContext.SendEvent(message, streamName);
         }
@@ -266,13 +266,6 @@ namespace FabrCore.Client
 
             try
             {
-                if (message.MessageType == "event")
-                {
-                    logger.LogDebug("Calling OnEventAsync - Handle: {Handle}, From: {FromHandle}", Handle, message.FromHandle);
-                    await OnEventAsync(message);
-                    logger.LogDebug("OnEventAsync completed - Handle: {Handle}, From: {FromHandle}", Handle, message.FromHandle);
-                }
-                else
                 {
                     logger.LogDebug("Calling OnMessageAsync - Handle: {Handle}, From: {FromHandle}", Handle, message.FromHandle);
                     var response = await OnMessageAsync(message);

@@ -55,7 +55,7 @@ namespace FabrCore.Client
         /// <param name="request">The event message to send.</param>
         /// <param name="streamName">Optional named event stream to publish to.</param>
         /// <exception cref="ObjectDisposedException">Thrown if the context has been disposed.</exception>
-        Task SendEvent(AgentMessage request, string? streamName = null);
+        Task SendEvent(EventMessage request, string? streamName = null);
 
         /// <summary>
         /// Creates a new agent with the specified configuration.
@@ -88,5 +88,12 @@ namespace FabrCore.Client
         /// <returns>True if the agent is tracked, false otherwise.</returns>
         /// <exception cref="ObjectDisposedException">Thrown if the context has been disposed.</exception>
         Task<bool> IsAgentTracked(string handle);
+
+        /// <summary>
+        /// Gets shared agents that this client has permission to access (via ACL).
+        /// Returns agents owned by other owners where the caller has at least Message permission.
+        /// </summary>
+        /// <exception cref="ObjectDisposedException">Thrown if the context has been disposed.</exception>
+        Task<List<AgentInfo>> GetAccessibleSharedAgents();
     }
 }
