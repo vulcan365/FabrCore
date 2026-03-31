@@ -15,7 +15,7 @@ namespace FabrCore.Core.Interfaces
         /// If streamName is provided, publishes to the named event stream instead of the agent's default stream.
         /// </summary>
         [AlwaysInterleave]
-        Task SendEvent(AgentMessage request, string? streamName = null);
+        Task SendEvent(EventMessage request, string? streamName = null);
 
         /// <summary>
         /// Creates a new agent with the specified configuration.
@@ -42,5 +42,12 @@ namespace FabrCore.Core.Interfaces
         /// <returns>True if the agent is tracked, false otherwise.</returns>
         [AlwaysInterleave]
         Task<bool> IsAgentTracked(string handle);
+
+        /// <summary>
+        /// Gets shared agents that this client has permission to access (via ACL).
+        /// Returns agents owned by other owners where the caller has at least Message permission.
+        /// </summary>
+        [AlwaysInterleave]
+        Task<List<AgentInfo>> GetAccessibleSharedAgents();
     }
 }

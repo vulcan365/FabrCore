@@ -74,6 +74,11 @@
     box-shadow: var(--chat-dock-shadow);
     transition: all 0.3s ease;
     flex-shrink: 0;
+    /* A1: Reset button defaults when using <button> element */
+    border: none;
+    padding: 0;
+    font: inherit;
+    line-height: 1;
 }
 
 .chat-dock-icon:hover {
@@ -189,6 +194,14 @@
     display: flex;
     flex-direction: column;
     z-index: 10001;
+    transition: width 0.3s ease, height 0.3s ease, max-height 0.3s ease,
+                top 0.3s ease, left 0.3s ease, right 0.3s ease, bottom 0.3s ease,
+                border-radius 0.3s ease;
+}
+
+/* B1: Hidden state — panel always rendered in DOM, toggled via class */
+.chat-dock-panel.chat-dock-panel-hidden {
+    display: none;
 }
 
 /* Bottom Right (default) */
@@ -254,6 +267,51 @@
     to { opacity: 1; transform: translateX(0); }
 }
 
+/* ============================================================
+   Panel Sizes — Small (default), Medium, Large
+   Small uses the base --chat-dock-width (380px).
+   Medium is ~2x width. Large is proportional wide, full height.
+   ============================================================ */
+
+/* Medium — Bottom positions */
+.chat-dock-panel.chat-dock-size-md.chat-dock-bottom-right,
+.chat-dock-panel.chat-dock-size-md.chat-dock-bottom-left {
+    width: 700px;
+    height: 85vh;
+    max-height: calc(100vh - 60px);
+}
+
+/* Medium — Side positions */
+.chat-dock-panel.chat-dock-size-md.chat-dock-right,
+.chat-dock-panel.chat-dock-size-md.chat-dock-left {
+    width: 700px;
+}
+
+/* Large — Bottom positions: wide and full height */
+.chat-dock-panel.chat-dock-size-lg.chat-dock-bottom-right {
+    width: calc(100vw - 32px);
+    height: calc(100vh - 32px);
+    max-height: calc(100vh - 32px);
+    bottom: var(--chat-dock-spacing-4);
+    right: var(--chat-dock-spacing-4);
+    border-radius: var(--chat-dock-radius-lg);
+}
+
+.chat-dock-panel.chat-dock-size-lg.chat-dock-bottom-left {
+    width: calc(100vw - 32px);
+    height: calc(100vh - 32px);
+    max-height: calc(100vh - 32px);
+    bottom: var(--chat-dock-spacing-4);
+    left: var(--chat-dock-spacing-4);
+    border-radius: var(--chat-dock-radius-lg);
+}
+
+/* Large — Side positions: full width, full height */
+.chat-dock-panel.chat-dock-size-lg.chat-dock-right,
+.chat-dock-panel.chat-dock-size-lg.chat-dock-left {
+    width: calc(100vw - 32px);
+}
+
 /* Header */
 .chat-dock-header {
     display: flex;
@@ -264,6 +322,15 @@
     color: var(--chat-dock-text-on-dark);
     flex-shrink: 0;
     border-radius: var(--chat-dock-radius-lg) var(--chat-dock-radius-lg) 0 0;
+}
+
+/* A2: Position-specific header border-radius to match panel corners */
+.chat-dock-right .chat-dock-header {
+    border-radius: var(--chat-dock-radius-lg) 0 0 0;
+}
+
+.chat-dock-left .chat-dock-header {
+    border-radius: 0 var(--chat-dock-radius-lg) 0 0;
 }
 
 .chat-dock-title {
@@ -331,7 +398,7 @@
     width: 60px;
     height: 60px;
     border-radius: 50%;
-    background: rgba(59, 130, 246, 0.1);
+    background: color-mix(in srgb, var(--chat-dock-primary) 10%, transparent);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -393,6 +460,7 @@
 
 .chat-dock-message-content {
     background: var(--chat-dock-bg);
+    color: var(--chat-dock-text);
     border-radius: var(--chat-dock-radius-md);
     padding: var(--chat-dock-spacing-2) var(--chat-dock-spacing-3);
 }
@@ -476,7 +544,7 @@
     50% { opacity: 1; }
 }
 
-/* Error Message */
+/* Error Message (standalone banner with close button) */
 .chat-dock-error {
     padding: var(--chat-dock-spacing-2) var(--chat-dock-spacing-3);
     background: rgba(239, 68, 68, 0.1);
@@ -487,6 +555,12 @@
     justify-content: space-between;
 }
 
+/* B4: Inline error displayed inside a message bubble */
+.chat-dock-message-error {
+    color: var(--chat-dock-danger);
+    font-size: 0.8rem;
+}
+
 /* Input Area */
 .chat-dock-input-container {
     flex-shrink: 0;
@@ -494,6 +568,15 @@
     background: var(--chat-dock-surface);
     border-top: 1px solid var(--chat-dock-border);
     border-radius: 0 0 var(--chat-dock-radius-lg) var(--chat-dock-radius-lg);
+}
+
+/* A2: Position-specific input container border-radius to match panel corners */
+.chat-dock-right .chat-dock-input-container {
+    border-radius: 0 0 0 var(--chat-dock-radius-lg);
+}
+
+.chat-dock-left .chat-dock-input-container {
+    border-radius: 0 0 var(--chat-dock-radius-lg) 0;
 }
 
 .chat-dock-input-wrapper {
@@ -610,7 +693,13 @@
     background: var(--chat-dock-text-muted);
 }
 
-/* Responsive */
+/* Cross-browser scrollbar (Firefox + standard) */
+.chat-dock-messages {
+    scrollbar-width: thin;
+    scrollbar-color: var(--chat-dock-border-strong) transparent;
+}
+
+/* Responsive — mobile: all sizes collapse to full-width */
 @media (max-width: 480px) {
     .chat-dock-panel {
         width: 100% !important;
@@ -628,5 +717,52 @@
     .chat-dock-panel.chat-dock-right,
     .chat-dock-panel.chat-dock-left {
         border-radius: 0;
+    }
+}
+
+/* Responsive — medium panels cap at viewport on smaller screens */
+@media (max-width: 768px) {
+    .chat-dock-panel.chat-dock-size-md {
+        width: calc(100vw - 32px) !important;
+    }
+}
+
+/* ============================================================
+   A3: Dark Mode Support
+   Override CSS custom properties for dark color scheme
+   ============================================================ */
+@media (prefers-color-scheme: dark) {
+    :root {
+        /* Primary colors */
+        --chat-dock-primary: #60a5fa;
+        --chat-dock-primary-hover: #2563eb;
+        --chat-dock-secondary: #9ca3af;
+        --chat-dock-text-on-dark: #ffffff;
+
+        /* Surface colors */
+        --chat-dock-surface: #1f2937;
+        --chat-dock-bg: #374151;
+
+        /* Status colors */
+        --chat-dock-success: #34d399;
+        --chat-dock-success-light: #065f46;
+        --chat-dock-success-dark: #a7f3d0;
+        --chat-dock-warning: #fbbf24;
+        --chat-dock-warning-light: #78350f;
+        --chat-dock-warning-dark: #fde68a;
+        --chat-dock-danger: #f87171;
+
+        /* Text colors */
+        --chat-dock-text: #f3f4f6;
+        --chat-dock-text-muted: #9ca3af;
+
+        /* Border colors */
+        --chat-dock-border: #374151;
+        --chat-dock-border-strong: #4b5563;
+
+        /* Shadows */
+        --chat-dock-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+        --chat-dock-shadow-lg: 0 -4px 24px rgba(0, 0, 0, 0.4), 0 4px 24px rgba(0, 0, 0, 0.3);
+        --chat-dock-focus-ring: 0 0 0 3px rgba(96, 165, 250, 0.3);
     }
 }

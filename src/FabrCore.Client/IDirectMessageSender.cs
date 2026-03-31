@@ -17,12 +17,11 @@ namespace FabrCore.Client
         Task SendMessageAsync(AgentMessage message);
 
         /// <summary>
-        /// Sends an event directly to an agent's event stream.
-        /// The message will be automatically marked as OneWay (fire-and-forget).
+        /// Sends an event directly to an agent's event stream (fire-and-forget).
         /// If streamName is provided, publishes to the named event stream instead of the agent's default stream.
         /// </summary>
-        /// <param name="message">The message to send. ToHandle must be set to the target agent's handle (unless using streamName).</param>
+        /// <param name="message">The event to send. Channel must be set to the target agent's handle (unless using streamName).</param>
         /// <param name="streamName">Optional named event stream to publish to.</param>
-        Task SendEventAsync(AgentMessage message, string? streamName = null);
+        Task SendEventAsync(EventMessage message, string? streamName = null);
     }
 }

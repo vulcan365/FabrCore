@@ -37,6 +37,10 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<EmbeddedResource Include="SqlScripts\*.sql" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<ProjectReference Include="..\FabrCore.Core\FabrCore.Core.csproj" />
 		<ProjectReference Include="..\FabrCore.Sdk\FabrCore.Sdk.csproj" />
 	</ItemGroup>

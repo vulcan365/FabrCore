@@ -8,7 +8,7 @@ namespace FabrCore.Core.Streaming
         /// <summary>
         /// The name of the Orleans stream provider.
         /// </summary>
-        public const string ProviderName = "StreamProvider";
+        public const string ProviderName = "fabrcoreStreams";
 
         /// <summary>
         /// Stream namespace for agent-to-agent chat messages.

@@ -62,5 +62,21 @@ namespace FabrCore.Core
         /// Builds an owner prefix string from an owner/client ID.
         /// </summary>
         public static string BuildPrefix(string ownerId) => $"{ownerId}:";
+
+        /// <summary>
+        /// Parses a handle into its owner and alias components.
+        /// Returns an empty owner if the handle has no colon (bare alias).
+        /// </summary>
+        public static (string Owner, string Alias) ParseHandle(string handle)
+        {
+            if (string.IsNullOrEmpty(handle))
+                throw new ArgumentException("Handle cannot be null or empty", nameof(handle));
+
+            var colonIndex = handle.IndexOf(':');
+            if (colonIndex < 0)
+                return (string.Empty, handle);
+
+            return (handle[..colonIndex], handle[(colonIndex + 1)..]);
+        }
     }
 }

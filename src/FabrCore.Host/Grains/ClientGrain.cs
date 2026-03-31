@@ -1,7 +1,10 @@
 ﻿using Azure.Data.Tables;
 using FabrCore.Core;
+using FabrCore.Core.Acl;
 using FabrCore.Core.Interfaces;
 using FabrCore.Core.Streaming;
+using FabrCore.Host.Configuration;
+using FabrCore.Host.Services;
 using FabrCore.Host.Streaming;
 using FabrCore.Sdk;
 using Microsoft.Extensions.Logging;
@@ -72,6 +75,8 @@ namespace FabrCore.Host.Grains
 
         private readonly IClusterClient clusterClient;
         private readonly ILogger<ClientGrain> logger;
+        private readonly IFabrCoreAgentService _agentService;
+        private readonly IAclProvider _aclProvider;
         private readonly ObserverManager<IClientGrainObserver> observerManager;
         private readonly Queue<AgentMessage> pendingMessages = new();
         private readonly Dictionary<string, TrackedAgentInfo> _trackedAgents = new();
@@ -80,11 +85,15 @@ namespace FabrCore.Host.Grains
         public ClientGrain(
             IClusterClient clusterClient,
             ILoggerFactory loggerFactory,
-            [PersistentState("clientState", "fabrcoreStorage")]
+            IFabrCoreAgentService agentService,
+            IAclProvider aclProvider,
+            [PersistentState("clientState", FabrCoreOrleansConstants.StorageProviderName)]
             IPersistentState<ClientGrainState> state)
         {
             this.clusterClient = clusterClient;
             this.logger = loggerFactory.CreateLogger<ClientGrain>();
+            _agentService = agentService;
+            _aclProvider = aclProvider;
             this.observerManager = new ObserverManager<IClientGrainObserver>(TimeSpan.FromMinutes(5), logger);
             _state = state;
         }
@@ -183,6 +192,9 @@ namespace FabrCore.Host.Grains
             // Resolve the ToHandle - if it contains ':', use as-is; otherwise prefix with client ID
             var resolvedToHandle = ResolveAgentHandle(request.ToHandle, clientId);
 
+            // ACL check for cross-owner access
+            await AuthorizeOrThrow(resolvedToHandle, AclPermission.Message);
+
             // Defense-in-depth: ensure FromHandle is set so the agent can route responses back
             if (string.IsNullOrEmpty(request.FromHandle))
                 request.FromHandle = clientId;
@@ -242,6 +254,9 @@ namespace FabrCore.Host.Grains
             // Resolve the ToHandle - if it contains ':', use as-is; otherwise prefix with client ID
             var resolvedToHandle = ResolveAgentHandle(request.ToHandle, clientId);
 
+            // ACL check for cross-owner access
+            await AuthorizeOrThrow(resolvedToHandle, AclPermission.Message);
+
             // Defense-in-depth: ensure FromHandle is set so the agent can route responses back
             if (string.IsNullOrEmpty(request.FromHandle))
                 request.FromHandle = clientId;
@@ -281,13 +296,14 @@ namespace FabrCore.Host.Grains
             }
         }
 
-        public async Task SendEvent(AgentMessage request, string? streamName = null)
+        public async Task SendEvent(EventMessage request, string? streamName = null)
         {
             using var activity = ActivitySource.StartActivity("SendEvent", ActivityKind.Producer);
             var clientId = this.GetPrimaryKeyString();
 
             activity?.SetTag("client.id", clientId);
-            activity?.SetTag("message.from", request.FromHandle);
+            activity?.SetTag("event.source", request.Source);
+            activity?.SetTag("event.type", request.Type);
             activity?.SetTag("stream.provider", StreamConstants.ProviderName);
             activity?.SetTag("stream.namespace", StreamConstants.AgentEventNamespace);
 
@@ -298,8 +314,8 @@ namespace FabrCore.Host.Grains
                     // Named event stream — publish directly, no handle normalization
                     activity?.SetTag("stream.name", streamName);
 
-                    logger.LogTrace("Client sending event to named stream - From: {FromHandle}, StreamName: {StreamName}",
-                        request.FromHandle, streamName);
+                    logger.LogTrace("Client sending event to named stream - Source: {Source}, StreamName: {StreamName}",
+                        request.Source, streamName);
 
                     var stream = clusterClient.GetAgentEventStream(streamName);
                     await stream.OnNextAsync(request);
@@ -308,19 +324,23 @@ namespace FabrCore.Host.Grains
                 }
                 else
                 {
-                    // Default agent event stream — resolve handle
-                    var resolvedToHandle = ResolveAgentHandle(request.ToHandle, clientId);
-                    request.ToHandle = resolvedToHandle;
+                    // Default agent event stream — resolve handle from Channel
+                    var resolvedChannel = ResolveAgentHandle(request.Channel, clientId);
 
-                    activity?.SetTag("message.to", resolvedToHandle);
+                    // ACL check for cross-owner event delivery
+                    await AuthorizeOrThrow(resolvedChannel, AclPermission.Message);
 
-                    logger.LogTrace("Client sending event to stream - From: {FromHandle}, To: {ToHandle}",
-                        request.FromHandle, resolvedToHandle);
+                    request.Channel = resolvedChannel;
 
-                    var stream = clusterClient.GetAgentEventStream(resolvedToHandle);
+                    activity?.SetTag("event.channel", resolvedChannel);
+
+                    logger.LogTrace("Client sending event to stream - Source: {Source}, Channel: {Channel}",
+                        request.Source, resolvedChannel);
+
+                    var stream = clusterClient.GetAgentEventStream(resolvedChannel);
                     await stream.OnNextAsync(request);
 
-                    logger.LogTrace("Client event sent to stream for: {ToHandle}", resolvedToHandle);
+                    logger.LogTrace("Client event sent to stream for: {Channel}", resolvedChannel);
                 }
 
                 activity?.SetStatus(ActivityStatusCode.Ok);
@@ -390,7 +410,7 @@ namespace FabrCore.Host.Grains
                 }
 
                 await CreateStreams();
-                await RegisterWithManagementGrain();
+                await RegisterWithManagement();
 
                 logger.LogInformation("Client activated and streams created: {ClientId}", clientId);
 
@@ -443,8 +463,7 @@ namespace FabrCore.Host.Grains
 
             try
             {
-                var registry = GrainFactory.GetGrain<IAgentManagementGrain>(0);
-                await registry.DeactivateClient(clientId, reason.Description);
+                await _agentService.DeactivateClientAsync(clientId, reason.Description);
             }
             catch (Exception ex)
             {
@@ -454,19 +473,18 @@ namespace FabrCore.Host.Grains
             await base.OnDeactivateAsync(reason, cancellationToken);
         }
 
-        private async Task RegisterWithManagementGrain()
+        private async Task RegisterWithManagement()
         {
             var clientId = this.GetPrimaryKeyString();
             try
             {
-                var registry = GrainFactory.GetGrain<IAgentManagementGrain>(0);
-                await registry.RegisterClient(clientId);
+                await _agentService.RegisterClientAsync(clientId);
 
-                logger.LogInformation("Registered client with management grain: {ClientId}", clientId);
+                logger.LogInformation("Registered client with management provider: {ClientId}", clientId);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to register client with management grain: {ClientId}", clientId);
+                logger.LogError(ex, "Failed to register client with management provider: {ClientId}", clientId);
             }
         }
 
@@ -590,6 +608,9 @@ namespace FabrCore.Host.Grains
                 agentConfiguration.Handle ?? throw new ArgumentException("Handle is required"),
                 handlePrefix);
 
+            // ACL check for cross-owner agent creation
+            await AuthorizeOrThrow(agentConfiguration.Handle, AclPermission.Configure);
+
             activity?.SetTag("client.id", clientId);
             activity?.SetTag("agent.handle", agentConfiguration.Handle);
             activity?.SetTag("agent.type", agentConfiguration.AgentType);
@@ -696,6 +717,53 @@ namespace FabrCore.Host.Grains
 
             // O(1) dictionary lookup
             return Task.FromResult(_trackedAgents.ContainsKey(fullHandle));
+        }
+
+        public async Task<List<AgentInfo>> GetAccessibleSharedAgents()
+        {
+            var clientId = this.GetPrimaryKeyString();
+            var allAgents = await _agentService.GetAgentsAsync("active");
+            var accessible = new List<AgentInfo>();
+
+            foreach (var agent in allAgents)
+            {
+                var (owner, alias) = HandleUtilities.ParseHandle(agent.Key);
+
+                // Skip own agents (already tracked via GetTrackedAgents)
+                if (string.Equals(clientId, owner, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var result = await _aclProvider.EvaluateAsync(clientId, owner, alias, AclPermission.Message);
+                if (result.Allowed)
+                    accessible.Add(agent);
+            }
+
+            return accessible;
+        }
+
+        /// <summary>
+        /// Checks ACL permissions for cross-owner access. Own-agent access is always allowed.
+        /// </summary>
+        private async Task AuthorizeOrThrow(string targetHandle, AclPermission required)
+        {
+            var clientId = this.GetPrimaryKeyString();
+            var (targetOwner, agentAlias) = HandleUtilities.ParseHandle(targetHandle);
+
+            // Own agents always allowed — short-circuit with zero overhead
+            if (string.Equals(clientId, targetOwner, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            var result = await _aclProvider.EvaluateAsync(clientId, targetOwner, agentAlias, required);
+            if (!result.Allowed)
+            {
+                logger.LogWarning("ACL denied: '{ClientId}' cannot {Permission} on '{TargetHandle}'. {Reason}",
+                    clientId, required, targetHandle, result.DeniedReason);
+                throw new UnauthorizedAccessException(
+                    $"Access denied: '{clientId}' cannot {required} on '{targetHandle}'. {result.DeniedReason}");
+            }
+
+            logger.LogDebug("ACL granted: '{ClientId}' can {Permission} on '{TargetHandle}'",
+                clientId, required, targetHandle);
         }
 
         /// <summary>
