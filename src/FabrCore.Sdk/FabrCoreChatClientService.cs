@@ -154,7 +154,18 @@ namespace FabrCore.Sdk
 
                 _logger.LogInformation("{Provider} chat client created successfully for model: {Model}", modelConfig.Provider, modelConfig.Model);
                 activity?.SetStatus(ActivityStatusCode.Ok);
-                return openAiClient.GetChatClient(modelConfig.Model).AsIChatClient();
+
+                IChatClient chatClient = openAiClient.GetChatClient(modelConfig.Model).AsIChatClient();
+
+                // Wrap with provider sanitizer for non-OpenAI providers that reject
+                // the "name" field on non-user messages (e.g., Grok, Gemini)
+                if (NeedsAuthorNameSanitization(modelConfig.Provider))
+                {
+                    chatClient = new ProviderSanitizingChatClient(chatClient);
+                    _logger.LogDebug("Added AuthorName sanitization for provider: {Provider}", modelConfig.Provider);
+                }
+
+                return chatClient;
             }
             catch (Exception ex)
             {
@@ -334,6 +345,22 @@ namespace FabrCore.Sdk
 
         /// <inheritdoc />
         public Task<ModelConfiguration> GetModelConfigurationAsync(string name) => GetModelConfiguration(name);
+
+        /// <summary>
+        /// Returns true for providers that reject the "name" field on non-user messages.
+        /// OpenAI and Azure OpenAI accept "name" on all roles; other OpenAI-compatible
+        /// providers (Grok, Gemini, OpenRouter) may not.
+        /// </summary>
+        private static bool NeedsAuthorNameSanitization(string provider)
+        {
+            return provider.ToLowerInvariant() switch
+            {
+                "grok" => true,
+                "gemini" => true,
+                "openrouter" => true,
+                _ => false
+            };
+        }
 
 #pragma warning disable OPENAI001 // OpenAIClientOptions.Endpoint is experimental
         private OpenAIClient CreateOpenAICompatibleClient(string apiKey, string endpointUri, int timeoutSeconds)

@@ -41,6 +41,13 @@ namespace FabrCore.Host.Configuration
         /// Gets the effective storage connection string (StorageConnectionString if set, otherwise ConnectionString).
         /// </summary>
         public string? EffectiveStorageConnectionString => StorageConnectionString ?? ConnectionString;
+
+        /// <summary>
+        /// When true and ClusteringMode is SqlServer, automatically creates
+        /// required Orleans tables on startup if they do not exist.
+        /// Defaults to true.
+        /// </summary>
+        public bool AutoInitDatabase { get; set; } = true;
     }
 
     /// <summary>
