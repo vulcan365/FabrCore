@@ -102,9 +102,28 @@ var allSettings = config.GetPluginSettings("my-plugin");
 ### Plugin DI Access
 
 The `IServiceProvider` in `InitializeAsync` includes:
-- `IFabrCoreAgentHost` — For inter-agent communication
+- `IFabrCoreAgentHost` — For inter-agent communication and handle access
 - All services registered in the server's DI container
 - `ILogger<T>` — For structured logging
+
+### Plugin Handle Access
+
+Plugins can access the hosting agent's handle components via `IFabrCoreAgentHost`:
+
+```csharp
+public Task InitializeAsync(AgentConfiguration config, IServiceProvider serviceProvider)
+{
+    _agentHost = serviceProvider.GetRequiredService<IFabrCoreAgentHost>();
+
+    var fullHandle = _agentHost.GetHandle();        // "user123:assistant"
+    var owner      = _agentHost.GetOwnerHandle();   // "user123"
+    var agent      = _agentHost.GetAgentHandle();   // "assistant"
+    var (o, a)     = _agentHost.GetParsedHandle();  // ("user123", "assistant")
+    var hasOwner   = _agentHost.HasOwner();         // true
+
+    return Task.CompletedTask;
+}
+```
 
 ### Plugin with Inter-Agent Communication
 

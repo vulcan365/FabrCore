@@ -127,5 +127,27 @@ namespace FabrCore.Sdk
         /// <param name="changes">State entries to add or update.</param>
         /// <param name="deletes">Keys to remove from state.</param>
         Task MergeCustomStateAsync(Dictionary<string, JsonElement> changes, IEnumerable<string> deletes);
+
+        /// <summary>
+        /// Parses this agent's handle into its owner and agent handle components.
+        /// Owner will be empty if the handle has no owner prefix.
+        /// </summary>
+        (string Owner, string AgentHandle) GetParsedHandle() => HandleUtilities.ParseHandle(GetHandle());
+
+        /// <summary>
+        /// Gets the owner portion of this agent's handle.
+        /// Returns empty string if the handle has no owner.
+        /// </summary>
+        string GetOwnerHandle() => HandleUtilities.ParseHandle(GetHandle()).Owner;
+
+        /// <summary>
+        /// Gets the agent handle portion (without the owner prefix).
+        /// </summary>
+        string GetAgentHandle() => HandleUtilities.ParseHandle(GetHandle()).Alias;
+
+        /// <summary>
+        /// Returns true if this agent's handle includes an owner.
+        /// </summary>
+        bool HasOwner() => !string.IsNullOrEmpty(HandleUtilities.ParseHandle(GetHandle()).Owner);
     }
 }

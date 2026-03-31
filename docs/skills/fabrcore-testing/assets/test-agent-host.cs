@@ -34,6 +34,18 @@ public class TestFabrCoreAgentHost : IFabrCoreAgentHost
 
     public string GetHandle() => _handle;
 
+    public (string Owner, string AgentHandle) GetParsedHandle()
+        => HandleUtilities.ParseHandle(_handle);
+
+    public string GetOwnerHandle()
+        => HandleUtilities.ParseHandle(_handle).Owner;
+
+    public string GetAgentHandle()
+        => HandleUtilities.ParseHandle(_handle).Alias;
+
+    public bool HasOwner()
+        => _handle.Contains(':');
+
     public Task<AgentMessage> SendAndReceiveMessage(AgentMessage request)
     {
         SentMessages.Add(request);

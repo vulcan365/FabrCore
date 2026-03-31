@@ -185,6 +185,27 @@ public class MyAgentIntegrationTests
 | `InitializeAndMessage(agent, text)` | Convenience: init + send in one call |
 | `AgentHost` | Access the `TestFabrCoreAgentHost` for assertions |
 
+## TestFabrCoreAgentHost Handle Methods
+
+`TestFabrCoreAgentHost` implements all handle methods from `IFabrCoreAgentHost`:
+
+```csharp
+// Default handle is "test-agent" (no owner)
+var harness = new FabrCoreTestHarness();
+var host = harness.AgentHost;
+host.GetHandle();        // "test-agent"
+host.GetOwnerHandle();   // ""
+host.GetAgentHandle();   // "test-agent"
+host.HasOwner();         // false
+
+// With owner-scoped handle
+var harness2 = new FabrCoreTestHarness(new() { Handle = "user1:my-agent" });
+var host2 = harness2.AgentHost;
+host2.GetOwnerHandle();  // "user1"
+host2.GetAgentHandle();  // "my-agent"
+host2.HasOwner();        // true
+```
+
 ## TestFabrCoreAgentHost Assertions
 
 ```csharp
