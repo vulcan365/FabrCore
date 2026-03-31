@@ -69,6 +69,40 @@ protected readonly IFabrCoreChatClientService chatClientService;
 
 **CRITICAL:** The field is `fabrcoreAgentHost` (with "fabrcore" prefix), NOT `fabrAgentHost`.
 
+## Handle Methods
+
+`IFabrCoreAgentHost` provides methods to access the agent's handle and its components:
+
+```csharp
+// Full handle (e.g., "user123:assistant")
+var full = fabrcoreAgentHost.GetHandle();
+
+// Owner portion (e.g., "user123") — empty string if no owner
+var owner = fabrcoreAgentHost.GetOwnerHandle();
+
+// Agent handle portion without owner prefix (e.g., "assistant")
+var agent = fabrcoreAgentHost.GetAgentHandle();
+
+// Decompose into both parts at once
+var (owner, agentHandle) = fabrcoreAgentHost.GetParsedHandle();
+
+// Check if this agent has an owner
+if (fabrcoreAgentHost.HasOwner())
+{
+    // Owner-scoped logic
+}
+```
+
+| Method | Returns | Example (`"user123:assistant"`) | Example (`"assistant"`) |
+|--------|---------|-------------------------------|------------------------|
+| `GetHandle()` | Full handle string | `"user123:assistant"` | `"assistant"` |
+| `GetOwnerHandle()` | Owner portion | `"user123"` | `""` |
+| `GetAgentHandle()` | Agent handle portion | `"assistant"` | `"assistant"` |
+| `GetParsedHandle()` | `(Owner, AgentHandle)` tuple | `("user123", "assistant")` | `("", "assistant")` |
+| `HasOwner()` | `bool` | `true` | `false` |
+
+These methods are available in both agents and plugins (via `IFabrCoreAgentHost`).
+
 ## Lifecycle Methods
 
 | Method | When It Runs | Purpose |
