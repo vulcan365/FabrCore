@@ -250,6 +250,13 @@ namespace FabrCore.Host
                 logger.LogInformation("Orleans clustering mode: {ClusteringMode}", orleansOptions.ClusteringMode);
                 activity?.SetTag("orleans.clustering_mode", orleansOptions.ClusteringMode.ToString());
 
+                // Auto-initialize Orleans SQL Server tables if needed
+                if (orleansOptions.ClusteringMode == ClusteringMode.SqlServer && orleansOptions.AutoInitDatabase)
+                {
+                    logger.LogInformation("Auto-initializing Orleans SQL Server database tables");
+                    Services.OrleansSqlServerInitializer.EnsureOrleansTablesExist(orleansOptions, logger);
+                }
+
                 builder.UseOrleans(siloBuilder =>
                 {
                     using var orleansActivity = ActivitySource.StartActivity("ConfigureOrleans", ActivityKind.Internal);
