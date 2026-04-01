@@ -316,6 +316,40 @@ namespace FabrCore.Client
         }
 
         /// <inheritdoc/>
+        public async Task<AgentHealthStatus> ResetAgent(string handle)
+        {
+            ThrowIfDisposed();
+
+            using var activity = ActivitySource.StartActivity("ResetAgent", ActivityKind.Internal);
+            activity?.SetTag("client.handle", _handle);
+            activity?.SetTag("agent.handle", handle);
+
+            _logger.LogInformation("Resetting agent - ClientHandle: {ClientHandle}, AgentHandle: {AgentHandle}",
+                _handle, handle);
+
+            try
+            {
+                await RefreshObserverIfNeeded();
+
+                var health = await _clientGrain.ResetAgent(handle);
+
+                _logger.LogInformation("Agent reset successfully - AgentHandle: {AgentHandle}, State: {State}",
+                    handle, health.State);
+                activity?.SetStatus(ActivityStatusCode.Ok);
+
+                return health;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to reset agent - AgentHandle: {AgentHandle}", handle);
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                activity?.AddException(ex);
+                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "reset_agent_failed"));
+                throw;
+            }
+        }
+
+        /// <inheritdoc/>
         public async Task<AgentHealthStatus> GetAgentHealth(string handle, HealthDetailLevel detailLevel = HealthDetailLevel.Basic)
         {
             ThrowIfDisposed();

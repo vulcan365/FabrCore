@@ -20,12 +20,21 @@ namespace FabrCore.Sdk
         internal Task<AgentMessage> InternalOnMessage(AgentMessage message);
         internal Task InternalOnEvent(EventMessage message);
         internal Task<ProxyHealthStatus> InternalGetHealth(HealthDetailLevel detailLevel);
+        internal Task InternalReset();
         internal Task InternalFlushStateAsync();
         internal Task InternalDisposeAsync();
         internal bool InternalHasPendingStateChanges { get; }
 
         Task OnInitialize();
         Task<AgentMessage> OnMessage(AgentMessage message);
+
+        /// <summary>
+        /// Called before the agent is reset and reconfigured.
+        /// Override to perform custom cleanup (e.g., closing connections, clearing caches).
+        /// The base implementation does nothing. After this returns, all state is cleared
+        /// and ConfigureAgent is called with ForceReconfigure=true.
+        /// </summary>
+        Task OnReset();
 
         /// <summary>
         /// Called when an event message is received on the AgentEvent stream.
@@ -687,6 +696,15 @@ namespace FabrCore.Sdk
         public abstract Task OnInitialize();
 
         /// <summary>
+        /// Called before the agent is reset. Override for custom cleanup.
+        /// Default implementation is a no-op.
+        /// </summary>
+        public virtual Task OnReset()
+        {
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
         /// Called when an event message is received on the AgentEvent stream.
         /// Override this method to handle events separately from chat messages.
         /// Default implementation logs and ignores the event.
@@ -733,6 +751,29 @@ namespace FabrCore.Sdk
             }
 
             return null;
+        }
+
+        async Task IFabrCoreAgentProxy.InternalReset()
+        {
+            using var activity = ActivitySource.StartActivity("InternalReset", ActivityKind.Internal);
+            activity?.SetTag("agent.type", config.AgentType);
+            activity?.SetTag("agent.handle", config.Handle);
+
+            logger.LogInformation("Resetting agent proxy - Handle: {Handle}", config.Handle);
+
+            try
+            {
+                await OnReset();
+                activity?.SetStatus(ActivityStatusCode.Ok);
+                logger.LogInformation("Agent proxy reset completed - Handle: {Handle}", config.Handle);
+            }
+            catch (Exception ex)
+            {
+                // Log but don't rethrow — reset should proceed even if custom cleanup fails
+                logger.LogError(ex, "Error during agent proxy reset - Handle: {Handle}", config.Handle);
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                activity?.AddException(ex);
+            }
         }
 
         async Task IFabrCoreAgentProxy.InternalInitialize()
