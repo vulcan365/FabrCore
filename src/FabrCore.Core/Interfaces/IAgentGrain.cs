@@ -25,6 +25,15 @@ namespace FabrCore.Core.Interfaces
         Task<AgentMessage> OnMessage(AgentMessage request);
 
         /// <summary>
+        /// Resets the agent: calls OnReset on the proxy for custom cleanup,
+        /// clears all message threads and custom state, then reconfigures
+        /// the agent with ForceReconfigure=true.
+        /// </summary>
+        /// <returns>Health status after reset.</returns>
+        [AlwaysInterleave]
+        Task<AgentHealthStatus> ResetAgent();
+
+        /// <summary>
         /// Gets the current health status of the agent.
         /// This method is marked as interleaving to allow health checks
         /// while message processing is active.

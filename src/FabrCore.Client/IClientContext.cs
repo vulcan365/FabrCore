@@ -66,6 +66,15 @@ namespace FabrCore.Client
         Task<AgentHealthStatus> CreateAgent(AgentConfiguration agentConfiguration);
 
         /// <summary>
+        /// Resets an agent, clearing all server-side state (chat history, custom state)
+        /// and re-initializing the agent from scratch.
+        /// </summary>
+        /// <param name="handle">The agent handle (without client prefix).</param>
+        /// <returns>Health status after reset.</returns>
+        /// <exception cref="ObjectDisposedException">Thrown if the context has been disposed.</exception>
+        Task<AgentHealthStatus> ResetAgent(string handle);
+
+        /// <summary>
         /// Gets the health status of an agent.
         /// </summary>
         /// <param name="handle">The agent handle (without client prefix).</param>

@@ -674,6 +674,45 @@ namespace FabrCore.Host.Grains
             }
         }
 
+        public async Task<AgentHealthStatus> ResetAgent(string handle)
+        {
+            using var activity = ActivitySource.StartActivity("ResetAgent", ActivityKind.Internal);
+            var clientId = this.GetPrimaryKeyString();
+
+            var resolvedHandle = ResolveAgentHandle(handle, clientId);
+
+            // ACL check — reset requires Configure permission
+            await AuthorizeOrThrow(resolvedHandle, AclPermission.Configure);
+
+            activity?.SetTag("client.id", clientId);
+            activity?.SetTag("agent.handle", resolvedHandle);
+
+            logger.LogInformation("Client resetting agent - ClientId: {ClientId}, Handle: {Handle}",
+                clientId, resolvedHandle);
+
+            try
+            {
+                var agentGrain = clusterClient.GetGrain<IAgentGrain>(resolvedHandle);
+                var health = await agentGrain.ResetAgent();
+
+                logger.LogInformation("Agent reset completed - ClientId: {ClientId}, Handle: {Handle}, State: {State}",
+                    clientId, resolvedHandle, health.State);
+                activity?.SetStatus(ActivityStatusCode.Ok);
+
+                return health;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to reset agent - ClientId: {ClientId}, Handle: {Handle}",
+                    clientId, resolvedHandle);
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                activity?.AddException(ex);
+                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "reset_failed"),
+                    new KeyValuePair<string, object?>("client.id", clientId));
+                throw;
+            }
+        }
+
         /// <summary>
         /// For tracked agents: try GetHealth first, only ConfigureAgent if NotConfigured or on error.
         /// </summary>

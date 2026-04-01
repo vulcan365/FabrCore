@@ -595,6 +595,73 @@
     box-shadow: var(--chat-dock-focus-ring);
 }
 
+.chat-dock-input-wrapper.chat-dock-drag-over {
+    border-color: var(--chat-dock-primary);
+    background: rgba(59, 130, 246, 0.08);
+    box-shadow: var(--chat-dock-focus-ring);
+}
+
+.chat-dock-upload-indicator {
+    display: flex;
+    align-items: center;
+    gap: var(--chat-dock-spacing-1);
+    padding: var(--chat-dock-spacing-1) var(--chat-dock-spacing-2);
+    font-size: 0.75rem;
+    color: var(--chat-dock-primary);
+    animation: chat-dock-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes chat-dock-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.chat-dock-file-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--chat-dock-spacing-1);
+    padding: var(--chat-dock-spacing-1) 0;
+}
+
+.chat-dock-file-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--chat-dock-spacing-1);
+    padding: 2px var(--chat-dock-spacing-2);
+    background: var(--chat-dock-bg);
+    border: 1px solid var(--chat-dock-border);
+    border-radius: var(--chat-dock-radius-sm);
+    font-size: 0.75rem;
+    color: var(--chat-dock-text);
+    max-width: 200px;
+}
+
+.chat-dock-file-chip-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.chat-dock-file-chip-remove {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border: none;
+    background: transparent;
+    color: var(--chat-dock-text-muted);
+    cursor: pointer;
+    padding: 0;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.chat-dock-file-chip-remove:hover {
+    background: var(--chat-dock-danger);
+    color: var(--chat-dock-text-on-dark);
+}
+
 .chat-dock-input {
     flex: 1;
     border: none;
