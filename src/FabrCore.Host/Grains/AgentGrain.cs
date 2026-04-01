@@ -456,6 +456,58 @@ namespace FabrCore.Host.Grains
                 changes.Count, deletes.Count());
         }
 
+        public async Task<AgentHealthStatus> ResetAgent()
+        {
+            using var activity = ActivitySource.StartActivity("ResetAgent", ActivityKind.Internal);
+            var handle = this.GetPrimaryKeyString();
+            activity?.SetTag("agent.handle", handle);
+
+            logger.LogInformation("Resetting agent: {Handle}", handle);
+
+            if (agentConfiguration == null)
+            {
+                logger.LogWarning("Cannot reset agent that is not configured: {Handle}", handle);
+                return await GetHealth();
+            }
+
+            try
+            {
+                // Step 1: Call OnReset on proxy for custom cleanup (before state is cleared)
+                if (fabrcoreAgentProxy != null)
+                {
+                    await fabrcoreAgentProxy.InternalReset();
+                }
+
+                // Step 2: Clear all message threads and custom state
+                _messageState.State.MessageThreads.Clear();
+                _messageState.State.CustomState.Clear();
+
+                // Step 3: Persist the cleared state
+                _messageState.State.LastModified = DateTime.UtcNow;
+                await _messageState.WriteStateAsync();
+
+                logger.LogInformation("Cleared all state for agent: {Handle}", handle);
+
+                // Step 4: Reconfigure — creates a NEW proxy instance and calls OnInitialize
+                var health = await ConfigureAgent(agentConfiguration, forceReconfigure: true);
+
+                logger.LogInformation("Agent reset completed: {Handle}, State: {State}", handle, health.State);
+                activity?.SetStatus(ActivityStatusCode.Ok);
+
+                return health;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to reset agent: {Handle}", handle);
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                activity?.AddException(ex);
+                ErrorCounter.Add(1,
+                    new KeyValuePair<string, object?>("error.type", "reset_failed"),
+                    new KeyValuePair<string, object?>("agent.handle", handle));
+                throw;
+            }
+        }
+
         public async Task<AgentMessage> OnMessage(AgentMessage request)
         {
             using var activity = ActivitySource.StartActivity("OnMessage", ActivityKind.Server);

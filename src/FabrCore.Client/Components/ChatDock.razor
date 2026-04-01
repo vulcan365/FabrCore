@@ -7,6 +7,7 @@
 @inject IClientContextFactory ClientContextFactory
 @inject IJSRuntime JSRuntime
 @inject ILogger<ChatDock> Logger
+@inject IFabrCoreHostApiClient HostApiClient
 @implements IAsyncDisposable
 
 <button type="button"
@@ -39,6 +40,10 @@
                 </button>
                 <button class="chat-dock-btn" @onclick="ClearMessages" title="Clear chat history (agent memory retained)">
                     <i class="bi bi-trash"></i>
+                </button>
+                <button class="chat-dock-btn" @onclick="ResetAgent" title="Reset agent (clears all state and history)"
+                        disabled="@(!_isConnected || _isResetting)">
+                    <i class="bi bi-arrow-counterclockwise"></i>
                 </button>
                 <button class="chat-dock-btn" @onclick="ToggleDock" title="Minimize">
                     <i class="bi bi-dash-lg"></i>
@@ -126,7 +131,7 @@
         }
 
         <div class="chat-dock-input-container">
-            <div class="chat-dock-input-wrapper">
+            <div class="chat-dock-input-wrapper" @ref="_inputWrapperElement">
                 <textarea class="chat-dock-input"
                           @ref="_textareaElement"
                           value="@_currentMessage"
@@ -136,10 +141,32 @@
                           rows="1"></textarea>
                 <button class="chat-dock-send-btn"
                         @onclick="SendMessage"
-                        disabled="@(_isWaitingForResponse || string.IsNullOrWhiteSpace(_currentMessage) || !_isConnected)">
+                        disabled="@(_isWaitingForResponse || _isUploading || (string.IsNullOrWhiteSpace(_currentMessage) && _uploadedFiles.Count == 0) || !_isConnected)">
                     <i class="bi bi-send-fill"></i>
                 </button>
             </div>
+            @if (_isUploading)
+            {
+                <div class="chat-dock-upload-indicator">
+                    <i class="bi bi-cloud-arrow-up"></i> Uploading...
+                </div>
+            }
+            @if (_uploadedFiles.Count > 0)
+            {
+                <div class="chat-dock-file-chips">
+                    @foreach (var file in _uploadedFiles)
+                    {
+                        var fileId = file.FileId;
+                        <span class="chat-dock-file-chip" title="@file.FileName (@FormatFileSize(file.FileSize))">
+                            <i class="bi bi-paperclip"></i>
+                            <span class="chat-dock-file-chip-name">@TruncateFileName(file.FileName, 20)</span>
+                            <button class="chat-dock-file-chip-remove" @onclick="() => RemoveFile(fileId)" title="Remove">
+                                <i class="bi bi-x"></i>
+                            </button>
+                        </span>
+                    }
+                </div>
+            }
             <div class="chat-dock-status">
                 @if (_isConnected)
                 {
@@ -283,6 +310,7 @@
     private string? _error;
     private string? _thinkingMessage;
     private bool _isWaitingForResponse;
+    private bool _isResetting;
     private bool _isConnected;
     private bool _isConnecting;
     private bool _isExpanded;
@@ -293,6 +321,9 @@
     private ElementReference _messagesContainer;
     private ElementReference _panelElement;
     private ElementReference _textareaElement;
+    private ElementReference _inputWrapperElement;
+    private List<UploadedFile> _uploadedFiles = new();
+    private bool _isUploading;
     private CancellationTokenSource? _thinkingFadeCts;
     private AgentHealthStatus? _agentHealth;
     private readonly string _panelId = $"chat-dock-panel-{Guid.NewGuid():N}";
@@ -466,6 +497,7 @@
             {
                 var dotNetRef = DotNetObjectReference.Create(this);
                 await _jsModule.InvokeVoidAsync("registerKeyHandler", _textareaElement, dotNetRef);
+                await _jsModule.InvokeVoidAsync("registerDropHandler", _panelElement, _inputWrapperElement, dotNetRef);
             }
             catch (Exception ex)
             {
@@ -770,7 +802,7 @@
 
     private async Task SendMessage()
     {
-        if (string.IsNullOrWhiteSpace(_currentMessage) || _clientContext == null || !_isConnected)
+        if ((string.IsNullOrWhiteSpace(_currentMessage) && _uploadedFiles.Count == 0) || _clientContext == null || !_isConnected)
             return;
 
         var messageText = _currentMessage.Trim();
@@ -800,6 +832,12 @@
                 MessageType = "chat"
             };
 
+            if (_uploadedFiles.Count > 0)
+            {
+                request.Files.AddRange(_uploadedFiles.Select(f => f.FileId));
+                _uploadedFiles.Clear();
+            }
+
             await _clientContext.SendMessage(request);
 
             // Notify parent component
@@ -828,6 +866,39 @@
         _thinkingFadeCts?.Cancel();
         _error = null;
         StateHasChanged();
+    }
+
+    private async Task ResetAgent()
+    {
+        if (_clientContext == null || !_isConnected || _isResetting) return;
+
+        _isResetting = true;
+        _error = null;
+        StateHasChanged();
+
+        try
+        {
+            _agentHealth = await _clientContext.ResetAgent(AgentHandle);
+
+            // Clear local UI state after successful server reset
+            _messages.Clear();
+            _isWaitingForResponse = false;
+            _thinkingMessage = null;
+            _thinkingFadeCts?.Cancel();
+            _uploadedFiles.Clear();
+
+            Logger.LogInformation("Agent reset successfully: {AgentHandle}", AgentHandle);
+        }
+        catch (Exception ex)
+        {
+            _error = $"Failed to reset agent: {ex.Message}";
+            Logger.LogError(ex, "Failed to reset agent: {AgentHandle}", AgentHandle);
+        }
+        finally
+        {
+            _isResetting = false;
+            StateHasChanged();
+        }
     }
 
     private async Task RefreshHealthAsync()
@@ -890,6 +961,56 @@
         return tooltip;
     }
 
+    [JSInvokable]
+    public async Task OnFileDropped(string fileName, string base64Data, long fileSize)
+    {
+        _isUploading = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var bytes = Convert.FromBase64String(base64Data);
+            using var stream = new MemoryStream(bytes);
+            var fileId = await HostApiClient.UploadFileAsync(stream, fileName, ttlSeconds: 300);
+            _uploadedFiles.Add(new UploadedFile(fileId, fileName, fileSize));
+        }
+        catch (Exception ex)
+        {
+            _error = $"Failed to upload {fileName}: {ex.Message}";
+            Logger.LogWarning(ex, "Failed to upload file {FileName}", fileName);
+        }
+        finally
+        {
+            _isUploading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnFileError(string fileName, string errorMessage)
+    {
+        _error = $"Cannot attach {fileName}: {errorMessage}";
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void RemoveFile(string fileId)
+    {
+        _uploadedFiles.RemoveAll(f => f.FileId == fileId);
+    }
+
+    private static string FormatFileSize(long bytes)
+    {
+        if (bytes >= 1024 * 1024) return $"{bytes / (1024.0 * 1024.0):F1} MB";
+        if (bytes >= 1024) return $"{bytes / 1024.0:F1} KB";
+        return $"{bytes} B";
+    }
+
+    private static string TruncateFileName(string name, int maxLength)
+    {
+        if (name.Length <= maxLength) return name;
+        return string.Concat(name.AsSpan(0, maxLength - 3), "...");
+    }
+
     public async ValueTask DisposeAsync()
     {
         DockManager?.Unregister(DockId);
@@ -925,4 +1046,6 @@
         public bool IsFromUser { get; set; }
         public DateTime Timestamp { get; set; }
     }
+
+    private record UploadedFile(string FileId, string FileName, long FileSize);
 }

@@ -28,6 +28,15 @@ namespace FabrCore.Core.Interfaces
         Task<AgentHealthStatus> CreateAgent(AgentConfiguration agentConfiguration);
 
         /// <summary>
+        /// Resets an agent's state and reconfigures it.
+        /// Requires Configure permission for cross-owner agents.
+        /// </summary>
+        /// <param name="handle">The agent handle.</param>
+        /// <returns>Health status after reset.</returns>
+        [AlwaysInterleave]
+        Task<AgentHealthStatus> ResetAgent(string handle);
+
+        /// <summary>
         /// Gets the list of agents created by this client.
         /// </summary>
         /// <returns>List of tracked agents with handle and type.</returns>
