@@ -210,6 +210,25 @@ Any OpenAI-compatible endpoint can be used by setting `Provider: "OpenAI"` and a
 
 Agents reference models by name: `config.Models = "default"`.
 
+### Embeddings Model
+
+The `IEmbeddings` service (auto-registered by `AddFabrCoreServer()`) looks up a model named `"embeddings"` in `fabrcore.json`. Add this entry to enable embedding generation for agents and the `/fabrcoreapi/embeddings` API:
+
+```json
+{
+  "ModelConfigurations": [
+    {
+      "Name": "embeddings",
+      "Provider": "OpenAI",
+      "Model": "text-embedding-3-small",
+      "ApiKeyAlias": "openai"
+    }
+  ]
+}
+```
+
+Supported providers for embeddings: `OpenAI`, `Azure`, `OpenRouter`, `Gemini`. Grok does not support embeddings.
+
 ## System Agents
 
 System agents are shared agents owned by `"system"` that multiple users can access. Create them server-side using `IFabrCoreAgentService`:
@@ -243,42 +262,272 @@ The agent grain key becomes `"system:{config.Handle}"`. Any user can message it 
 
 ## REST API Endpoints
 
-Base: `/fabrcoreapi/`
+Base path: `/fabrcoreapi/`. All agent-scoped endpoints require the `x-user` header to identify the caller.
 
-### Agent Operations
+---
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/Agent/create` | POST | Create/configure agents (batch) |
-| `/Agent/health/{userId}/{handle}` | GET | Get agent health |
-| `/Agent/chat/{userId}/{handle}` | POST | Send chat message |
-| `/Agent/event/{userId}/{handle}` | POST | Send event |
+### Agent API (`/fabrcoreapi/agent`)
 
-### Discovery
+Create agents, send messages, and check health. This is the primary API for programmatic agent interaction.
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/Discovery/agents` | GET | List registered agent types |
-| `/Discovery/plugins` | GET | List registered plugins |
-| `/Discovery/tools` | GET | List registered tools |
+#### POST `/agent/create` — Create/configure agents (batch)
 
-### Model Configuration
+Creates one or more agents for a user. If the agent already exists it is reconfigured.
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/ModelConfig/model/{name}` | POST | Get model configuration |
-| `/ModelConfig/apikey/{alias}` | GET | Get API key by alias |
+| Parameter | Source | Type | Required | Description |
+|-----------|--------|------|----------|-------------|
+| `x-user` | Header | string | Yes | User/owner ID |
+| body | Body | `List<AgentConfiguration>` | Yes | Agent configs to create |
+| `detailLevel` | Query | `HealthDetailLevel` | No | `Basic` (default), `Detailed`, or `Full` |
 
-### Diagnostics
+**Response** `200 OK`:
+```json
+{
+  "TotalRequested": 2,
+  "SuccessCount": 2,
+  "FailureCount": 0,
+  "Results": [ /* AgentHealthStatus[] */ ]
+}
+```
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/Diagnostics/stats` | GET | System statistics |
-| `/Diagnostics/agents` | GET | All registered agents |
+#### GET `/agent/health/{handle}` — Get agent health
+
+| Parameter | Source | Type | Required |
+|-----------|--------|------|----------|
+| `x-user` | Header | string | Yes |
+| `handle` | Route | string | Yes |
+| `detailLevel` | Query | `HealthDetailLevel` | No |
+
+**Response** `200 OK`: `AgentHealthStatus` (see models below).
+
+#### POST `/agent/chat/{handle}` — Send chat message
+
+Simple request/response chat. Blocks until the agent responds.
+
+| Parameter | Source | Type | Required |
+|-----------|--------|------|----------|
+| `x-user` | Header | string | Yes |
+| `handle` | Route | string | Yes |
+| body | Body | `string` | Yes |
+
+**Response** `200 OK`: `AgentMessage` — the agent's reply.
+
+#### POST `/agent/event/{handle}` — Send event (fire-and-forget)
+
+| Parameter | Source | Type | Required |
+|-----------|--------|------|----------|
+| `x-user` | Header | string | Yes |
+| `handle` | Route | string | Yes |
+| body | Body | `EventMessage` | Yes |
+| `streamName` | Query | string | No |
+
+**Response** `202 Accepted`.
+
+---
+
+### File API (`/fabrcoreapi/file`)
+
+Temporary file storage with TTL-based expiration. Agents and plugins use this to exchange files (images, documents, audio) via `AgentMessage.Files` which holds file IDs. A background `FileCleanupService` purges expired files automatically.
+
+#### POST `/file/upload` — Upload a file
+
+| Parameter | Source | Type | Required | Description |
+|-----------|--------|------|----------|-------------|
+| `file` | Form | `IFormFile` | Yes | The file to upload |
+| `ttlSeconds` | Query | int | No | Seconds until expiration (default from `FileStorageSettings.DefaultTtlSeconds`, typically 300) |
+
+**Response** `200 OK`: `string` — the file ID (use this in `AgentMessage.Files`).
+
+#### GET `/file/{fileId}` — Download a file
+
+Returns the file contents with the correct `Content-Type`. Supports HTTP range requests for large files.
+
+**Response** `200 OK`: file stream with content type.
+
+#### GET `/file/{fileId}/info` — Get file metadata
+
+**Response** `200 OK`:
+```json
+{
+  "FileId": "abc123",
+  "OriginalFileName": "report.pdf",
+  "ExpiresAt": "2026-04-02T12:00:00Z",
+  "FileSize": 102400,
+  "ContentType": "application/pdf"
+}
+```
+
+---
+
+### Discovery API (`/fabrcoreapi/discovery`)
+
+Introspect available agent types, plugins, and tools registered via `AdditionalAssemblies`.
+
+#### GET `/discovery` — List all registered types
+
+**Response** `200 OK`:
+```json
+{
+  "agents": ["my-agent", "router-agent"],
+  "plugins": ["weather", "github"],
+  "tools": ["calculate", "format-date"]
+}
+```
+
+---
+
+### Embeddings API (`/fabrcoreapi/embeddings`)
+
+Generate vector embeddings for text using the configured embedding model.
+
+#### POST `/embeddings` — Single text embedding
+
+**Request**:
+```json
+{ "Text": "The quick brown fox" }
+```
+
+**Response** `200 OK`:
+```json
+{ "Vector": [0.012, -0.034, ...], "Dimensions": 1536 }
+```
+
+#### POST `/embeddings/batch` — Batch embeddings (max 2048 items)
+
+**Request**:
+```json
+{
+  "Items": [
+    { "Id": "doc-1", "Text": "First document" },
+    { "Id": "doc-2", "Text": "Second document" }
+  ]
+}
+```
+
+**Response** `200 OK`:
+```json
+{
+  "Results": [
+    { "Id": "doc-1", "Vector": [...], "Dimensions": 1536 },
+    { "Id": "doc-2", "Vector": [...], "Dimensions": 1536 }
+  ]
+}
+```
+
+---
+
+### Model Config API (`/fabrcoreapi/modelconfig`)
+
+Read model configuration and API keys from `fabrcore.json`. Useful for clients that need to know available models.
+
+#### GET `/modelconfig/model/{name}` — Get model configuration
+
+**Response** `200 OK`:
+```json
+{
+  "Name": "default",
+  "Provider": "OpenAI",
+  "Uri": null,
+  "Model": "gpt-4o",
+  "ApiKeyAlias": "openai-key",
+  "TimeoutSeconds": 120,
+  "MaxOutputTokens": 16384,
+  "ContextWindowTokens": 128000
+}
+```
+
+#### GET `/modelconfig/apikey/{alias}` — Get API key value
+
+**Response** `200 OK`: `{ "Value": "sk-..." }`
+
+---
+
+### Diagnostics API (`/fabrcoreapi/diagnostics`)
+
+Monitor and manage agent lifecycle across the cluster.
+
+#### GET `/diagnostics/agents` — List all agents
+
+| Parameter | Source | Type | Required | Description |
+|-----------|--------|------|----------|-------------|
+| `status` | Query | string | No | Filter by status (e.g., `"Active"`, `"Deactivated"`) |
+
+**Response** `200 OK`:
+```json
+{
+  "Count": 5,
+  "Agents": [ /* AgentInfo[] */ ]
+}
+```
+
+#### GET `/diagnostics/agents/{key}` — Get specific agent info
+
+**Response** `200 OK`: `AgentInfo` or `404` if not found.
+
+#### GET `/diagnostics/agents/statistics` — Cluster statistics
+
+**Response** `200 OK`: `{ "Total": 10, "Active": 8, "Deactivated": 2 }`
+
+#### POST `/diagnostics/agents/purge` — Purge old deactivated agents
+
+| Parameter | Source | Type | Required | Description |
+|-----------|--------|------|----------|-------------|
+| `olderThanHours` | Query | int | No | Hours threshold (default 24) |
+
+**Response** `200 OK`: `{ "PurgedCount": 3, "Message": "Purged 3 agents deactivated more than 24 hours ago" }`
+
+---
+
+### Response Models
+
+**`AgentHealthStatus`** — returned by create and health endpoints:
+
+| Field | Type | Level | Description |
+|-------|------|-------|-------------|
+| `Handle` | string | Basic | Agent handle |
+| `State` | `HealthState` | Basic | `Healthy`, `Degraded`, `Unhealthy`, `NotConfigured` |
+| `Timestamp` | DateTime | Basic | When health was collected (UTC) |
+| `IsConfigured` | bool | Basic | Whether agent has been configured |
+| `Message` | string? | Basic | Human-readable status message |
+| `AgentType` | string? | Detailed | Agent type alias |
+| `Uptime` | TimeSpan? | Detailed | Time since activation |
+| `MessagesProcessed` | long? | Detailed | Total messages handled |
+| `ActiveTimerCount` | int? | Detailed | Active timer count |
+| `ActiveReminderCount` | int? | Detailed | Active reminder count |
+| `StreamCount` | int? | Detailed | Stream subscription count |
+| `Configuration` | AgentConfiguration? | Detailed | Full agent config |
+| `ProxyHealth` | ProxyHealthStatus? | Full | Proxy-level health |
+| `ActiveStreams` | List\<string\>? | Full | Stream names |
+| `Diagnostics` | Dictionary\<string,string\>? | Full | Diagnostic key-value pairs |
+
+**`AgentInfo`** — returned by diagnostics endpoints:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Key` | string | Grain key |
+| `AgentType` | string | Agent type alias |
+| `Handle` | string | Full handle |
+| `Status` | `AgentStatus` | `Active` or `Deactivated` |
+| `ActivatedAt` | DateTime | When activated |
+| `DeactivatedAt` | DateTime? | When deactivated (if applicable) |
+| `DeactivationReason` | string? | Reason for deactivation |
+| `EntityType` | `EntityType` | `Agent` or `Client` |
+
+**`FileMetadata`** — returned by file info endpoint:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `FileId` | string | Unique file ID |
+| `OriginalFileName` | string | Original upload filename |
+| `ExpiresAt` | DateTime | When the file will be cleaned up |
+| `FileSize` | long | File size in bytes |
+| `ContentType` | string | MIME content type |
+
+---
 
 ## WebSocket
 
-Connect at `/ws` for real-time bidirectional communication.
+Connect at `/ws` for real-time bidirectional communication. Requires user ID via `x-fabrcore-userid` header or `userid` query parameter.
 
 ## IAgentManagementProvider
 

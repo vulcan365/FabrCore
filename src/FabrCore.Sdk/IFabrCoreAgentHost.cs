@@ -129,6 +129,14 @@ namespace FabrCore.Sdk
         Task MergeCustomStateAsync(Dictionary<string, JsonElement> changes, IEnumerable<string> deletes);
 
         /// <summary>
+        /// Sets the status message shown in the heartbeat loop.
+        /// The grain's _status heartbeat sends this text instead of the default "Thinking..".
+        /// Pass null to revert to the default.
+        /// </summary>
+        /// <param name="message">The status text to display, or null to revert to default.</param>
+        void SetStatusMessage(string? message);
+
+        /// <summary>
         /// Parses this agent's handle into its owner and agent handle components.
         /// Owner will be empty if the handle has no owner prefix.
         /// </summary>

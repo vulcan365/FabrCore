@@ -29,7 +29,7 @@ Build distributed AI agent systems with FabrCore — an open-source .NET 10 fram
 | Agent Framework | LLM agent runtime | `AIAgent`, `AgentSession` | fabrcore-agentframework |
 | Plugin | Stateful tool collection | `IFabrCorePlugin` | fabrcore-plugins-tools |
 | Standalone Tool | Single static method | `[ToolAlias]` attribute | fabrcore-plugins-tools |
-| Server/Host | Orleans silo + REST API | `AddFabrCoreServer()` | fabrcore-server |
+| Server/Host | Orleans silo + REST API | `AddFabrCoreServer()` | fabrcore-server (includes full REST API docs with I/O models) |
 | Orleans | Distributed runtime | Clustering, Persistence | fabrcore-orleans |
 | Client | Blazor UI + Orleans client | `AddFabrCoreClient()` | fabrcore-client |
 | ChatDock | Floating icon → chat overlay | `<ChatDock>` component | fabrcore-chatdock |
