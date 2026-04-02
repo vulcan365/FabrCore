@@ -182,7 +182,7 @@ public override async Task<AgentMessage> OnMessage(AgentMessage message)
 
 ### SetStatusMessage(string? message)
 
-Controls the text sent in `_status` heartbeat messages (every 3 seconds during processing):
+Controls the text sent in `_status` heartbeat messages (every 3 seconds during processing). Available as a `protected` method on the agent, and also via `IFabrCoreAgentHost` (so plugins can call it too):
 
 ```csharp
 public override async Task<AgentMessage> OnMessage(AgentMessage message)
@@ -199,6 +199,9 @@ public override async Task<AgentMessage> OnMessage(AgentMessage message)
     // ... process with LLM
     return response;
 }
+
+// Plugins can call it via IFabrCoreAgentHost:
+// _agentHost.SetStatusMessage("Processing..");
 ```
 
 ### OnEvent(EventMessage)
@@ -280,15 +283,12 @@ Override `OnCompaction` to customize the compaction strategy:
 ```csharp
 public override async Task<CompactionResult?> OnCompaction(
     FabrCoreChatHistoryProvider chatHistoryProvider,
-    CompactionConfig compactionConfig)
+    CompactionConfig compactionConfig,
+    int estimatedTokens = 0)
 {
     // Custom compaction logic — use your own prompt, model, or strategy
-    // Or call the default CompactionService:
-    if (CompactionServiceInstance is null || CompactionChatClientConfigName is null)
-        return null;
-
-    return await CompactionServiceInstance.CompactIfNeededAsync(
-        chatHistoryProvider, compactionConfig, CompactionChatClientConfigName);
+    // Or call the base implementation which delegates to CompactionService:
+    return await base.OnCompaction(chatHistoryProvider, compactionConfig, estimatedTokens);
 }
 ```
 

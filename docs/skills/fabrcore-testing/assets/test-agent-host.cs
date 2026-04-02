@@ -27,6 +27,9 @@ public class TestFabrCoreAgentHost : IFabrCoreAgentHost
     /// <summary>Registered reminder names, for test assertions.</summary>
     public List<string> RegisteredReminders { get; } = new();
 
+    /// <summary>Current status message set via SetStatusMessage, for test assertions.</summary>
+    public string? CurrentStatusMessage { get; private set; }
+
     public TestFabrCoreAgentHost(string handle = "test-agent")
     {
         _handle = handle;
@@ -157,5 +160,10 @@ public class TestFabrCoreAgentHost : IFabrCoreAgentHost
         foreach (var (key, value) in changes)
             _customState[key] = value;
         return Task.CompletedTask;
+    }
+
+    public void SetStatusMessage(string? message)
+    {
+        CurrentStatusMessage = message;
     }
 }

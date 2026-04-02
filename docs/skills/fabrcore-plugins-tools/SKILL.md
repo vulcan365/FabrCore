@@ -102,7 +102,8 @@ var allSettings = config.GetPluginSettings("my-plugin");
 ### Plugin DI Access
 
 The `IServiceProvider` in `InitializeAsync` includes:
-- `IFabrCoreAgentHost` — For inter-agent communication and handle access
+- `IFabrCoreAgentHost` — For inter-agent communication, handle access, and status messages
+- `IEmbeddings` — For generating vector embeddings (see below)
 - All services registered in the server's DI container
 - `ILogger<T>` — For structured logging
 
@@ -150,6 +151,41 @@ public class CoordinatorPlugin : IFabrCorePlugin
     }
 }
 ```
+
+### Plugin with Status Messages
+
+Plugins can set the agent's heartbeat status message via `IFabrCoreAgentHost.SetStatusMessage()`. This controls the text shown to clients during long-running tool operations (instead of the default "Thinking.."):
+
+```csharp
+[PluginAlias("data-sync")]
+public class DataSyncPlugin : IFabrCorePlugin
+{
+    private IFabrCoreAgentHost _agentHost = default!;
+
+    public Task InitializeAsync(AgentConfiguration config, IServiceProvider serviceProvider)
+    {
+        _agentHost = serviceProvider.GetRequiredService<IFabrCoreAgentHost>();
+        return Task.CompletedTask;
+    }
+
+    [Description("Sync data from the external API")]
+    public async Task<string> SyncData([Description("The dataset to sync")] string dataset)
+    {
+        _agentHost.SetStatusMessage("Syncing data..");
+        try
+        {
+            // ... long-running operation
+            return "Sync complete";
+        }
+        finally
+        {
+            _agentHost.SetStatusMessage(null); // revert to default "Thinking.."
+        }
+    }
+}
+```
+
+**Best practice:** Always reset the status message to `null` in a `finally` block so it reverts to the default even if the tool throws.
 
 ### Plugin with Disposable Resources
 
@@ -276,6 +312,42 @@ public async Task<string> Search(string q, int n = 20)
 - Return `string` or `Task<string>` for simplicity
 - Complex return types are JSON-serialized automatically
 - Return error messages as strings rather than throwing exceptions
+
+## Using IEmbeddings in Plugins
+
+`IEmbeddings` (FabrCore.Sdk) is auto-registered by `AddFabrCoreServer()` and available via DI. It generates vector embeddings using the `"embeddings"` model entry in `fabrcore.json`.
+
+```csharp
+public interface IEmbeddings
+{
+    Task<Embedding<float>> GetEmbeddings(string text);
+    Task<IReadOnlyList<Embedding<float>>> GetBatchEmbeddings(IReadOnlyList<string> texts);
+}
+```
+
+**Example: Plugin that uses embeddings for semantic similarity:**
+```csharp
+[PluginAlias("semantic")]
+public class SemanticPlugin : IFabrCorePlugin
+{
+    private IEmbeddings _embeddings = default!;
+
+    public Task InitializeAsync(AgentConfiguration config, IServiceProvider serviceProvider)
+    {
+        _embeddings = serviceProvider.GetRequiredService<IEmbeddings>();
+        return Task.CompletedTask;
+    }
+
+    [Description("Generate a vector embedding for the given text")]
+    public async Task<string> Embed([Description("Text to embed")] string text)
+    {
+        var result = await _embeddings.GetEmbeddings(text);
+        return $"Generated {result.Vector.Length}-dimensional embedding";
+    }
+}
+```
+
+**Requires** a `"embeddings"` entry in `fabrcore.json` `ModelConfigurations` (see fabrcore-server skill).
 
 ## Plugin Best Practices
 
