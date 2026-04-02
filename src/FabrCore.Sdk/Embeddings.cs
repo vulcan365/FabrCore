@@ -28,7 +28,7 @@ namespace FabrCore.Sdk
             await _initLock.WaitAsync();
             try
             {
-                embeddingClient ??= await fabrcoreChatClientService.GetEmbeddingsClient("OpenAIEmbeddings");
+                embeddingClient ??= await fabrcoreChatClientService.GetEmbeddingsClient("embeddings");
                 return embeddingClient;
             }
             finally

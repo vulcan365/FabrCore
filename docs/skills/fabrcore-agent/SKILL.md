@@ -280,15 +280,12 @@ Override `OnCompaction` to customize the compaction strategy:
 ```csharp
 public override async Task<CompactionResult?> OnCompaction(
     FabrCoreChatHistoryProvider chatHistoryProvider,
-    CompactionConfig compactionConfig)
+    CompactionConfig compactionConfig,
+    int estimatedTokens = 0)
 {
     // Custom compaction logic — use your own prompt, model, or strategy
-    // Or call the default CompactionService:
-    if (CompactionServiceInstance is null || CompactionChatClientConfigName is null)
-        return null;
-
-    return await CompactionServiceInstance.CompactIfNeededAsync(
-        chatHistoryProvider, compactionConfig, CompactionChatClientConfigName);
+    // Or call the base implementation which delegates to CompactionService:
+    return await base.OnCompaction(chatHistoryProvider, compactionConfig, estimatedTokens);
 }
 ```
 

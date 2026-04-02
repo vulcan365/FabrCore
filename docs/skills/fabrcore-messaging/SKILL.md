@@ -167,10 +167,11 @@ context.AgentMessageReceived += (sender, response) => { /* process */ };
 ### Agent-to-Agent (Request-Response)
 
 ```csharp
-var request = new AgentMessage { Message = "Analyze this data" };
-var reply = await fabrcoreAgentHost.SendAndReceiveMessage("analyst", request);
+var request = new AgentMessage { ToHandle = "analyst", Message = "Analyze this data" };
+var reply = await fabrcoreAgentHost.SendAndReceiveMessage(request);
 // Cross-owner:
-var reply = await fabrcoreAgentHost.SendAndReceiveMessage("user2:analyst", request);
+var crossOwnerRequest = new AgentMessage { ToHandle = "user2:analyst", Message = "Analyze this data" };
+var reply = await fabrcoreAgentHost.SendAndReceiveMessage(crossOwnerRequest);
 ```
 
 ### Events
