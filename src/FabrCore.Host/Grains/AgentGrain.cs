@@ -1164,6 +1164,12 @@ namespace FabrCore.Host.Grains
         Task IFabrCoreAgentHost.MergeCustomStateAsync(Dictionary<string, JsonElement> changes, IEnumerable<string> deletes)
             => MergeCustomStateAsync(changes, deletes);
 
+        void IFabrCoreAgentHost.SetStatusMessage(string? message)
+        {
+            if (fabrcoreAgentProxy is not null)
+                fabrcoreAgentProxy.StatusMessage = message;
+        }
+
         // IRemindable implementation
         public async Task ReceiveReminder(string reminderName, TickStatus status)
         {

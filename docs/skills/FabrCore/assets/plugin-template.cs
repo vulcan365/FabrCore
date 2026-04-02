@@ -29,8 +29,17 @@ public class {{PLUGIN_NAME}} : IFabrCorePlugin
     {
         _logger.LogInformation("{{TOOL_NAME}} called with: {Input}", input);
 
-        // Tool implementation
-        return "result";
+        // Set status message shown to client during long operations (instead of "Thinking..")
+        _agentHost.SetStatusMessage("Processing..");
+        try
+        {
+            // Tool implementation
+            return "result";
+        }
+        finally
+        {
+            _agentHost.SetStatusMessage(null); // revert to default
+        }
     }
 }
 

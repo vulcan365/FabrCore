@@ -182,7 +182,7 @@ public override async Task<AgentMessage> OnMessage(AgentMessage message)
 
 ### SetStatusMessage(string? message)
 
-Controls the text sent in `_status` heartbeat messages (every 3 seconds during processing):
+Controls the text sent in `_status` heartbeat messages (every 3 seconds during processing). Available as a `protected` method on the agent, and also via `IFabrCoreAgentHost` (so plugins can call it too):
 
 ```csharp
 public override async Task<AgentMessage> OnMessage(AgentMessage message)
@@ -199,6 +199,9 @@ public override async Task<AgentMessage> OnMessage(AgentMessage message)
     // ... process with LLM
     return response;
 }
+
+// Plugins can call it via IFabrCoreAgentHost:
+// _agentHost.SetStatusMessage("Processing..");
 ```
 
 ### OnEvent(EventMessage)

@@ -102,7 +102,7 @@ var allSettings = config.GetPluginSettings("my-plugin");
 ### Plugin DI Access
 
 The `IServiceProvider` in `InitializeAsync` includes:
-- `IFabrCoreAgentHost` — For inter-agent communication and handle access
+- `IFabrCoreAgentHost` — For inter-agent communication, handle access, and status messages
 - `IEmbeddings` — For generating vector embeddings (see below)
 - All services registered in the server's DI container
 - `ILogger<T>` — For structured logging
@@ -151,6 +151,41 @@ public class CoordinatorPlugin : IFabrCorePlugin
     }
 }
 ```
+
+### Plugin with Status Messages
+
+Plugins can set the agent's heartbeat status message via `IFabrCoreAgentHost.SetStatusMessage()`. This controls the text shown to clients during long-running tool operations (instead of the default "Thinking.."):
+
+```csharp
+[PluginAlias("data-sync")]
+public class DataSyncPlugin : IFabrCorePlugin
+{
+    private IFabrCoreAgentHost _agentHost = default!;
+
+    public Task InitializeAsync(AgentConfiguration config, IServiceProvider serviceProvider)
+    {
+        _agentHost = serviceProvider.GetRequiredService<IFabrCoreAgentHost>();
+        return Task.CompletedTask;
+    }
+
+    [Description("Sync data from the external API")]
+    public async Task<string> SyncData([Description("The dataset to sync")] string dataset)
+    {
+        _agentHost.SetStatusMessage("Syncing data..");
+        try
+        {
+            // ... long-running operation
+            return "Sync complete";
+        }
+        finally
+        {
+            _agentHost.SetStatusMessage(null); // revert to default "Thinking.."
+        }
+    }
+}
+```
+
+**Best practice:** Always reset the status message to `null` in a `finally` block so it reverts to the default even if the tool throws.
 
 ### Plugin with Disposable Resources
 
