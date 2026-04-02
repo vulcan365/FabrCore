@@ -6,7 +6,7 @@ namespace FabrCore.Sdk.Memory;
 public sealed class MemoryOptions
 {
     public string ConnectionString { get; set; } = "";
-    public string EmbeddingConfigName { get; set; } = "OpenAIEmbeddings";
+    public string EmbeddingConfigName { get; set; } = "embeddings";
     public int Dimensions { get; set; } = 1536;
     public int ChunkSize { get; set; } = 500;
     public int ChunkOverlap { get; set; } = 64;

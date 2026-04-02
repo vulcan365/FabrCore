@@ -103,6 +103,7 @@ var allSettings = config.GetPluginSettings("my-plugin");
 
 The `IServiceProvider` in `InitializeAsync` includes:
 - `IFabrCoreAgentHost` — For inter-agent communication and handle access
+- `IEmbeddings` — For generating vector embeddings (see below)
 - All services registered in the server's DI container
 - `ILogger<T>` — For structured logging
 
@@ -276,6 +277,42 @@ public async Task<string> Search(string q, int n = 20)
 - Return `string` or `Task<string>` for simplicity
 - Complex return types are JSON-serialized automatically
 - Return error messages as strings rather than throwing exceptions
+
+## Using IEmbeddings in Plugins
+
+`IEmbeddings` (FabrCore.Sdk) is auto-registered by `AddFabrCoreServer()` and available via DI. It generates vector embeddings using the `"embeddings"` model entry in `fabrcore.json`.
+
+```csharp
+public interface IEmbeddings
+{
+    Task<Embedding<float>> GetEmbeddings(string text);
+    Task<IReadOnlyList<Embedding<float>>> GetBatchEmbeddings(IReadOnlyList<string> texts);
+}
+```
+
+**Example: Plugin that uses embeddings for semantic similarity:**
+```csharp
+[PluginAlias("semantic")]
+public class SemanticPlugin : IFabrCorePlugin
+{
+    private IEmbeddings _embeddings = default!;
+
+    public Task InitializeAsync(AgentConfiguration config, IServiceProvider serviceProvider)
+    {
+        _embeddings = serviceProvider.GetRequiredService<IEmbeddings>();
+        return Task.CompletedTask;
+    }
+
+    [Description("Generate a vector embedding for the given text")]
+    public async Task<string> Embed([Description("Text to embed")] string text)
+    {
+        var result = await _embeddings.GetEmbeddings(text);
+        return $"Generated {result.Vector.Length}-dimensional embedding";
+    }
+}
+```
+
+**Requires** a `"embeddings"` entry in `fabrcore.json` `ModelConfigurations` (see fabrcore-server skill).
 
 ## Plugin Best Practices
 
