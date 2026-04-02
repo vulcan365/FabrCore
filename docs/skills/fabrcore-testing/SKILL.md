@@ -217,6 +217,9 @@ Assert.AreEqual(0, harness.AgentHost.SentEvents.Count);
 
 // Check timers/reminders registered
 CollectionAssert.Contains(harness.AgentHost.RegisteredTimers, "my-timer");
+
+// Check status message set by agent or plugins
+Assert.AreEqual("Processing..", harness.AgentHost.CurrentStatusMessage);
 ```
 
 ## Running Tests
