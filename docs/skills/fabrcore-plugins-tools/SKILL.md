@@ -5,7 +5,8 @@ description: >
   plugin settings, DI access, disposable resources, and inter-agent communication from plugins.
   Triggers on: "build plugin", "create plugin", "IFabrCorePlugin", "PluginAlias", "standalone tool", "ToolAlias",
   "tool calling", "AIFunctionFactory", "add tools to agent", "[Description]", "plugin settings",
-  "GetPluginSetting", "plugin DI", "tool description", "tool method".
+  "GetPluginSetting", "plugin DI", "tool description", "tool method",
+  "FabrCoreCapabilities", "FabrCoreNote", "plugin capabilities", "tool capabilities".
   Do NOT use for: MCP integration — use fabrcore-mcp.
   Do NOT use for: agent lifecycle — use fabrcore-agent.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
@@ -22,6 +23,7 @@ allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powers
 | DI Support | `IServiceProvider` in `InitializeAsync` | None (static context) |
 | Lifecycle | `InitializeAsync` called once per agent | No lifecycle |
 | Discovery | `[PluginAlias("name")]` on class | `[ToolAlias("name")]` on static method |
+| Registry Metadata | `[Description]`, `[FabrCoreCapabilities]`, `[FabrCoreNote]` on class | `[Description]`, `[FabrCoreCapabilities]`, `[FabrCoreNote]` on method |
 | Use Cases | API integrations, DB access, HTTP clients, stateful workflows | String formatting, math, date/time, simple conversions |
 
 ## Building a Plugin
@@ -40,6 +42,9 @@ using FabrCore.Core;
 using FabrCore.Sdk;
 
 [PluginAlias("my-plugin")]
+[Description("Data lookup and transformation plugin for my-service")]
+[FabrCoreCapabilities("Provides data lookup and transformation tools for the my-service API.")]
+[FabrCoreNote("Requires my-plugin:ApiKey in Args for authentication.")]
 public class MyPlugin : IFabrCorePlugin
 {
     private IFabrCoreAgentHost _agentHost = default!;
@@ -70,11 +75,43 @@ public class MyPlugin : IFabrCorePlugin
 
 ### Plugin Lifecycle
 
-1. **Discovery** — `FabrCoreRegistry` scans assemblies for `[PluginAlias]` at startup
+1. **Discovery** — `FabrCoreRegistry` scans assemblies for `[PluginAlias]` at startup; `[FabrCoreCapabilities]` and `[FabrCoreNote]` metadata is included in the registry
 2. **Resolution** — `FabrCoreToolRegistry.ResolvePluginToolsAsync()` instantiates the plugin
 3. **Initialization** — `InitializeAsync(config, serviceProvider)` called with agent's config
-4. **Tool Extraction** — Public methods with `[Description]` become `AITool` instances
+4. **Tool Extraction** — Public methods with `[Description]` become `AITool` instances; method names and descriptions are included in the registry
 5. **Disposal** — If plugin implements `IDisposable` or `IAsyncDisposable`, disposed on agent deactivation
+
+### Registry Metadata Attributes
+
+Decorate plugins and standalone tools with `[FabrCoreCapabilities]` and `[FabrCoreNote]` so the discovery registry exposes what they do. This metadata is returned by the `/fabrcoreapi/discovery` endpoint.
+
+| Attribute | Targets | Multiplicity | Purpose |
+|-----------|---------|-------------|---------|
+| `[Description("...")]` | Class or Method | One | Short summary (from `System.ComponentModel`). On plugin classes it describes the plugin; on tool methods it describes the tool |
+| `[FabrCoreCapabilities("...")]` | Class or Method | One | Describes what the plugin/tool provides in detail |
+| `[FabrCoreNote("...")]` | Class or Method | Multiple | Usage instructions, prerequisites, or limitations |
+| `[FabrCoreHidden]` | Class or Method | One | Hides the plugin/tool from the discovery endpoint (still usable, just not listed) |
+
+**On a plugin class** (applies to the entire plugin):
+```csharp
+[PluginAlias("weather")]
+[Description("Real-time weather data plugin")]
+[FabrCoreCapabilities("Current conditions, forecasts, and severe weather alerts for any location.")]
+[FabrCoreNote("Requires weather:ApiKey in Args.")]
+[FabrCoreNote("Rate limited to 60 requests per minute per agent.")]
+public class WeatherPlugin : IFabrCorePlugin { /* ... */ }
+```
+
+**On a standalone tool method:**
+```csharp
+[ToolAlias("format-currency")]
+[Description("Formats a decimal as USD currency")]
+[FabrCoreCapabilities("Currency formatting for US locale.")]
+[FabrCoreNote("Only supports USD — do not use for international currencies.")]
+public static string FormatCurrency([Description("Amount to format")] decimal amount) { /* ... */ }
+```
+
+These attributes are optional but strongly recommended for discoverable plugins and tools.
 
 ### Plugin Settings Convention
 
@@ -224,6 +261,7 @@ public static class UtilityTools
 {
     [ToolAlias("format-json")]
     [Description("Format a JSON string with proper indentation")]
+    [FabrCoreCapabilities("JSON pretty-printing with standard indentation.")]
     public static string FormatJson(
         [Description("The raw JSON string to format")] string json)
     {
@@ -233,6 +271,7 @@ public static class UtilityTools
 
     [ToolAlias("timestamp")]
     [Description("Get the current UTC timestamp in ISO 8601 format")]
+    [FabrCoreCapabilities("UTC timestamp generation in ISO 8601 format.")]
     public static string GetTimestamp()
     {
         return DateTimeOffset.UtcNow.ToString("o");

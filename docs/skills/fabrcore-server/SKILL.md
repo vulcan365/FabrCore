@@ -66,7 +66,7 @@ builder.AddFabrCoreServer(new FabrCoreServerOptions
 });
 ```
 
-`AdditionalAssemblies` tells FabrCore which assemblies to scan for `[AgentAlias]`, `[PluginAlias]`, and `[ToolAlias]` types.
+`AdditionalAssemblies` tells FabrCore which assemblies to scan for `[AgentAlias]`, `[PluginAlias]`, and `[ToolAlias]` types. Registry metadata attributes (`[Description]`, `[FabrCoreCapabilities]`, `[FabrCoreNote]`) are also read from these assemblies and surfaced in the discovery endpoint. Types decorated with `[FabrCoreHidden]` are excluded from discovery but remain usable.
 
 ### Custom Providers
 
@@ -361,18 +361,61 @@ Returns the file contents with the correct `Content-Type`. Supports HTTP range r
 
 ### Discovery API (`/fabrcoreapi/discovery`)
 
-Introspect available agent types, plugins, and tools registered via `AdditionalAssemblies`.
+Introspect available agent types, plugins, and tools registered via `AdditionalAssemblies`. Returns full registry metadata including capabilities, notes, and method descriptions.
 
 #### GET `/discovery` — List all registered types
 
 **Response** `200 OK`:
 ```json
 {
-  "agents": ["my-agent", "router-agent"],
-  "plugins": ["weather", "github"],
-  "tools": ["calculate", "format-date"]
+  "agents": [
+    {
+      "typeName": "MyProject.Agents.JobAgent",
+      "aliases": ["job-agent"],
+      "description": "Manufacturing job management agent",
+      "capabilities": "Manages manufacturing jobs — lookup, status tracking, priority changes.",
+      "notes": [
+        "Requires a job number in context before most tools will work.",
+        "Do not use for quoting — use the quotes-agent instead."
+      ],
+      "methods": []
+    }
+  ],
+  "plugins": [
+    {
+      "typeName": "MyProject.Plugins.WeatherPlugin",
+      "aliases": ["weather"],
+      "description": "Real-time weather data plugin",
+      "capabilities": "Current conditions, forecasts, and severe weather alerts.",
+      "notes": ["Requires weather:ApiKey in Args."],
+      "methods": [
+        { "name": "GetCurrentWeather", "description": "Get current weather conditions for a location" },
+        { "name": "GetForecast", "description": "Get a 5-day weather forecast for a location" }
+      ]
+    }
+  ],
+  "tools": [
+    {
+      "typeName": "MyProject.Tools.UtilityTools.FormatJson",
+      "aliases": ["format-json"],
+      "description": "Format a JSON string with proper indentation",
+      "capabilities": "JSON pretty-printing with standard indentation.",
+      "notes": [],
+      "methods": [
+        { "name": "FormatJson", "description": "Format a JSON string with proper indentation" }
+      ]
+    }
+  ]
 }
 ```
+
+Each entry contains:
+- `typeName` — Full .NET type name (or `Type.Method` for standalone tools)
+- `aliases` — Alias strings used in `AgentConfiguration` (`AgentType`, `Plugins`, `Tools`)
+- `description` — From `[Description]` attribute on the class (agents/plugins) or method (tools); null if not set
+- `capabilities` — From `[FabrCoreCapabilities]` attribute (null if not set)
+- `notes` — From `[FabrCoreNote]` attributes (empty array if none)
+- `methods` — Tool method names and `[Description]` text (plugins list all tool methods; standalone tools list the single method)
 
 ---
 

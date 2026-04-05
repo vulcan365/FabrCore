@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using System.ComponentModel;
 using System.Reflection;
 
 namespace FabrCore.Sdk
@@ -21,11 +22,22 @@ namespace FabrCore.Sdk
         public List<RegistryEntry> GetAgentTypes()
         {
             return _agentTypes.Value
+                .Where(kv => kv.Value.GetCustomAttribute<FabrCoreHiddenAttribute>() == null)
                 .GroupBy(kv => kv.Value.FullName ?? kv.Value.Name)
-                .Select(g => new RegistryEntry
+                .Select(g =>
                 {
-                    TypeName = g.Key,
-                    Aliases = g.Select(kv => kv.Key).ToList()
+                    var type = g.First().Value;
+                    return new RegistryEntry
+                    {
+                        TypeName = g.Key,
+                        Aliases = g.Select(kv => kv.Key).ToList(),
+                        Description = type.GetCustomAttribute<DescriptionAttribute>()?.Description,
+                        Capabilities = type.GetCustomAttribute<FabrCoreCapabilitiesAttribute>()?.Description,
+                        Notes = type.GetCustomAttributes<FabrCoreNoteAttribute>()
+                            .Select(a => a.Note)
+                            .Where(n => !string.IsNullOrEmpty(n))
+                            .ToList()
+                    };
                 })
                 .ToList();
         }
@@ -33,11 +45,31 @@ namespace FabrCore.Sdk
         public List<RegistryEntry> GetPlugins()
         {
             return _pluginTypes.Value
+                .Where(kv => kv.Value.GetCustomAttribute<FabrCoreHiddenAttribute>() == null)
                 .GroupBy(kv => kv.Value.FullName ?? kv.Value.Name)
-                .Select(g => new RegistryEntry
+                .Select(g =>
                 {
-                    TypeName = g.Key,
-                    Aliases = g.Select(kv => kv.Key).ToList()
+                    var type = g.First().Value;
+                    return new RegistryEntry
+                    {
+                        TypeName = g.Key,
+                        Aliases = g.Select(kv => kv.Key).ToList(),
+                        Description = type.GetCustomAttribute<DescriptionAttribute>()?.Description,
+                        Capabilities = type.GetCustomAttribute<FabrCoreCapabilitiesAttribute>()?.Description,
+                        Notes = type.GetCustomAttributes<FabrCoreNoteAttribute>()
+                            .Select(a => a.Note)
+                            .Where(n => !string.IsNullOrEmpty(n))
+                            .ToList(),
+                        Methods = type
+                            .GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                            .Where(m => m.GetCustomAttribute<DescriptionAttribute>() != null && m.DeclaringType != typeof(object))
+                            .Select(m => new RegistryMethodEntry
+                            {
+                                Name = m.Name,
+                                Description = m.GetCustomAttribute<DescriptionAttribute>()!.Description
+                            })
+                            .ToList()
+                    };
                 })
                 .ToList();
         }
@@ -45,11 +77,31 @@ namespace FabrCore.Sdk
         public List<RegistryEntry> GetTools()
         {
             return _toolMethods.Value
+                .Where(kv => kv.Value.GetCustomAttribute<FabrCoreHiddenAttribute>() == null)
                 .GroupBy(kv => $"{kv.Value.DeclaringType?.FullName ?? kv.Value.DeclaringType?.Name ?? "Unknown"}.{kv.Value.Name}")
-                .Select(g => new RegistryEntry
+                .Select(g =>
                 {
-                    TypeName = g.Key,
-                    Aliases = g.Select(kv => kv.Key).ToList()
+                    var method = g.First().Value;
+                    var desc = method.GetCustomAttribute<DescriptionAttribute>();
+                    return new RegistryEntry
+                    {
+                        TypeName = g.Key,
+                        Aliases = g.Select(kv => kv.Key).ToList(),
+                        Description = desc?.Description,
+                        Capabilities = method.GetCustomAttribute<FabrCoreCapabilitiesAttribute>()?.Description,
+                        Notes = method.GetCustomAttributes<FabrCoreNoteAttribute>()
+                            .Select(a => a.Note)
+                            .Where(n => !string.IsNullOrEmpty(n))
+                            .ToList(),
+                        Methods = new List<RegistryMethodEntry>
+                        {
+                            new RegistryMethodEntry
+                            {
+                                Name = method.Name,
+                                Description = desc?.Description ?? string.Empty
+                            }
+                        }
+                    };
                 })
                 .ToList();
         }
