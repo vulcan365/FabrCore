@@ -29,6 +29,7 @@ Build distributed AI agent systems with FabrCore — an open-source .NET 10 fram
 | Agent Framework | LLM agent runtime | `AIAgent`, `AgentSession` | fabrcore-agentframework |
 | Plugin | Stateful tool collection | `IFabrCorePlugin` | fabrcore-plugins-tools |
 | Standalone Tool | Single static method | `[ToolAlias]` attribute | fabrcore-plugins-tools |
+| Registry Metadata | Capabilities & notes | `[FabrCoreCapabilities]`, `[FabrCoreNote]` | fabrcore-agent, fabrcore-plugins-tools |
 | Server/Host | Orleans silo + REST API | `AddFabrCoreServer()` | fabrcore-server (includes full REST API docs with I/O models) |
 | Orleans | Distributed runtime | Clustering, Persistence | fabrcore-orleans |
 | Client | Blazor UI + Orleans client | `AddFabrCoreClient()` | fabrcore-client |
@@ -93,7 +94,7 @@ Create `fabrcore.json` in the server project root with your LLM provider configu
 ```csharp
 using FabrCore.Core;          // AgentMessage, AgentConfiguration, MessageKind
 using FabrCore.Core.Acl;      // IAclProvider, AclRule, AclPermission
-using FabrCore.Sdk;           // FabrCoreAgentProxy, IFabrCoreAgentHost, IFabrCorePlugin
+using FabrCore.Sdk;           // FabrCoreAgentProxy, IFabrCoreAgentHost, IFabrCorePlugin, FabrCoreCapabilitiesAttribute, FabrCoreNoteAttribute
 using FabrCore.Client;        // IClientContextFactory, IClientContext
 using FabrCore.Host;          // AddFabrCoreServer, UseFabrCoreServer, FabrCoreServerOptions
 using Microsoft.Agents.AI;    // AIAgent, AgentSession, ChatClientAgent

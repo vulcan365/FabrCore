@@ -34,9 +34,27 @@ The Agent Message Monitor provides a pluggable provider for observing all messag
 | `AgentTokenSummary` | `FabrCore.Core.Monitoring` | Accumulated token totals per agent |
 | `MessageDirection` | `FabrCore.Core.Monitoring` | `Inbound` / `Outbound` enum |
 
-## Quick Start — Using the Default In-Memory Monitor
+## Enabling Monitoring
 
-The `InMemoryAgentMessageMonitor` is registered automatically as a singleton. No configuration needed.
+Monitoring is **opt-in**. Enable it in `AddFabrCoreServer`:
+
+```csharp
+// Use the built-in in-memory monitor
+builder.AddFabrCoreServer(options =>
+{
+    options.UseInMemoryAgentMessageMonitor();
+});
+
+// Or use a custom implementation
+builder.AddFabrCoreServer(options =>
+{
+    options.UseAgentMessageMonitor<SqlAgentMessageMonitor>();
+});
+```
+
+When not enabled, a no-op `NullAgentMessageMonitor` is registered so grains always have a valid dependency.
+
+## Quick Start — Using the In-Memory Monitor
 
 ### Querying Messages
 
