@@ -7,6 +7,9 @@ using Microsoft.Extensions.Logging;
 /// {{PLUGIN_DESCRIPTION}}
 /// </summary>
 [PluginAlias("{{PLUGIN_ALIAS}}")]
+[Description("{{PLUGIN_DESCRIPTION}}")]
+[FabrCoreCapabilities("{{PLUGIN_CAPABILITIES}}")]
+[FabrCoreNote("{{PLUGIN_NOTE}}")]
 public class {{PLUGIN_NAME}} : IFabrCorePlugin
 {
     private IFabrCoreAgentHost _agentHost = default!;

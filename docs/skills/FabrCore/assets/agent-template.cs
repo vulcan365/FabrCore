@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using FabrCore.Core;
 using FabrCore.Sdk;
 using Microsoft.Agents.AI;
@@ -7,6 +8,9 @@ using Microsoft.Extensions.AI;
 /// {{AGENT_DESCRIPTION}}
 /// </summary>
 [AgentAlias("{{AGENT_ALIAS}}")]
+[Description("{{AGENT_DESCRIPTION}}")]
+[FabrCoreCapabilities("{{AGENT_CAPABILITIES}}")]
+[FabrCoreNote("{{AGENT_NOTE}}")]
 public class {{AGENT_NAME}} : FabrCoreAgentProxy
 {
     private AIAgent? _agent;
