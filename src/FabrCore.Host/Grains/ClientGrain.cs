@@ -2,6 +2,7 @@
 using FabrCore.Core;
 using FabrCore.Core.Acl;
 using FabrCore.Core.Interfaces;
+using FabrCore.Core.Monitoring;
 using FabrCore.Core.Streaming;
 using FabrCore.Host.Configuration;
 using FabrCore.Host.Services;
@@ -77,6 +78,7 @@ namespace FabrCore.Host.Grains
         private readonly ILogger<ClientGrain> logger;
         private readonly IFabrCoreAgentService _agentService;
         private readonly IAclProvider _aclProvider;
+        private readonly IAgentMessageMonitor _messageMonitor;
         private readonly ObserverManager<IClientGrainObserver> observerManager;
         private readonly Queue<AgentMessage> pendingMessages = new();
         private readonly Dictionary<string, TrackedAgentInfo> _trackedAgents = new();
@@ -87,6 +89,7 @@ namespace FabrCore.Host.Grains
             ILoggerFactory loggerFactory,
             IFabrCoreAgentService agentService,
             IAclProvider aclProvider,
+            IAgentMessageMonitor messageMonitor,
             [PersistentState("clientState", FabrCoreOrleansConstants.StorageProviderName)]
             IPersistentState<ClientGrainState> state)
         {
@@ -94,6 +97,7 @@ namespace FabrCore.Host.Grains
             this.logger = loggerFactory.CreateLogger<ClientGrain>();
             _agentService = agentService;
             _aclProvider = aclProvider;
+            _messageMonitor = messageMonitor;
             this.observerManager = new ObserverManager<IClientGrainObserver>(TimeSpan.FromMinutes(5), logger);
             _state = state;
         }
@@ -554,6 +558,20 @@ namespace FabrCore.Host.Grains
             StreamMessagesCounter.Add(1,
                 new KeyValuePair<string, object?>("client.id", clientId),
                 new KeyValuePair<string, object?>("message.from", request.FromHandle));
+
+            // Record inbound message to client in the message monitor
+            _ = _messageMonitor.RecordMessageAsync(new MonitoredMessage
+            {
+                AgentHandle = clientId,
+                FromHandle = request.FromHandle,
+                ToHandle = request.ToHandle,
+                Message = request.Message,
+                MessageType = request.MessageType,
+                Kind = request.Kind,
+                Direction = MessageDirection.Inbound,
+                TraceId = request.TraceId,
+                LlmUsage = LlmUsageInfo.FromArgs(request.Args)
+            });
 
             try
             {
