@@ -1,5 +1,6 @@
 ﻿using FabrCore.Core;
 using FabrCore.Core.Interfaces;
+using FabrCore.Core.Monitoring;
 using FabrCore.Core.Streaming;
 using FabrCore.Host.Configuration;
 using FabrCore.Host.Services;
@@ -77,6 +78,7 @@ namespace FabrCore.Host.Grains
         private readonly IConfiguration configuration;
         private readonly IFabrCoreRegistry _registry;
         private readonly IFabrCoreAgentService _agentService;
+        private readonly IAgentMessageMonitor _messageMonitor;
 
         // Message persistence state
         private readonly IPersistentState<AgentGrainState> _messageState;
@@ -98,6 +100,7 @@ namespace FabrCore.Host.Grains
             IConfiguration configuration,
             IFabrCoreRegistry registry,
             IFabrCoreAgentService agentService,
+            IAgentMessageMonitor messageMonitor,
             [PersistentState("agentMessages", FabrCoreOrleansConstants.StorageProviderName)]
             IPersistentState<AgentGrainState> messageState)
         {
@@ -107,6 +110,7 @@ namespace FabrCore.Host.Grains
             this.configuration = configuration;
             _registry = registry;
             _agentService = agentService;
+            _messageMonitor = messageMonitor;
             _messageState = messageState;
 
             logger = loggerFactory.CreateLogger<AgentGrain>();
@@ -561,6 +565,36 @@ namespace FabrCore.Host.Grains
                             tokReasoning ?? "0", tokCached ?? "0",
                             llmDuration ?? "0", model ?? "n/a", finishReason ?? "n/a");
                     }
+                }
+
+                // Record inbound request and outbound response to the message monitor
+                var handle = this.GetPrimaryKeyString();
+                _ = _messageMonitor.RecordMessageAsync(new MonitoredMessage
+                {
+                    AgentHandle = handle,
+                    FromHandle = request.FromHandle,
+                    ToHandle = request.ToHandle,
+                    Message = request.Message,
+                    MessageType = request.MessageType,
+                    Kind = request.Kind,
+                    Direction = MessageDirection.Inbound,
+                    TraceId = request.TraceId
+                });
+
+                if (response != null)
+                {
+                    _ = _messageMonitor.RecordMessageAsync(new MonitoredMessage
+                    {
+                        AgentHandle = handle,
+                        FromHandle = response.FromHandle,
+                        ToHandle = response.ToHandle,
+                        Message = response.Message,
+                        MessageType = response.MessageType,
+                        Kind = response.Kind,
+                        Direction = MessageDirection.Outbound,
+                        TraceId = response.TraceId,
+                        LlmUsage = LlmUsageInfo.FromArgs(response.Args)
+                    });
                 }
 
                 var elapsed = Stopwatch.GetElapsedTime(startTime).TotalMilliseconds;
