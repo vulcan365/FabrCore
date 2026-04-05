@@ -535,6 +535,20 @@ namespace FabrCore.Host.Grains
                     throw new InvalidOperationException("Agent has not been configured. Call ConfigureAgent first.");
                 }
 
+                // Record inbound request to the message monitor immediately
+                var handle = this.GetPrimaryKeyString();
+                _ = _messageMonitor.RecordMessageAsync(new MonitoredMessage
+                {
+                    AgentHandle = handle,
+                    FromHandle = request.FromHandle,
+                    ToHandle = request.ToHandle,
+                    Message = request.Message,
+                    MessageType = request.MessageType,
+                    Kind = request.Kind,
+                    Direction = MessageDirection.Inbound,
+                    TraceId = request.TraceId
+                });
+
                 var response = await fabrcoreAgentProxy.InternalOnMessage(request);
 
                 // Stop heartbeat
@@ -567,20 +581,7 @@ namespace FabrCore.Host.Grains
                     }
                 }
 
-                // Record inbound request and outbound response to the message monitor
-                var handle = this.GetPrimaryKeyString();
-                _ = _messageMonitor.RecordMessageAsync(new MonitoredMessage
-                {
-                    AgentHandle = handle,
-                    FromHandle = request.FromHandle,
-                    ToHandle = request.ToHandle,
-                    Message = request.Message,
-                    MessageType = request.MessageType,
-                    Kind = request.Kind,
-                    Direction = MessageDirection.Inbound,
-                    TraceId = request.TraceId
-                });
-
+                // Record outbound response to the message monitor
                 if (response != null)
                 {
                     _ = _messageMonitor.RecordMessageAsync(new MonitoredMessage

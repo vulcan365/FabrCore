@@ -6,7 +6,8 @@ description: >
   Triggers on: "FabrCoreAgentProxy", "AgentAlias", "OnInitialize", "OnMessage", "OnEvent", "OnCompaction",
   "ResolveConfiguredToolsAsync", "CreateChatClientAgent", "SetStatusMessage", "agent state", "GetStateAsync",
   "SetState", "FlushStateAsync", "compaction", "agent timer", "RegisterTimer", "agent reminder", "RegisterReminder",
-  "OnReminder", "agent health", "GetHealth", "AgentHealthStatus", "build agent", "create agent".
+  "OnReminder", "agent health", "GetHealth", "AgentHealthStatus", "build agent", "create agent",
+  "FabrCoreCapabilities", "FabrCoreNote", "agent capabilities", "agent notes".
   Do NOT use for: Microsoft Agent Framework internals (AIAgent, AgentSession) — use fabrcore-agentframework.
   Do NOT use for: plugins, tools, MCP — use fabrcore-plugins-tools or fabrcore-mcp.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
@@ -27,6 +28,10 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
 [AgentAlias("my-agent")]
+[Description("Customer support agent for order inquiries and returns")]
+[FabrCoreCapabilities("Handles customer inquiries — lookup orders, check status, process returns.")]
+[FabrCoreNote("Requires an order ID in context before most tools will work.")]
+[FabrCoreNote("Do not use for payment processing — use the billing-agent instead.")]
 public class MyAgent : FabrCoreAgentProxy
 {
     private AIAgent? _agent;
@@ -52,6 +57,28 @@ The constructor always takes exactly three parameters — do not add additional 
 
 - **Agent alias:** `kebab-case` (e.g., `"my-agent"`) — used in `[AgentAlias]` and `AgentConfiguration.AgentType`
 - **Class name:** `PascalCase` (e.g., `MyAgent`)
+
+### Registry Metadata Attributes
+
+Decorate agents with `[FabrCoreCapabilities]` and `[FabrCoreNote]` so the discovery registry exposes what the agent does. This metadata is returned by the `/fabrcoreapi/discovery` endpoint and is used by users and other agents to decide whether to interact with this agent.
+
+| Attribute | Multiplicity | Purpose |
+|-----------|-------------|---------|
+| `[Description("...")]` | One per class | Short summary of the agent (from `System.ComponentModel`) |
+| `[FabrCoreCapabilities("...")]` | One per class | Describes what the agent can do — its core responsibilities and features |
+| `[FabrCoreNote("...")]` | Multiple allowed | Usage instructions, prerequisites, or when *not* to use this agent |
+| `[FabrCoreHidden]` | One per class | Hides the agent from the discovery endpoint (still usable, just not listed) |
+
+```csharp
+[AgentAlias("job-agent")]
+[Description("Manufacturing job management agent")]
+[FabrCoreCapabilities("Manages manufacturing jobs — lookup, status tracking, priority changes, and ship date queries.")]
+[FabrCoreNote("Requires a job number in the user's context before most tools will work.")]
+[FabrCoreNote("Do not use for quoting or estimating — use the quotes-agent instead.")]
+public class JobAgent : FabrCoreAgentProxy { /* ... */ }
+```
+
+These attributes are optional but strongly recommended for any agent that will be discoverable by other agents or surfaced in a registry UI.
 
 ## Protected Fields
 
