@@ -1,5 +1,6 @@
 using FabrCore.Core;
 using FabrCore.Core.Acl;
+using FabrCore.Core.Monitoring;
 using FabrCore.Host.Configuration;
 using FabrCore.Host.Services;
 using FabrCore.Sdk;
@@ -35,6 +36,13 @@ namespace FabrCore.Host
         internal Type AclProviderType { get; private set; } = typeof(InMemoryAclProvider);
 
         /// <summary>
+        /// The implementation type for <see cref="IAgentMessageMonitor"/>.
+        /// Defaults to <see cref="InMemoryAgentMessageMonitor"/> which stores messages in a
+        /// bounded in-memory FIFO buffer with accumulated token tracking.
+        /// </summary>
+        internal Type AgentMessageMonitorType { get; private set; } = typeof(InMemoryAgentMessageMonitor);
+
+        /// <summary>
         /// Configures a custom <see cref="IAgentManagementProvider"/> implementation for
         /// agent/client registration, tracking, and lifecycle management.
         /// </summary>
@@ -53,6 +61,17 @@ namespace FabrCore.Host
         public FabrCoreServerOptions UseAclProvider<T>() where T : class, IAclProvider
         {
             AclProviderType = typeof(T);
+            return this;
+        }
+
+        /// <summary>
+        /// Configures a custom <see cref="IAgentMessageMonitor"/> implementation for
+        /// agent message monitoring. The default is <see cref="InMemoryAgentMessageMonitor"/>.
+        /// </summary>
+        /// <typeparam name="T">The monitor implementation type.</typeparam>
+        public FabrCoreServerOptions UseAgentMessageMonitor<T>() where T : class, IAgentMessageMonitor
+        {
+            AgentMessageMonitorType = typeof(T);
             return this;
         }
     }
@@ -187,6 +206,10 @@ namespace FabrCore.Host
                 builder.Services.Configure<FabrCoreAclOptions>(builder.Configuration.GetSection("FabrCore:Acl"));
                 builder.Services.AddSingleton(typeof(IAclProvider), options.AclProviderType);
                 logger.LogDebug("AclProvider added: {ProviderType}", options.AclProviderType.Name);
+
+                // Configure Agent Message Monitor (pluggable — default is in-memory FIFO buffer)
+                builder.Services.AddSingleton(typeof(IAgentMessageMonitor), options.AgentMessageMonitorType);
+                logger.LogDebug("AgentMessageMonitor added: {MonitorType}", options.AgentMessageMonitorType.Name);
 
                 // Configure Agent Service
                 builder.Services.AddSingleton<IFabrCoreAgentService, FabrCoreAgentService>();
