@@ -417,6 +417,21 @@ Each entry contains:
 - `notes` — From `[FabrCoreNote]` attributes (empty array if none)
 - `methods` — Tool method names and `[Description]` text (plugins list all tool methods; standalone tools list the single method)
 
+**Collision detection:** If two different types share the same alias, the response includes a `collisions` array (omitted when empty):
+```json
+{
+  "collisions": [
+    {
+      "alias": "my-agent",
+      "category": "agent",
+      "types": ["ProjectA.Agents.MyAgent", "ProjectB.Agents.MyAgent"]
+    }
+  ]
+}
+```
+
+Each collision lists the alias, the category (`agent`, `plugin`, or `tool`), and all competing type names. The last type scanned wins the alias. Collisions are also logged as warnings at startup.
+
 ---
 
 ### Embeddings API (`/fabrcoreapi/embeddings`)
