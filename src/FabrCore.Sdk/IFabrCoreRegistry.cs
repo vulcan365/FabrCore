@@ -16,11 +16,19 @@ namespace FabrCore.Sdk
         public List<RegistryMethodEntry> Methods { get; set; } = new();
     }
 
+    public class RegistryCollision
+    {
+        public string Alias { get; set; } = string.Empty;
+        public string Category { get; set; } = string.Empty;
+        public List<string> Types { get; set; } = new();
+    }
+
     public interface IFabrCoreRegistry
     {
         List<RegistryEntry> GetAgentTypes();
         List<RegistryEntry> GetPlugins();
         List<RegistryEntry> GetTools();
+        List<RegistryCollision> GetCollisions();
         Type? FindAgentType(string alias);
     }
 }
