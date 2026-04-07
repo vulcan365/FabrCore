@@ -10,6 +10,7 @@ namespace FabrCore.Sdk
         private readonly Lazy<Dictionary<string, Type>> _agentTypes;
         private readonly Lazy<Dictionary<string, Type>> _pluginTypes;
         private readonly Lazy<Dictionary<string, MethodInfo>> _toolMethods;
+        private readonly List<RegistryCollision> _collisions = new();
 
         public FabrCoreRegistry(ILogger<FabrCoreRegistry> logger)
         {
@@ -106,6 +107,15 @@ namespace FabrCore.Sdk
                 .ToList();
         }
 
+        public List<RegistryCollision> GetCollisions()
+        {
+            // Force all scans to run so collisions are fully populated
+            _ = _agentTypes.Value;
+            _ = _pluginTypes.Value;
+            _ = _toolMethods.Value;
+            return _collisions.ToList();
+        }
+
         public Type? FindAgentType(string alias)
         {
             if (string.IsNullOrWhiteSpace(alias))
@@ -142,6 +152,10 @@ namespace FabrCore.Sdk
                     {
                         if (!string.IsNullOrEmpty(attr.Alias))
                         {
+                            if (result.TryGetValue(attr.Alias, out var existing) && existing != type)
+                            {
+                                RecordCollision("agent", attr.Alias, existing.FullName ?? existing.Name, type.FullName ?? type.Name);
+                            }
                             result[attr.Alias] = type;
                             _logger.LogTrace("Registered agent alias '{Alias}' -> {Type}", attr.Alias, type.FullName);
                         }
@@ -180,6 +194,10 @@ namespace FabrCore.Sdk
                     {
                         if (!string.IsNullOrEmpty(attr.Alias))
                         {
+                            if (result.TryGetValue(attr.Alias, out var existing) && existing != type)
+                            {
+                                RecordCollision("plugin", attr.Alias, existing.FullName ?? existing.Name, type.FullName ?? type.Name);
+                            }
                             result[attr.Alias] = type;
                             _logger.LogTrace("Registered plugin alias '{Alias}' -> {Type}", attr.Alias, type.FullName);
                         }
@@ -221,6 +239,12 @@ namespace FabrCore.Sdk
                         {
                             if (!string.IsNullOrEmpty(attr.Alias))
                             {
+                                if (result.TryGetValue(attr.Alias, out var existing) && existing != method)
+                                {
+                                    var existingName = $"{existing.DeclaringType?.FullName ?? existing.DeclaringType?.Name}.{existing.Name}";
+                                    var newName = $"{type.FullName ?? type.Name}.{method.Name}";
+                                    RecordCollision("tool", attr.Alias, existingName, newName);
+                                }
                                 result[attr.Alias] = method;
                                 _logger.LogTrace("Registered tool alias '{Alias}' -> {Type}.{Method}", attr.Alias, type.FullName, method.Name);
                             }
@@ -231,6 +255,28 @@ namespace FabrCore.Sdk
 
             _logger.LogInformation("Tool scan complete: {Count} tool aliases registered", result.Count);
             return result;
+        }
+
+        private void RecordCollision(string category, string alias, string existingType, string newType)
+        {
+            _logger.LogWarning("Registry collision: {Category} alias '{Alias}' claimed by both '{ExistingType}' and '{NewType}' — '{NewType}' wins",
+                category, alias, existingType, newType);
+
+            var collision = _collisions.FirstOrDefault(c => c.Alias == alias && c.Category == category);
+            if (collision != null)
+            {
+                if (!collision.Types.Contains(newType))
+                    collision.Types.Add(newType);
+            }
+            else
+            {
+                _collisions.Add(new RegistryCollision
+                {
+                    Alias = alias,
+                    Category = category,
+                    Types = new List<string> { existingType, newType }
+                });
+            }
         }
     }
 }
