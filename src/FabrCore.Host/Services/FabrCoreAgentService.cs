@@ -190,6 +190,8 @@ namespace FabrCore.Host.Services
 
         public List<RegistryEntry> GetTools() => _registry.GetTools();
 
+        public List<RegistryCollision> GetCollisions() => _registry.GetCollisions();
+
         // ── Thread Management ──
 
         public async Task<List<StoredChatMessage>> GetThreadMessagesAsync(string userId, string handle, string threadId)

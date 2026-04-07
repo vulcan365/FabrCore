@@ -121,6 +121,11 @@ namespace FabrCore.Host.Services
         /// </summary>
         List<RegistryEntry> GetTools();
 
+        /// <summary>
+        /// Gets any alias collisions detected during registry scanning.
+        /// </summary>
+        List<RegistryCollision> GetCollisions();
+
         // ── Thread Management ──
 
         /// <summary>

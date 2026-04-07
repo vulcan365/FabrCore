@@ -22,11 +22,13 @@ namespace FabrCore.Host.Api.Controllers
         {
             try
             {
+                var collisions = _agentService.GetCollisions();
                 var result = new
                 {
                     agents = _agentService.GetAgentTypes(),
                     plugins = _agentService.GetPlugins(),
-                    tools = _agentService.GetTools()
+                    tools = _agentService.GetTools(),
+                    collisions = collisions.Count > 0 ? collisions : null
                 };
 
                 return Ok(result);
