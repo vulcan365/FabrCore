@@ -13,7 +13,7 @@
 
 	<ItemGroup>
 		<FrameworkReference Include="Microsoft.AspNetCore.App" />
-		<PackageReference Include="OpenTelemetry.Api" Version="1.15.0" />
+		<PackageReference Include="OpenTelemetry.Api" Version="1.15.1" />
 	</ItemGroup>
 
 	<ItemGroup>
