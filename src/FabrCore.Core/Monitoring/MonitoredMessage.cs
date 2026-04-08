@@ -12,9 +12,16 @@ namespace FabrCore.Core.Monitoring
 
         public string? FromHandle { get; set; }
         public string? ToHandle { get; set; }
+        public string? OnBehalfOfHandle { get; set; }
+        public string? DeliverToHandle { get; set; }
+        public string? Channel { get; set; }
         public string? Message { get; set; }
         public string? MessageType { get; set; }
         public MessageKind Kind { get; set; }
+        public string? DataType { get; set; }
+        public List<string> Files { get; set; } = new List<string>();
+        public Dictionary<string, string>? State { get; set; }
+        public Dictionary<string, string>? Args { get; set; }
         public MessageDirection Direction { get; set; }
         public DateTimeOffset Timestamp { get; set; } = DateTimeOffset.UtcNow;
         public string? TraceId { get; set; }
