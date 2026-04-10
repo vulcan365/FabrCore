@@ -8,12 +8,12 @@ namespace FabrCore.Core.Monitoring
     /// </summary>
     public interface IAgentMessageMonitor
     {
-        // ── Recording ──
+        // ── Message Recording ──
 
         /// <summary>Records a message flowing through the system.</summary>
         Task RecordMessageAsync(MonitoredMessage message);
 
-        // ── Queries ──
+        // ── Message Queries ──
 
         /// <summary>
         /// Gets recorded messages, optionally filtered by agent handle.
@@ -27,9 +27,26 @@ namespace FabrCore.Core.Monitoring
         /// <summary>Gets accumulated LLM token usage for all agents.</summary>
         Task<List<AgentTokenSummary>> GetAllAgentTokenSummariesAsync();
 
+        // ── Event Recording ──
+
+        /// <summary>
+        /// Records an event that reached an agent's <c>OnEvent</c> handler via the event stream.
+        /// Events are stored in a separate buffer from messages so consumers can filter
+        /// to messages only, events only, or both.
+        /// </summary>
+        Task RecordEventAsync(MonitoredEvent evt);
+
+        // ── Event Queries ──
+
+        /// <summary>
+        /// Gets recorded events, optionally filtered by agent handle.
+        /// Returns most recent events first.
+        /// </summary>
+        Task<List<MonitoredEvent>> GetEventsAsync(string? agentHandle = null, int? limit = null);
+
         // ── Maintenance ──
 
-        /// <summary>Clears all recorded messages and token summaries.</summary>
+        /// <summary>Clears all recorded messages, events, and token summaries.</summary>
         Task ClearAsync();
 
         // ── Notifications ──
@@ -39,5 +56,12 @@ namespace FabrCore.Core.Monitoring
         /// Implementations must ensure subscriber exceptions do not propagate to the caller.
         /// </summary>
         event Action<MonitoredMessage>? OnMessageRecorded;
+
+        /// <summary>
+        /// Raised when a new event is recorded. Subscribe alongside or instead of
+        /// <see cref="OnMessageRecorded"/> to filter a viewer to messages, events, or both.
+        /// Implementations must ensure subscriber exceptions do not propagate to the caller.
+        /// </summary>
+        event Action<MonitoredEvent>? OnEventRecorded;
     }
 }
