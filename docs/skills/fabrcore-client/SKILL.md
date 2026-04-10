@@ -258,15 +258,37 @@ await DirectSender.SendAsync("user1", "user1:agent-handle", new AgentMessage
 
 ## FabrCoreHostApiClient
 
-REST client for the Host API:
+REST client for the Host API. The base URL is read from the `FabrCoreHostUrl` configuration key (see appsettings.json above; defaults to `http://localhost:5000` if missing).
+
+Agent-scoped methods take a **fully-qualified handle** in the form `"owner:alias"`. The client parses the owner out of the handle via `HandleUtilities.ParseHandle` and sends it as the `x-user` header automatically — callers do not pass the user id separately. Bare aliases are rejected with `ArgumentException`.
 
 ```csharp
-@inject FabrCoreHostApiClient ApiClient
+@inject IFabrCoreHostApiClient ApiClient
 
-var health = await ApiClient.GetAgentHealthAsync("user1", "my-agent");
-var agentTypes = await ApiClient.GetAgentTypesAsync();
-var plugins = await ApiClient.GetPluginsAsync();
+// Health — handle is full "owner:alias"
+var health = await ApiClient.GetAgentHealthAsync("user1:my-agent");
+
+// Chat
+var reply = await ApiClient.ChatAsync("user1:my-agent", "hello");
+
+// Event
+await ApiClient.SendEventAsync("user1:my-agent", new EventMessage
+{
+    Type = "order.created",
+    Source = "user1:orders",
+    Channel = "user1:my-agent"
+});
+
+// Batch create — every config.Handle must be "owner:alias" and all
+// configs in the batch must share the same owner.
+var created = await ApiClient.CreateAgentsAsync(new List<AgentConfiguration>
+{
+    new() { Handle = "user1:assistant", AgentType = "ChatAgent", Models = "gpt-4o-mini" },
+    new() { Handle = "user1:summarizer", AgentType = "ChatAgent", Models = "gpt-4o-mini" }
+});
 ```
+
+Under the hood, for `GetAgentHealthAsync("user1:my-agent")` the client issues `GET {FabrCoreHostUrl}/fabrcoreapi/Agent/health/my-agent` with header `x-user: user1`. You never have to split the handle yourself.
 
 ## Extension Methods
 
