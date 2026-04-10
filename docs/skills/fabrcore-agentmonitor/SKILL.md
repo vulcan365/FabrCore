@@ -1,11 +1,13 @@
 ---
 name: fabrcore-agentmonitor
 description: >
-  FabrCore agent message monitoring — IAgentMessageMonitor, InMemoryAgentMessageMonitor, message traffic observation,
-  LLM token tracking, building custom monitor providers, subscribing to message events for UI updates.
+  FabrCore agent message and event monitoring — IAgentMessageMonitor, InMemoryAgentMessageMonitor, message traffic observation,
+  event stream observation at OnEvent, LLM token tracking, building custom monitor providers, subscribing to
+  message/event notifications for UI updates.
   Triggers on: "agent monitor", "message monitor", "IAgentMessageMonitor", "InMemoryAgentMessageMonitor",
-  "monitor messages", "track tokens", "agent token usage", "message traffic", "monitor provider",
-  "OnMessageRecorded", "MonitoredMessage", "AgentTokenSummary", "message observation".
+  "monitor messages", "monitor events", "OnEvent", "event stream monitor", "track tokens", "agent token usage",
+  "message traffic", "monitor provider", "OnMessageRecorded", "OnEventRecorded", "MonitoredMessage",
+  "MonitoredEvent", "AgentTokenSummary", "message observation".
   Do NOT use for: agent lifecycle — use fabrcore-agent.
   Do NOT use for: OpenTelemetry metrics — use fabrcore-server.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
@@ -15,13 +17,16 @@ allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powers
 
 ## Overview
 
-The Agent Message Monitor provides a pluggable provider for observing all message traffic flowing through the FabrCore agent system. It captures:
+The Agent Message Monitor provides a pluggable provider for observing message and event traffic flowing through the FabrCore agent system. It captures:
 
 - Every message an agent receives (inbound requests)
 - Every response an agent sends (outbound responses with LLM usage)
 - Messages arriving at clients via streams
+- Every event that reaches an agent's `OnEvent` handler (inbound, fire-and-forget)
 - LLM token usage per response (input, output, reasoning, cached tokens, model, duration)
 - Accumulated token totals per agent
+
+Messages and events live in **separate buffers** with **separate query methods and notification events**, so a client output viewer can filter to messages only, events only, or merge both into a unified timeline.
 
 ## Architecture
 
@@ -30,6 +35,7 @@ The Agent Message Monitor provides a pluggable provider for observing all messag
 | `IAgentMessageMonitor` | `FabrCore.Core.Monitoring` | Provider interface |
 | `InMemoryAgentMessageMonitor` | `FabrCore.Host.Services` | Default bounded FIFO buffer implementation |
 | `MonitoredMessage` | `FabrCore.Core.Monitoring` | Captured message snapshot |
+| `MonitoredEvent` | `FabrCore.Core.Monitoring` | Captured event snapshot (from `OnEvent`) |
 | `LlmUsageInfo` | `FabrCore.Core.Monitoring` | LLM usage metrics per response |
 | `AgentTokenSummary` | `FabrCore.Core.Monitoring` | Accumulated token totals per agent |
 | `MessageDirection` | `FabrCore.Core.Monitoring` | `Inbound` / `Outbound` enum |
@@ -86,6 +92,81 @@ public class MyService
     }
 }
 ```
+
+### Querying Events
+
+Events that reach an agent's `OnEvent` handler are captured separately from messages. The query shape mirrors `GetMessagesAsync`:
+
+```csharp
+// All events (most recent first)
+var allEvents = await _monitor.GetEventsAsync();
+
+// Events delivered to a specific agent
+var agentEvents = await _monitor.GetEventsAsync(agentHandle: "user1:my-agent");
+
+// Last 10 events
+var recentEvents = await _monitor.GetEventsAsync(limit: 10);
+
+// Combine filters
+var filtered = await _monitor.GetEventsAsync(agentHandle: "user1:my-agent", limit: 50);
+```
+
+### Output Viewer — Messages / Events / Both Filter
+
+Because messages and events live on separate endpoints, an output viewer can expose a filter toggle by choosing which query to call and which notification to subscribe to:
+
+```csharp
+public enum MonitorViewFilter { Messages, Events, Both }
+
+public class AgentOutputViewer : IDisposable
+{
+    private readonly IAgentMessageMonitor _monitor;
+    private MonitorViewFilter _filter = MonitorViewFilter.Both;
+
+    public AgentOutputViewer(IAgentMessageMonitor monitor)
+    {
+        _monitor = monitor;
+        _monitor.OnMessageRecorded += HandleMessage;
+        _monitor.OnEventRecorded += HandleEvent;
+    }
+
+    public void SetFilter(MonitorViewFilter filter) => _filter = filter;
+
+    public async Task<IEnumerable<object>> LoadAsync(string? agentHandle = null, int? limit = null)
+    {
+        var items = new List<object>();
+
+        if (_filter != MonitorViewFilter.Events)
+            items.AddRange(await _monitor.GetMessagesAsync(agentHandle, limit));
+
+        if (_filter != MonitorViewFilter.Messages)
+            items.AddRange(await _monitor.GetEventsAsync(agentHandle, limit));
+
+        // Merge into a unified timeline by timestamp
+        return items.OrderByDescending(i => i is MonitoredMessage m ? m.Timestamp : ((MonitoredEvent)i).Timestamp);
+    }
+
+    private void HandleMessage(MonitoredMessage message)
+    {
+        if (_filter == MonitorViewFilter.Events) return;
+        // push to UI
+    }
+
+    private void HandleEvent(MonitoredEvent evt)
+    {
+        if (_filter == MonitorViewFilter.Messages) return;
+        // push to UI
+    }
+
+    public void Dispose()
+    {
+        _monitor.OnMessageRecorded -= HandleMessage;
+        _monitor.OnEventRecorded -= HandleEvent;
+    }
+}
+```
+
+A viewer that only cares about messages simply never subscribes to `OnEventRecorded` (and never calls `GetEventsAsync`), and vice versa. Each buffer is bounded independently, so a chatty event stream cannot evict messages and vice versa.
 
 ### Querying Token Usage
 
@@ -150,7 +231,7 @@ builder.Services.AddSingleton<IAgentMessageMonitor>(sp =>
 ### Clearing the Monitor
 
 ```csharp
-await _monitor.ClearAsync(); // Clears all messages and token summaries
+await _monitor.ClearAsync(); // Clears all messages, events, and token summaries
 ```
 
 ## MonitoredMessage Properties
@@ -168,6 +249,27 @@ await _monitor.ClearAsync(); // Clears all messages and token summaries
 | `Timestamp` | `DateTimeOffset` | UTC timestamp |
 | `TraceId` | `string?` | Distributed trace correlation ID |
 | `LlmUsage` | `LlmUsageInfo?` | LLM metrics (null if no LLM was invoked) |
+
+## MonitoredEvent Properties
+
+Events captured at `AgentGrain.ReceivedEventMessage` (the `OnEvent` stream handler). The `Data` and `BinaryData` payloads are **intentionally excluded** to keep the monitor buffer readable, matching the policy used for `MonitoredMessage`.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Id` | `string` | Unique monitor record id |
+| `EventId` | `string?` | The originating `EventMessage.Id` |
+| `AgentHandle` | `string?` | The agent handle that received the event |
+| `Type` | `string?` | Event type descriptor (e.g. `"order.created"`) |
+| `Source` | `string?` | Handle of the event producer |
+| `Subject` | `string?` | Optional topic / subject |
+| `Namespace` | `string?` | Stream namespace used for routing |
+| `Channel` | `string?` | Channel within the namespace |
+| `DataContentType` | `string?` | MIME type of the (excluded) payload |
+| `Args` | `Dictionary<string, string>?` | Optional key-value args |
+| `EventTime` | `DateTimeOffset` | Producer-stamped event time |
+| `Timestamp` | `DateTimeOffset` | UTC time the monitor recorded the event |
+| `TraceId` | `string?` | Distributed trace correlation id |
+| `Direction` | `MessageDirection` | Always `Inbound` today |
 
 ## LlmUsageInfo Properties
 
@@ -192,6 +294,7 @@ public class SqlAgentMessageMonitor : IAgentMessageMonitor
     private readonly IDbConnection _db;
 
     public event Action<MonitoredMessage>? OnMessageRecorded;
+    public event Action<MonitoredEvent>? OnEventRecorded;
 
     public SqlAgentMessageMonitor(IDbConnection db)
     {
@@ -230,9 +333,27 @@ public class SqlAgentMessageMonitor : IAgentMessageMonitor
         return (await _db.QueryAsync<AgentTokenSummary>("SELECT * FROM AgentTokenSummaries")).ToList();
     }
 
+    public async Task RecordEventAsync(MonitoredEvent evt)
+    {
+        await _db.ExecuteAsync("INSERT INTO MonitoredEvents ...", evt);
+        try { OnEventRecorded?.Invoke(evt); }
+        catch { /* never let subscriber exceptions propagate */ }
+    }
+
+    public async Task<List<MonitoredEvent>> GetEventsAsync(string? agentHandle = null, int? limit = null)
+    {
+        var sql = "SELECT * FROM MonitoredEvents";
+        if (agentHandle != null) sql += " WHERE AgentHandle = @agentHandle";
+        sql += " ORDER BY Timestamp DESC";
+        if (limit.HasValue) sql += " LIMIT @limit";
+
+        return (await _db.QueryAsync<MonitoredEvent>(sql, new { agentHandle, limit })).ToList();
+    }
+
     public async Task ClearAsync()
     {
         await _db.ExecuteAsync("DELETE FROM MonitoredMessages");
+        await _db.ExecuteAsync("DELETE FROM MonitoredEvents");
         await _db.ExecuteAsync("DELETE FROM AgentTokenSummaries");
     }
 }
@@ -249,13 +370,14 @@ builder.AddFabrCoreServer(options =>
 
 ## What Gets Captured
 
-| Source | Direction | LLM Usage | Notes |
-|--------|-----------|-----------|-------|
-| Agent receives a message (via `AgentGrain.OnMessage`) | Inbound | No | Every request hitting an agent |
-| Agent sends a response (via `AgentGrain.OnMessage`) | Outbound | Yes | Response after LLM processing |
-| Client receives a stream message | Inbound | If present | Responses flowing back to clients |
-| Plugin sends via `IFabrCoreAgentHost` | — | — | Captured at the receiving agent's `OnMessage` |
-| Agent-to-agent via `SendAndReceiveMessage` | — | — | Captured at the target agent's `OnMessage` |
+| Source | Record Type | Direction | LLM Usage | Notes |
+|--------|-------------|-----------|-----------|-------|
+| Agent receives a message (via `AgentGrain.OnMessage`) | `MonitoredMessage` | Inbound | No | Every request hitting an agent |
+| Agent sends a response (via `AgentGrain.OnMessage`) | `MonitoredMessage` | Outbound | Yes | Response after LLM processing |
+| Client receives a stream message | `MonitoredMessage` | Inbound | If present | Responses flowing back to clients |
+| Plugin sends via `IFabrCoreAgentHost` | `MonitoredMessage` | — | — | Captured at the receiving agent's `OnMessage` |
+| Agent-to-agent via `SendAndReceiveMessage` | `MonitoredMessage` | — | — | Captured at the target agent's `OnMessage` |
+| Agent receives an event (via `AgentGrain.ReceivedEventMessage` → `OnEvent`) | `MonitoredEvent` | Inbound | No | Captured inbound-only; events do not flow through `ClientGrain` |
 
 System messages (`_status` heartbeats, `_error` messages) are captured like any other message. Filter by `MessageType` if needed:
 

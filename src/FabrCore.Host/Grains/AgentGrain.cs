@@ -1535,6 +1535,23 @@ namespace FabrCore.Host.Grains
 
             try
             {
+                var handle = this.GetPrimaryKeyString();
+                _ = _messageMonitor.RecordEventAsync(new MonitoredEvent
+                {
+                    AgentHandle = handle,
+                    EventId = request.Id,
+                    Type = request.Type,
+                    Source = request.Source,
+                    Subject = request.Subject,
+                    Namespace = request.Namespace,
+                    Channel = request.Channel,
+                    DataContentType = request.DataContentType,
+                    Args = request.Args,
+                    EventTime = request.Time,
+                    TraceId = request.TraceId,
+                    Direction = MessageDirection.Inbound
+                });
+
                 if (fabrcoreAgentProxy != null)
                 {
                     await fabrcoreAgentProxy.InternalOnEvent(request);
