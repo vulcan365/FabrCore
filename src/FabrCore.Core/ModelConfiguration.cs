@@ -39,6 +39,13 @@ namespace FabrCore.Core
         /// Trigger compaction when estimated tokens exceed this fraction of ContextWindowTokens. Default is null (uses system default: 0.75).
         /// </summary>
         public double? CompactionThreshold { get; set; }
+
+        /// <summary>
+        /// When a thread has been dormant for at least this many minutes AND stored tokens
+        /// exceed the compaction threshold, compaction runs before the next OnMessage call
+        /// (preflight compaction). Default is null (uses system default: 60). Set to 0 to disable.
+        /// </summary>
+        public int? CompactionStaleAfterMinutes { get; set; }
     }
 
     public class ApiKeyConfiguration
