@@ -63,5 +63,37 @@ namespace FabrCore.Core.Monitoring
         /// Implementations must ensure subscriber exceptions do not propagate to the caller.
         /// </summary>
         event Action<MonitoredEvent>? OnEventRecorded;
+
+        // ── LLM Call Recording ──
+
+        /// <summary>
+        /// Records a single LLM request/response call made by an agent. Stored in a buffer
+        /// independent from messages and events so consumers can toggle visibility per track.
+        /// </summary>
+        Task RecordLlmCallAsync(MonitoredLlmCall call);
+
+        // ── LLM Call Queries ──
+
+        /// <summary>
+        /// Gets recorded LLM calls, optionally filtered by agent handle.
+        /// Returns most recent calls first.
+        /// </summary>
+        Task<List<MonitoredLlmCall>> GetLlmCallsAsync(string? agentHandle = null, int? limit = null);
+
+        // ── LLM Call Notifications ──
+
+        /// <summary>
+        /// Raised when a new LLM call is recorded. Subscribe to push internal LLM request/response
+        /// traffic to a viewer. Implementations must ensure subscriber exceptions do not propagate.
+        /// </summary>
+        event Action<MonitoredLlmCall>? OnLlmCallRecorded;
+
+        // ── LLM Capture Configuration ──
+
+        /// <summary>
+        /// Options controlling LLM call capture behavior. Read by the chat client wrapper on
+        /// every call to cheaply decide whether to materialize payloads.
+        /// </summary>
+        LlmCaptureOptions LlmCaptureOptions { get; }
     }
 }

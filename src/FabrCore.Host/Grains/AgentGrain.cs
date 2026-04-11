@@ -1314,7 +1314,13 @@ namespace FabrCore.Host.Grains
             logger.LogTrace("Sending {Type} message to agent - Name: {Name}, MessageType: {MessageType}",
                 isReminder ? "reminder" : "timer", name, messageType);
 
-            await fabrcoreAgentProxy.InternalOnMessage(agentMessage);
+            // Tag LLM calls made while processing this timer/reminder with a distinct origin
+            // so the monitor can distinguish them from user-initiated OnMessage calls.
+            var origin = isReminder ? $"Reminder:{name}" : $"Timer:{name}";
+            using (FabrCore.Sdk.LlmCallContext.Begin(handle, origin))
+            {
+                await fabrcoreAgentProxy.InternalOnMessage(agentMessage);
+            }
         }
 
         // End Interfaces
@@ -1554,7 +1560,15 @@ namespace FabrCore.Host.Grains
 
                 if (fabrcoreAgentProxy != null)
                 {
-                    await fabrcoreAgentProxy.InternalOnEvent(request);
+                    // Tag any LLM calls made inside OnEvent with an "OnEvent:<type>" origin so
+                    // the monitor can attribute them even though they are outside an LlmUsageScope.
+                    using (FabrCore.Sdk.LlmCallContext.Begin(
+                        handle,
+                        $"OnEvent:{request.Type ?? request.Id}",
+                        request.TraceId))
+                    {
+                        await fabrcoreAgentProxy.InternalOnEvent(request);
+                    }
                 }
                 else
                 {

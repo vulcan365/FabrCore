@@ -21,6 +21,18 @@ namespace FabrCore.Sdk
         /// <summary>Gets the current active scope, or null if none.</summary>
         public static LlmUsageScope? Current => _current.Value;
 
+        /// <summary>Agent handle that owns this scope. Set by <see cref="Begin"/>.</summary>
+        public string? AgentHandle { get; set; }
+
+        /// <summary>Id of the parent <c>MonitoredMessage</c> that triggered this scope, if any.</summary>
+        public string? ParentMessageId { get; set; }
+
+        /// <summary>Distributed trace id carried from the parent message.</summary>
+        public string? TraceId { get; set; }
+
+        /// <summary>Origin context tag used when recording nested LLM calls (e.g. <c>OnMessage:&lt;id&gt;</c>).</summary>
+        public string? OriginContext { get; set; }
+
         public long InputTokens => Interlocked.Read(ref _inputTokens);
         public long OutputTokens => Interlocked.Read(ref _outputTokens);
         public long ReasoningTokens => Interlocked.Read(ref _reasoningTokens);
@@ -31,9 +43,19 @@ namespace FabrCore.Sdk
         public string? FinishReason => _finishReason;
 
         /// <summary>Starts a new LLM usage tracking scope.</summary>
-        public static LlmUsageScope Begin()
+        public static LlmUsageScope Begin(
+            string? agentHandle = null,
+            string? parentMessageId = null,
+            string? traceId = null,
+            string? originContext = null)
         {
-            var scope = new LlmUsageScope();
+            var scope = new LlmUsageScope
+            {
+                AgentHandle = agentHandle,
+                ParentMessageId = parentMessageId,
+                TraceId = traceId,
+                OriginContext = originContext
+            };
             _current.Value = scope;
             return scope;
         }

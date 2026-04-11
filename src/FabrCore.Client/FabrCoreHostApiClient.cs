@@ -129,6 +129,73 @@ namespace FabrCore.Client
     }
 
     /// <summary>
+    /// A single method exposed by a plugin or tool, as returned by the Discovery API.
+    /// Mirrors the server-side <c>RegistryMethodEntry</c>.
+    /// </summary>
+    public class DiscoveryRegistryMethod
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+    }
+
+    /// <summary>
+    /// A registered agent type, plugin, or tool as returned by the Discovery API.
+    /// Mirrors the server-side <c>RegistryEntry</c>.
+    /// </summary>
+    public class DiscoveryRegistryEntry
+    {
+        /// <summary>Fully-qualified .NET type name (or <c>Type.Method</c> for standalone tools).</summary>
+        public string TypeName { get; set; } = string.Empty;
+
+        /// <summary>Alias strings used in <see cref="AgentConfiguration"/> (<c>AgentType</c>, <c>Plugins</c>, <c>Tools</c>).</summary>
+        public List<string> Aliases { get; set; } = new();
+
+        /// <summary>From the <c>[Description]</c> attribute; null if not set.</summary>
+        public string? Description { get; set; }
+
+        /// <summary>From the <c>[FabrCoreCapabilities]</c> attribute; null if not set.</summary>
+        public string? Capabilities { get; set; }
+
+        /// <summary>From <c>[FabrCoreNote]</c> attributes; empty if none.</summary>
+        public List<string> Notes { get; set; } = new();
+
+        /// <summary>Tool methods exposed by this entry (plugins list all methods; standalone tools list one).</summary>
+        public List<DiscoveryRegistryMethod> Methods { get; set; } = new();
+    }
+
+    /// <summary>
+    /// A collision between two or more registered types sharing the same alias.
+    /// Mirrors the server-side <c>RegistryCollision</c>.
+    /// </summary>
+    public class DiscoveryRegistryCollision
+    {
+        public string Alias { get; set; } = string.Empty;
+
+        /// <summary>One of <c>"agent"</c>, <c>"plugin"</c>, or <c>"tool"</c>.</summary>
+        public string Category { get; set; } = string.Empty;
+
+        /// <summary>All competing .NET type names. The last one scanned wins the alias.</summary>
+        public List<string> Types { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Response from the Discovery API — lists all registered agent types, plugins, tools,
+    /// and any alias collisions detected at startup.
+    /// </summary>
+    public class DiscoveryResponse
+    {
+        public List<DiscoveryRegistryEntry> Agents { get; set; } = new();
+        public List<DiscoveryRegistryEntry> Plugins { get; set; } = new();
+        public List<DiscoveryRegistryEntry> Tools { get; set; } = new();
+
+        /// <summary>
+        /// Null (or omitted) when no collisions were detected. Populated only when two or more
+        /// types share the same alias within the same category.
+        /// </summary>
+        public List<DiscoveryRegistryCollision>? Collisions { get; set; }
+    }
+
+    /// <summary>
     /// Client interface for the FabrCore Host API.
     /// <para>
     /// Agent-scoped methods accept a fully-qualified handle in the form <c>"owner:alias"</c>.
@@ -239,6 +306,13 @@ namespace FabrCore.Client
         /// Generates embeddings for a batch of texts in a single request.
         /// </summary>
         Task<BatchEmbeddingResponse> GetBatchEmbeddingsAsync(List<BatchEmbeddingItem> items, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Queries the Discovery API to list all registered agent types, plugins, tools,
+        /// and any alias collisions detected at startup. No <c>x-user</c> header required —
+        /// discovery metadata is global to the host.
+        /// </summary>
+        Task<DiscoveryResponse> GetDiscoveryAsync(CancellationToken cancellationToken = default);
     }
 
     /// <summary>
@@ -815,6 +889,36 @@ namespace FabrCore.Client
             {
                 RecordError(activity, startTime, "GetBatchEmbeddings", ex);
                 _logger.LogError(ex, "Failed to generate batch embeddings for {Count} items", items.Count);
+                throw;
+            }
+        }
+
+        public async Task<DiscoveryResponse> GetDiscoveryAsync(CancellationToken cancellationToken = default)
+        {
+            using var activity = ActivitySource.StartActivity("GetDiscovery", ActivityKind.Client);
+
+            var url = $"{_baseUrl}/fabrcoreapi/Discovery";
+            var startTime = Stopwatch.GetTimestamp();
+
+            try
+            {
+                var response = await _httpClient.GetAsync(url, cancellationToken);
+                response.EnsureSuccessStatusCode();
+
+                var result = await response.Content.ReadFromJsonAsync<DiscoveryResponse>(JsonOptions, cancellationToken)
+                    ?? throw new InvalidOperationException("Failed to deserialize discovery response");
+
+                RecordSuccess(activity, startTime, "GetDiscovery");
+                _logger.LogDebug(
+                    "Retrieved discovery: {AgentCount} agents, {PluginCount} plugins, {ToolCount} tools, {CollisionCount} collisions",
+                    result.Agents.Count, result.Plugins.Count, result.Tools.Count, result.Collisions?.Count ?? 0);
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                RecordError(activity, startTime, "GetDiscovery", ex);
+                _logger.LogError(ex, "Failed to get discovery information");
                 throw;
             }
         }

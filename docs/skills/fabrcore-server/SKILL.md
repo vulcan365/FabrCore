@@ -264,6 +264,8 @@ The agent grain key becomes `"system:{config.Handle}"`. Any user can message it 
 
 Base path: `/fabrcoreapi/`. All agent-scoped endpoints require the `x-user` header to identify the caller.
 
+> **Typed C# client:** `IFabrCoreHostApiClient` in `FabrCore.Client` wraps every endpoint below (Agent, Discovery, Embeddings, File, ModelConfig, Diagnostics). Agent-scoped methods take a fully-qualified `"owner:alias"` handle and the client extracts the owner into the `x-user` header automatically. See the **FabrCoreHostApiClient** section in the `fabrcore-client` skill for usage.
+
 ---
 
 ### Agent API (`/fabrcoreapi/agent`)
