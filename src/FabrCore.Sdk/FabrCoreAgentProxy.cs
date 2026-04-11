@@ -177,7 +177,8 @@ namespace FabrCore.Sdk
         protected async Task<Microsoft.Extensions.AI.IChatClient> GetChatClient(string name, int networkTimeoutSeconds = 100)
         {
             var client = await chatClientService.GetChatClient(name, networkTimeoutSeconds);
-            return new TokenTrackingChatClient(client);
+            var monitor = serviceProvider.GetService<FabrCore.Core.Monitoring.IAgentMessageMonitor>();
+            return new TokenTrackingChatClient(client, fabrcoreAgentHost.GetHandle(), monitor, logger);
         }
 
 #pragma warning disable MEAI001 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
@@ -862,7 +863,11 @@ namespace FabrCore.Sdk
             try
             {
                 AgentMessage response;
-                using (var llmScope = LlmUsageScope.Begin())
+                using (var llmScope = LlmUsageScope.Begin(
+                    agentHandle: fabrcoreAgentHost.GetHandle(),
+                    parentMessageId: message.Id,
+                    traceId: message.TraceId,
+                    originContext: $"OnMessage:{message.Id}"))
                 {
                     response = await OnMessage(message);
 

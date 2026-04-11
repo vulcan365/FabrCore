@@ -43,6 +43,12 @@ namespace FabrCore.Host
         internal Type? AgentMessageMonitorType { get; private set; }
 
         /// <summary>
+        /// Options controlling LLM call capture behavior. Registered as a singleton and consumed
+        /// by <see cref="InMemoryAgentMessageMonitor"/> and <c>TokenTrackingChatClient</c>.
+        /// </summary>
+        internal LlmCaptureOptions LlmCaptureOptions { get; } = new LlmCaptureOptions();
+
+        /// <summary>
         /// Configures a custom <see cref="IAgentManagementProvider"/> implementation for
         /// agent/client registration, tracking, and lifecycle management.
         /// </summary>
@@ -79,9 +85,17 @@ namespace FabrCore.Host
         /// Enables agent message monitoring with the built-in <see cref="InMemoryAgentMessageMonitor"/>.
         /// Messages are stored in a bounded FIFO buffer (default 5000) with accumulated token tracking.
         /// </summary>
-        public FabrCoreServerOptions UseInMemoryAgentMessageMonitor()
+        /// <param name="configureLlmCapture">
+        /// Optional callback to configure LLM call capture. By default only metadata
+        /// (model, tokens, duration, finish reason) is captured. Set
+        /// <see cref="LlmCaptureOptions.CapturePayloads"/> to true to also capture prompts and
+        /// responses — be sure to configure <see cref="LlmCaptureOptions.Redact"/> when doing so,
+        /// as prompts may contain PII or secrets.
+        /// </param>
+        public FabrCoreServerOptions UseInMemoryAgentMessageMonitor(Action<LlmCaptureOptions>? configureLlmCapture = null)
         {
             AgentMessageMonitorType = typeof(InMemoryAgentMessageMonitor);
+            configureLlmCapture?.Invoke(LlmCaptureOptions);
             return this;
         }
     }
@@ -218,6 +232,10 @@ namespace FabrCore.Host
                 logger.LogDebug("AclProvider added: {ProviderType}", options.AclProviderType.Name);
 
                 // Configure Agent Message Monitor (opt-in — disabled by default)
+                // Register LlmCaptureOptions as a singleton so the monitor and
+                // TokenTrackingChatClient can pick it up via DI.
+                builder.Services.AddSingleton(options.LlmCaptureOptions);
+
                 if (options.AgentMessageMonitorType is not null)
                 {
                     builder.Services.AddSingleton(typeof(IAgentMessageMonitor), options.AgentMessageMonitorType);

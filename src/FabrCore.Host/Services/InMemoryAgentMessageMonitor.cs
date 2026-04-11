@@ -12,19 +12,34 @@ namespace FabrCore.Host.Services
     {
         private readonly ConcurrentQueue<MonitoredMessage> _messages = new();
         private readonly ConcurrentQueue<MonitoredEvent> _events = new();
+        private readonly ConcurrentQueue<MonitoredLlmCall> _llmCalls = new();
         private readonly ConcurrentDictionary<string, AgentTokenSummary> _tokenSummaries = new();
         private readonly ILogger<InMemoryAgentMessageMonitor> _logger;
         private readonly int _maxMessages;
         private int _count;
         private int _eventCount;
+        private int _llmCallCount;
 
         public event Action<MonitoredMessage>? OnMessageRecorded;
         public event Action<MonitoredEvent>? OnEventRecorded;
+        public event Action<MonitoredLlmCall>? OnLlmCallRecorded;
+
+        /// <inheritdoc />
+        public LlmCaptureOptions LlmCaptureOptions { get; }
 
         public InMemoryAgentMessageMonitor(ILogger<InMemoryAgentMessageMonitor> logger, int maxMessages = 5000)
+            : this(logger, new LlmCaptureOptions(), maxMessages)
+        {
+        }
+
+        public InMemoryAgentMessageMonitor(
+            ILogger<InMemoryAgentMessageMonitor> logger,
+            LlmCaptureOptions llmCaptureOptions,
+            int maxMessages = 5000)
         {
             _logger = logger;
             _maxMessages = maxMessages;
+            LlmCaptureOptions = llmCaptureOptions ?? new LlmCaptureOptions();
         }
 
         public Task RecordMessageAsync(MonitoredMessage message)
@@ -128,6 +143,49 @@ namespace FabrCore.Host.Services
             return Task.FromResult(result.ToList());
         }
 
+        public Task RecordLlmCallAsync(MonitoredLlmCall call)
+        {
+            if (!LlmCaptureOptions.Enabled)
+            {
+                return Task.CompletedTask;
+            }
+
+            _llmCalls.Enqueue(call);
+            var currentCount = Interlocked.Increment(ref _llmCallCount);
+
+            // FIFO eviction — bounded independently from messages and events.
+            var max = LlmCaptureOptions.MaxBufferedCalls;
+            while (currentCount > max && _llmCalls.TryDequeue(out _))
+            {
+                currentCount = Interlocked.Decrement(ref _llmCallCount);
+            }
+
+            // Fire notification — never let subscriber exceptions propagate.
+            try
+            {
+                OnLlmCallRecorded?.Invoke(call);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "OnLlmCallRecorded subscriber threw an exception");
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public Task<List<MonitoredLlmCall>> GetLlmCallsAsync(string? agentHandle = null, int? limit = null)
+        {
+            IEnumerable<MonitoredLlmCall> result = _llmCalls.ToArray().Reverse();
+
+            if (!string.IsNullOrEmpty(agentHandle))
+                result = result.Where(c => c.AgentHandle == agentHandle);
+
+            if (limit.HasValue)
+                result = result.Take(limit.Value);
+
+            return Task.FromResult(result.ToList());
+        }
+
         public Task<AgentTokenSummary?> GetAgentTokenSummaryAsync(string agentHandle)
         {
             _tokenSummaries.TryGetValue(agentHandle, out var summary);
@@ -145,6 +203,8 @@ namespace FabrCore.Host.Services
             Interlocked.Exchange(ref _count, 0);
             while (_events.TryDequeue(out _)) { }
             Interlocked.Exchange(ref _eventCount, 0);
+            while (_llmCalls.TryDequeue(out _)) { }
+            Interlocked.Exchange(ref _llmCallCount, 0);
             _tokenSummaries.Clear();
             return Task.CompletedTask;
         }
