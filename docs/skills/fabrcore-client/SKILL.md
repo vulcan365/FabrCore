@@ -290,6 +290,74 @@ var created = await ApiClient.CreateAgentsAsync(new List<AgentConfiguration>
 
 Under the hood, for `GetAgentHealthAsync("user1:my-agent")` the client issues `GET {FabrCoreHostUrl}/fabrcoreapi/Agent/health/my-agent` with header `x-user: user1`. You never have to split the handle yourself.
 
+### Host-scoped methods (no `x-user` required)
+
+Discovery, embeddings, file, model-config, and diagnostics endpoints are **global to the host** and do not require a handle or `x-user` header. Call them straight off the injected client:
+
+```csharp
+// Discovery — list registered agent types, plugins, tools, and any alias collisions
+DiscoveryResponse discovery = await ApiClient.GetDiscoveryAsync();
+foreach (var agent in discovery.Agents)
+    Console.WriteLine($"{agent.Aliases.FirstOrDefault()} — {agent.Description}");
+foreach (var plugin in discovery.Plugins)
+    Console.WriteLine($"{plugin.Aliases.FirstOrDefault()} — {plugin.Methods.Count} method(s)");
+if (discovery.Collisions is { Count: > 0 } collisions)
+    foreach (var c in collisions)
+        Console.WriteLine($"collision: {c.Category} alias '{c.Alias}' → {string.Join(", ", c.Types)}");
+
+// Embeddings — single text
+EmbeddingResponse emb = await ApiClient.GetEmbeddingsAsync("The quick brown fox");
+Console.WriteLine($"{emb.Dimensions}-dim vector");
+
+// Embeddings — batch (max 2048 items)
+BatchEmbeddingResponse batch = await ApiClient.GetBatchEmbeddingsAsync(new List<BatchEmbeddingItem>
+{
+    new() { Id = "doc-1", Text = "First document" },
+    new() { Id = "doc-2", Text = "Second document" }
+});
+foreach (var r in batch.Results)
+    Console.WriteLine($"{r.Id}: {r.Dimensions}-dim");
+
+// Files — upload, info, download
+using var fs = File.OpenRead("./report.pdf");
+string fileId = await ApiClient.UploadFileAsync(fs, "report.pdf", ttlSeconds: 3600);
+
+FileMetadataResponse? info = await ApiClient.GetFileInfoAsync(fileId);
+Console.WriteLine($"{info?.OriginalFileName} ({info?.FileSize} bytes, expires {info?.ExpiresAt:O})");
+
+Stream? download = await ApiClient.GetFileAsync(fileId);
+if (download != null)
+{
+    using var outFile = File.Create("./downloaded.pdf");
+    await download.CopyToAsync(outFile);
+}
+
+// Model config and API keys (from fabrcore.json)
+ModelConfigResponse model = await ApiClient.GetModelConfigAsync("gpt-4o-mini");
+ApiKeyResponse apiKey = await ApiClient.GetApiKeyAsync("openai");
+
+// Diagnostics — host-wide agent registry (independent of any single owner)
+AgentsListResponse agents = await ApiClient.GetAgentsAsync(status: "active");
+AgentStatisticsResponse stats = await ApiClient.GetAgentStatisticsAsync();
+```
+
+| Method | HTTP | Endpoint | Returns |
+|---|---|---|---|
+| `GetDiscoveryAsync` | GET | `/fabrcoreapi/Discovery` | `DiscoveryResponse` (agents, plugins, tools, collisions) |
+| `GetEmbeddingsAsync` | POST | `/fabrcoreapi/Embeddings` | `EmbeddingResponse` |
+| `GetBatchEmbeddingsAsync` | POST | `/fabrcoreapi/Embeddings/batch` | `BatchEmbeddingResponse` (max 2048 items) |
+| `UploadFileAsync` | POST | `/fabrcoreapi/File/upload` | `string` (file id) |
+| `GetFileAsync` | GET | `/fabrcoreapi/File/{fileId}` | `Stream?` |
+| `GetFileInfoAsync` | GET | `/fabrcoreapi/File/{fileId}/info` | `FileMetadataResponse?` |
+| `GetModelConfigAsync` | GET | `/fabrcoreapi/ModelConfig/model/{name}` | `ModelConfigResponse` |
+| `GetApiKeyAsync` | GET | `/fabrcoreapi/ModelConfig/apikey/{alias}` | `ApiKeyResponse` |
+| `GetAgentsAsync` | GET | `/fabrcoreapi/Diagnostics/agents` | `AgentsListResponse` |
+| `GetAgentAsync` | GET | `/fabrcoreapi/Diagnostics/agents/{key}` | `AgentInfo?` |
+| `GetAgentStatisticsAsync` | GET | `/fabrcoreapi/Diagnostics/agents/statistics` | `AgentStatisticsResponse` |
+| `PurgeOldAgentsAsync` | POST | `/fabrcoreapi/Diagnostics/agents/purge` | `PurgeAgentsResponse` |
+
+All of these are straight HTTP calls against `{FabrCoreHostUrl}` — no handle parsing, no `x-user` header, no ClientContext required. They're safe to call from any DI-registered consumer.
+
 ## Extension Methods
 
 ```csharp

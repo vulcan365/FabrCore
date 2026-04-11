@@ -1,4 +1,5 @@
 using FabrCore.Core;
+using FabrCore.Core.Monitoring;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
@@ -25,11 +26,16 @@ public class CompactionService
 {
     private readonly IFabrCoreChatClientService _chatClientService;
     private readonly ILogger<CompactionService> _logger;
+    private readonly IAgentMessageMonitor? _monitor;
 
-    public CompactionService(IFabrCoreChatClientService chatClientService, ILogger<CompactionService> logger)
+    public CompactionService(
+        IFabrCoreChatClientService chatClientService,
+        ILogger<CompactionService> logger,
+        IAgentMessageMonitor? monitor = null)
     {
         _chatClientService = chatClientService;
         _logger = logger;
+        _monitor = monitor;
     }
 
     public async Task<CompactionResult> CompactIfNeededAsync(
@@ -177,8 +183,21 @@ public class CompactionService
         string modelConfigName,
         CancellationToken ct)
     {
+        // Compaction calls typically run inside an OnMessage LlmUsageScope, so they'll
+        // inherit that scope's agent handle and parent message correlation. When called
+        // outside a scope, the monitor falls back to the constructor-captured handle.
         var chatClient = new TokenTrackingChatClient(
-            await _chatClientService.GetChatClient(modelConfigName));
+            await _chatClientService.GetChatClient(modelConfigName),
+            agentHandle: LlmUsageScope.Current?.AgentHandle,
+            monitor: _monitor,
+            logger: _logger);
+
+        // Tag the compaction LLM call with a "Compaction" origin so it can be distinguished
+        // from the OnMessage LLM calls that happen around it.
+        using var _compactionCtx = LlmCallContext.Begin(
+            LlmUsageScope.Current?.AgentHandle ?? "",
+            "Compaction",
+            LlmUsageScope.Current?.TraceId);
 
         var formattedMessages = string.Join("\n", messages.Select(m =>
         {
