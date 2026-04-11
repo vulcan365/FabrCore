@@ -10,7 +10,10 @@ namespace FabrCore.Host.Services
 #pragma warning disable CS0067 // Events are intentionally unused in no-op implementation
         public event Action<MonitoredMessage>? OnMessageRecorded;
         public event Action<MonitoredEvent>? OnEventRecorded;
+        public event Action<MonitoredLlmCall>? OnLlmCallRecorded;
 #pragma warning restore CS0067
+
+        public LlmCaptureOptions LlmCaptureOptions { get; } = new LlmCaptureOptions { Enabled = false };
 
         public Task RecordMessageAsync(MonitoredMessage message) => Task.CompletedTask;
 
@@ -27,6 +30,11 @@ namespace FabrCore.Host.Services
 
         public Task<List<MonitoredEvent>> GetEventsAsync(string? agentHandle = null, int? limit = null)
             => Task.FromResult(new List<MonitoredEvent>());
+
+        public Task RecordLlmCallAsync(MonitoredLlmCall call) => Task.CompletedTask;
+
+        public Task<List<MonitoredLlmCall>> GetLlmCallsAsync(string? agentHandle = null, int? limit = null)
+            => Task.FromResult(new List<MonitoredLlmCall>());
 
         public Task ClearAsync() => Task.CompletedTask;
     }
