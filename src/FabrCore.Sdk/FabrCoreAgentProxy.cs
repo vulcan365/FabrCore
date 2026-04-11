@@ -143,6 +143,7 @@ namespace FabrCore.Sdk
         private string? _chatClientConfigName;
         private CompactionService? _compactionService;
         private CompactionConfig? _compactionConfig;
+        private ProjectionConfig? _projectionConfig;
         private bool _compactionInitialized;
 
         /// <summary>The lazily-resolved CompactionService instance, available after the first TryCompactAsync() call.</summary>
@@ -234,6 +235,12 @@ namespace FabrCore.Sdk
             // Auto-store for compaction support
             _chatHistoryProvider = historyProvider;
             _chatClientConfigName = chatClientConfigName;
+
+            // Eagerly initialize compaction + projection config so the sliding-window
+            // projection is active for the very first ProvideChatHistoryAsync call.
+            // Without this, the first LLM request after rehydration would see the full
+            // unbounded history.
+            await EnsureCompactionInitializedAsync();
 
             logger.LogDebug("Created ChatClientAgent - Config: {Config}, ThreadId: {ThreadId}",
                 chatClientConfigName, threadId);
@@ -385,6 +392,33 @@ namespace FabrCore.Sdk
         }
 
         /// <summary>
+        /// Lazily resolves CompactionService from DI, builds CompactionConfig and
+        /// ProjectionConfig, and attaches the projection to the chat history provider
+        /// so the sliding-window safety net is active before the first LLM call.
+        /// Safe to call multiple times; subsequent calls are no-ops.
+        /// </summary>
+        private async Task EnsureCompactionInitializedAsync()
+        {
+            if (_compactionInitialized)
+                return;
+            if (_chatHistoryProvider is null || _chatClientConfigName is null)
+                return;
+
+            _compactionService = serviceProvider.GetService<CompactionService>();
+            _compactionConfig = await BuildCompactionConfigAsync();
+            _projectionConfig = BuildProjectionConfig(_compactionConfig);
+            _chatHistoryProvider.ActiveProjection = _projectionConfig;
+            _compactionInitialized = true;
+
+            logger.LogDebug(
+                "Compaction initialized for '{Handle}': Enabled={Enabled}, MaxContextTokens={MaxTokens}, Threshold={Threshold}, KeepLastN={KeepLastN}, StaleAfterMinutes={Stale}",
+                config.Handle, _compactionConfig.Enabled, _compactionConfig.MaxContextTokens, _compactionConfig.Threshold, _compactionConfig.KeepLastN, _compactionConfig.StaleAfterMinutes);
+            logger.LogDebug(
+                "Projection initialized for '{Handle}': Enabled={Enabled}, MaxContextTokens={MaxTokens}, Threshold={Threshold}, MinKeepLastN={MinKeep}",
+                config.Handle, _projectionConfig.Enabled, _projectionConfig.MaxContextTokens, _projectionConfig.Threshold, _projectionConfig.MinKeepLastN);
+        }
+
+        /// <summary>
         /// Attempts to compact the chat history if the token count exceeds the configured threshold.
         /// Called automatically after each OnMessage. Returns null if compaction is not configured or not needed.
         /// On first call, lazily resolves CompactionService from DI and builds CompactionConfig from agent args.
@@ -396,16 +430,7 @@ namespace FabrCore.Sdk
 
             try
             {
-                if (!_compactionInitialized)
-                {
-                    _compactionService = serviceProvider.GetService<CompactionService>();
-                    _compactionConfig = await BuildCompactionConfigAsync();
-                    _compactionInitialized = true;
-
-                    logger.LogDebug(
-                        "Compaction initialized for '{Handle}': Enabled={Enabled}, MaxContextTokens={MaxTokens}, Threshold={Threshold}, KeepLastN={KeepLastN}",
-                        config.Handle, _compactionConfig.Enabled, _compactionConfig.MaxContextTokens, _compactionConfig.Threshold, _compactionConfig.KeepLastN);
-                }
+                await EnsureCompactionInitializedAsync();
 
                 if (_compactionConfig is null || !_compactionConfig.Enabled)
                     return null;
@@ -457,6 +482,83 @@ namespace FabrCore.Sdk
             }
         }
 
+        /// <summary>
+        /// Pre-flight compaction: runs *before* <see cref="OnMessage"/> when the chat thread
+        /// has been dormant (newest stored message older than <see cref="CompactionConfig.StaleAfterMinutes"/>)
+        /// AND estimated stored tokens already exceed the compaction threshold.
+        /// This handles the rehydration case where a user comes back after a long gap to a
+        /// thread that accumulated a lot of context. Projection would still protect the LLM
+        /// call, but preflight also shrinks storage so future turns see a smaller thread.
+        /// Active conversations skip this entirely — they rely on the existing post-<see cref="OnMessage"/>
+        /// compaction so every turn doesn't pay compaction latency.
+        /// </summary>
+        private async Task<CompactionResult?> TryPreflightCompactAsync()
+        {
+            if (_chatHistoryProvider is null || _chatClientConfigName is null)
+                return null;
+
+            try
+            {
+                await EnsureCompactionInitializedAsync();
+
+                if (_compactionConfig is null || !_compactionConfig.Enabled)
+                    return null;
+                if (_compactionConfig.MaxContextTokens <= 0)
+                    return null;
+                if (_compactionConfig.StaleAfterMinutes <= 0)
+                    return null;
+
+                if (_chatHistoryProvider.HasPendingMessages)
+                    await _chatHistoryProvider.FlushAsync();
+
+                var messages = await _chatHistoryProvider.GetStoredMessagesAsync();
+                if (messages.Count == 0)
+                    return null;
+
+                var newest = messages[messages.Count - 1].Timestamp;
+                var dormantFor = DateTime.UtcNow - newest;
+                if (dormantFor < TimeSpan.FromMinutes(_compactionConfig.StaleAfterMinutes))
+                {
+                    logger.LogDebug(
+                        "Preflight compaction skipped for '{Handle}': thread active (last message {Minutes:F1}m ago)",
+                        config.Handle, dormantFor.TotalMinutes);
+                    return null;
+                }
+
+                var estimatedTokens = CompactionService.EstimateTokens(messages);
+                var threshold = (int)(_compactionConfig.MaxContextTokens * _compactionConfig.Threshold);
+                if (estimatedTokens <= threshold)
+                {
+                    logger.LogDebug(
+                        "Preflight compaction skipped for '{Handle}': thread dormant {Minutes:F1}m but under threshold (~{Tokens} <= {Threshold})",
+                        config.Handle, dormantFor.TotalMinutes, estimatedTokens, threshold);
+                    return null;
+                }
+
+                logger.LogInformation(
+                    "Preflight compaction for '{Handle}': thread dormant {Minutes:F1}m with ~{Tokens} estimated tokens (>{Threshold}) — compacting before LLM call",
+                    config.Handle, dormantFor.TotalMinutes, estimatedTokens, threshold);
+
+                var result = await OnCompaction(_chatHistoryProvider, _compactionConfig, estimatedTokens);
+
+                if (result?.WasCompacted == true)
+                {
+                    logger.LogInformation(
+                        "Preflight compaction complete for '{Handle}': {Before} → {After} messages (~{TokensBefore} → ~{TokensAfter} tokens)",
+                        config.Handle,
+                        result.OriginalMessageCount, result.CompactedMessageCount,
+                        result.EstimatedTokensBefore, result.EstimatedTokensAfter);
+                }
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Preflight compaction failed for '{Handle}' — continuing without compaction (projection will still protect the call)", config.Handle);
+                return null;
+            }
+        }
+
         private async Task<CompactionConfig> BuildCompactionConfigAsync()
         {
             var args = config.Args ?? new Dictionary<string, string>();
@@ -466,6 +568,7 @@ namespace FabrCore.Sdk
             var maxContextTokens = 25000;
             var keepLastN = 20;
             var threshold = 0.75;
+            var staleAfterMinutes = 60;
 
             // Layer 2: Model configuration overrides defaults
             try
@@ -479,6 +582,8 @@ namespace FabrCore.Sdk
                     keepLastN = mcKeep;
                 if (modelConfig.CompactionThreshold is { } mcThresh)
                     threshold = mcThresh;
+                if (modelConfig.CompactionStaleAfterMinutes is { } mcStale)
+                    staleAfterMinutes = mcStale;
             }
             catch (Exception ex)
             {
@@ -495,13 +600,50 @@ namespace FabrCore.Sdk
             if (args.TryGetValue("_CompactionThreshold", out var threshStr)
                 && double.TryParse(threshStr, System.Globalization.CultureInfo.InvariantCulture, out var threshVal))
                 threshold = threshVal;
+            if (args.TryGetValue("_CompactionStaleAfterMinutes", out var staleStr) && int.TryParse(staleStr, out var staleVal))
+                staleAfterMinutes = staleVal;
 
             return new CompactionConfig
             {
                 Enabled = enabled,
                 KeepLastN = keepLastN,
                 MaxContextTokens = maxContextTokens,
-                Threshold = threshold
+                Threshold = threshold,
+                StaleAfterMinutes = staleAfterMinutes
+            };
+        }
+
+        /// <summary>
+        /// Builds projection config from agent args, falling back to the equivalent
+        /// compaction values so users who tuned compaction automatically get consistent
+        /// projection behavior. Agent-arg overrides use the <c>_Projection*</c> prefix.
+        /// </summary>
+        private ProjectionConfig BuildProjectionConfig(CompactionConfig compaction)
+        {
+            var args = config.Args ?? new Dictionary<string, string>();
+
+            // Inherit from compaction config by default
+            var enabled = compaction.Enabled;
+            var maxContextTokens = compaction.MaxContextTokens;
+            var threshold = compaction.Threshold;
+            var minKeepLastN = 4;
+
+            if (args.TryGetValue("_ProjectionEnabled", out var enabledStr) && bool.TryParse(enabledStr, out var enabledVal))
+                enabled = enabledVal;
+            if (args.TryGetValue("_ProjectionMaxContextTokens", out var maxStr) && int.TryParse(maxStr, out var maxVal))
+                maxContextTokens = maxVal;
+            if (args.TryGetValue("_ProjectionThreshold", out var threshStr)
+                && double.TryParse(threshStr, System.Globalization.CultureInfo.InvariantCulture, out var threshVal))
+                threshold = threshVal;
+            if (args.TryGetValue("_ProjectionMinKeepLastN", out var minKeepStr) && int.TryParse(minKeepStr, out var minKeepVal))
+                minKeepLastN = minKeepVal;
+
+            return new ProjectionConfig
+            {
+                Enabled = enabled,
+                MaxContextTokens = maxContextTokens,
+                Threshold = threshold,
+                MinKeepLastN = minKeepLastN
             };
         }
 
@@ -869,6 +1011,12 @@ namespace FabrCore.Sdk
                     traceId: message.TraceId,
                     originContext: $"OnMessage:{message.Id}"))
                 {
+                    // Preflight: if the thread is dormant and bloated, compact *before*
+                    // OnMessage so the LLM call doesn't pay the full historical token cost.
+                    // Projection still acts as the hard safety net regardless of whether
+                    // preflight ran.
+                    await TryPreflightCompactAsync();
+
                     response = await OnMessage(message);
 
                     // Auto-compact chat history if threshold exceeded
