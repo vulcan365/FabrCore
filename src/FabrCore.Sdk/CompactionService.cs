@@ -11,6 +11,47 @@ public record CompactionConfig
     public int KeepLastN { get; init; } = 20;
     public int MaxContextTokens { get; init; } = 25000;
     public double Threshold { get; init; } = 0.75;
+
+    /// <summary>
+    /// If the newest stored message is older than this many minutes AND stored tokens
+    /// are over threshold, run compaction before the next OnMessage call ("preflight"
+    /// compaction). This protects dormant threads that wake up with a large backlog
+    /// from paying the full token cost on the first turn.
+    /// Set to 0 or negative to disable preflight compaction entirely.
+    /// Default: 60 minutes.
+    /// </summary>
+    public int StaleAfterMinutes { get; init; } = 60;
+}
+
+/// <summary>
+/// Projection config controls the sliding window applied when the history provider
+/// hands chat messages to the LLM. Storage is untouched — this only affects reads.
+/// This is the safety net that bounds how many tokens any single LLM call can see,
+/// regardless of how large the persisted thread has grown.
+/// </summary>
+public record ProjectionConfig
+{
+    public bool Enabled { get; init; } = true;
+
+    /// <summary>
+    /// Hard ceiling on tokens visible to the LLM, in the same units as the compaction
+    /// heuristic (<see cref="CompactionService.EstimateTokens"/>).
+    /// </summary>
+    public int MaxContextTokens { get; init; } = 25000;
+
+    /// <summary>
+    /// Fraction of <see cref="MaxContextTokens"/> to actually fill. Leaving headroom
+    /// below the raw max accounts for the output tokens and system prompt not included
+    /// in the stored history estimate.
+    /// </summary>
+    public double Threshold { get; init; } = 0.75;
+
+    /// <summary>
+    /// Always include at least this many of the most recent non-system messages even
+    /// if the token ceiling would otherwise clip them. Prevents pathological
+    /// single-message-over-budget cases from dropping the user's own turn.
+    /// </summary>
+    public int MinKeepLastN { get; init; } = 4;
 }
 
 public record CompactionResult
