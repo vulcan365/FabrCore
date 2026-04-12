@@ -43,8 +43,8 @@
 --
 -- 7. In the storage operations queries the columns need to be in the exact same order
 -- since the storage table operations support optionally streaming.
-IF OBJECT_ID(N'[OrleansStorage]', 'U') IS NULL
-CREATE TABLE OrleansStorage
+IF OBJECT_ID(N'[orlns].[OrleansStorage]', 'U') IS NULL
+CREATE TABLE orlns.OrleansStorage
 (
     -- These are for the book keeping. Orleans calculates
     -- these hashes (see RelationalStorageProvide implementation),
@@ -78,24 +78,24 @@ CREATE TABLE OrleansStorage
     -- rows down to [0, n] relevant ones, n being the number of collided value pairs.
 );
 
-IF NOT EXISTS(SELECT * FROM sys.indexes WHERE name = 'IX_OrleansStorage' AND object_id = OBJECT_ID('OrleansStorage'))
+IF NOT EXISTS(SELECT * FROM sys.indexes WHERE name = 'IX_OrleansStorage' AND object_id = OBJECT_ID('orlns.OrleansStorage'))
 BEGIN
-	CREATE NONCLUSTERED INDEX IX_OrleansStorage ON OrleansStorage(GrainIdHash, GrainTypeHash);
+	CREATE NONCLUSTERED INDEX IX_OrleansStorage ON orlns.OrleansStorage(GrainIdHash, GrainTypeHash);
 END
 
 -- This ensures lock escalation will not lock the whole table, which can potentially be enormous.
 -- See more information at https://www.littlekendra.com/2016/02/04/why-rowlock-hints-can-make-queries-slower-and-blocking-worse-in-sql-server/.
-ALTER TABLE OrleansStorage SET(LOCK_ESCALATION = DISABLE);
+ALTER TABLE orlns.OrleansStorage SET(LOCK_ESCALATION = DISABLE);
 
 -- A feature with ID is compression. If it is supported, it is used for OrleansStorage table. This is an Enterprise feature.
 -- This consumes more processor cycles, but should save on space on GrainIdString, GrainTypeString and ServiceId, which
 -- contain mainly the same values. Also the payloads will be compressed.
 IF EXISTS (SELECT 1 FROM sys.dm_db_persisted_sku_features WHERE feature_id = 100)
 BEGIN
-    ALTER TABLE OrleansStorage REBUILD PARTITION = ALL WITH(DATA_COMPRESSION = PAGE);
+    ALTER TABLE orlns.OrleansStorage REBUILD PARTITION = ALL WITH(DATA_COMPRESSION = PAGE);
 END
 
-INSERT INTO OrleansQuery(QueryKey, QueryText)
+INSERT INTO orlns.OrleansQuery(QueryKey, QueryText)
 SELECT
     'WriteToStorageKey',
     '-- When Orleans is running in normal, non-split state, there will
@@ -123,7 +123,7 @@ SELECT
     -- The NULL value is supplied by Orleans when the state is new.
     IF @GrainStateVersion IS NOT NULL
     BEGIN
-        UPDATE OrleansStorage
+        UPDATE orlns.OrleansStorage
         SET
             PayloadBinary = @PayloadBinary,
             ModifiedOn = GETUTCDATE(),
@@ -146,7 +146,7 @@ SELECT
     -- to ensure only one INSERT succeeds.
     IF @GrainStateVersion IS NULL
     BEGIN
-        INSERT INTO OrleansStorage
+        INSERT INTO orlns.OrleansStorage
         (
             GrainIdHash,
             GrainIdN0,
@@ -174,7 +174,7 @@ SELECT
          (
             -- There should not be any version of this grain state.
             SELECT 1
-            FROM OrleansStorage WITH(XLOCK, ROWLOCK, HOLDLOCK, INDEX(IX_OrleansStorage))
+            FROM orlns.OrleansStorage WITH(XLOCK, ROWLOCK, HOLDLOCK, INDEX(IX_OrleansStorage))
             WHERE
                 GrainIdHash = @GrainIdHash AND @GrainIdHash IS NOT NULL
                 AND GrainTypeHash = @GrainTypeHash AND @GrainTypeHash IS NOT NULL
@@ -196,17 +196,17 @@ SELECT
 WHERE NOT EXISTS 
 ( 
     SELECT 1 
-    FROM OrleansQuery oqt
+    FROM orlns.OrleansQuery oqt
     WHERE oqt.[QueryKey] = 'WriteToStorageKey'
 );
 
-INSERT INTO OrleansQuery(QueryKey, QueryText)
+INSERT INTO orlns.OrleansQuery(QueryKey, QueryText)
 SELECT
     'ClearStorageKey',
     'BEGIN TRANSACTION;
     SET XACT_ABORT, NOCOUNT ON;
     DECLARE @NewGrainStateVersion AS INT = @GrainStateVersion;
-    UPDATE OrleansStorage
+    UPDATE orlns.OrleansStorage
     SET
         PayloadBinary = NULL,
         ModifiedOn = GETUTCDATE(),
@@ -228,11 +228,11 @@ SELECT
 WHERE NOT EXISTS 
 ( 
     SELECT 1 
-    FROM OrleansQuery oqt
+    FROM orlns.OrleansQuery oqt
     WHERE oqt.[QueryKey] = 'ClearStorageKey'
 );
 
-INSERT INTO OrleansQuery(QueryKey, QueryText)
+INSERT INTO orlns.OrleansQuery(QueryKey, QueryText)
 SELECT
     'ReadFromStorageKey',
     '-- The application code will deserialize the relevant result. Not that the query optimizer
@@ -246,7 +246,7 @@ SELECT
         PayloadBinary,
         Version
     FROM
-        OrleansStorage
+        orlns.OrleansStorage
     WHERE
         GrainIdHash = @GrainIdHash AND @GrainIdHash IS NOT NULL
         AND GrainTypeHash = @GrainTypeHash AND @GrainTypeHash IS NOT NULL
@@ -259,16 +259,16 @@ SELECT
 WHERE NOT EXISTS 
 ( 
     SELECT 1 
-    FROM OrleansQuery oqt
+    FROM orlns.OrleansQuery oqt
     WHERE oqt.[QueryKey] = 'ReadFromStorageKey'
 );
 
-INSERT INTO OrleansQuery(QueryKey, QueryText)
+INSERT INTO orlns.OrleansQuery(QueryKey, QueryText)
 SELECT
     'DeleteStorageKey',
     'BEGIN TRANSACTION;
     SET XACT_ABORT, NOCOUNT ON;
-    DELETE FROM OrleansStorage OUTPUT DELETED.Version + 1
+    DELETE FROM orlns.OrleansStorage OUTPUT DELETED.Version + 1
     WHERE
         GrainIdHash = @GrainIdHash AND @GrainIdHash IS NOT NULL
         AND GrainTypeHash = @GrainTypeHash AND @GrainTypeHash IS NOT NULL
@@ -284,6 +284,6 @@ SELECT
 WHERE NOT EXISTS
 (
     SELECT 1
-    FROM OrleansQuery oqt
+    FROM orlns.OrleansQuery oqt
     WHERE oqt.[QueryKey] = 'DeleteStorageKey'
 );

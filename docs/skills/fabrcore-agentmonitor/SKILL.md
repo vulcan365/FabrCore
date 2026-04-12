@@ -361,6 +361,7 @@ await _monitor.ClearAsync(); // Clears messages, events, LLM calls, and token su
 | `Timestamp` | `DateTimeOffset` | UTC timestamp |
 | `TraceId` | `string?` | Distributed trace correlation ID |
 | `LlmUsage` | `LlmUsageInfo?` | LLM metrics (null if no LLM was invoked) |
+| `BusyRouted` | `bool` | True if this message was routed through `OnMessageBusy` because the agent was already processing |
 
 ## MonitoredEvent Properties
 
@@ -601,6 +602,8 @@ builder.AddFabrCoreServer(options =>
 |--------|-------------|-----------|-----------|-------|
 | Agent receives a message (via `AgentGrain.OnMessage`) | `MonitoredMessage` | Inbound | No | Every request hitting an agent |
 | Agent sends a response (via `AgentGrain.OnMessage`) | `MonitoredMessage` | Outbound | Yes | Response after LLM processing |
+| Agent receives a message while busy (via `OnMessageBusy`) | `MonitoredMessage` | Inbound | No | `BusyRouted = true` — no heartbeat, compaction, or flush |
+| Agent sends a busy response (via `OnMessageBusy`) | `MonitoredMessage` | Outbound | No | `BusyRouted = true` |
 | Client receives a stream message | `MonitoredMessage` | Inbound | If present | Responses flowing back to clients |
 | Plugin sends via `IFabrCoreAgentHost` | `MonitoredMessage` | — | — | Captured at the receiving agent's `OnMessage` |
 | Agent-to-agent via `SendAndReceiveMessage` | `MonitoredMessage` | — | — | Captured at the target agent's `OnMessage` |
@@ -616,4 +619,7 @@ System messages (`_status` heartbeats, `_error` messages) are captured like any 
 
 ```csharp
 var chatMessages = messages.Where(m => !SystemMessageTypes.IsSystemMessage(m.MessageType));
+
+// Filter to only busy-routed messages (useful for monitoring concurrency)
+var busyMessages = messages.Where(m => m.BusyRouted);
 ```
