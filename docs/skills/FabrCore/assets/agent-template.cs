@@ -19,8 +19,8 @@ public class {{AGENT_NAME}} : FabrCoreAgentProxy
     public {{AGENT_NAME}}(
         AgentConfiguration config,
         IServiceProvider serviceProvider,
-        IFabrCoreAgentHost fabrAgentHost)
-        : base(config, serviceProvider, fabrAgentHost) { }
+        IFabrCoreAgentHost fabrcoreAgentHost)
+        : base(config, serviceProvider, fabrcoreAgentHost) { }
 
     public override async Task OnInitialize()
     {
@@ -47,6 +47,27 @@ public class {{AGENT_NAME}} : FabrCoreAgentProxy
         }
 
         return response;
+    }
+
+    /// <summary>
+    /// Called when a new message arrives while OnMessage is already running.
+    /// Override for custom busy-state handling. Default returns a "busy" response.
+    /// IMPORTANT: Do not mutate shared agent state here — OnMessage may be mid-execution.
+    /// ActiveMessage returns the message currently being processed by the primary handler.
+    /// </summary>
+    public override Task<AgentMessage> OnMessageBusy(AgentMessage message)
+    {
+        // Example: acknowledge receipt with context about what's happening
+        return Task.FromResult(new AgentMessage
+        {
+            ToHandle = message.FromHandle,
+            FromHandle = config.Handle,
+            OnBehalfOfHandle = message.OnBehalfOfHandle,
+            Message = "I'm currently working on a request. I'll be available shortly.",
+            MessageType = message.MessageType,
+            Kind = MessageKind.Response,
+            TraceId = message.TraceId
+        });
     }
 
     public override Task OnEvent(EventMessage eventMessage)

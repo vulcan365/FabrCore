@@ -3,9 +3,9 @@ Orleans Stream Message Sequence.
 This sequence reduces contention on generation of [MessageId] values vs an identity column.
 The CACHE parameter can be increased to further reduce contention.
 */
-IF NOT EXISTS (SELECT * FROM sys.sequences WHERE name = 'OrleansStreamMessageSequence')
+IF NOT EXISTS (SELECT * FROM sys.sequences WHERE name = 'OrleansStreamMessageSequence' AND schema_id = SCHEMA_ID('orlns'))
 BEGIN
-    CREATE SEQUENCE OrleansStreamMessageSequence
+    CREATE SEQUENCE orlns.OrleansStreamMessageSequence
     AS BIGINT
     START WITH 1
     INCREMENT BY 1
@@ -38,8 +38,8 @@ This happens by forcing all queries to touch data in the exact same order of the
 This induces ordered resource lock acquisition while avoiding the cost of ordering itself.
 
 */
-IF OBJECT_ID(N'[OrleansStreamMessage]', 'U') IS NULL
-CREATE TABLE OrleansStreamMessage
+IF OBJECT_ID(N'[orlns].[OrleansStreamMessage]', 'U') IS NULL
+CREATE TABLE orlns.OrleansStreamMessage
 (
 	/* Identifies the application */
 	ServiceId NVARCHAR(150) NOT NULL,
@@ -87,8 +87,8 @@ Orleans Streaming Dead Letters.
 
 This table holds events that could not be processed within the allowed number of attempts or that have expired.
 */
-IF OBJECT_ID(N'[OrleansStreamDeadLetter]', 'U') IS NULL
-CREATE TABLE OrleansStreamDeadLetter
+IF OBJECT_ID(N'[orlns].[OrleansStreamDeadLetter]', 'U') IS NULL
+CREATE TABLE orlns.OrleansStreamDeadLetter
 (
 	/* Identifies the application */
 	ServiceId NVARCHAR(150) NOT NULL,
@@ -142,8 +142,8 @@ GO
 Orleans Streaming Control Table.
 This table holds schedule variables to help providers self manage their own work.
 */
-IF OBJECT_ID(N'[OrleansStreamControl]', 'U') IS NULL
-CREATE TABLE OrleansStreamControl
+IF OBJECT_ID(N'[orlns].[OrleansStreamControl]', 'U') IS NULL
+CREATE TABLE orlns.OrleansStreamControl
 (
 	/* Identifies the application */
 	ServiceId NVARCHAR(150) NOT NULL,
@@ -168,9 +168,9 @@ CREATE TABLE OrleansStreamControl
 GO
 
 /* Queues a message to the Orleans Streaming Message Queue */
-IF OBJECT_ID(N'QueueStreamMessage', 'P') IS NULL
+IF OBJECT_ID(N'[orlns].[QueueStreamMessage]', 'P') IS NULL
 EXEC('
-CREATE PROCEDURE QueueStreamMessage
+CREATE PROCEDURE orlns.QueueStreamMessage
 	@ServiceId NVARCHAR(150),
     @ProviderId NVARCHAR(150),
 	@QueueId NVARCHAR(150),
@@ -182,11 +182,11 @@ BEGIN
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
 
-DECLARE @MessageId BIGINT = NEXT VALUE FOR OrleansStreamMessageSequence;
+DECLARE @MessageId BIGINT = NEXT VALUE FOR orlns.OrleansStreamMessageSequence;
 DECLARE @Now DATETIME2(7) = SYSUTCDATETIME();
 DECLARE @ExpiresOn DATETIME2(7) = DATEADD(SECOND, @ExpiryTimeout, @Now);
 
-INSERT INTO OrleansStreamMessage
+INSERT INTO orlns.OrleansStreamMessage
 (
 	ServiceId,
     ProviderId,
@@ -222,27 +222,27 @@ END
 ');
 GO
 
-INSERT INTO OrleansQuery
+INSERT INTO orlns.OrleansQuery
 (
 	QueryKey,
 	QueryText
 )
 SELECT
 	'QueueStreamMessageKey',
-	'EXECUTE QueueStreamMessage @ServiceId = @ServiceId, @ProviderId = @ProviderId, @QueueId = @QueueId, @Payload = @Payload, @ExpiryTimeout = @ExpiryTimeout'
+	'EXECUTE orlns.QueueStreamMessage @ServiceId = @ServiceId, @ProviderId = @ProviderId, @QueueId = @QueueId, @Payload = @Payload, @ExpiryTimeout = @ExpiryTimeout'
 WHERE NOT EXISTS
 (
     SELECT 1
-    FROM OrleansQuery oqt
+    FROM orlns.OrleansQuery oqt
     WHERE oqt.[QueryKey] = 'QueueStreamMessageKey'
 );
 GO
 
 /* Gets message batches from the Orleans Streaming Message Queue */
 /* Also opportunistically performs eviction activities when they are due */
-IF OBJECT_ID(N'GetStreamMessages', 'P') IS NULL
+IF OBJECT_ID(N'[orlns].[GetStreamMessages]', 'P') IS NULL
 EXEC('
-CREATE PROCEDURE GetStreamMessages
+CREATE PROCEDURE orlns.GetStreamMessages
 	@ServiceId NVARCHAR(150),
     @ProviderId NVARCHAR(150),
 	@QueueId NVARCHAR(150),
@@ -265,7 +265,7 @@ DECLARE @VisibleOn DATETIME2(7) = DATEADD(SECOND, @VisibilityTimeout, @Now);
 DECLARE @EvictOn DATETIME2(7) =
 (
     SELECT EvictOn
-    FROM OrleansStreamControl
+    FROM orlns.OrleansStreamControl
     WHERE
         ServiceId = @ServiceId
         AND ProviderId = @ProviderId
@@ -287,7 +287,7 @@ BEGIN
             Now = @Now,
             EvictOn = DATEADD(SECOND, @EvictionInterval, @Now)
     )
-    MERGE OrleansStreamControl WITH (UPDLOCK, HOLDLOCK) AS T
+    MERGE orlns.OrleansStreamControl WITH (UPDLOCK, HOLDLOCK) AS T
     USING Candidate AS S
     ON T.ServiceId = S.ServiceId
     AND T.ProviderId = S.ProviderId
@@ -316,7 +316,7 @@ BEGIN
     BEGIN
 
         /* evict messages */
-        EXECUTE EvictStreamMessages
+        EXECUTE orlns.EvictStreamMessages
             @ServiceId = @ServiceId,
             @ProviderId = @ProviderId,
             @QueueId = @QueueId,
@@ -325,7 +325,7 @@ BEGIN
             @BatchSize = @EvictionBatchSize
 
         /* evict dead letters */
-        EXECUTE EvictStreamDeadLetters
+        EXECUTE orlns.EvictStreamDeadLetters
             @ServiceId = @ServiceId,
             @ProviderId = @ProviderId,
             @QueueId = @QueueId,
@@ -350,7 +350,7 @@ WITH Batch AS
 		ModifiedOn,
 		Payload
 	FROM
-		OrleansStreamMessage WITH (UPDLOCK)
+		orlns.OrleansStreamMessage WITH (UPDLOCK)
 	WHERE
 		ServiceId = @ServiceId
         AND ProviderId = @ProviderId
@@ -387,26 +387,26 @@ END
 ');
 GO
 
-INSERT INTO OrleansQuery
+INSERT INTO orlns.OrleansQuery
 (
 	QueryKey,
 	QueryText
 )
 SELECT
 	'GetStreamMessagesKey',
-	'EXECUTE GetStreamMessages @ServiceId = @ServiceId, @ProviderId = @ProviderId, @QueueId = @QueueId, @MaxCount = @MaxCount, @MaxAttempts = @MaxAttempts, @VisibilityTimeout = @VisibilityTimeout, @RemovalTimeout = @RemovalTimeout, @EvictionInterval = @EvictionInterval, @EvictionBatchSize = @EvictionBatchSize'
+	'EXECUTE orlns.GetStreamMessages @ServiceId = @ServiceId, @ProviderId = @ProviderId, @QueueId = @QueueId, @MaxCount = @MaxCount, @MaxAttempts = @MaxAttempts, @VisibilityTimeout = @VisibilityTimeout, @RemovalTimeout = @RemovalTimeout, @EvictionInterval = @EvictionInterval, @EvictionBatchSize = @EvictionBatchSize'
 WHERE NOT EXISTS
 (
     SELECT 1
-    FROM OrleansQuery oqt
+    FROM orlns.OrleansQuery oqt
     WHERE oqt.[QueryKey] = 'GetStreamMessagesKey'
 );
 GO
 
 /* Confirms delivery of a stream message. */
-IF OBJECT_ID(N'ConfirmStreamMessages', 'P') IS NULL
+IF OBJECT_ID(N'[orlns].[ConfirmStreamMessages]', 'P') IS NULL
 EXEC('
-CREATE PROCEDURE ConfirmStreamMessages
+CREATE PROCEDURE orlns.ConfirmStreamMessages
 	@ServiceId NVARCHAR(150),
     @ProviderId NVARCHAR(150),
 	@QueueId NVARCHAR(150),
@@ -447,7 +447,7 @@ WITH Batch AS
 	SELECT TOP (@Count)
 		*
 	FROM
-		OrleansStreamMessage AS M WITH (UPDLOCK, HOLDLOCK)
+		orlns.OrleansStreamMessage AS M WITH (UPDLOCK, HOLDLOCK)
 	WHERE
 		ServiceId = @ServiceId
         AND ProviderId = @ProviderId
@@ -476,18 +476,18 @@ END
 ');
 GO
 
-INSERT INTO OrleansQuery
+INSERT INTO orlns.OrleansQuery
 (
 	QueryKey,
 	QueryText
 )
 SELECT
 	'ConfirmStreamMessagesKey',
-	'EXECUTE ConfirmStreamMessages @ServiceId = @ServiceId, @ProviderId = @ProviderId, @QueueId = @QueueId, @Items = @Items'
+	'EXECUTE orlns.ConfirmStreamMessages @ServiceId = @ServiceId, @ProviderId = @ProviderId, @QueueId = @QueueId, @Items = @Items'
 WHERE NOT EXISTS
 (
     SELECT 1
-    FROM OrleansQuery oqt
+    FROM orlns.OrleansQuery oqt
     WHERE oqt.[QueryKey] = 'ConfirmStreamMessagesKey'
 );
 GO
@@ -496,9 +496,9 @@ GO
 /* If the message has been dequeued too many times, we move it to the dead letter table. */
 /* If the message has expired, we move to the dead letter table. */
 /* If the message is still eligible for delivery, it is made visible again. */
-IF OBJECT_ID(N'FailStreamMessage', 'P') IS NULL
+IF OBJECT_ID(N'[orlns].[FailStreamMessage]', 'P') IS NULL
 EXEC('
-CREATE PROCEDURE FailStreamMessage
+CREATE PROCEDURE orlns.FailStreamMessage
 	@ServiceId NVARCHAR(150),
     @ProviderId NVARCHAR(150),
 	@QueueId NVARCHAR(150),
@@ -515,7 +515,7 @@ DECLARE @Now DATETIME2(7) = SYSUTCDATETIME();
 DECLARE @RemoveOn DATETIME2(7) = DATEADD(SECOND, @RemovalTimeout, @Now);
 
 /* if the message can still be dequeued then attempt to mark it visible again */
-UPDATE OrleansStreamMessage
+UPDATE orlns.OrleansStreamMessage
 SET
     VisibleOn = @Now,
     ModifiedOn = @Now
@@ -529,7 +529,7 @@ WHERE
 IF @@ROWCOUNT > 0 RETURN;
 
 /* otherwise attempt to move the message to dead letters */
-DELETE FROM OrleansStreamMessage
+DELETE FROM orlns.OrleansStreamMessage
 OUTPUT
     Deleted.ServiceId,
     Deleted.ProviderId,
@@ -543,7 +543,7 @@ OUTPUT
     @Now AS DeadOn,
     @RemoveOn AS RemoveOn,
     Deleted.Payload
-INTO OrleansStreamDeadLetter
+INTO orlns.OrleansStreamDeadLetter
 (
     ServiceId,
     ProviderId,
@@ -568,26 +568,26 @@ END
 ');
 GO
 
-INSERT INTO OrleansQuery
+INSERT INTO orlns.OrleansQuery
 (
 	QueryKey,
 	QueryText
 )
 SELECT
 	'FailStreamMessageKey',
-	'EXECUTE FailStreamMessage @ServiceId = @ServiceId, @ProviderId = @ProviderId, @QueueId = @QueueId, @MessageId = @MessageId, @MaxAttempts = @MaxAttempts, @RemovalTimeout = @RemovalTimeout'
+	'EXECUTE orlns.FailStreamMessage @ServiceId = @ServiceId, @ProviderId = @ProviderId, @QueueId = @QueueId, @MessageId = @MessageId, @MaxAttempts = @MaxAttempts, @RemovalTimeout = @RemovalTimeout'
 WHERE NOT EXISTS
 (
     SELECT 1
-    FROM OrleansQuery oqt
+    FROM orlns.OrleansQuery oqt
     WHERE oqt.[QueryKey] = 'FailStreamMessageKey'
 );
 GO
 
 /* Moves non-delivered messages from the message table to the dead letter table for human troubleshooting. */
-IF OBJECT_ID(N'EvictStreamMessages', 'P') IS NULL
+IF OBJECT_ID(N'[orlns].[EvictStreamMessages]', 'P') IS NULL
 EXEC('
-CREATE PROCEDURE EvictStreamMessages
+CREATE PROCEDURE orlns.EvictStreamMessages
 	@ServiceId NVARCHAR(150),
     @ProviderId NVARCHAR(150),
 	@QueueId NVARCHAR(150),
@@ -620,7 +620,7 @@ WITH Batch AS
 		RemoveOn = @RemoveOn,
 		Payload
 	FROM
-		OrleansStreamMessage WITH (UPDLOCK)
+		orlns.OrleansStreamMessage WITH (UPDLOCK)
 	WHERE
 		ServiceId = @ServiceId
         AND ProviderId = @ProviderId
@@ -656,7 +656,7 @@ OUTPUT
 	Deleted.DeadOn,
 	Deleted.RemoveOn,
 	Deleted.Payload
-INTO OrleansStreamDeadLetter
+INTO orlns.OrleansStreamDeadLetter
 (
 	ServiceId,
     ProviderId,
@@ -676,26 +676,26 @@ END
 ');
 GO
 
-INSERT INTO OrleansQuery
+INSERT INTO orlns.OrleansQuery
 (
 	QueryKey,
 	QueryText
 )
 SELECT
 	'EvictStreamMessagesKey',
-	'EXECUTE EvictStreamMessages @ServiceId = @ServiceId, @ProviderId = @ProviderId, @QueueId = @QueueId, @BatchSize = @BatchSize, @MaxAttempts = @MaxAttempts, @RemovalTimeout = @RemovalTimeout'
+	'EXECUTE orlns.EvictStreamMessages @ServiceId = @ServiceId, @ProviderId = @ProviderId, @QueueId = @QueueId, @BatchSize = @BatchSize, @MaxAttempts = @MaxAttempts, @RemovalTimeout = @RemovalTimeout'
 WHERE NOT EXISTS
 (
     SELECT 1
-    FROM OrleansQuery oqt
+    FROM orlns.OrleansQuery oqt
     WHERE oqt.[QueryKey] = 'EvictStreamMessagesKey'
 );
 GO
 
 /* Removes messages from the dead letters table. */
-IF OBJECT_ID(N'EvictStreamDeadLetters', 'P') IS NULL
+IF OBJECT_ID(N'[orlns].[EvictStreamDeadLetters]', 'P') IS NULL
 EXEC('
-CREATE PROCEDURE EvictStreamDeadLetters
+CREATE PROCEDURE orlns.EvictStreamDeadLetters
 	@ServiceId NVARCHAR(150),
     @ProviderId NVARCHAR(150),
 	@QueueId NVARCHAR(150),
@@ -717,7 +717,7 @@ WITH Batch AS
         QueueId,
         MessageId
     FROM
-        OrleansStreamDeadLetter WITH (UPDLOCK)
+        orlns.OrleansStreamDeadLetter WITH (UPDLOCK)
     WHERE
         ServiceId = @ServiceId
         AND ProviderId = @ProviderId
@@ -735,18 +735,18 @@ END
 ');
 GO
 
-INSERT INTO OrleansQuery
+INSERT INTO orlns.OrleansQuery
 (
 	QueryKey,
 	QueryText
 )
 SELECT
 	'EvictStreamDeadLettersKey',
-	'EXECUTE EvictStreamDeadLetters @ServiceId = @ServiceId, @ProviderId = @ProviderId, @QueueId = @QueueId, @BatchSize = @BatchSize'
+	'EXECUTE orlns.EvictStreamDeadLetters @ServiceId = @ServiceId, @ProviderId = @ProviderId, @QueueId = @QueueId, @BatchSize = @BatchSize'
 WHERE NOT EXISTS
 (
     SELECT 1
-    FROM OrleansQuery oqt
+    FROM orlns.OrleansQuery oqt
     WHERE oqt.[QueryKey] = 'EvictStreamDeadLettersKey'
 );
 GO
