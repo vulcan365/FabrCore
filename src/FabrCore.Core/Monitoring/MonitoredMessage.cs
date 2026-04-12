@@ -28,5 +28,8 @@ namespace FabrCore.Core.Monitoring
 
         /// <summary>LLM usage metrics. Populated on outbound responses that invoked an LLM.</summary>
         public LlmUsageInfo? LlmUsage { get; set; }
+
+        /// <summary>True if this message was routed through the busy handler because the agent was already processing.</summary>
+        public bool BusyRouted { get; set; }
     }
 }

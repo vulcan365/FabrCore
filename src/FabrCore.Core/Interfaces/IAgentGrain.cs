@@ -22,6 +22,12 @@ namespace FabrCore.Core.Interfaces
             bool forceReconfigure = false,
             HealthDetailLevel detailLevel = HealthDetailLevel.Basic);
 
+        /// <summary>
+        /// Processes an incoming agent message. Marked as interleaving so that new messages
+        /// can enter the grain while a message is already being processed. When the agent
+        /// proxy is already handling a message, the grain routes to the busy handler instead.
+        /// </summary>
+        [AlwaysInterleave]
         Task<AgentMessage> OnMessage(AgentMessage request);
 
         /// <summary>
