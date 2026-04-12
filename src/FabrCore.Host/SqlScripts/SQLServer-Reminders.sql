@@ -1,6 +1,6 @@
 -- Orleans Reminders table - https://learn.microsoft.com/dotnet/orleans/grains/timers-and-reminders
-IF OBJECT_ID(N'[OrleansRemindersTable]', 'U') IS NULL
-CREATE TABLE OrleansRemindersTable
+IF OBJECT_ID(N'[orlns].[OrleansRemindersTable]', 'U') IS NULL
+CREATE TABLE orlns.OrleansRemindersTable
 (
 	ServiceId NVARCHAR(150) NOT NULL,
 	GrainId VARCHAR(150) NOT NULL,
@@ -13,13 +13,13 @@ CREATE TABLE OrleansRemindersTable
 	CONSTRAINT PK_RemindersTable_ServiceId_GrainId_ReminderName PRIMARY KEY(ServiceId, GrainId, ReminderName)
 );
 
-INSERT INTO OrleansQuery(QueryKey, QueryText)
+INSERT INTO orlns.OrleansQuery(QueryKey, QueryText)
 SELECT
 	'UpsertReminderRowKey',
 	'DECLARE @Version AS INT = 0;
 	SET XACT_ABORT, NOCOUNT ON;
 	BEGIN TRANSACTION;
-	UPDATE OrleansRemindersTable WITH(UPDLOCK, ROWLOCK, HOLDLOCK)
+	UPDATE orlns.OrleansRemindersTable WITH(UPDLOCK, ROWLOCK, HOLDLOCK)
 	SET
 		StartTime = @StartTime,
 		Period = @Period,
@@ -30,7 +30,7 @@ SELECT
 		AND GrainId = @GrainId AND @GrainId IS NOT NULL
 		AND ReminderName = @ReminderName AND @ReminderName IS NOT NULL;
 
-	INSERT INTO OrleansRemindersTable
+	INSERT INTO orlns.OrleansRemindersTable
 	(
 		ServiceId,
 		GrainId,
@@ -56,11 +56,11 @@ SELECT
 WHERE NOT EXISTS 
 ( 
     SELECT 1 
-    FROM OrleansQuery oqt
+    FROM orlns.OrleansQuery oqt
     WHERE oqt.[QueryKey] = 'UpsertReminderRowKey'
 );
 
-INSERT INTO OrleansQuery(QueryKey, QueryText)
+INSERT INTO orlns.OrleansQuery(QueryKey, QueryText)
 SELECT
 	'ReadReminderRowsKey',
 	'SELECT
@@ -69,7 +69,7 @@ SELECT
 		StartTime,
 		Period,
 		Version
-	FROM OrleansRemindersTable
+	FROM orlns.OrleansRemindersTable
 	WHERE
 		ServiceId = @ServiceId AND @ServiceId IS NOT NULL
 		AND GrainId = @GrainId AND @GrainId IS NOT NULL;
@@ -77,11 +77,11 @@ SELECT
 WHERE NOT EXISTS 
 ( 
     SELECT 1 
-    FROM OrleansQuery oqt
+    FROM orlns.OrleansQuery oqt
     WHERE oqt.[QueryKey] = 'ReadReminderRowsKey'
 );
 
-INSERT INTO OrleansQuery(QueryKey, QueryText)
+INSERT INTO orlns.OrleansQuery(QueryKey, QueryText)
 SELECT
 	'ReadReminderRowKey',
 	'SELECT
@@ -90,7 +90,7 @@ SELECT
 		StartTime,
 		Period,
 		Version
-	FROM OrleansRemindersTable
+	FROM orlns.OrleansRemindersTable
 	WHERE
 		ServiceId = @ServiceId AND @ServiceId IS NOT NULL
 		AND GrainId = @GrainId AND @GrainId IS NOT NULL
@@ -99,11 +99,11 @@ SELECT
 WHERE NOT EXISTS 
 ( 
     SELECT 1 
-    FROM OrleansQuery oqt
+    FROM orlns.OrleansQuery oqt
     WHERE oqt.[QueryKey] = 'ReadReminderRowKey'
 );
 
-INSERT INTO OrleansQuery(QueryKey, QueryText)
+INSERT INTO orlns.OrleansQuery(QueryKey, QueryText)
 SELECT
 	'ReadRangeRows1Key',
 	'SELECT
@@ -112,7 +112,7 @@ SELECT
 		StartTime,
 		Period,
 		Version
-	FROM OrleansRemindersTable
+	FROM orlns.OrleansRemindersTable
 	WHERE
 		ServiceId = @ServiceId AND @ServiceId IS NOT NULL
 		AND GrainHash > @BeginHash AND @BeginHash IS NOT NULL
@@ -121,11 +121,11 @@ SELECT
 WHERE NOT EXISTS 
 ( 
     SELECT 1 
-    FROM OrleansQuery oqt
+    FROM orlns.OrleansQuery oqt
     WHERE oqt.[QueryKey] = 'ReadRangeRows1Key'
 );
 
-INSERT INTO OrleansQuery(QueryKey, QueryText)
+INSERT INTO orlns.OrleansQuery(QueryKey, QueryText)
 SELECT
 	'ReadRangeRows2Key',
 	'SELECT
@@ -134,7 +134,7 @@ SELECT
 		StartTime,
 		Period,
 		Version
-	FROM OrleansRemindersTable
+	FROM orlns.OrleansRemindersTable
 	WHERE
 		ServiceId = @ServiceId AND @ServiceId IS NOT NULL
 		AND ((GrainHash > @BeginHash AND @BeginHash IS NOT NULL)
@@ -143,11 +143,11 @@ SELECT
 WHERE NOT EXISTS 
 ( 
     SELECT 1 
-    FROM OrleansQuery oqt
+    FROM orlns.OrleansQuery oqt
     WHERE oqt.[QueryKey] = 'ReadRangeRows2Key'
 );
 
-INSERT INTO OrleansQuery(QueryKey, QueryText)
+INSERT INTO orlns.OrleansQuery(QueryKey, QueryText)
 SELECT
 	'DeleteReminderRowKey',
 	'DELETE FROM OrleansRemindersTable
@@ -161,11 +161,11 @@ SELECT
 WHERE NOT EXISTS 
 ( 
     SELECT 1 
-    FROM OrleansQuery oqt
+    FROM orlns.OrleansQuery oqt
     WHERE oqt.[QueryKey] = 'DeleteReminderRowKey'
 );    
 
-INSERT INTO OrleansQuery(QueryKey, QueryText)
+INSERT INTO orlns.OrleansQuery(QueryKey, QueryText)
 SELECT
 	'DeleteReminderRowsKey',
 	'DELETE FROM OrleansRemindersTable
@@ -175,6 +175,6 @@ SELECT
 WHERE NOT EXISTS 
 ( 
     SELECT 1 
-    FROM OrleansQuery oqt
+    FROM orlns.OrleansQuery oqt
     WHERE oqt.[QueryKey] = 'DeleteReminderRowsKey'
 );  

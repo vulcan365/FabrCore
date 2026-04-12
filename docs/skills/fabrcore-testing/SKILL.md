@@ -166,6 +166,43 @@ public class MyAgentIntegrationTests
 }
 ```
 
+### Testing OnMessageBusy
+
+```csharp
+[TestClass]
+public class MyAgentBusyTests
+{
+    [TestMethod]
+    public async Task OnMessageBusy_ReturnsDefaultBusyResponse()
+    {
+        using var harness = new FabrCoreTestHarness();
+        var chatClient = FakeChatClient.WithTextResponse("ok");
+        var agent = harness.CreateMockAgent<MyAgent>(chatClient);
+        await harness.InitializeAgent(agent);
+
+        var response = await harness.SendBusyMessage(agent, "Are you there?");
+
+        Assert.IsNotNull(response.Message);
+        Assert.IsTrue(response.Message.Contains("currently processing",
+            StringComparison.OrdinalIgnoreCase));
+    }
+
+    [TestMethod]
+    public async Task OnMessageBusy_CustomOverride_ReturnsExpected()
+    {
+        using var harness = new FabrCoreTestHarness();
+        var chatClient = FakeChatClient.WithTextResponse("ok");
+        var agent = harness.CreateMockAgent<MyCustomBusyAgent>(chatClient);
+        await harness.InitializeAgent(agent);
+
+        var response = await harness.SendBusyMessage(agent, "Urgent request");
+
+        // Assert your custom busy behavior
+        Assert.IsNotNull(response.Message);
+    }
+}
+```
+
 ## FakeChatClient Factory Methods
 
 | Method | Use Case |
@@ -183,6 +220,7 @@ public class MyAgentIntegrationTests
 | `InitializeAgent(agent)` | Calls `OnInitialize()` |
 | `SendMessage(agent, text, fromHandle?)` | Calls `OnMessage()` with a properly formed `AgentMessage` |
 | `InitializeAndMessage(agent, text)` | Convenience: init + send in one call |
+| `SendBusyMessage(agent, text, fromHandle?)` | Calls `OnMessageBusy()` to test busy-state handling |
 | `AgentHost` | Access the `TestFabrCoreAgentHost` for assertions |
 
 ## TestFabrCoreAgentHost Handle Methods

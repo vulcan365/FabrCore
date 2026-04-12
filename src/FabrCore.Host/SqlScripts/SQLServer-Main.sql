@@ -34,14 +34,23 @@ SET @snapshotSettings = N'ALTER DATABASE ' + @current + N' SET READ_COMMITTED_SN
 
 EXECUTE sp_executesql @snapshotSettings;
 
+-- Create the Orleans schema if it does not exist.
+IF NOT EXISTS (SELECT * FROM sys.schemas WHERE name = 'orlns')
+    EXEC('CREATE SCHEMA orlns');
+
 -- This table defines Orleans operational queries. Orleans uses these to manage its operations,
 -- these are the only queries Orleans issues to the database.
 -- These can be redefined (e.g. to provide non-destructive updates) provided the stated interface principles hold.
-IF OBJECT_ID(N'[OrleansQuery]', 'U') IS NULL
-CREATE TABLE OrleansQuery
+IF OBJECT_ID(N'[orlns].[OrleansQuery]', 'U') IS NULL
+CREATE TABLE orlns.OrleansQuery
 (
 	QueryKey VARCHAR(64) NOT NULL,
 	QueryText VARCHAR(8000) NOT NULL,
 
 	CONSTRAINT OrleansQuery_Key PRIMARY KEY(QueryKey)
 );
+
+-- Orleans ADO.NET providers bootstrap by querying 'OrleansQuery' without a schema prefix,
+-- which resolves to dbo by default. Create a synonym so Orleans can discover the table.
+IF OBJECT_ID(N'[dbo].[OrleansQuery]', 'SN') IS NULL AND OBJECT_ID(N'[dbo].[OrleansQuery]', 'U') IS NULL
+    EXEC('CREATE SYNONYM dbo.OrleansQuery FOR orlns.OrleansQuery');

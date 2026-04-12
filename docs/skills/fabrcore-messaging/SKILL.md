@@ -106,6 +106,7 @@ public static class SystemMessageTypes
 - On exception, sends `_error` to original sender then rethrows
 - `ChatDock` shows `_status` as thinking indicator, `_error` as error message
 - System messages are NOT stored in chat history
+- **Busy routing:** `OnMessage` is marked `[AlwaysInterleave]`, so a second message can enter the grain while the first is processing. The grain routes the concurrent message to `OnMessageBusy` instead of `OnMessage`. No heartbeat, compaction, or chat history flush occurs for busy-routed messages. The monitor records busy-routed messages with `BusyRouted = true`.
 
 ## Handle Routing
 
