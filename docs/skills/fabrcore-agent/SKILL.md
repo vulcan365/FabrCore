@@ -3,11 +3,12 @@ name: fabrcore-agent
 description: >
   Build FabrCore agents — extend FabrCoreAgentProxy, implement lifecycle methods (OnInitialize, OnMessage, OnEvent),
   manage custom state, configure compaction, timers, reminders, and health monitoring.
-  Triggers on: "FabrCoreAgentProxy", "AgentAlias", "OnInitialize", "OnMessage", "OnEvent", "OnCompaction",
+  Triggers on: "FabrCoreAgentProxy", "AgentAlias", "OnInitialize", "OnMessage", "OnMessageBusy", "OnEvent", "OnCompaction",
   "ResolveConfiguredToolsAsync", "CreateChatClientAgent", "SetStatusMessage", "agent state", "GetStateAsync",
   "SetState", "FlushStateAsync", "compaction", "agent timer", "RegisterTimer", "agent reminder", "RegisterReminder",
   "OnReminder", "agent health", "GetHealth", "AgentHealthStatus", "build agent", "create agent",
-  "FabrCoreCapabilities", "FabrCoreNote", "agent capabilities", "agent notes".
+  "FabrCoreCapabilities", "FabrCoreNote", "agent capabilities", "agent notes", "busy message", "concurrent message",
+  "AlwaysInterleave", "busy routing", "agent busy".
   Do NOT use for: Microsoft Agent Framework internals (AIAgent, AgentSession) — use fabrcore-agentframework.
   Do NOT use for: plugins, tools, MCP — use fabrcore-plugins-tools or fabrcore-mcp.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
@@ -137,6 +138,7 @@ These methods are available in both agents and plugins (via `IFabrCoreAgentHost`
 | Constructor | Grain activation | DI wiring only — no async work |
 | `OnInitialize()` | Before first message or on reconfigure | Set up LLM client, tools, threads |
 | `OnMessage(AgentMessage)` | Request/OneWay message received | Process messages, return response |
+| `OnMessageBusy(AgentMessage)` | Message received while `OnMessage` is already running | Handle concurrent messages (default: returns "busy" response) |
 | `OnEvent(EventMessage)` | Fire-and-forget event | Handle stream event notifications |
 | `OnCompaction(...)` | After OnMessage, when threshold exceeded | Custom compaction logic |
 | `GetHealth(HealthDetailLevel)` | Health check request | Return custom health metrics |
@@ -230,6 +232,53 @@ public override async Task<AgentMessage> OnMessage(AgentMessage message)
 // Plugins can call it via IFabrCoreAgentHost:
 // _agentHost.SetStatusMessage("Processing..");
 ```
+
+### OnMessageBusy(AgentMessage)
+
+Called when a new message arrives while `OnMessage` is already executing. The `OnMessage` method on `IAgentGrain` is marked `[AlwaysInterleave]`, which allows a second message to enter the grain while the first is still processing. The grain checks whether `OnMessage` is already running and routes to `OnMessageBusy` instead.
+
+**Default behavior:** Returns a standard "Agent is currently processing a message. Please try again shortly." response. Override to customize.
+
+**Safety:** The primary `OnMessage` may be at any `await` point when `OnMessageBusy` executes. Do NOT mutate shared agent state (custom state, chat history). Read-only operations are safe.
+
+**`ActiveMessage` property:** Returns the message currently being processed by the primary `OnMessage` handler. Use it to provide context-aware busy responses.
+
+**Stale message protection:** If the primary `OnMessage` has been running for more than 5 minutes (stuck LLM call, deadlocked tool), the grain treats the agent as stuck and allows the new message through as a fresh primary instead of busy-routing it.
+
+```csharp
+// Example: Acknowledge receipt and tell the caller what's happening
+public override Task<AgentMessage> OnMessageBusy(AgentMessage message)
+{
+    var primaryMsg = ActiveMessage;
+    return Task.FromResult(new AgentMessage
+    {
+        ToHandle = message.FromHandle,
+        FromHandle = config.Handle,
+        OnBehalfOfHandle = message.OnBehalfOfHandle,
+        Message = $"I'm currently processing a request from {primaryMsg?.FromHandle ?? "another user"}. " +
+                  "I'll be available shortly.",
+        MessageType = message.MessageType,
+        Kind = MessageKind.Response,
+        TraceId = message.TraceId
+    });
+}
+
+// Example: Route timer messages differently when busy
+public override Task<AgentMessage> OnMessageBusy(AgentMessage message)
+{
+    // Timer messages can be identified by their MessageType
+    if (message.MessageType?.StartsWith("timer:") == true)
+    {
+        // Skip timer work when busy — the next tick will catch up
+        return Task.FromResult(message.Response());
+    }
+
+    // Default busy response for user messages
+    return base.OnMessageBusy(message);
+}
+```
+
+**What gets captured:** Busy-routed messages are recorded in the message monitor with `BusyRouted = true`. No heartbeat is sent, no compaction runs, and no chat history is flushed for busy messages.
 
 ### OnEvent(EventMessage)
 
@@ -458,6 +507,6 @@ var agentConfig = new AgentConfiguration
 - **Never share tool instances across agents** — each agent must have its own tool instances due to Orleans' single-threaded actor model.
 - **Don't call tools directly from other agents** — use `fabrcoreAgentHost.SendAndReceiveMessage()` for inter-agent communication.
 - **Constructor must match exactly:** `(AgentConfiguration, IServiceProvider, IFabrCoreAgentHost)` — Orleans instantiates agents via DI.
-- **Agents are single-threaded** — no need for locks or concurrent collections within an agent.
-- **Chat history is auto-flushed** after `OnMessage` completes and on grain deactivation.
+- **`OnMessage` is single-entry** — Orleans interleaving allows `OnMessageBusy` to execute concurrently, but only one `OnMessage` runs at a time. Do not mutate shared state in `OnMessageBusy`.
+- **Chat history is auto-flushed** after `OnMessage` completes and on grain deactivation. Not flushed after `OnMessageBusy`.
 - **Custom state requires explicit flush** — call `FlushStateAsync()` if you need durability before `OnMessage` returns.

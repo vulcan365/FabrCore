@@ -103,6 +103,22 @@ public class FabrCoreTestHarness : IDisposable
     }
 
     /// <summary>
+    /// Sends a message through the agent's OnMessageBusy method.
+    /// Use to test the agent's busy-state handling independently.
+    /// </summary>
+    public async Task<AgentMessage> SendBusyMessage(FabrCoreAgentProxy agent, string messageText, string? fromHandle = null)
+    {
+        var message = new AgentMessage
+        {
+            FromHandle = fromHandle ?? "test-user",
+            ToHandle = AgentHost.GetHandle(),
+            Message = messageText,
+            Kind = MessageKind.Request
+        };
+        return await agent.OnMessageBusy(message);
+    }
+
+    /// <summary>
     /// Convenience method: initializes then sends a message.
     /// </summary>
     public async Task<AgentMessage> InitializeAndMessage(FabrCoreAgentProxy agent, string messageText)

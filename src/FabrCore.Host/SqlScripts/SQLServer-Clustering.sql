@@ -1,6 +1,6 @@
 -- For each deployment, there will be only one (active) membership version table version column which will be updated periodically.
-IF OBJECT_ID(N'[OrleansMembershipVersionTable]', 'U') IS NULL
-CREATE TABLE OrleansMembershipVersionTable
+IF OBJECT_ID(N'[orlns].[OrleansMembershipVersionTable]', 'U') IS NULL
+CREATE TABLE orlns.OrleansMembershipVersionTable
 (
 	DeploymentId NVARCHAR(150) NOT NULL,
 	Timestamp DATETIME2(3) NOT NULL DEFAULT GETUTCDATE(),
@@ -10,8 +10,8 @@ CREATE TABLE OrleansMembershipVersionTable
 );
 
 -- Every silo instance has a row in the membership table.
-IF OBJECT_ID(N'[OrleansMembershipTable]', 'U') IS NULL
-CREATE TABLE OrleansMembershipTable
+IF OBJECT_ID(N'[orlns].[OrleansMembershipTable]', 'U') IS NULL
+CREATE TABLE orlns.OrleansMembershipTable
 (
 	DeploymentId NVARCHAR(150) NOT NULL,
 	Address VARCHAR(45) NOT NULL,
@@ -26,16 +26,16 @@ CREATE TABLE OrleansMembershipTable
 	IAmAliveTime DATETIME2(3) NOT NULL,
 
 	CONSTRAINT PK_MembershipTable_DeploymentId PRIMARY KEY(DeploymentId, Address, Port, Generation),
-	CONSTRAINT FK_MembershipTable_MembershipVersionTable_DeploymentId FOREIGN KEY (DeploymentId) REFERENCES OrleansMembershipVersionTable (DeploymentId)
+	CONSTRAINT FK_MembershipTable_MembershipVersionTable_DeploymentId FOREIGN KEY (DeploymentId) REFERENCES orlns.OrleansMembershipVersionTable (DeploymentId)
 );
 
-INSERT INTO OrleansQuery(QueryKey, QueryText)
+INSERT INTO orlns.OrleansQuery(QueryKey, QueryText)
 SELECT
 	'UpdateIAmAlivetimeKey',
 	'-- This is expected to never fail by Orleans, so return value
 	-- is not needed nor is it checked.
 	SET NOCOUNT ON;
-	UPDATE OrleansMembershipTable
+	UPDATE orlns.OrleansMembershipTable
 	SET
 		IAmAliveTime = @IAmAliveTime
 	WHERE
@@ -47,15 +47,15 @@ SELECT
 WHERE NOT EXISTS 
 ( 
     SELECT 1 
-    FROM OrleansQuery oqt
+    FROM orlns.OrleansQuery oqt
     WHERE oqt.[QueryKey] = 'UpdateIAmAlivetimeKey'
 );
 
-INSERT INTO OrleansQuery(QueryKey, QueryText)
+INSERT INTO orlns.OrleansQuery(QueryKey, QueryText)
 SELECT 
 	'InsertMembershipVersionKey',
 	'SET NOCOUNT ON;
-	INSERT INTO OrleansMembershipVersionTable
+	INSERT INTO orlns.OrleansMembershipVersionTable
 	(
 		DeploymentId
 	)
@@ -64,7 +64,7 @@ SELECT
 	(
 		SELECT 1
 		FROM
-			OrleansMembershipVersionTable WITH(HOLDLOCK, XLOCK, ROWLOCK)
+			orlns.OrleansMembershipVersionTable WITH(HOLDLOCK, XLOCK, ROWLOCK)
 		WHERE
 			DeploymentId = @DeploymentId AND @DeploymentId IS NOT NULL
 	);
@@ -74,17 +74,17 @@ SELECT
 WHERE NOT EXISTS 
 ( 
     SELECT 1 
-    FROM OrleansQuery oqt
+    FROM orlns.OrleansQuery oqt
     WHERE oqt.[QueryKey] = 'InsertMembershipVersionKey'
 );
 
-INSERT INTO OrleansQuery(QueryKey, QueryText)
+INSERT INTO orlns.OrleansQuery(QueryKey, QueryText)
 SELECT
 	'InsertMembershipKey',
 	'SET XACT_ABORT, NOCOUNT ON;
 	DECLARE @ROWCOUNT AS INT;
 	BEGIN TRANSACTION;
-	INSERT INTO OrleansMembershipTable
+	INSERT INTO orlns.OrleansMembershipTable
 	(
 		DeploymentId,
 		Address,
@@ -112,7 +112,7 @@ SELECT
 	(
 		SELECT 1
 		FROM
-			OrleansMembershipTable WITH(HOLDLOCK, XLOCK, ROWLOCK)
+			orlns.OrleansMembershipTable WITH(HOLDLOCK, XLOCK, ROWLOCK)
 		WHERE
 			DeploymentId = @DeploymentId AND @DeploymentId IS NOT NULL
 			AND Address = @Address AND @Address IS NOT NULL
@@ -120,7 +120,7 @@ SELECT
 			AND Generation = @Generation AND @Generation IS NOT NULL
 	);
 
-	UPDATE OrleansMembershipVersionTable
+	UPDATE orlns.OrleansMembershipVersionTable
 	SET
 		Timestamp = GETUTCDATE(),
 		Version = Version + 1
@@ -140,17 +140,17 @@ SELECT
 WHERE NOT EXISTS 
 ( 
     SELECT 1 
-    FROM OrleansQuery oqt
+    FROM orlns.OrleansQuery oqt
     WHERE oqt.[QueryKey] = 'InsertMembershipKey'
 );
 
-INSERT INTO OrleansQuery(QueryKey, QueryText)
+INSERT INTO orlns.OrleansQuery(QueryKey, QueryText)
 SELECT
 	'UpdateMembershipKey',
 	'SET XACT_ABORT, NOCOUNT ON;
 	BEGIN TRANSACTION;
 	
-	UPDATE OrleansMembershipVersionTable
+	UPDATE orlns.OrleansMembershipVersionTable
 	SET
 		Timestamp = GETUTCDATE(),
 		Version = Version + 1
@@ -158,7 +158,7 @@ SELECT
 		DeploymentId = @DeploymentId AND @DeploymentId IS NOT NULL
 		AND Version = @Version AND @Version IS NOT NULL;
 	
-	UPDATE OrleansMembershipTable
+	UPDATE orlns.OrleansMembershipTable
 	SET
 		Status = @Status,
 		SuspectTimes = @SuspectTimes,
@@ -176,11 +176,11 @@ SELECT
 WHERE NOT EXISTS 
 ( 
     SELECT 1 
-    FROM OrleansQuery oqt
+    FROM orlns.OrleansQuery oqt
     WHERE oqt.[QueryKey] = 'UpdateMembershipKey'
 );
 
-INSERT INTO OrleansQuery(QueryKey, QueryText)
+INSERT INTO orlns.OrleansQuery(QueryKey, QueryText)
 SELECT
 	'GatewaysQueryKey',
 	'SELECT
@@ -188,7 +188,7 @@ SELECT
 		ProxyPort,
 		Generation
 	FROM
-		OrleansMembershipTable
+		orlns.OrleansMembershipTable
 	WHERE
 		DeploymentId = @DeploymentId AND @DeploymentId IS NOT NULL
 		AND Status = @Status AND @Status IS NOT NULL
@@ -197,11 +197,11 @@ SELECT
 WHERE NOT EXISTS 
 ( 
     SELECT 1 
-    FROM OrleansQuery oqt
+    FROM orlns.OrleansQuery oqt
     WHERE oqt.[QueryKey] = 'GatewaysQueryKey'
 );
 
-INSERT INTO OrleansQuery(QueryKey, QueryText)
+INSERT INTO orlns.OrleansQuery(QueryKey, QueryText)
 SELECT
 	'MembershipReadRowKey',
 	'SELECT
@@ -218,9 +218,9 @@ SELECT
 		m.IAmAliveTime,
 		v.Version
 	FROM
-		OrleansMembershipVersionTable v
+		orlns.OrleansMembershipVersionTable v
 		-- This ensures the version table will returned even if there is no matching membership row.
-		LEFT OUTER JOIN OrleansMembershipTable m ON v.DeploymentId = m.DeploymentId
+		LEFT OUTER JOIN orlns.OrleansMembershipTable m ON v.DeploymentId = m.DeploymentId
 		AND Address = @Address AND @Address IS NOT NULL
 		AND Port = @Port AND @Port IS NOT NULL
 		AND Generation = @Generation AND @Generation IS NOT NULL
@@ -230,11 +230,11 @@ SELECT
 WHERE NOT EXISTS 
 ( 
     SELECT 1 
-    FROM OrleansQuery oqt
+    FROM orlns.OrleansQuery oqt
     WHERE oqt.[QueryKey] = 'MembershipReadRowKey'
 );
 
-INSERT INTO OrleansQuery(QueryKey, QueryText)
+INSERT INTO orlns.OrleansQuery(QueryKey, QueryText)
 SELECT
 	'MembershipReadAllKey',
 	'SELECT
@@ -251,7 +251,7 @@ SELECT
 		m.IAmAliveTime,
 		v.Version
 	FROM
-		OrleansMembershipVersionTable v LEFT OUTER JOIN OrleansMembershipTable m
+		orlns.OrleansMembershipVersionTable v LEFT OUTER JOIN orlns.OrleansMembershipTable m
 		ON v.DeploymentId = m.DeploymentId
 	WHERE
 		v.DeploymentId = @DeploymentId AND @DeploymentId IS NOT NULL;
@@ -259,28 +259,28 @@ SELECT
 WHERE NOT EXISTS 
 ( 
     SELECT 1 
-    FROM OrleansQuery oqt
+    FROM orlns.OrleansQuery oqt
     WHERE oqt.[QueryKey] = 'MembershipReadAllKey'
 );
 
-INSERT INTO OrleansQuery(QueryKey, QueryText)
+INSERT INTO orlns.OrleansQuery(QueryKey, QueryText)
 SELECT
 	'DeleteMembershipTableEntriesKey',
 	'DELETE FROM OrleansMembershipTable
 	WHERE DeploymentId = @DeploymentId AND @DeploymentId IS NOT NULL;
-	DELETE FROM OrleansMembershipVersionTable
+	DELETE FROM orlns.OrleansMembershipVersionTable
 	WHERE DeploymentId = @DeploymentId AND @DeploymentId IS NOT NULL;
 	'
 WHERE NOT EXISTS
 (
     SELECT 1
-    FROM OrleansQuery oqt
+    FROM orlns.OrleansQuery oqt
     WHERE oqt.[QueryKey] = 'DeleteMembershipTableEntriesKey'
 );
 
 -- Migration from Orleans 3.7.0: CleanupDefunctSiloEntriesKey
 -- (missing from official script, see https://github.com/dotnet/orleans/issues/8216)
-INSERT INTO OrleansQuery(QueryKey, QueryText)
+INSERT INTO orlns.OrleansQuery(QueryKey, QueryText)
 SELECT
 	'CleanupDefunctSiloEntriesKey',
 	'DELETE FROM OrleansMembershipTable
@@ -292,6 +292,6 @@ SELECT
 WHERE NOT EXISTS
 (
     SELECT 1
-    FROM OrleansQuery oqt
+    FROM orlns.OrleansQuery oqt
     WHERE oqt.[QueryKey] = 'CleanupDefunctSiloEntriesKey'
 );
