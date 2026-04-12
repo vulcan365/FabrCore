@@ -68,6 +68,10 @@ namespace FabrCore.Host.Grains
             "fabrcore.agent.reminder.fired",
             description: "Number of reminder callbacks fired");
 
+        private static readonly Counter<long> BusyMessagesProcessedCounter = Meter.CreateCounter<long>(
+            "fabrcore.agent.messages.busy",
+            description: "Number of messages routed to busy handler because the agent was already processing");
+
         protected IFabrCoreAgentProxy? fabrcoreAgentProxy;
         protected AgentConfiguration? agentConfiguration;
 
@@ -512,7 +516,44 @@ namespace FabrCore.Host.Grains
             }
         }
 
+        /// <summary>
+        /// Messages that have been processing for longer than this threshold are considered stale.
+        /// A new message arriving while a stale primary is running will be treated as a fresh primary
+        /// instead of being busy-routed, preventing the agent from getting permanently stuck.
+        /// </summary>
+        private static readonly TimeSpan StaleMessageThreshold = TimeSpan.FromMinutes(5);
+
         public async Task<AgentMessage> OnMessage(AgentMessage request)
+        {
+            if (fabrcoreAgentProxy == null)
+                throw new InvalidOperationException("Agent has not been configured. Call ConfigureAgent first.");
+
+            // Routing decision: checked before the first await, so Orleans' single-threaded
+            // turn guarantees this is atomic. Only one caller enters HandlePrimaryMessage;
+            // all others are routed to HandleBusyMessage.
+            if (fabrcoreAgentProxy.InternalIsProcessingMessage)
+            {
+                // Safety valve: if the primary message has been running too long, it's likely
+                // stuck (hung LLM call, deadlocked tool, etc.). Log a warning and allow this
+                // message through as primary rather than being stuck in busy forever.
+                var elapsed = fabrcoreAgentProxy.InternalProcessingElapsed;
+                if (elapsed > StaleMessageThreshold)
+                {
+                    logger.LogWarning(
+                        "Primary message has been processing for {Elapsed} (threshold: {Threshold}). " +
+                        "Treating new message as primary — previous message may be stuck.",
+                        elapsed, StaleMessageThreshold);
+                }
+                else
+                {
+                    return await HandleBusyMessage(request);
+                }
+            }
+
+            return await HandlePrimaryMessage(request);
+        }
+
+        private async Task<AgentMessage> HandlePrimaryMessage(AgentMessage request)
         {
             using var activity = ActivitySource.StartActivity("OnMessage", ActivityKind.Server);
             activity?.SetTag("message.from", request.FromHandle);
@@ -530,11 +571,6 @@ namespace FabrCore.Host.Grains
 
             try
             {
-                if (fabrcoreAgentProxy == null)
-                {
-                    throw new InvalidOperationException("Agent has not been configured. Call ConfigureAgent first.");
-                }
-
                 // Record inbound request to the message monitor immediately
                 var handle = this.GetPrimaryKeyString();
                 _ = _messageMonitor.RecordMessageAsync(new MonitoredMessage
@@ -654,6 +690,98 @@ namespace FabrCore.Host.Grains
 
                 // Auto-flush all tracked message stores after each message
                 await FlushAllChatHistoryProvidersAsync();
+            }
+        }
+
+        /// <summary>
+        /// Lightweight handler for messages arriving while the agent is already processing.
+        /// No heartbeat, no compaction, no chat history flush — just monitor recording,
+        /// the developer's OnMessageBusy override, and metrics.
+        /// </summary>
+        private async Task<AgentMessage> HandleBusyMessage(AgentMessage request)
+        {
+            using var activity = ActivitySource.StartActivity("OnMessageBusy", ActivityKind.Server);
+            activity?.SetTag("message.from", request.FromHandle);
+            activity?.SetTag("message.to", request.ToHandle);
+            activity?.SetTag("message.kind", request.Kind.ToString());
+            activity?.SetTag("message.route", "busy");
+
+            logger.LogDebug("OnMessage busy-routed: {AgentMessage}", SerializeForLog(request));
+
+            var handle = this.GetPrimaryKeyString();
+            var startTime = Stopwatch.GetTimestamp();
+
+            // Record inbound request to the message monitor (marked as busy-routed)
+            _ = _messageMonitor.RecordMessageAsync(new MonitoredMessage
+            {
+                AgentHandle = handle,
+                FromHandle = request.FromHandle,
+                ToHandle = request.ToHandle,
+                OnBehalfOfHandle = request.OnBehalfOfHandle,
+                DeliverToHandle = request.DeliverToHandle,
+                Channel = request.Channel,
+                Message = request.Message,
+                MessageType = request.MessageType,
+                Kind = request.Kind,
+                DataType = request.DataType,
+                Files = request.Files,
+                State = request.State,
+                Args = request.Args,
+                Direction = MessageDirection.Inbound,
+                TraceId = request.TraceId,
+                BusyRouted = true
+            });
+
+            try
+            {
+                var response = await fabrcoreAgentProxy!.InternalOnMessageBusy(request);
+
+                logger.LogDebug("OnMessageBusy response: {AgentMessage}", response != null ? SerializeForLog(response) : "null");
+
+                // Record outbound response to the message monitor
+                if (response != null)
+                {
+                    _ = _messageMonitor.RecordMessageAsync(new MonitoredMessage
+                    {
+                        AgentHandle = handle,
+                        FromHandle = response.FromHandle,
+                        ToHandle = response.ToHandle,
+                        OnBehalfOfHandle = response.OnBehalfOfHandle,
+                        DeliverToHandle = response.DeliverToHandle,
+                        Channel = response.Channel,
+                        Message = response.Message,
+                        MessageType = response.MessageType,
+                        Kind = response.Kind,
+                        Direction = MessageDirection.Outbound,
+                        TraceId = response.TraceId,
+                        BusyRouted = true
+                    });
+                }
+
+                var elapsed = Stopwatch.GetElapsedTime(startTime).TotalMilliseconds;
+                MessageProcessingDuration.Record(elapsed,
+                    new KeyValuePair<string, object?>("message.from", request.FromHandle),
+                    new KeyValuePair<string, object?>("message.to", request.ToHandle),
+                    new KeyValuePair<string, object?>("message.route", "busy"));
+
+                BusyMessagesProcessedCounter.Add(1,
+                    new KeyValuePair<string, object?>("message.from", request.FromHandle),
+                    new KeyValuePair<string, object?>("message.to", request.ToHandle));
+
+                activity?.SetStatus(ActivityStatusCode.Ok);
+                return response ?? throw new InvalidOperationException("Agent proxy returned null busy response");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error processing busy message from {FromHandle} to {ToHandle}",
+                    request.FromHandle, request.ToHandle);
+
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                activity?.AddException(ex);
+                ErrorCounter.Add(1,
+                    new KeyValuePair<string, object?>("error.type", "busy_message_processing_failed"),
+                    new KeyValuePair<string, object?>("message.from", request.FromHandle));
+                throw;
             }
         }
 

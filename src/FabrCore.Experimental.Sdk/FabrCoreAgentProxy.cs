@@ -35,6 +35,8 @@ public abstract class FabrCoreAgentProxy : IFabrCoreAgentProxy
         "fabrcore.agent.proxy.message.duration", unit: "ms", description: "Duration of message processing");
     private static readonly Counter<long> ErrorCounter = Meter.CreateCounter<long>(
         "fabrcore.agent.proxy.errors", description: "Number of errors");
+    private static readonly Counter<long> BusyMessagesProcessedCounter = Meter.CreateCounter<long>(
+        "fabrcore.agent.proxy.messages.busy", description: "Number of messages routed to OnMessageBusy");
     private static readonly Counter<long> McpServersConnectedCounter = Meter.CreateCounter<long>(
         "fabrcore.agent.proxy.mcp.servers.connected", description: "MCP servers connected");
     private static readonly Counter<long> McpErrorsCounter = Meter.CreateCounter<long>(
@@ -52,6 +54,8 @@ public abstract class FabrCoreAgentProxy : IFabrCoreAgentProxy
 
     private DateTime? _initializedAt;
     private AgentMessage? _activeMessage;
+    private int _activeMessageCount;
+    private long _processingStartTimestamp;
 
     /// <summary>The message currently being processed.</summary>
     protected AgentMessage? ActiveMessage => _activeMessage;
@@ -305,9 +309,12 @@ public abstract class FabrCoreAgentProxy : IFabrCoreAgentProxy
     async Task<AgentMessage> IFabrCoreAgentProxy.InternalOnMessage(AgentMessage message)
     {
         var sw = Stopwatch.StartNew();
-        _activeMessage = message;
         try
         {
+            Interlocked.Increment(ref _activeMessageCount);
+            _activeMessage = message;
+            _processingStartTimestamp = Stopwatch.GetTimestamp();
+
             var result = await OnMessage(message);
             MessagesProcessedCounter.Add(1, new KeyValuePair<string, object?>("agent.type", config.AgentType));
             return result;
@@ -321,10 +328,39 @@ public abstract class FabrCoreAgentProxy : IFabrCoreAgentProxy
         }
         finally
         {
-            _activeMessage = null;
+            if (Interlocked.Decrement(ref _activeMessageCount) == 0)
+            {
+                _activeMessage = null;
+                _processingStartTimestamp = 0;
+            }
             sw.Stop();
             MessageProcessingDuration.Record(sw.Elapsed.TotalMilliseconds,
                 new KeyValuePair<string, object?>("agent.type", config.AgentType));
+        }
+    }
+
+    async Task<AgentMessage> IFabrCoreAgentProxy.InternalOnMessageBusy(AgentMessage message)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var result = await OnMessageBusy(message);
+            BusyMessagesProcessedCounter.Add(1, new KeyValuePair<string, object?>("agent.type", config.AgentType));
+            return result;
+        }
+        catch (Exception ex)
+        {
+            ErrorCounter.Add(1,
+                new KeyValuePair<string, object?>("agent.type", config.AgentType),
+                new KeyValuePair<string, object?>("error.type", "busy_message_failed"));
+            throw;
+        }
+        finally
+        {
+            sw.Stop();
+            MessageProcessingDuration.Record(sw.Elapsed.TotalMilliseconds,
+                new KeyValuePair<string, object?>("agent.type", config.AgentType),
+                new KeyValuePair<string, object?>("message.route", "busy"));
         }
     }
 
@@ -368,12 +404,45 @@ public abstract class FabrCoreAgentProxy : IFabrCoreAgentProxy
     bool IFabrCoreAgentProxy.InternalHasPendingStateChanges =>
         _pendingStateChanges.Count > 0 || _pendingStateDeletes.Count > 0;
 
+    bool IFabrCoreAgentProxy.InternalIsProcessingMessage => _activeMessageCount > 0;
+
+    TimeSpan IFabrCoreAgentProxy.InternalProcessingElapsed =>
+        _activeMessageCount > 0
+            ? Stopwatch.GetElapsedTime(_processingStartTimestamp)
+            : TimeSpan.Zero;
+
     #endregion
 
     #region Virtual Methods
 
     public virtual Task OnInitialize() => Task.CompletedTask;
     public abstract Task<AgentMessage> OnMessage(AgentMessage message);
+
+    /// <summary>
+    /// Called when a new message arrives while the agent is already processing a message.
+    /// The default implementation returns a standard "busy" response.
+    /// Override to implement custom busy-state handling (e.g., acknowledge receipt,
+    /// reject duplicates, provide status, or perform state-safe read-only work).
+    /// <para>
+    /// IMPORTANT: Do not mutate shared agent state in this method — the primary OnMessage
+    /// may be mid-execution at any await point. The <see cref="ActiveMessage"/> property
+    /// returns the message currently being processed by the primary handler.
+    /// </para>
+    /// </summary>
+    public virtual Task<AgentMessage> OnMessageBusy(AgentMessage message)
+    {
+        return Task.FromResult(new AgentMessage
+        {
+            ToHandle = message.FromHandle,
+            FromHandle = config.Handle,
+            OnBehalfOfHandle = message.OnBehalfOfHandle,
+            Message = "Agent is currently processing a message. Please try again shortly.",
+            MessageType = message.MessageType,
+            Kind = MessageKind.Response,
+            TraceId = message.TraceId
+        });
+    }
+
     public virtual Task OnReset() => Task.CompletedTask;
     public virtual Task OnEvent(EventMessage message) => Task.CompletedTask;
 
