@@ -118,6 +118,58 @@ namespace FabrCore.Client
     }
 
     /// <summary>
+    /// A single message in a chat completion request.
+    /// </summary>
+    public class ChatCompletionMessageRequest
+    {
+        public string Role { get; set; } = "user";
+        public string Content { get; set; } = string.Empty;
+    }
+
+    /// <summary>
+    /// Options for controlling chat completion behavior.
+    /// </summary>
+    public class ChatCompletionOptions
+    {
+        public string Model { get; set; } = "default";
+        public int? MaxOutputTokens { get; set; }
+        public float? Temperature { get; set; }
+        public float? TopP { get; set; }
+        public int? TopK { get; set; }
+        public List<string>? StopSequences { get; set; }
+        public float? FrequencyPenalty { get; set; }
+        public float? PresencePenalty { get; set; }
+    }
+
+    /// <summary>
+    /// Request for chat completion endpoint.
+    /// </summary>
+    public class ChatCompletionRequest
+    {
+        public List<ChatCompletionMessageRequest> Messages { get; set; } = new();
+        public ChatCompletionOptions? Options { get; set; }
+    }
+
+    /// <summary>
+    /// Usage statistics from chat completion.
+    /// </summary>
+    public class ChatCompletionUsage
+    {
+        public int InputTokens { get; set; }
+        public int OutputTokens { get; set; }
+    }
+
+    /// <summary>
+    /// Response from chat completion endpoint.
+    /// </summary>
+    public class ChatCompletionResponse
+    {
+        public string Text { get; set; } = string.Empty;
+        public string Model { get; set; } = string.Empty;
+        public ChatCompletionUsage Usage { get; set; } = new();
+    }
+
+    /// <summary>
     /// Response from batch agent creation endpoint.
     /// </summary>
     public class CreateAgentsResponse
@@ -313,6 +365,16 @@ namespace FabrCore.Client
         /// discovery metadata is global to the host.
         /// </summary>
         Task<DiscoveryResponse> GetDiscoveryAsync(CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Sends a chat completion request to the host and returns the response.
+        /// </summary>
+        Task<ChatCompletionResponse> GetChatCompletionAsync(ChatCompletionRequest request, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Convenience overload: sends a single user prompt with optional options.
+        /// </summary>
+        Task<ChatCompletionResponse> GetChatCompletionAsync(string prompt, ChatCompletionOptions? options = null, CancellationToken cancellationToken = default);
     }
 
     /// <summary>
@@ -921,6 +983,50 @@ namespace FabrCore.Client
                 _logger.LogError(ex, "Failed to get discovery information");
                 throw;
             }
+        }
+
+        public async Task<ChatCompletionResponse> GetChatCompletionAsync(ChatCompletionRequest request, CancellationToken cancellationToken = default)
+        {
+            using var activity = ActivitySource.StartActivity("GetChatCompletion", ActivityKind.Client);
+            activity?.SetTag("model.name", request.Options?.Model ?? "default");
+            activity?.SetTag("messages.count", request.Messages.Count);
+
+            var url = $"{_baseUrl}/fabrcoreapi/ChatCompletion";
+            var startTime = Stopwatch.GetTimestamp();
+
+            try
+            {
+                var response = await _httpClient.PostAsJsonAsync(url, request, JsonOptions, cancellationToken);
+                response.EnsureSuccessStatusCode();
+
+                var result = await response.Content.ReadFromJsonAsync<ChatCompletionResponse>(JsonOptions, cancellationToken)
+                    ?? throw new InvalidOperationException("Failed to deserialize chat completion response");
+
+                RecordSuccess(activity, startTime, "GetChatCompletion");
+                _logger.LogDebug("Chat completion using model {Model}, {InputTokens} input / {OutputTokens} output tokens",
+                    result.Model, result.Usage.InputTokens, result.Usage.OutputTokens);
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                RecordError(activity, startTime, "GetChatCompletion", ex);
+                _logger.LogError(ex, "Failed to get chat completion for model {Model}", request.Options?.Model ?? "default");
+                throw;
+            }
+        }
+
+        public Task<ChatCompletionResponse> GetChatCompletionAsync(string prompt, ChatCompletionOptions? options = null, CancellationToken cancellationToken = default)
+        {
+            var request = new ChatCompletionRequest
+            {
+                Messages = new List<ChatCompletionMessageRequest>
+                {
+                    new() { Role = "user", Content = prompt }
+                },
+                Options = options
+            };
+            return GetChatCompletionAsync(request, cancellationToken);
         }
 
         /// <summary>
