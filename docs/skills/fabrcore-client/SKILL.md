@@ -318,6 +318,24 @@ BatchEmbeddingResponse batch = await ApiClient.GetBatchEmbeddingsAsync(new List<
 foreach (var r in batch.Results)
     Console.WriteLine($"{r.Id}: {r.Dimensions}-dim");
 
+// Chat completion — single prompt with options
+ChatCompletionResponse completion = await ApiClient.GetChatCompletionAsync(
+    "Extract entities from this text...",
+    new ChatCompletionOptions { Model = "gpt-4o-mini", MaxOutputTokens = 2048 });
+Console.WriteLine($"{completion.Model}: {completion.Text}");
+Console.WriteLine($"Tokens: {completion.Usage.InputTokens} in / {completion.Usage.OutputTokens} out");
+
+// Chat completion — full multi-message request
+ChatCompletionResponse multi = await ApiClient.GetChatCompletionAsync(new ChatCompletionRequest
+{
+    Messages = new List<ChatCompletionMessageRequest>
+    {
+        new() { Role = "system", Content = "You are a helpful assistant." },
+        new() { Role = "user", Content = "Summarize this document..." }
+    },
+    Options = new ChatCompletionOptions { Model = "default", Temperature = 0.2f }
+});
+
 // Files — upload, info, download
 using var fs = File.OpenRead("./report.pdf");
 string fileId = await ApiClient.UploadFileAsync(fs, "report.pdf", ttlSeconds: 3600);
@@ -346,6 +364,7 @@ AgentStatisticsResponse stats = await ApiClient.GetAgentStatisticsAsync();
 | `GetDiscoveryAsync` | GET | `/fabrcoreapi/Discovery` | `DiscoveryResponse` (agents, plugins, tools, collisions) |
 | `GetEmbeddingsAsync` | POST | `/fabrcoreapi/Embeddings` | `EmbeddingResponse` |
 | `GetBatchEmbeddingsAsync` | POST | `/fabrcoreapi/Embeddings/batch` | `BatchEmbeddingResponse` (max 2048 items) |
+| `GetChatCompletionAsync` | POST | `/fabrcoreapi/ChatCompletion` | `ChatCompletionResponse` (text, model, usage) |
 | `UploadFileAsync` | POST | `/fabrcoreapi/File/upload` | `string` (file id) |
 | `GetFileAsync` | GET | `/fabrcoreapi/File/{fileId}` | `Stream?` |
 | `GetFileInfoAsync` | GET | `/fabrcoreapi/File/{fileId}/info` | `FileMetadataResponse?` |

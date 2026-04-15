@@ -476,6 +476,41 @@ Generate vector embeddings for text using the configured embedding model.
 
 ---
 
+### ChatCompletion API (`/fabrcoreapi/ChatCompletion`)
+
+Send a chat completion request to the configured LLM. Uses `IFabrCoreChatClientService` to resolve the model by name from `fabrcore.json`. Designed for single-turn completions (no streaming, no tool calling).
+
+#### POST `/ChatCompletion` — Chat completion
+
+**Request**:
+```json
+{
+  "Messages": [
+    { "Role": "user", "Content": "Extract entities from this text..." }
+  ],
+  "Options": {
+    "Model": "gpt-4o-mini",
+    "MaxOutputTokens": 2048,
+    "Temperature": 0.2
+  }
+}
+```
+
+`Options` is optional. All fields inside `Options` are optional. Supported options: `Model` (default: `"default"`), `MaxOutputTokens`, `Temperature`, `TopP`, `TopK`, `StopSequences`, `FrequencyPenalty`, `PresencePenalty`.
+
+**Response** `200 OK`:
+```json
+{
+  "Text": "The extracted response text...",
+  "Model": "gpt-4o-mini",
+  "Usage": { "InputTokens": 150, "OutputTokens": 80 }
+}
+```
+
+**Client fallback pattern** — on a client host (`AddFabrCoreClient`), use `IFabrCoreHostApiClient.GetChatCompletionAsync()` which POSTs to this endpoint on the server host. On a server host (`AddFabrCoreServer`), resolve `IFabrCoreChatClientService` directly from DI.
+
+---
+
 ### Model Config API (`/fabrcoreapi/modelconfig`)
 
 Read model configuration and API keys from `fabrcore.json`. Useful for clients that need to know available models.
