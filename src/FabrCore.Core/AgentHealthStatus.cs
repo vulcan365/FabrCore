@@ -91,6 +91,43 @@ namespace FabrCore.Core
         [Id(14)]
         public AgentConfiguration? Configuration { get; init; }
 
+        /// <summary>
+        /// Number of messages routed to the busy handler since configuration.
+        /// Proxy for "queue depth" — rising values indicate the agent is saturating.
+        /// Only populated when detail level is Detailed or Full.
+        /// </summary>
+        [Id(15)]
+        public long? BusyMessagesRouted { get; init; }
+
+        /// <summary>
+        /// Number of samples currently in the latency reservoir.
+        /// Only populated when detail level is Detailed or Full.
+        /// </summary>
+        [Id(16)]
+        public int? LatencySampleCount { get; init; }
+
+        /// <summary>
+        /// Median (50th percentile) message processing latency in milliseconds,
+        /// computed over a rolling window of recent samples.
+        /// Only populated when detail level is Detailed or Full and samples exist.
+        /// </summary>
+        [Id(17)]
+        public double? LatencyP50Ms { get; init; }
+
+        /// <summary>
+        /// 95th percentile message processing latency in milliseconds.
+        /// Only populated when detail level is Detailed or Full and samples exist.
+        /// </summary>
+        [Id(18)]
+        public double? LatencyP95Ms { get; init; }
+
+        /// <summary>
+        /// 99th percentile message processing latency in milliseconds.
+        /// Only populated when detail level is Detailed or Full and samples exist.
+        /// </summary>
+        [Id(19)]
+        public double? LatencyP99Ms { get; init; }
+
         // Full level
 
         /// <summary>
