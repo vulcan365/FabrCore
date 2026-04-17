@@ -4,6 +4,7 @@ using FabrCore.Host.Streaming;
 using FabrCore.Sdk;
 using Microsoft.Extensions.Logging;
 using Orleans;
+using System.Diagnostics;
 using System.Text.Json;
 
 namespace FabrCore.Host.Services
@@ -81,13 +82,15 @@ namespace FabrCore.Host.Services
         {
             var key = BuildAgentKey(userId, handle);
             var stream = _clusterClient.GetAgentChatStream(key);
-            await stream.OnNextAsync(new AgentMessage
+            var msg = new AgentMessage
             {
                 ToHandle = key,
                 FromHandle = "AgentService",
                 Message = message,
                 Kind = MessageKind.OneWay
-            });
+            };
+            msg.StampFromActivity(Activity.Current);
+            await stream.OnNextAsync(msg);
             _logger.LogDebug("Fire-and-forget message sent to agent {Handle} for user {UserId}", handle, userId);
         }
 
@@ -95,6 +98,8 @@ namespace FabrCore.Host.Services
         {
             var key = BuildAgentKey(userId, handle);
             message.ToHandle = key;
+            if (string.IsNullOrEmpty(message.TraceId))
+                message.StampFromActivity(Activity.Current);
             var stream = _clusterClient.GetAgentChatStream(key);
             await stream.OnNextAsync(message);
             _logger.LogDebug("Fire-and-forget message sent to agent {Handle} for user {UserId}", handle, userId);
@@ -104,18 +109,22 @@ namespace FabrCore.Host.Services
         {
             var key = BuildAgentKey(userId, handle);
             var proxy = _clusterClient.GetGrain<IAgentGrain>(key);
-            return await proxy.OnMessage(new AgentMessage
+            var msg = new AgentMessage
             {
                 ToHandle = key,
                 FromHandle = "AgentService",
                 Message = message
-            });
+            };
+            msg.StampFromActivity(Activity.Current);
+            return await proxy.OnMessage(msg);
         }
 
         public async Task<AgentMessage> SendAndReceiveMessageAsync(string userId, string handle, AgentMessage message)
         {
             var key = BuildAgentKey(userId, handle);
             message.ToHandle = key;
+            if (string.IsNullOrEmpty(message.TraceId))
+                message.StampFromActivity(Activity.Current);
             var proxy = _clusterClient.GetGrain<IAgentGrain>(key);
             return await proxy.OnMessage(message);
         }

@@ -80,15 +80,8 @@ namespace FabrCore.Host.Services
                     });
             }
 
-            // Fire notification — never let subscriber exceptions propagate
-            try
-            {
-                OnMessageRecorded?.Invoke(message);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "OnMessageRecorded subscriber threw an exception");
-            }
+            // Fire notification — one throwing subscriber must not prevent siblings from running.
+            SafeInvoke(OnMessageRecorded, message, nameof(OnMessageRecorded));
 
             return Task.CompletedTask;
         }
@@ -117,15 +110,8 @@ namespace FabrCore.Host.Services
                 currentCount = Interlocked.Decrement(ref _eventCount);
             }
 
-            // Fire notification — never let subscriber exceptions propagate
-            try
-            {
-                OnEventRecorded?.Invoke(evt);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "OnEventRecorded subscriber threw an exception");
-            }
+            // Fire notification — one throwing subscriber must not prevent siblings from running.
+            SafeInvoke(OnEventRecorded, evt, nameof(OnEventRecorded));
 
             return Task.CompletedTask;
         }
@@ -160,15 +146,8 @@ namespace FabrCore.Host.Services
                 currentCount = Interlocked.Decrement(ref _llmCallCount);
             }
 
-            // Fire notification — never let subscriber exceptions propagate.
-            try
-            {
-                OnLlmCallRecorded?.Invoke(call);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "OnLlmCallRecorded subscriber threw an exception");
-            }
+            // Fire notification — one throwing subscriber must not prevent siblings from running.
+            SafeInvoke(OnLlmCallRecorded, call, nameof(OnLlmCallRecorded));
 
             return Task.CompletedTask;
         }
@@ -207,6 +186,26 @@ namespace FabrCore.Host.Services
             Interlocked.Exchange(ref _llmCallCount, 0);
             _tokenSummaries.Clear();
             return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Invokes each subscriber in the multicast delegate individually, so one
+        /// throwing subscriber can't prevent later ones from running.
+        /// </summary>
+        private void SafeInvoke<T>(Action<T>? handler, T arg, string eventName)
+        {
+            if (handler is null) return;
+            foreach (var d in handler.GetInvocationList())
+            {
+                try
+                {
+                    ((Action<T>)d).Invoke(arg);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "{EventName} subscriber threw an exception", eventName);
+                }
+            }
         }
     }
 }

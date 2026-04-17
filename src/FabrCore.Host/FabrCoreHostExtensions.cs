@@ -7,6 +7,7 @@ using FabrCore.Sdk;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry.Trace;
@@ -110,6 +111,26 @@ namespace FabrCore.Host
     {
         private static readonly ActivitySource ActivitySource = new("FabrCore.Host.Extensions");
         private static readonly Meter Meter = new("FabrCore.Host.Extensions");
+        private static int _fabrCoreListenerRegistered;
+
+        /// <summary>
+        /// Registers a process-wide <see cref="ActivityListener"/> for all FabrCore.* ActivitySources
+        /// so that <c>ActivitySource.StartActivity</c> calls actually materialize <see cref="Activity"/>
+        /// instances (and therefore populate <c>Activity.Current.TraceId</c> / <c>SpanId</c>). Without this,
+        /// ingress-point trace stamping is a no-op. Consumers can still add their own OpenTelemetry
+        /// TracerProvider with exporters on top — multiple listeners coexist safely.
+        /// </summary>
+        private static void EnsureFabrCoreActivityListenerRegistered()
+        {
+            if (Interlocked.Exchange(ref _fabrCoreListenerRegistered, 1) == 1) return;
+
+            ActivitySource.AddActivityListener(new ActivityListener
+            {
+                ShouldListenTo = source => source.Name.StartsWith("FabrCore.", StringComparison.Ordinal),
+                Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+                SampleUsingParentId = (ref ActivityCreationOptions<string> _) => ActivitySamplingResult.AllData,
+            });
+        }
 
         // Metrics
         private static readonly Counter<long> ServerConfiguredCounter = Meter.CreateCounter<long>(
@@ -137,15 +158,33 @@ namespace FabrCore.Host
                 app.MapControllers();
                 logger.LogInformation("FabrCore API controllers mapped");
 
-                // Enable WebSocket support with specific options
-                var webSocketOptions = new WebSocketOptions
+                // Map health endpoints for Kubernetes-style probes.
+                // /health/live: process is alive (no tagged checks required).
+                // /health/ready: Orleans cluster client is ready (tagged "ready").
+                // /health: detailed JSON served by HealthController (registered above).
+                app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
                 {
-                    KeepAliveInterval = TimeSpan.FromMinutes(2)
-                };
-                app.UseWebSockets(webSocketOptions);
-                logger.LogInformation("WebSocket support enabled");
+                    Predicate = _ => false // no checks run — just a liveness ping
+                });
+                app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+                {
+                    Predicate = check => check.Tags.Contains("ready")
+                });
+                logger.LogInformation("Health endpoints mapped (/health, /health/live, /health/ready)");
 
-                // Add WebSocket middleware - this will only handle /ws path
+                // Enable WebSocket support with configured keep-alive interval.
+                var hostOptions = app.Services
+                    .GetRequiredService<Microsoft.Extensions.Options.IOptions<Configuration.FabrCoreHostOptions>>()
+                    .Value;
+                app.UseWebSockets(new WebSocketOptions
+                {
+                    KeepAliveInterval = hostOptions.WebSocketKeepAliveInterval,
+                });
+                logger.LogInformation(
+                    "WebSocket support enabled (keep-alive {KeepAlive}, path {Path})",
+                    hostOptions.WebSocketKeepAliveInterval, hostOptions.WebSocketPath);
+
+                // Add WebSocket middleware (path resolved from FabrCoreHostOptions).
                 app.UseMiddleware<FabrCore.Host.WebSocket.WebSocketMiddleware>();
                 logger.LogInformation("WebSocket middleware added");
 
@@ -179,6 +218,8 @@ namespace FabrCore.Host
         /// </summary>
         public static WebApplicationBuilder AddFabrCoreServices(this WebApplicationBuilder builder, FabrCoreServerOptions? options = null)
         {
+            EnsureFabrCoreActivityListenerRegistered();
+
             using var activity = ActivitySource.StartActivity("AddFabrCoreServices", ActivityKind.Internal);
             options ??= new FabrCoreServerOptions();
 
@@ -231,6 +272,24 @@ namespace FabrCore.Host
                 builder.Services.AddSingleton(typeof(IAclProvider), options.AclProviderType);
                 logger.LogDebug("AclProvider added: {ProviderType}", options.AclProviderType.Name);
 
+                // Bind tunable options (see FabrCoreHostOptions / AgentGrainOptions / ClientGrainOptions).
+                builder.Services.Configure<Configuration.FabrCoreHostOptions>(
+                    builder.Configuration.GetSection(Configuration.FabrCoreHostOptions.SectionName));
+                builder.Services.Configure<Configuration.AgentGrainOptions>(
+                    builder.Configuration.GetSection(Configuration.AgentGrainOptions.SectionName));
+                builder.Services.Configure<Configuration.ClientGrainOptions>(
+                    builder.Configuration.GetSection(Configuration.ClientGrainOptions.SectionName));
+
+                // Pluggable WebSocket authenticator. Default preserves legacy header/query behavior;
+                // production apps override via AddFabrCoreServices().Services.AddSingleton<IWebSocketAuthenticator, MyAuthN>().
+                builder.Services.TryAddSingleton<WebSocket.IWebSocketAuthenticator, WebSocket.DefaultWebSocketAuthenticator>();
+
+                // Token cost calculator — default reads FabrCore:ModelPricing from config. Hosts
+                // can register their own ITokenCostCalculator for dynamic pricing.
+                builder.Services.TryAddSingleton<FabrCore.Core.Monitoring.ITokenCostCalculator, Services.ConfigurableTokenCostCalculator>();
+
+                logger.LogDebug("FabrCore runtime options bound");
+
                 // Configure Agent Message Monitor (opt-in — disabled by default)
                 // Register LlmCaptureOptions as a singleton so the monitor and
                 // TokenTrackingChatClient can pick it up via DI.
@@ -254,6 +313,14 @@ namespace FabrCore.Host
                 // Configure Agent Registry Cleanup
                 builder.Services.AddHostedService<AgentRegistryCleanupService>();
                 logger.LogInformation("Agent registry cleanup service configured");
+
+                // Configure Health Checks (wired to endpoints in UseFabrCoreServer).
+                // "live" = process is up; "ready" = Orleans cluster client usable.
+                builder.Services.AddHealthChecks()
+                    .AddCheck<Services.OrleansClusterHealthCheck>(
+                        "orleans-cluster",
+                        tags: new[] { "ready" });
+                logger.LogDebug("Health checks registered");
 
                 logger.LogInformation("FabrCore services added successfully");
                 activity?.SetStatus(ActivityStatusCode.Ok);
