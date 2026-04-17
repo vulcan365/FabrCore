@@ -1,5 +1,7 @@
+using FabrCore.Host.Configuration;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using OpenTelemetry.Trace;
 using Orleans;
 using System.Diagnostics;
@@ -37,44 +39,41 @@ namespace FabrCore.Host.WebSocket
             this.logger = logger;
         }
 
-        public async Task InvokeAsync(HttpContext context, IClusterClient clusterClient, ILoggerFactory loggerFactory)
+        public async Task InvokeAsync(
+            HttpContext context,
+            IClusterClient clusterClient,
+            ILoggerFactory loggerFactory,
+            IOptions<FabrCoreHostOptions> hostOptions,
+            IWebSocketAuthenticator authenticator)
         {
             using var activity = ActivitySource.StartActivity("InvokeAsync", ActivityKind.Server);
 
-            // Check if this is a WebSocket request to our endpoint
-            if (context.Request.Path == "/ws" && context.WebSockets.IsWebSocketRequest)
+            var configuredPath = hostOptions.Value.WebSocketPath;
+
+            // Check if this is a WebSocket request to the configured endpoint
+            if (context.Request.Path == configuredPath && context.WebSockets.IsWebSocketRequest)
             {
                 activity?.SetTag("websocket.path", context.Request.Path);
                 activity?.SetTag("client.ip", context.Connection.RemoteIpAddress?.ToString());
 
-                // Extract client ID from header or query parameter
-                // Try header first (preferred), then fall back to query parameter (for browser compatibility)
-                string? userId = null;
-
-                if (context.Request.Headers.TryGetValue("x-fabrcore-userid", out var userIdValues))
+                // Run pluggable authentication. Default implementation preserves the
+                // pre-auth header/query behavior; production hosts register their own.
+                var authResult = await authenticator.AuthenticateAsync(context);
+                if (!authResult.Allowed || string.IsNullOrWhiteSpace(authResult.UserId))
                 {
-                    userId = userIdValues.FirstOrDefault();
-                    logger.LogDebug("User ID from header: {UserId}", userId);
-                }
-                else if (context.Request.Query.TryGetValue("userid", out var queryValues))
-                {
-                    userId = queryValues.FirstOrDefault();
-                    logger.LogDebug("User ID from query parameter: {UserId}", userId);
-                }
-
-                if (string.IsNullOrWhiteSpace(userId))
-                {
-                    logger.LogWarning("WebSocket connection rejected - missing or empty user ID from {RemoteIp}",
-                        context.Connection.RemoteIpAddress);
+                    logger.LogWarning(
+                        "WebSocket connection rejected by authenticator from {RemoteIp}: {Reason}",
+                        context.Connection.RemoteIpAddress, authResult.Reason ?? "(no reason)");
 
                     ConnectionsRejectedCounter.Add(1,
-                        new KeyValuePair<string, object?>("reason", "missing_or_empty_userid"));
+                        new KeyValuePair<string, object?>("reason", "authentication_failed"));
 
-                    context.Response.StatusCode = StatusCodes.Status400BadRequest;
-                    await context.Response.WriteAsync("Missing required user ID. Provide via x-fabrcore-userid header or userid query parameter.");
+                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    await context.Response.WriteAsync(authResult.Reason ?? "WebSocket connection denied.");
                     return;
                 }
 
+                var userId = authResult.UserId;
                 activity?.SetTag("user.id", userId);
 
                 logger.LogInformation("WebSocket connection request from {RemoteIp} for user {UserId}",
@@ -84,14 +83,23 @@ namespace FabrCore.Host.WebSocket
                 {
                     var webSocket = await context.WebSockets.AcceptWebSocketAsync();
 
-                    ConnectionsAcceptedCounter.Add(1,
-                        new KeyValuePair<string, object?>("user.id", userId));
+                    // user.id intentionally omitted from metric tags — it's unbounded
+                    // cardinality. Trace/activity tags still carry it for drill-down.
+                    ConnectionsAcceptedCounter.Add(1);
 
                     logger.LogInformation("WebSocket connection accepted for user {UserId}", userId);
 
                     // Create a new session with the user ID as the handle
                     var sessionLogger = loggerFactory.CreateLogger<WebSocketSession>();
-                    var session = new WebSocketSession(webSocket, clusterClient, sessionLogger, userId);
+                    var session = new WebSocketSession(webSocket, clusterClient, sessionLogger, userId, hostOptions.Value);
+
+                    // Capture the upgrade-request's trace context (populated by ASP.NET Core
+                    // from an incoming traceparent header, or from our own InvokeAsync activity)
+                    // so per-message activities on the session can parent on it when the
+                    // message itself carries no trace context.
+                    var ambientContext = Activity.Current?.Context ?? default;
+                    if (ambientContext != default)
+                        session.SetInitialTraceContext(ambientContext);
 
                     try
                     {
@@ -111,16 +119,15 @@ namespace FabrCore.Host.WebSocket
                     activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                     activity?.AddException(ex);
                     ErrorCounter.Add(1,
-                        new KeyValuePair<string, object?>("error.type", "connection_error"),
-                        new KeyValuePair<string, object?>("user.id", userId));
+                        new KeyValuePair<string, object?>("error.type", "connection_error"));
 
                     context.Response.StatusCode = StatusCodes.Status500InternalServerError;
                 }
             }
-            else if (context.Request.Path == "/ws" && !context.WebSockets.IsWebSocketRequest)
+            else if (context.Request.Path == configuredPath && !context.WebSockets.IsWebSocketRequest)
             {
                 // Request to WebSocket endpoint but not a WebSocket request
-                logger.LogWarning("Non-WebSocket request to /ws endpoint");
+                logger.LogWarning("Non-WebSocket request to {WebSocketPath} endpoint", configuredPath);
 
                 ConnectionsRejectedCounter.Add(1,
                     new KeyValuePair<string, object?>("reason", "not_websocket_request"));

@@ -1,5 +1,6 @@
 using FabrCore.Core;
 using FabrCore.Core.Interfaces;
+using FabrCore.Host.Configuration;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry.Trace;
 using Orleans;
@@ -8,6 +9,7 @@ using System.Diagnostics.Metrics;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using System.Threading.Channels;
 
 namespace FabrCore.Host.WebSocket
 {
@@ -45,6 +47,14 @@ namespace FabrCore.Host.WebSocket
             "fabrcore.websocket.errors",
             description: "Number of errors encountered");
 
+        private static readonly Counter<long> OutboundDroppedCounter = Meter.CreateCounter<long>(
+            "fabrcore.websocket.messages.dropped",
+            description: "Outbound messages dropped due to full send queue or closed socket");
+
+        private static readonly Counter<long> OversizeRejectedCounter = Meter.CreateCounter<long>(
+            "fabrcore.websocket.messages.oversize_rejected",
+            description: "Inbound messages rejected for exceeding the max message size");
+
         private readonly System.Net.WebSockets.WebSocket webSocket;
         private readonly IClusterClient clusterClient;
         private readonly ILogger<WebSocketSession> logger;
@@ -54,12 +64,23 @@ namespace FabrCore.Host.WebSocket
         private bool disposed;
         private readonly CancellationTokenSource cancellationTokenSource;
         private readonly SemaphoreSlim sendLock = new(1, 1);
+        private ActivityContext initialTraceContext;
+        private readonly int maxIncomingMessageBytes;
+        private readonly Channel<AgentMessage> outboundQueue;
+        private Task? outboundPumpTask;
+
+        /// <summary>
+        /// Sets a trace context captured from the WebSocket HTTP upgrade (traceparent/tracestate headers).
+        /// Used as the outer parent for ingress activities when an incoming AgentMessage carries no trace context of its own.
+        /// </summary>
+        public void SetInitialTraceContext(ActivityContext context) => initialTraceContext = context;
 
         public WebSocketSession(
             System.Net.WebSockets.WebSocket webSocket,
             IClusterClient clusterClient,
             ILogger<WebSocketSession> logger,
-            string userId)
+            string userId,
+            FabrCoreHostOptions? hostOptions = null)
         {
             this.webSocket = webSocket ?? throw new ArgumentNullException(nameof(webSocket));
             this.clusterClient = clusterClient ?? throw new ArgumentNullException(nameof(clusterClient));
@@ -67,7 +88,18 @@ namespace FabrCore.Host.WebSocket
             this.handle = userId ?? throw new ArgumentNullException(nameof(userId));
             this.cancellationTokenSource = new CancellationTokenSource();
 
-            SessionsCreatedCounter.Add(1, new KeyValuePair<string, object?>("user.id", handle));
+            var options = hostOptions ?? new FabrCoreHostOptions();
+            this.maxIncomingMessageBytes = options.MaxIncomingMessageBytes;
+            this.outboundQueue = Channel.CreateBounded<AgentMessage>(
+                new BoundedChannelOptions(options.OutboundQueueCapacity)
+                {
+                    FullMode = BoundedChannelFullMode.DropOldest,
+                    SingleReader = true,
+                    SingleWriter = false,
+                });
+
+            // user.id omitted from metric tags (unbounded cardinality); retained on activity/log context.
+            SessionsCreatedCounter.Add(1);
             logger.LogInformation("WebSocketSession created for user: {UserId}", handle);
         }
 
@@ -90,6 +122,9 @@ namespace FabrCore.Host.WebSocket
                     cancellationToken,
                     cancellationTokenSource.Token);
 
+                // Start the outbound pump so observer callbacks never block on the socket.
+                outboundPumpTask = Task.Run(() => RunOutboundPumpAsync(linkedCts.Token), linkedCts.Token);
+
                 await ProcessMessagesAsync(linkedCts.Token);
 
                 activity?.SetStatus(ActivityStatusCode.Ok);
@@ -105,8 +140,7 @@ namespace FabrCore.Host.WebSocket
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
                 ErrorCounter.Add(1,
-                    new KeyValuePair<string, object?>("error.type", "session_error"),
-                    new KeyValuePair<string, object?>("user.id", handle));
+                    new KeyValuePair<string, object?>("error.type", "session_error"));
                 throw;
             }
         }
@@ -142,8 +176,7 @@ namespace FabrCore.Host.WebSocket
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
                 ErrorCounter.Add(1,
-                    new KeyValuePair<string, object?>("error.type", "client_grain_init_failed"),
-                    new KeyValuePair<string, object?>("user.id", handle));
+                    new KeyValuePair<string, object?>("error.type", "client_grain_init_failed"));
                 throw;
             }
         }
@@ -199,10 +232,40 @@ namespace FabrCore.Host.WebSocket
         {
             using var ms = new MemoryStream();
             WebSocketReceiveResult result;
+            var totalBytes = 0;
 
             do
             {
                 result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
+
+                totalBytes += result.Count;
+                if (totalBytes > maxIncomingMessageBytes)
+                {
+                    OversizeRejectedCounter.Add(1);
+                    logger.LogWarning(
+                        "WebSocket message exceeded max size ({MaxBytes} bytes) for user {UserId}. Closing session.",
+                        maxIncomingMessageBytes, handle);
+
+                    // Drain remaining fragments so the close handshake is clean, but cap the drain.
+                    while (!result.EndOfMessage && totalBytes < maxIncomingMessageBytes * 2)
+                    {
+                        result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
+                        totalBytes += result.Count;
+                    }
+
+                    if (webSocket.State == WebSocketState.Open)
+                    {
+                        await webSocket.CloseAsync(
+                            WebSocketCloseStatus.MessageTooBig,
+                            $"Message exceeded max size of {maxIncomingMessageBytes} bytes",
+                            cancellationToken);
+                    }
+
+                    throw new WebSocketException(
+                        WebSocketError.InvalidMessageType,
+                        $"Inbound message exceeded max size of {maxIncomingMessageBytes} bytes (received at least {totalBytes}).");
+                }
+
                 ms.Write(buffer, 0, result.Count);
             }
             while (!result.EndOfMessage);
@@ -248,6 +311,14 @@ namespace FabrCore.Host.WebSocket
                     if (agentMessage == null)
                         throw new InvalidOperationException("Failed to deserialize message");
 
+                    using var ingress = agentMessage.StartIngressActivity(
+                        ActivitySource,
+                        messageType?.ToLower() == "command" ? "ReceiveCommand" : "ReceiveMessage",
+                        ActivityKind.Server,
+                        initialTraceContext);
+                    ingress?.SetTag("message.from", agentMessage.FromHandle);
+                    ingress?.SetTag("message.to", agentMessage.ToHandle);
+
                     activity?.SetTag("message.from", agentMessage.FromHandle);
                     activity?.SetTag("message.to", agentMessage.ToHandle);
 
@@ -283,8 +354,7 @@ namespace FabrCore.Host.WebSocket
             logger.LogInformation("Processing command: {CommandName} for user: {UserId}", commandName, handle);
 
             CommandsProcessedCounter.Add(1,
-                new KeyValuePair<string, object?>("command.name", commandName),
-                new KeyValuePair<string, object?>("user.id", handle));
+                new KeyValuePair<string, object?>("command.name", commandName));
 
             try
             {
@@ -311,6 +381,7 @@ namespace FabrCore.Host.WebSocket
                         ["status"] = "success"
                     }
                 };
+                response.StampFromActivity(Activity.Current);
 
                 await SendMessageAsync(response, cancellationToken);
 
@@ -323,8 +394,7 @@ namespace FabrCore.Host.WebSocket
                 activity?.AddException(ex);
                 ErrorCounter.Add(1,
                     new KeyValuePair<string, object?>("error.type", "command_error"),
-                    new KeyValuePair<string, object?>("command.name", commandName),
-                    new KeyValuePair<string, object?>("user.id", handle));
+                    new KeyValuePair<string, object?>("command.name", commandName));
 
                 // Send error response
                 var errorResponse = new AgentMessage
@@ -340,6 +410,7 @@ namespace FabrCore.Host.WebSocket
                         ["error"] = ex.Message
                     }
                 };
+                errorResponse.StampFromActivity(Activity.Current);
 
                 await SendMessageAsync(errorResponse, cancellationToken);
             }
@@ -483,7 +554,10 @@ namespace FabrCore.Host.WebSocket
             }
         }
 
-        // IClientGrainObserver implementation
+        // IClientGrainObserver implementation.
+        // Must NEVER throw — Orleans observer callbacks that throw can destabilize the
+        // ObserverManager on the grain side. We enqueue to a bounded channel and return
+        // immediately; the outbound pump serializes writes to the socket.
         public void OnMessageReceived(AgentMessage message)
         {
             using var activity = ActivitySource.StartActivity("OnMessageReceived", ActivityKind.Consumer);
@@ -491,35 +565,81 @@ namespace FabrCore.Host.WebSocket
             activity?.SetTag("message.from", message.FromHandle);
             activity?.SetTag("message.to", message.ToHandle);
 
-            logger.LogInformation("Observer received message - From: {FromHandle}, To: {ToHandle}",
+            logger.LogDebug("Observer received message - From: {FromHandle}, To: {ToHandle}",
                 message.FromHandle, message.ToHandle);
+
+            if (disposed || cancellationTokenSource.IsCancellationRequested)
+            {
+                OutboundDroppedCounter.Add(1,
+                    new KeyValuePair<string, object?>("reason", "session_closed"));
+                activity?.SetStatus(ActivityStatusCode.Ok);
+                return;
+            }
 
             try
             {
-                // Send the message to the WebSocket client
-                // Use Task.Run to avoid blocking the Orleans callback
-                _ = Task.Run(async () =>
+                // BoundedChannel with DropOldest: TryWrite never fails unless the channel is
+                // completed, and the oldest queued message is dropped when at capacity.
+                if (!outboundQueue.Writer.TryWrite(message))
                 {
-                    try
-                    {
-                        await SendMessageAsync(message, CancellationToken.None);
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogError(ex, "Error sending message to WebSocket");
-                        ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "websocket_send_error"));
-                    }
-                });
+                    OutboundDroppedCounter.Add(1,
+                        new KeyValuePair<string, object?>("reason", "channel_completed"));
+                    logger.LogWarning("Outbound queue refused message for user {UserId} (channel completed)", handle);
+                }
 
                 activity?.SetStatus(ActivityStatusCode.Ok);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error in observer callback");
+                // Log-and-swallow: throwing into Orleans' observer pipeline is worse than dropping one message.
+                logger.LogError(ex, "Error enqueuing message to outbound queue for user {UserId}", handle);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
                 ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "observer_error"));
-                throw;
+            }
+        }
+
+        private async Task RunOutboundPumpAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                await foreach (var message in outboundQueue.Reader.ReadAllAsync(cancellationToken))
+                {
+                    if (cancellationToken.IsCancellationRequested)
+                        break;
+
+                    if (webSocket.State != WebSocketState.Open)
+                    {
+                        OutboundDroppedCounter.Add(1,
+                            new KeyValuePair<string, object?>("reason", "socket_not_open"));
+                        continue;
+                    }
+
+                    try
+                    {
+                        await SendMessageAsync(message, cancellationToken);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Outbound pump failed to send message for user {UserId}", handle);
+                        ErrorCounter.Add(1,
+                            new KeyValuePair<string, object?>("error.type", "outbound_pump_send_error"));
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Normal shutdown.
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Outbound pump faulted for user {UserId}", handle);
+                ErrorCounter.Add(1,
+                    new KeyValuePair<string, object?>("error.type", "outbound_pump_faulted"));
             }
         }
 
@@ -577,6 +697,7 @@ namespace FabrCore.Host.WebSocket
                     Message = errorMessage,
                     Kind = MessageKind.Response
                 };
+                errorMsg.StampFromActivity(Activity.Current);
 
                 await SendMessageAsync(errorMsg, cancellationToken);
             }
@@ -602,6 +723,23 @@ namespace FabrCore.Host.WebSocket
             {
                 // Cancel any ongoing operations
                 cancellationTokenSource.Cancel();
+
+                // Signal the outbound pump to drain what it has and exit.
+                outboundQueue.Writer.TryComplete();
+                if (outboundPumpTask is not null)
+                {
+                    try
+                    {
+                        // Bounded wait so a stuck pump can't hold session teardown forever.
+                        using var pumpTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                        await outboundPumpTask.WaitAsync(pumpTimeout.Token);
+                    }
+                    catch (OperationCanceledException) { /* pump didn't finish in time — proceed */ }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "Outbound pump reported an error during dispose");
+                    }
+                }
 
                 // Unsubscribe if we have an active subscription
                 if (clientGrain != null && observerRef != null)
