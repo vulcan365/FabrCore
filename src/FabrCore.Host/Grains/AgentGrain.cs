@@ -96,6 +96,9 @@ namespace FabrCore.Host.Grains
         // Health tracking state
         private DateTime? _configuredAt;
         private long _messagesProcessed;
+        private long _busyMessagesRouted;
+        private readonly LatencyReservoir _latencyReservoir;
+        private readonly AgentGrainOptions _grainOptions;
 
         public AgentGrain(
             IClusterClient clusterClient,
@@ -105,6 +108,7 @@ namespace FabrCore.Host.Grains
             IFabrCoreRegistry registry,
             IFabrCoreAgentService agentService,
             IAgentMessageMonitor messageMonitor,
+            Microsoft.Extensions.Options.IOptions<AgentGrainOptions> grainOptions,
             [PersistentState("agentMessages", FabrCoreOrleansConstants.StorageProviderName)]
             IPersistentState<AgentGrainState> messageState)
         {
@@ -116,6 +120,8 @@ namespace FabrCore.Host.Grains
             _agentService = agentService;
             _messageMonitor = messageMonitor;
             _messageState = messageState;
+            _grainOptions = grainOptions.Value;
+            _latencyReservoir = new LatencyReservoir(_grainOptions.LatencyReservoirCapacity);
 
             logger = loggerFactory.CreateLogger<AgentGrain>();
         }
@@ -306,8 +312,7 @@ namespace FabrCore.Host.Grains
                 logger.LogDebug("Configuration persisted for agent: {Handle}", config.Handle);
 
                 AgentConfiguredCounter.Add(1,
-                    new KeyValuePair<string, object?>("agent.type", config.AgentType),
-                    new KeyValuePair<string, object?>("agent.handle", config.Handle));
+                    new KeyValuePair<string, object?>("agent.type", config.AgentType));
 
                 activity?.SetStatus(ActivityStatusCode.Ok);
 
@@ -352,6 +357,8 @@ namespace FabrCore.Host.Grains
             // Add detailed info if requested
             if (detailLevel >= HealthDetailLevel.Detailed)
             {
+                var snapshot = _latencyReservoir.Snapshot();
+
                 status = status with
                 {
                     AgentType = agentConfiguration!.AgentType,
@@ -360,7 +367,12 @@ namespace FabrCore.Host.Grains
                     ActiveTimerCount = _timers.Count,
                     ActiveReminderCount = _reminderMessages.Count,
                     StreamCount = agentConfiguration.Streams?.Count ?? 0,
-                    Configuration = agentConfiguration
+                    Configuration = agentConfiguration,
+                    BusyMessagesRouted = Interlocked.Read(ref _busyMessagesRouted),
+                    LatencySampleCount = _latencyReservoir.Count,
+                    LatencyP50Ms = snapshot is not null ? LatencyReservoir.Percentile(snapshot, 50) : null,
+                    LatencyP95Ms = snapshot is not null ? LatencyReservoir.Percentile(snapshot, 95) : null,
+                    LatencyP99Ms = snapshot is not null ? LatencyReservoir.Percentile(snapshot, 99) : null,
                 };
             }
 
@@ -510,8 +522,7 @@ namespace FabrCore.Host.Grains
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
                 ErrorCounter.Add(1,
-                    new KeyValuePair<string, object?>("error.type", "reset_failed"),
-                    new KeyValuePair<string, object?>("agent.handle", handle));
+                    new KeyValuePair<string, object?>("error.type", "reset_failed"));
                 throw;
             }
         }
@@ -555,7 +566,7 @@ namespace FabrCore.Host.Grains
 
         private async Task<AgentMessage> HandlePrimaryMessage(AgentMessage request)
         {
-            using var activity = ActivitySource.StartActivity("OnMessage", ActivityKind.Server);
+            using var activity = request.StartIngressActivity(ActivitySource, "OnMessage", ActivityKind.Server);
             activity?.SetTag("message.from", request.FromHandle);
             activity?.SetTag("message.to", request.ToHandle);
             activity?.SetTag("message.kind", request.Kind.ToString());
@@ -573,7 +584,7 @@ namespace FabrCore.Host.Grains
             {
                 // Record inbound request to the message monitor immediately
                 var handle = this.GetPrimaryKeyString();
-                _ = _messageMonitor.RecordMessageAsync(new MonitoredMessage
+                _messageMonitor.RecordMessageAsync(new MonitoredMessage
                 {
                     AgentHandle = handle,
                     FromHandle = request.FromHandle,
@@ -590,7 +601,7 @@ namespace FabrCore.Host.Grains
                     Args = request.Args,
                     Direction = MessageDirection.Inbound,
                     TraceId = request.TraceId
-                });
+                }).TrackRecording(logger, ErrorCounter, "RecordMessage.Inbound", handle);
 
                 var response = await fabrcoreAgentProxy.InternalOnMessage(request);
 
@@ -627,7 +638,7 @@ namespace FabrCore.Host.Grains
                 // Record outbound response to the message monitor
                 if (response != null)
                 {
-                    _ = _messageMonitor.RecordMessageAsync(new MonitoredMessage
+                    _messageMonitor.RecordMessageAsync(new MonitoredMessage
                     {
                         AgentHandle = handle,
                         FromHandle = response.FromHandle,
@@ -645,21 +656,21 @@ namespace FabrCore.Host.Grains
                         Direction = MessageDirection.Outbound,
                         TraceId = response.TraceId,
                         LlmUsage = LlmUsageInfo.FromArgs(response.Args)
-                    });
+                    }).TrackRecording(logger, ErrorCounter, "RecordMessage.Outbound", handle);
                 }
 
                 var elapsed = Stopwatch.GetElapsedTime(startTime).TotalMilliseconds;
+                // message.from/to dropped from metric tags — unbounded handles. Retained on activity span.
                 MessageProcessingDuration.Record(elapsed,
-                    new KeyValuePair<string, object?>("message.from", request.FromHandle),
-                    new KeyValuePair<string, object?>("message.to", request.ToHandle),
                     new KeyValuePair<string, object?>("message.kind", request.Kind.ToString()));
 
                 MessagesProcessedCounter.Add(1,
-                    new KeyValuePair<string, object?>("message.from", request.FromHandle),
-                    new KeyValuePair<string, object?>("message.to", request.ToHandle),
                     new KeyValuePair<string, object?>("message.kind", request.Kind.ToString()));
 
+                _latencyReservoir.Record(elapsed);
+
                 activity?.SetStatus(ActivityStatusCode.Ok);
+                response?.StampFromActivity(activity);
                 return response ?? throw new InvalidOperationException("Agent proxy returned null response");
             }
             catch (Exception ex)
@@ -675,8 +686,7 @@ namespace FabrCore.Host.Grains
 
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
-                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "message_processing_failed"),
-                    new KeyValuePair<string, object?>("message.from", request.FromHandle));
+                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "message_processing_failed"));
                 throw;
             }
             finally
@@ -685,8 +695,19 @@ namespace FabrCore.Host.Grains
                 if (!heartbeatCts.IsCancellationRequested)
                     heartbeatCts.Cancel();
 
-                // Await heartbeat task to ensure clean shutdown
-                try { await heartbeatTask; } catch (OperationCanceledException) { }
+                // Await heartbeat task to ensure clean shutdown. OCE is the happy path when we
+                // cancel above; any other exception indicates the heartbeat loop itself faulted
+                // and deserves visibility.
+                try
+                {
+                    await heartbeatTask;
+                }
+                catch (OperationCanceledException) { }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Heartbeat task faulted");
+                    ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "heartbeat_failed"));
+                }
 
                 // Auto-flush all tracked message stores after each message
                 await FlushAllChatHistoryProvidersAsync();
@@ -700,7 +721,7 @@ namespace FabrCore.Host.Grains
         /// </summary>
         private async Task<AgentMessage> HandleBusyMessage(AgentMessage request)
         {
-            using var activity = ActivitySource.StartActivity("OnMessageBusy", ActivityKind.Server);
+            using var activity = request.StartIngressActivity(ActivitySource, "OnMessageBusy", ActivityKind.Server);
             activity?.SetTag("message.from", request.FromHandle);
             activity?.SetTag("message.to", request.ToHandle);
             activity?.SetTag("message.kind", request.Kind.ToString());
@@ -712,7 +733,7 @@ namespace FabrCore.Host.Grains
             var startTime = Stopwatch.GetTimestamp();
 
             // Record inbound request to the message monitor (marked as busy-routed)
-            _ = _messageMonitor.RecordMessageAsync(new MonitoredMessage
+            _messageMonitor.RecordMessageAsync(new MonitoredMessage
             {
                 AgentHandle = handle,
                 FromHandle = request.FromHandle,
@@ -730,7 +751,7 @@ namespace FabrCore.Host.Grains
                 Direction = MessageDirection.Inbound,
                 TraceId = request.TraceId,
                 BusyRouted = true
-            });
+            }).TrackRecording(logger, ErrorCounter, "RecordMessage.BusyInbound", handle);
 
             try
             {
@@ -741,7 +762,7 @@ namespace FabrCore.Host.Grains
                 // Record outbound response to the message monitor
                 if (response != null)
                 {
-                    _ = _messageMonitor.RecordMessageAsync(new MonitoredMessage
+                    _messageMonitor.RecordMessageAsync(new MonitoredMessage
                     {
                         AgentHandle = handle,
                         FromHandle = response.FromHandle,
@@ -755,20 +776,23 @@ namespace FabrCore.Host.Grains
                         Direction = MessageDirection.Outbound,
                         TraceId = response.TraceId,
                         BusyRouted = true
-                    });
+                    }).TrackRecording(logger, ErrorCounter, "RecordMessage.BusyOutbound", handle);
                 }
 
                 var elapsed = Stopwatch.GetElapsedTime(startTime).TotalMilliseconds;
+                // message.from/to dropped from metric tags — unbounded handles. Retained on activity span.
                 MessageProcessingDuration.Record(elapsed,
-                    new KeyValuePair<string, object?>("message.from", request.FromHandle),
-                    new KeyValuePair<string, object?>("message.to", request.ToHandle),
-                    new KeyValuePair<string, object?>("message.route", "busy"));
+                    new KeyValuePair<string, object?>("message.route", "busy"),
+                    new KeyValuePair<string, object?>("message.kind", request.Kind.ToString()));
 
                 BusyMessagesProcessedCounter.Add(1,
-                    new KeyValuePair<string, object?>("message.from", request.FromHandle),
-                    new KeyValuePair<string, object?>("message.to", request.ToHandle));
+                    new KeyValuePair<string, object?>("message.kind", request.Kind.ToString()));
+
+                Interlocked.Increment(ref _busyMessagesRouted);
+                _latencyReservoir.Record(elapsed);
 
                 activity?.SetStatus(ActivityStatusCode.Ok);
+                response?.StampFromActivity(activity);
                 return response ?? throw new InvalidOperationException("Agent proxy returned null busy response");
             }
             catch (Exception ex)
@@ -779,8 +803,7 @@ namespace FabrCore.Host.Grains
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
                 ErrorCounter.Add(1,
-                    new KeyValuePair<string, object?>("error.type", "busy_message_processing_failed"),
-                    new KeyValuePair<string, object?>("message.from", request.FromHandle));
+                    new KeyValuePair<string, object?>("error.type", "busy_message_processing_failed"));
                 throw;
             }
         }
@@ -803,8 +826,8 @@ namespace FabrCore.Host.Grains
 
             try
             {
-                // Wait 3 seconds before first heartbeat — fast responses never trigger one
-                await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken);
+                // Wait one heartbeat interval before first tick — fast responses never trigger one.
+                await Task.Delay(_grainOptions.HeartbeatInterval, cancellationToken);
 
                 while (!cancellationToken.IsCancellationRequested)
                 {
@@ -830,7 +853,7 @@ namespace FabrCore.Host.Grains
                         logger.LogWarning(ex, "Failed to send _status heartbeat to {TargetHandle}", targetHandle);
                     }
 
-                    await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken);
+                    await Task.Delay(_grainOptions.HeartbeatInterval, cancellationToken);
                 }
             }
             catch (OperationCanceledException)
@@ -1068,8 +1091,7 @@ namespace FabrCore.Host.Grains
                     request.FromHandle, request.ToHandle);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
-                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "send_receive_failed"),
-                    new KeyValuePair<string, object?>("message.to", request.ToHandle));
+                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "send_receive_failed"));
                 throw;
             }
         }
@@ -1117,8 +1139,7 @@ namespace FabrCore.Host.Grains
                 logger.LogError(ex, "Error sending message to stream for: {ToHandle}", request.ToHandle);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
-                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "stream_send_failed"),
-                    new KeyValuePair<string, object?>("message.to", request.ToHandle));
+                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "stream_send_failed"));
                 throw;
             }
         }
@@ -1359,8 +1380,7 @@ namespace FabrCore.Host.Grains
                 reminderName, status.CurrentTickTime, status.Period);
 
             ReminderFiredCounter.Add(1,
-                new KeyValuePair<string, object?>("reminder.name", reminderName),
-                new KeyValuePair<string, object?>("agent.handle", this.GetPrimaryKeyString()));
+                new KeyValuePair<string, object?>("reminder.name", reminderName));
 
             try
             {
@@ -1393,8 +1413,7 @@ namespace FabrCore.Host.Grains
             logger.LogDebug("Timer fired: {TimerName}", timerName);
 
             TimerFiredCounter.Add(1,
-                new KeyValuePair<string, object?>("timer.name", timerName),
-                new KeyValuePair<string, object?>("agent.handle", this.GetPrimaryKeyString()));
+                new KeyValuePair<string, object?>("timer.name", timerName));
 
             try
             {
@@ -1503,8 +1522,7 @@ namespace FabrCore.Host.Grains
                 logger.LogError(ex, "Error creating streams for agent: {Handle}", handle);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
-                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "stream_creation_failed"),
-                    new KeyValuePair<string, object?>("agent.handle", handle));
+                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "stream_creation_failed"));
                 throw;
             }
         }
@@ -1528,10 +1546,10 @@ namespace FabrCore.Host.Grains
 
             logger.LogInformation("Subscribed to stream: {StreamName}", streamName);
 
+            // Only stream.namespace is low-cardinality (e.g., agent-chat, agent-event).
+            // stream.name and agent.handle are per-agent strings — kept on activity tags instead.
             StreamsCreatedCounter.Add(1,
-                new KeyValuePair<string, object?>("stream.name", streamName.ToString()),
-                new KeyValuePair<string, object?>("stream.namespace", streamName.Namespace),
-                new KeyValuePair<string, object?>("agent.handle", handle));
+                new KeyValuePair<string, object?>("stream.namespace", streamName.Namespace));
 
             streamActivity?.SetStatus(ActivityStatusCode.Ok);
         }
@@ -1614,8 +1632,6 @@ namespace FabrCore.Host.Grains
             logger.LogDebug("Received chat message: {AgentMessage}", SerializeForLog(request));
 
             StreamMessagesCounter.Add(1,
-                new KeyValuePair<string, object?>("message.from", request.FromHandle),
-                new KeyValuePair<string, object?>("message.to", request.ToHandle),
                 new KeyValuePair<string, object?>("stream.namespace", StreamConstants.AgentChatNamespace));
 
             try
@@ -1640,8 +1656,7 @@ namespace FabrCore.Host.Grains
                 logger.LogError(ex, "Error processing chat message from: {FromHandle}", request.FromHandle);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
-                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "chat_message_failed"),
-                    new KeyValuePair<string, object?>("message.from", request.FromHandle));
+                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "chat_message_failed"));
             }
         }
 
@@ -1670,7 +1685,7 @@ namespace FabrCore.Host.Grains
             try
             {
                 var handle = this.GetPrimaryKeyString();
-                _ = _messageMonitor.RecordEventAsync(new MonitoredEvent
+                _messageMonitor.RecordEventAsync(new MonitoredEvent
                 {
                     AgentHandle = handle,
                     EventId = request.Id,
@@ -1684,7 +1699,7 @@ namespace FabrCore.Host.Grains
                     EventTime = request.Time,
                     TraceId = request.TraceId,
                     Direction = MessageDirection.Inbound
-                });
+                }).TrackRecording(logger, ErrorCounter, "RecordEvent.Inbound", handle);
 
                 if (fabrcoreAgentProxy != null)
                 {

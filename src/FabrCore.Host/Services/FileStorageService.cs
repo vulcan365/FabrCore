@@ -22,7 +22,7 @@ namespace FabrCore.Host.Services
             if (!Directory.Exists(_settings.StoragePath))
             {
                 Directory.CreateDirectory(_settings.StoragePath);
-                _logger.LogInformation($"Created storage directory: {_settings.StoragePath}");
+                _logger.LogInformation("Created storage directory: {StoragePath}", _settings.StoragePath);
             }
         }
 
@@ -37,21 +37,22 @@ namespace FabrCore.Host.Services
                 await fileStream.CopyToAsync(fileStreamOutput);
             }
 
-            _logger.LogInformation($"File saved: {fileName}");
+            _logger.LogInformation("File saved: {FileName}", fileName);
             return fileId;
         }
 
         public void TrackFile(string fileId, DateTime expiresAt)
         {
             _fileTtlTracker[fileId] = expiresAt;
-            _logger.LogDebug($"Tracking file {fileId} with expiration at {expiresAt}");
+            _logger.LogDebug("Tracking file {FileId} with expiration at {ExpiresAt}", fileId, expiresAt);
         }
 
         public void TrackFile(string fileId, string originalFileName, DateTime expiresAt)
         {
             _fileTtlTracker[fileId] = expiresAt;
             _fileNameTracker[fileId] = originalFileName;
-            _logger.LogDebug($"Tracking file {fileId} ({originalFileName}) with expiration at {expiresAt}");
+            _logger.LogDebug("Tracking file {FileId} ({OriginalFileName}) with expiration at {ExpiresAt}",
+                fileId, originalFileName, expiresAt);
         }
 
         public async Task CleanupExpiredFilesAsync()
@@ -69,11 +70,11 @@ namespace FabrCore.Host.Services
                     try
                     {
                         File.Delete(file);
-                        _logger.LogInformation($"Deleted expired file: {Path.GetFileName(file)}");
+                        _logger.LogInformation("Deleted expired file: {FileName}", Path.GetFileName(file));
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, $"Error deleting file: {file}");
+                        _logger.LogError(ex, "Error deleting file: {FilePath}", file);
                     }
                 }
 
@@ -91,7 +92,7 @@ namespace FabrCore.Host.Services
 
             if (files.Length == 0)
             {
-                _logger.LogWarning($"File not found: {fileId}");
+                _logger.LogWarning("File not found: {FileId}", fileId);
                 return (null, null);
             }
 
@@ -112,7 +113,7 @@ namespace FabrCore.Host.Services
             };
 
             var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            _logger.LogInformation($"File retrieved: {Path.GetFileName(filePath)}");
+            _logger.LogInformation("File retrieved: {FileName}", Path.GetFileName(filePath));
 
             return await Task.FromResult((fileStream, contentType));
         }
@@ -123,7 +124,7 @@ namespace FabrCore.Host.Services
 
             if (files.Length == 0)
             {
-                _logger.LogWarning($"File metadata not found: {fileId}");
+                _logger.LogWarning("File metadata not found: {FileId}", fileId);
                 return null;
             }
 
@@ -156,7 +157,7 @@ namespace FabrCore.Host.Services
                 ContentType = contentType
             };
 
-            _logger.LogInformation($"File metadata retrieved: {fileId}");
+            _logger.LogInformation("File metadata retrieved: {FileId}", fileId);
             return await Task.FromResult(metadata);
         }
 
@@ -178,11 +179,11 @@ namespace FabrCore.Host.Services
                         try
                         {
                             File.Delete(filePath);
-                            _logger.LogInformation($"Deleted orphaned file: {fileName}");
+                            _logger.LogInformation("Deleted orphaned file: {FileName}", fileName);
                         }
                         catch (Exception ex)
                         {
-                            _logger.LogError(ex, $"Error deleting orphaned file: {filePath}");
+                            _logger.LogError(ex, "Error deleting orphaned file: {FilePath}", filePath);
                         }
                     }
                 }

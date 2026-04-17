@@ -70,7 +70,14 @@ namespace FabrCore.Core
         public Dictionary<string, string>? State { get; set; } = new Dictionary<string, string>();
         public Dictionary<string, string>? Args { get; set; } = new Dictionary<string, string>();
 
-        public string? TraceId { get; set; } = Guid.NewGuid().ToString();
+        /// <summary>W3C trace id (32-char lowercase hex). Null until stamped at an ingress/send boundary.</summary>
+        public string? TraceId { get; set; }
+
+        /// <summary>W3C span id (16-char lowercase hex) of the span that published this message.</summary>
+        public string? SpanId { get; set; }
+
+        /// <summary>W3C span id (16-char lowercase hex) of the publisher span's parent.</summary>
+        public string? ParentSpanId { get; set; }
 
         public AgentMessage Response()
         {
@@ -150,7 +157,13 @@ namespace FabrCore.Core
 
 
         [Id(14)]
-        public string? TraceId { get; set; } = Guid.NewGuid().ToString();
+        public string? TraceId { get; set; }
+
+        [Id(15)]
+        public string? SpanId { get; set; }
+
+        [Id(16)]
+        public string? ParentSpanId { get; set; }
 
     }
 
@@ -179,7 +192,9 @@ namespace FabrCore.Core
                 Files = surrogate.Files,
                 State = surrogate.State,
                 Args = surrogate.Args,
-                TraceId = surrogate.TraceId
+                TraceId = surrogate.TraceId,
+                SpanId = surrogate.SpanId,
+                ParentSpanId = surrogate.ParentSpanId
             };
         }
 
@@ -201,7 +216,9 @@ namespace FabrCore.Core
                 Files = value.Files,
                 State = value.State,
                 Args = value.Args,
-                TraceId = value.TraceId
+                TraceId = value.TraceId,
+                SpanId = value.SpanId,
+                ParentSpanId = value.ParentSpanId
             };
         }
     }

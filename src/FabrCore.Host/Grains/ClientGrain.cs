@@ -72,8 +72,6 @@ namespace FabrCore.Host.Grains
             "fabrcore.client.pending.messages.flushed",
             description: "Number of pending messages flushed to observers");
 
-        private static readonly TimeSpan PendingMessageMaxAge = TimeSpan.FromHours(1);
-
         private readonly IClusterClient clusterClient;
         private readonly ILogger<ClientGrain> logger;
         private readonly IFabrCoreAgentService _agentService;
@@ -83,6 +81,7 @@ namespace FabrCore.Host.Grains
         private readonly Queue<AgentMessage> pendingMessages = new();
         private readonly Dictionary<string, TrackedAgentInfo> _trackedAgents = new();
         private readonly IPersistentState<ClientGrainState> _state;
+        private readonly ClientGrainOptions _grainOptions;
 
         public ClientGrain(
             IClusterClient clusterClient,
@@ -90,11 +89,13 @@ namespace FabrCore.Host.Grains
             IFabrCoreAgentService agentService,
             IAclProvider aclProvider,
             IAgentMessageMonitor messageMonitor,
+            Microsoft.Extensions.Options.IOptions<ClientGrainOptions> grainOptions,
             [PersistentState("clientState", FabrCoreOrleansConstants.StorageProviderName)]
             IPersistentState<ClientGrainState> state)
         {
             this.clusterClient = clusterClient;
             this.logger = loggerFactory.CreateLogger<ClientGrain>();
+            this._grainOptions = grainOptions.Value;
             _agentService = agentService;
             _aclProvider = aclProvider;
             _messageMonitor = messageMonitor;
@@ -116,7 +117,6 @@ namespace FabrCore.Host.Grains
                 logger.LogInformation("Observer subscribed to client: {ClientId}", clientId);
 
                 ObserverSubscriptionsCounter.Add(1,
-                    new KeyValuePair<string, object?>("client.id", clientId),
                     new KeyValuePair<string, object?>("action", "subscribe"));
 
                 // Flush any pending messages to the newly subscribed observer
@@ -130,13 +130,10 @@ namespace FabrCore.Host.Grains
                     {
                         observerManager.Notify(o => o.OnMessageReceived(message));
 
-                        ObserverNotificationsCounter.Add(1,
-                            new KeyValuePair<string, object?>("client.id", clientId),
-                            new KeyValuePair<string, object?>("message.from", message.FromHandle));
+                        ObserverNotificationsCounter.Add(1);
                     }
 
-                    PendingMessagesFlushedCounter.Add(messageCount,
-                        new KeyValuePair<string, object?>("client.id", clientId));
+                    PendingMessagesFlushedCounter.Add(messageCount);
 
                     logger.LogInformation("Finished flushing pending messages - ClientId: {ClientId}", clientId);
                 }
@@ -148,8 +145,7 @@ namespace FabrCore.Host.Grains
                 logger.LogError(ex, "Error subscribing observer to client: {ClientId}", clientId);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
-                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "subscribe_failed"),
-                    new KeyValuePair<string, object?>("client.id", clientId));
+                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "subscribe_failed"));
                 throw;
             }
 
@@ -170,7 +166,6 @@ namespace FabrCore.Host.Grains
                 logger.LogInformation("Observer unsubscribed from client: {ClientId}", clientId);
 
                 ObserverSubscriptionsCounter.Add(1,
-                    new KeyValuePair<string, object?>("client.id", clientId),
                     new KeyValuePair<string, object?>("action", "unsubscribe"));
 
                 activity?.SetStatus(ActivityStatusCode.Ok);
@@ -180,8 +175,7 @@ namespace FabrCore.Host.Grains
                 logger.LogError(ex, "Error unsubscribing observer from client: {ClientId}", clientId);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
-                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "unsubscribe_failed"),
-                    new KeyValuePair<string, object?>("client.id", clientId));
+                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "unsubscribe_failed"));
                 throw;
             }
 
@@ -223,15 +217,12 @@ namespace FabrCore.Host.Grains
                 var response = await agentProxy.OnMessage(request);
 
                 var elapsed = Stopwatch.GetElapsedTime(startTime).TotalMilliseconds;
+                // message.from/to/client.id dropped — all unbounded handles. Retained on activity span.
                 MessageProcessingDuration.Record(elapsed,
-                    new KeyValuePair<string, object?>("message.from", request.FromHandle),
-                    new KeyValuePair<string, object?>("message.to", resolvedToHandle),
-                    new KeyValuePair<string, object?>("client.id", clientId));
+                    new KeyValuePair<string, object?>("message.kind", request.Kind.ToString()));
 
                 MessagesProcessedCounter.Add(1,
-                    new KeyValuePair<string, object?>("message.from", request.FromHandle),
-                    new KeyValuePair<string, object?>("message.to", resolvedToHandle),
-                    new KeyValuePair<string, object?>("client.id", clientId));
+                    new KeyValuePair<string, object?>("message.kind", request.Kind.ToString()));
 
                 logger.LogDebug("Client message completed - Response received from: {ToHandle}", resolvedToHandle);
                 activity?.SetStatus(ActivityStatusCode.Ok);
@@ -244,8 +235,7 @@ namespace FabrCore.Host.Grains
                     request.FromHandle, resolvedToHandle);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
-                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "send_receive_failed"),
-                    new KeyValuePair<string, object?>("client.id", this.GetPrimaryKeyString()));
+                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "send_receive_failed"));
                 throw;
             }
         }
@@ -294,8 +284,7 @@ namespace FabrCore.Host.Grains
                 logger.LogError(ex, "Error sending message to stream from client for: {ToHandle}", resolvedToHandle);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
-                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "stream_send_failed"),
-                    new KeyValuePair<string, object?>("client.id", this.GetPrimaryKeyString()));
+                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "stream_send_failed"));
                 throw;
             }
         }
@@ -354,8 +343,7 @@ namespace FabrCore.Host.Grains
                 logger.LogError(ex, "Error sending event from client - ClientId: {ClientId}", clientId);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
-                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "stream_event_send_failed"),
-                    new KeyValuePair<string, object?>("client.id", clientId));
+                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "stream_event_send_failed"));
                 throw;
             }
         }
@@ -392,7 +380,7 @@ namespace FabrCore.Host.Grains
                     if (persistedAt.HasValue)
                     {
                         var age = DateTime.UtcNow - persistedAt.Value;
-                        if (age > PendingMessageMaxAge)
+                        if (age > _grainOptions.PendingMessageMaxAge)
                         {
                             logger.LogWarning("Discarding {Count} stale pending messages for client {ClientId} - age: {Age}",
                                 _state.State.PendingMessages.Count, clientId, age);
@@ -418,7 +406,7 @@ namespace FabrCore.Host.Grains
 
                 logger.LogInformation("Client activated and streams created: {ClientId}", clientId);
 
-                ClientActivatedCounter.Add(1, new KeyValuePair<string, object?>("client.id", clientId));
+                ClientActivatedCounter.Add(1);
 
                 activity?.SetStatus(ActivityStatusCode.Ok);
             }
@@ -427,8 +415,7 @@ namespace FabrCore.Host.Grains
                 logger.LogError(ex, "Error activating client: {ClientId}", clientId);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
-                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "activation_failed"),
-                    new KeyValuePair<string, object?>("client.id", clientId));
+                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "activation_failed"));
                 throw;
             }
         }
@@ -531,8 +518,7 @@ namespace FabrCore.Host.Grains
                 logger.LogError(ex, "Error creating streams for client: {ClientId}", clientId);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
-                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "stream_creation_failed"),
-                    new KeyValuePair<string, object?>("client.id", clientId));
+                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "stream_creation_failed"));
                 throw;
             }
         }
@@ -555,12 +541,10 @@ namespace FabrCore.Host.Grains
             logger.LogInformation("Client received message - ClientId: {ClientId}, From: {FromHandle}",
                 clientId, request.FromHandle);
 
-            StreamMessagesCounter.Add(1,
-                new KeyValuePair<string, object?>("client.id", clientId),
-                new KeyValuePair<string, object?>("message.from", request.FromHandle));
+            StreamMessagesCounter.Add(1);
 
             // Record inbound message to client in the message monitor
-            _ = _messageMonitor.RecordMessageAsync(new MonitoredMessage
+            _messageMonitor.RecordMessageAsync(new MonitoredMessage
             {
                 AgentHandle = clientId,
                 FromHandle = request.FromHandle,
@@ -578,7 +562,7 @@ namespace FabrCore.Host.Grains
                 Direction = MessageDirection.Inbound,
                 TraceId = request.TraceId,
                 LlmUsage = LlmUsageInfo.FromArgs(request.Args)
-            });
+            }).TrackRecording(logger, ErrorCounter, "RecordMessage.ClientInbound", clientId);
 
             try
             {
@@ -589,9 +573,7 @@ namespace FabrCore.Host.Grains
                     logger.LogInformation("No observers subscribed, message queued - ClientId: {ClientId}, QueueLength: {QueueLength}",
                         clientId, pendingMessages.Count);
 
-                    PendingMessagesQueuedCounter.Add(1,
-                        new KeyValuePair<string, object?>("client.id", clientId),
-                        new KeyValuePair<string, object?>("message.from", request.FromHandle));
+                    PendingMessagesQueuedCounter.Add(1);
 
                     activity?.SetStatus(ActivityStatusCode.Ok);
                 }
@@ -600,9 +582,7 @@ namespace FabrCore.Host.Grains
                     // Notify all observers
                     observerManager.Notify(observer => observer.OnMessageReceived(request));
 
-                    ObserverNotificationsCounter.Add(1,
-                        new KeyValuePair<string, object?>("client.id", clientId),
-                        new KeyValuePair<string, object?>("message.from", request.FromHandle));
+                    ObserverNotificationsCounter.Add(1);
 
                     logger.LogInformation("Client observers notified - ClientId: {ClientId}", clientId);
                     activity?.SetStatus(ActivityStatusCode.Ok);
@@ -613,8 +593,7 @@ namespace FabrCore.Host.Grains
                 logger.LogError(ex, "Error processing streaming message for client: {ClientId}", clientId);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
-                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "observer_notification_failed"),
-                    new KeyValuePair<string, object?>("client.id", clientId));
+                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "observer_notification_failed"));
                 throw;
             }
 
@@ -676,9 +655,7 @@ namespace FabrCore.Host.Grains
                         clientId, agentConfiguration.Handle);
 
                     AgentsCreatedCounter.Add(1,
-                        new KeyValuePair<string, object?>("client.id", clientId),
-                        new KeyValuePair<string, object?>("agent.type", agentConfiguration.AgentType),
-                        new KeyValuePair<string, object?>("agent.handle", agentConfiguration.Handle));
+                        new KeyValuePair<string, object?>("agent.type", agentConfiguration.AgentType));
                 }
 
                 logger.LogInformation("Client agent ready - ClientId: {ClientId}, Handle: {Handle}, State: {State}",
@@ -693,8 +670,7 @@ namespace FabrCore.Host.Grains
                     clientId, agentConfiguration.AgentType);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
-                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "agent_creation_failed"),
-                    new KeyValuePair<string, object?>("client.id", clientId));
+                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "agent_creation_failed"));
                 throw;
             }
         }
@@ -732,8 +708,7 @@ namespace FabrCore.Host.Grains
                     clientId, resolvedHandle);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
-                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "reset_failed"),
-                    new KeyValuePair<string, object?>("client.id", clientId));
+                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "reset_failed"));
                 throw;
             }
         }

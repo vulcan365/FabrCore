@@ -46,7 +46,9 @@ namespace FabrCore.Host.Api.Controllers
                 var expiresAt = DateTime.UtcNow.AddSeconds(ttl);
                 _fileStorageService.TrackFile(fileId, file.FileName, expiresAt);
 
-                _logger.LogInformation($"File uploaded: {fileId}{fileExtension} ({file.FileName}), TTL: {ttl} seconds, Expires at: {expiresAt}");
+                _logger.LogInformation(
+                    "File uploaded: {FileId}{FileExtension} ({OriginalFileName}), TTL: {TtlSeconds}s, ExpiresAt: {ExpiresAt}",
+                    fileId, fileExtension, file.FileName, ttl, expiresAt);
 
                 return Ok(fileId);
             }
