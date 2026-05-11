@@ -13,27 +13,27 @@
 
 	<ItemGroup>
 		<FrameworkReference Include="Microsoft.AspNetCore.App" />
-		<PackageReference Include="OpenTelemetry.Api" Version="1.15.1" />
+		<PackageReference Include="OpenTelemetry.Api" Version="1.15.3" />
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Microsoft.Orleans.Core.Abstractions" Version="10.0.1" />
-		<PackageReference Include="Microsoft.Orleans.Runtime" Version="10.0.1" />
-		<PackageReference Include="Microsoft.Orleans.Streaming" Version="10.0.1" />
-		<PackageReference Include="Microsoft.Orleans.Sdk" Version="10.0.1" />
-		<PackageReference Include="Microsoft.Orleans.Client" Version="10.0.1" />
-		<PackageReference Include="Microsoft.Orleans.Server" Version="10.0.1" />
-		<PackageReference Include="Microsoft.Orleans.Reminders" Version="10.0.1" />
+		<PackageReference Include="Microsoft.Orleans.Core.Abstractions" Version="10.1.0" />
+		<PackageReference Include="Microsoft.Orleans.Runtime" Version="10.1.0" />
+		<PackageReference Include="Microsoft.Orleans.Streaming" Version="10.1.0" />
+		<PackageReference Include="Microsoft.Orleans.Sdk" Version="10.1.0" />
+		<PackageReference Include="Microsoft.Orleans.Client" Version="10.1.0" />
+		<PackageReference Include="Microsoft.Orleans.Server" Version="10.1.0" />
+		<PackageReference Include="Microsoft.Orleans.Reminders" Version="10.1.0" />
 		<!-- Azure Storage Providers -->
-		<PackageReference Include="Microsoft.Orleans.Clustering.AzureStorage" Version="10.0.1" />
-		<PackageReference Include="Microsoft.Orleans.Persistence.AzureStorage" Version="10.0.1" />
-		<PackageReference Include="Microsoft.Orleans.Streaming.AzureStorage" Version="10.0.1" />
-		<PackageReference Include="Microsoft.Orleans.Reminders.AzureStorage" Version="10.0.1" />
+		<PackageReference Include="Microsoft.Orleans.Clustering.AzureStorage" Version="10.1.0" />
+		<PackageReference Include="Microsoft.Orleans.Persistence.AzureStorage" Version="10.1.0" />
+		<PackageReference Include="Microsoft.Orleans.Streaming.AzureStorage" Version="10.1.0" />
+		<PackageReference Include="Microsoft.Orleans.Reminders.AzureStorage" Version="10.1.0" />
 		<!-- SQL Server (ADO.NET) Providers -->
-		<PackageReference Include="Microsoft.Orleans.Clustering.AdoNet" Version="10.0.1" />
-		<PackageReference Include="Microsoft.Orleans.Persistence.AdoNet" Version="10.0.1" />
-		<PackageReference Include="Microsoft.Orleans.Reminders.AdoNet" Version="10.0.1" />
-		<PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.0" />
+		<PackageReference Include="Microsoft.Orleans.Clustering.AdoNet" Version="10.1.0" />
+		<PackageReference Include="Microsoft.Orleans.Persistence.AdoNet" Version="10.1.0" />
+		<PackageReference Include="Microsoft.Orleans.Reminders.AdoNet" Version="10.1.0" />
+		<PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.1" />
 	</ItemGroup>
 
 	<ItemGroup>

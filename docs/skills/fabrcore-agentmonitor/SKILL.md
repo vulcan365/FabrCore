@@ -359,7 +359,7 @@ await _monitor.ClearAsync(); // Clears messages, events, LLM calls, and token su
 | `Kind` | `MessageKind` | `Request`, `OneWay`, or `Response` |
 | `Direction` | `MessageDirection` | `Inbound` or `Outbound` |
 | `Timestamp` | `DateTimeOffset` | UTC timestamp |
-| `TraceId` | `string?` | Distributed trace correlation ID |
+| `TraceId` | `string?` | W3C trace id (32-char hex) — same value stamped on `AgentMessage.TraceId`; use it to join monitor records with OpenTelemetry spans from your exporter. Only `TraceId` is persisted — `SpanId`/`ParentSpanId` from `AgentMessage` are not captured on the monitor record. |
 | `LlmUsage` | `LlmUsageInfo?` | LLM metrics (null if no LLM was invoked) |
 | `BusyRouted` | `bool` | True if this message was routed through `OnMessageBusy` because the agent was already processing |
 
@@ -381,7 +381,7 @@ Events captured at `AgentGrain.ReceivedEventMessage` (the `OnEvent` stream handl
 | `Args` | `Dictionary<string, string>?` | Optional key-value args |
 | `EventTime` | `DateTimeOffset` | Producer-stamped event time |
 | `Timestamp` | `DateTimeOffset` | UTC time the monitor recorded the event |
-| `TraceId` | `string?` | Distributed trace correlation id |
+| `TraceId` | `string?` | W3C trace id (32-char hex) carried on the `EventMessage` — joinable with OpenTelemetry spans by trace id |
 | `Direction` | `MessageDirection` | Always `Inbound` today |
 
 ## MonitoredLlmCall Properties
@@ -393,7 +393,7 @@ A `MonitoredLlmCall` is recorded for every LLM round-trip made through `TokenTra
 | `Id` | `string` | Unique LLM call id |
 | `Timestamp` | `DateTimeOffset` | UTC time the monitor recorded the call |
 | `AgentHandle` | `string?` | Agent that made the call |
-| `TraceId` | `string?` | Distributed trace id inherited from the parent scope |
+| `TraceId` | `string?` | W3C trace id (32-char hex) inherited from the parent scope (`LlmUsageScope` → surrounding `AgentMessage.TraceId`). Join on this to correlate LLM calls with the OpenTelemetry span tree. |
 | `ParentMessageId` | `string?` | `MonitoredMessage.Id` that triggered the call (null for timer/event/background) |
 | `OriginContext` | `string` | `OnMessage:<id>`, `OnEvent:<type>`, `Timer:<name>`, `Reminder:<name>`, `Compaction`, `Background` |
 | `Model` | `string?` | Model identifier returned by the provider |
@@ -438,6 +438,19 @@ A `MonitoredLlmCall` is recorded for every LLM round-trip made through `TokenTra
 | `MaxToolArgsChars` | `4000` | Character cap on captured tool call arguments |
 | `Redact` | `null` | Optional `Func<string,string>` applied to every captured string (use for secret/PII scrubbing) |
 | `MaxBufferedCalls` | `2000` | FIFO cap on the in-memory LLM call buffer |
+
+## Correlating with OpenTelemetry traces
+
+The monitor and OpenTelemetry are **complementary, not overlapping**:
+
+- **Monitor** captures message/event/LLM-call *provenance* — who sent what to whom, which LLM call came out of which `OnMessage`, tokens used, tool arguments. In-process, query via `IAgentMessageMonitor`. No exporter required.
+- **OpenTelemetry** captures *span timing* — wall-clock of each activity, parent/child relationships, distributed across processes. Visible in Jaeger / OTLP / Console via your `TracerProvider`.
+
+**How to join them:** `MonitoredMessage.TraceId`, `MonitoredEvent.TraceId`, and `MonitoredLlmCall.TraceId` are the *same* W3C 32-char hex values stamped on the underlying `AgentMessage` / `EventMessage` at ingress (via `AgentMessageTelemetry.StartIngressActivity` — see fabrcore-messaging). That means a span shown in Jaeger and a `MonitoredLlmCall` in the in-process buffer can be matched by equal `TraceId`.
+
+Note that **only `TraceId` is persisted on the monitor records** — `SpanId` / `ParentSpanId` from `AgentMessage` are not copied onto `MonitoredMessage`. If you need span-level correlation (not just trace-level), read it from `Activity.Current` inside your agent and stash it in `MonitoredMessage.Args`/`State` via your own instrumentation, or rely on the exporter-side view.
+
+For exporter wiring, see **fabrcore-server → OpenTelemetry exporter setup**.
 
 ## Attribution: How LLM Calls Are Tagged
 

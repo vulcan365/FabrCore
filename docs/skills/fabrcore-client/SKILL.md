@@ -377,6 +377,46 @@ AgentStatisticsResponse stats = await ApiClient.GetAgentStatisticsAsync();
 
 All of these are straight HTTP calls against `{FabrCoreHostUrl}` — no handle parsing, no `x-user` header, no ClientContext required. They're safe to call from any DI-registered consumer.
 
+## Telemetry (OpenTelemetry)
+
+`ClientContext` instruments every outbound call with an `Activity`:
+
+| Method | ActivitySource | Activity kind | Auto-stamps `AgentMessage`? |
+|---|---|---|---|
+| `SendAndReceiveMessage` | `FabrCore.Client.ClientContext` | `Client` | **No** |
+| `SendMessage` | `FabrCore.Client.ClientContext` | `Producer` | **No** |
+
+Tags set on the Activity: `client.handle`, `message.from`, `message.to`. Duration and success metrics are emitted to meter `FabrCore.Client.ClientContext` (`MessageProcessingDuration` histogram, `MessagesProcessedCounter` counter). See `src/FabrCore.Client/ClientContext.cs:157-195`.
+
+### What the client does NOT do
+
+Important: `ClientContext` does **not** call `AgentMessage.StampFromActivity` on your outbound message. The client-side Activity wraps the call for local span timing, but the `AgentMessage` itself leaves the client without `TraceId`/`SpanId`/`ParentSpanId` set. The receiving `AgentGrain` then calls `StartIngressActivity`, which — since the message has no trace context and no `outerParent` is passed for in-process Orleans grain calls — starts a **new root trace**.
+
+If you need end-to-end trace correlation across the client → grain boundary via the message itself, stamp before sending:
+
+```csharp
+using FabrCore.Core;  // for StampFromActivity extension
+
+var request = new AgentMessage { ToHandle = "assistant", Message = "hi" };
+request.StampFromActivity(Activity.Current);   // propagate your caller's trace context
+var response = await clientContext.SendAndReceiveMessage(request);
+```
+
+The `WebSocket` and HTTP REST ingress points (used by browser-side ChatDock, external callers, and cross-process clients) **do** honor the `traceparent` header and propagate via `StartIngressActivity` automatically — see `src/FabrCore.Host/WebSocket/WebSocketSession.cs:314-413`. Manual stamping is only needed for in-process `IClientContext` calls where you want the client span and the grain span in one trace.
+
+### Wiring an exporter
+
+FabrCore.Client depends only on `OpenTelemetry.Api`. To see client-side spans, register a TracerProvider in your host (same pattern as the server — see **fabrcore-server → OpenTelemetry exporter setup**):
+
+```csharp
+builder.Services.AddOpenTelemetry()
+    .WithTracing(t => t
+        .AddSource("FabrCore.Client.*")
+        .AddOtlpExporter());
+```
+
+See **fabrcore-messaging → Correlation and Tracing** for the full `AgentMessage` telemetry surface and helper reference.
+
 ## Extension Methods
 
 ```csharp

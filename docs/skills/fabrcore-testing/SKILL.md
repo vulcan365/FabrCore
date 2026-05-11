@@ -203,6 +203,47 @@ public class MyAgentBusyTests
 }
 ```
 
+### Testing Trace Propagation
+
+If you're verifying that your agent preserves W3C TraceContext across `OnMessage`, assert on the response's `TraceId`/`SpanId`/`ParentSpanId`. The harness's `SendMessage(agent, text, ...)` only takes a text message, so for trace tests call `agent.OnMessage(...)` directly with a pre-stamped `AgentMessage`. Note that calling `OnMessage` directly bypasses the `AgentGrain` ingress, so no `FabrCore.Host.AgentGrain` Activity is created — the test is exercising only what your agent code does with the trace fields it receives.
+
+```csharp
+using System.Diagnostics;
+using FabrCore.Core;
+
+[TestMethod]
+public async Task OnMessage_PreservesTraceIdAcrossResponse()
+{
+    using var source = new ActivitySource("Test.MyAgent");
+    using var listener = new ActivityListener
+    {
+        ShouldListenTo = s => s.Name == "Test.MyAgent",
+        Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+    };
+    ActivitySource.AddActivityListener(listener);
+
+    using var harness = new FabrCoreTestHarness();
+    var agent = harness.CreateMockAgent<MyAgent>(FakeChatClient.WithTextResponse("ok"));
+    await harness.InitializeAgent(agent);
+
+    using var activity = source.StartActivity("test");
+    var request = new AgentMessage
+    {
+        FromHandle = "test-user",
+        ToHandle = harness.AgentHost.GetHandle(),
+        Message = "hi",
+        Kind = MessageKind.Request
+    };
+    request.StampFromActivity(Activity.Current);
+
+    var response = await agent.OnMessage(request);
+
+    Assert.AreEqual(request.TraceId, response.TraceId);   // Response() copies TraceId
+}
+```
+
+For end-to-end `SpanId`/`ParentSpanId` propagation checks you need the grain ingress path — run against a real `AgentGrain` (integration test against a running host) rather than the in-process harness. See **fabrcore-messaging → Correlation and Tracing** for the telemetry surface and helper reference.
+
 ## FakeChatClient Factory Methods
 
 | Method | Use Case |

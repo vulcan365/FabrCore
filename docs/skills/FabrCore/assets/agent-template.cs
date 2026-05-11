@@ -58,16 +58,19 @@ public class {{AGENT_NAME}} : FabrCoreAgentProxy
     public override Task<AgentMessage> OnMessageBusy(AgentMessage message)
     {
         // Example: acknowledge receipt with context about what's happening
-        return Task.FromResult(new AgentMessage
+        var response = new AgentMessage
         {
             ToHandle = message.FromHandle,
             FromHandle = config.Handle,
             OnBehalfOfHandle = message.OnBehalfOfHandle,
             Message = "I'm currently working on a request. I'll be available shortly.",
             MessageType = message.MessageType,
-            Kind = MessageKind.Response,
-            TraceId = message.TraceId
-        });
+            Kind = MessageKind.Response
+        };
+        // Stamp W3C trace fields from the ambient Activity so the response stays in the same trace.
+        // See fabrcore-messaging → "Correlation and Tracing" for the full telemetry surface.
+        response.StampFromActivity(System.Diagnostics.Activity.Current);
+        return Task.FromResult(response);
     }
 
     public override Task OnEvent(EventMessage eventMessage)
