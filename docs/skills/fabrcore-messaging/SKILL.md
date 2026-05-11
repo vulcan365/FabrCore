@@ -44,9 +44,16 @@ public class AgentMessage
     // Metadata
     public Dictionary<string, string>? State { get; set; } = new();
     public Dictionary<string, string>? Args { get; set; } = new();
-    public string? TraceId { get; set; } = Guid.NewGuid().ToString();
 
-    // Create response with routing pre-filled
+    // W3C TraceContext — null until stamped at an ingress/send boundary.
+    // See "Correlation and Tracing" below. Use AgentMessageTelemetry helpers
+    // (StampFromActivity / StartIngressActivity) rather than setting these by hand.
+    public string? TraceId { get; set; }        // 32-char lowercase hex
+    public string? SpanId { get; set; }         // 16-char lowercase hex — publisher span
+    public string? ParentSpanId { get; set; }   // 16-char lowercase hex — publisher's parent
+
+    // Create response with routing pre-filled. Copies TraceId but NOT SpanId/ParentSpanId —
+    // the response is a new span; stamp it from its own Activity before returning.
     public AgentMessage Response();
 }
 
@@ -288,17 +295,67 @@ var message = new AgentMessage
 };
 ```
 
-## Correlation and Tracing
+## Correlation and Tracing (OpenTelemetry / W3C TraceContext)
+
+`AgentMessage` carries three W3C TraceContext fields so every hop (client → grain → downstream agent → response) stays in one trace:
+
+| Field | Format | Meaning |
+|---|---|---|
+| `TraceId` | 32-char lowercase hex | The whole trace — stable across every hop |
+| `SpanId` | 16-char lowercase hex | The span that published *this* message |
+| `ParentSpanId` | 16-char lowercase hex | The publisher span's parent (null if root) |
+
+All three are null until a boundary stamps them. Do not hand-roll GUIDs into these fields — the helpers in `FabrCore.Core.AgentMessageTelemetry` do the right thing and keep the values W3C-valid.
+
+### Helpers (`AgentMessageTelemetry`)
 
 ```csharp
-var message = new AgentMessage
-{
-    Message = "Process this",
-    TraceId = Activity.Current?.Id ?? Guid.NewGuid().ToString()
-};
+using FabrCore.Core;   // brings the extension methods into scope
+
+// 1. Stamp outbound — before sending a message, copy IDs from the current Activity
+message.StampFromActivity(Activity.Current);
+
+// 2. Parse inbound — rebuild an ActivityContext from a message's trace fields
+if (message.TryGetParentContext(out var parentCtx)) { /* parentCtx.IsRemote == true */ }
+
+// 3. Ingress boundary — start an Activity that parents on the message, with fallback
+using var activity = message.StartIngressActivity(
+    MyActivitySource,
+    name: "OnMessage",
+    kind: ActivityKind.Server,
+    outerParent: default);   // optional: supply e.g. a traceparent header context
 ```
 
-FabrCore automatically instruments agent calls with OpenTelemetry.
+**`StartIngressActivity` parent precedence:** (1) the message's own `TraceId`/`SpanId` → (2) `outerParent` (e.g. extracted from a `traceparent` HTTP header) → (3) new root. If the message was unstamped, the new Activity's IDs are stamped back onto it so downstream hops can parent on it automatically.
+
+### Response semantics
+
+`AgentMessage.Response()` copies `TraceId` so the response stays in the same trace, but it does **not** copy `SpanId`/`ParentSpanId` — a response is conceptually its own span. If you return a response from a scope with an active `Activity`, stamp it:
+
+```csharp
+var response = request.Response();
+response.Message = "done";
+response.StampFromActivity(Activity.Current);
+return response;
+```
+
+`AgentGrain` already does this for you at its `OnMessage`/`OnMessageBusy` ingress — see `src/FabrCore.Host/Grains/AgentGrain.cs:569,673,724,795`.
+
+### Where FabrCore already stamps for you
+
+| Component | ActivitySource | Behavior |
+|---|---|---|
+| `AgentGrain.OnMessage` / `OnMessageBusy` | `FabrCore.Host.AgentGrain` | Calls `StartIngressActivity` on inbound, `StampFromActivity` on outbound response |
+| `FabrCoreAgentProxy.InternalOnMessage` (your agent) | `FabrCore.Sdk.AgentProxy` | Runs inside the grain's Activity; your `ActivitySource.StartActivity(...)` auto-parents |
+| `WebSocketSession` | `FabrCore.Host.WebSocketSession` | Accepts upstream `traceparent` header, passes as `outerParent`, stamps responses |
+| `FabrCoreAgentService` (host-side fire-and-forget) | `FabrCore.Host.*` | Stamps outbound messages before `stream.OnNextAsync` |
+| `ClientContext.SendAndReceiveMessage` / `SendMessage` | `FabrCore.Client.ClientContext` | Wraps the call in an Activity (tags + metrics). **Does NOT auto-stamp the outbound `AgentMessage`** — if you need the receiving grain to parent its Activity on your client span via the message, call `message.StampFromActivity(Activity.Current)` yourself before sending. |
+
+### Viewing spans (exporter setup)
+
+FabrCore depends only on `OpenTelemetry.Api` — no exporter is bundled. Register your own TracerProvider to see spans in Jaeger / OTLP / Console. See **fabrcore-server → OpenTelemetry exporter setup** for the wiring.
+
+For message-level observability (who sent what to whom, without needing an external exporter), see **fabrcore-agentmonitor** — `MonitoredMessage.TraceId` is the same `TraceId` stamped here, so the in-process monitor and your external trace viewer are joinable by `TraceId`.
 
 ## Access Control (ACL)
 

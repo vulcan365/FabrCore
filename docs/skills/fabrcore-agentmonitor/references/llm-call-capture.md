@@ -55,6 +55,8 @@ When `TryRecordLlmCall` runs, it resolves `AgentHandle`, `ParentMessageId`, `Tra
    └── guarantees a correct AgentHandle; OriginContext defaults to "Background"
 ```
 
+The `TraceId` flowing through this chain originates on the inbound `AgentMessage` — stamped by `AgentMessageTelemetry.StartIngressActivity` at the grain boundary (see fabrcore-messaging → Correlation and Tracing). It is a W3C-compliant 32-char lowercase hex id, the same value you'll see on the corresponding span in Jaeger / OTLP, so `MonitoredLlmCall.TraceId == Activity.TraceId.ToHexString()` — that's your join key between the in-process monitor and your external trace viewer.
+
 The precedence rule is subtle: **`LlmCallContext` does not block `LlmUsageScope`; it overlays on top of it.** When both are set (e.g. compaction running inside an `OnMessage`), `LlmCallContext.OriginContext` wins for tagging, while `LlmUsageScope.ParentMessageId` still flows through so the call is correlated to its parent message. This lets compaction calls appear as `OriginContext = "Compaction"` but still link back to the outbound message that triggered them.
 
 ### Where the scopes are set

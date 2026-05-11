@@ -624,6 +624,54 @@ Monitor and manage agent lifecycle across the cluster.
 
 Connect at `/ws` for real-time bidirectional communication. Requires user ID via `x-fabrcore-userid` header or `userid` query parameter.
 
+The WebSocket ingress honors the W3C `traceparent` header — if a client sets it, the resulting `AgentMessage` ingress span parents on the caller's trace via `AgentMessageTelemetry.StartIngressActivity` (see `src/FabrCore.Host/WebSocket/WebSocketSession.cs:314`). Error responses are stamped from `Activity.Current` at lines 384, 413, 700.
+
+## OpenTelemetry exporter setup
+
+FabrCore depends only on **`OpenTelemetry.Api` v1.15.1** — no exporter is bundled. `UseFabrCoreServer` registers a process-wide `ActivityListener` for every `FabrCore.*` `ActivitySource` (see `src/FabrCore.Host/FabrCoreHostExtensions.cs:123-132`), so `Activity` instances materialize even without a full TracerProvider. To actually **see** spans, register your own exporter:
+
+```csharp
+// In your Program.cs, after AddFabrCoreServer / AddFabrCoreClient:
+builder.Services.AddOpenTelemetry()
+    .WithTracing(tracing => tracing
+        .AddSource("FabrCore.*")              // pick up every FabrCore ActivitySource
+        .AddHttpClientInstrumentation()       // optional but recommended
+        .AddAspNetCoreInstrumentation()       // optional for server
+        .AddOtlpExporter(o =>                 // OR .AddJaegerExporter() / .AddConsoleExporter()
+        {
+            o.Endpoint = new Uri("http://localhost:4317");
+        }))
+    .WithMetrics(metrics => metrics
+        .AddMeter("FabrCore.*")               // FabrCore meters (Host.Extensions, Client.ClientContext, ...)
+        .AddOtlpExporter());
+```
+
+NuGet packages to add to your host project: `OpenTelemetry.Extensions.Hosting`, `OpenTelemetry.Exporter.OpenTelemetryProtocol` (or the console/jaeger exporter of your choice).
+
+### ActivitySource names emitted by FabrCore
+
+| Source | Emitted by | When |
+|---|---|---|
+| `FabrCore.Host.AgentGrain` | `AgentGrain.OnMessage` / `OnMessageBusy` | Every inbound agent message — ingress span, parented on the message's `TraceId`/`SpanId` when present |
+| `FabrCore.Host.Extensions` | `FabrCoreHostExtensions` | Server configuration / startup |
+| `FabrCore.Host.WebSocketSession` | `WebSocketSession` | Every WebSocket frame ingress; honors `traceparent` |
+| `FabrCore.Host.WebSocketMiddleware` | WebSocket middleware | Connection accept/reject |
+| `FabrCore.Sdk.AgentProxy` | `FabrCoreAgentProxy.InternalOnMessage` | Inside every agent's lifecycle method |
+| `FabrCore.Client.ClientContext` | `ClientContext.SendAndReceiveMessage` / `SendMessage` | Client-side sends (see fabrcore-client) |
+| `FabrCore.Client.ClientContextFactory` | `ClientContextFactory` | Client lookup/creation |
+| `FabrCore.Client.DirectMessageSender` | `DirectMessageSender` | Direct grain calls without ClientContext |
+
+Filter by prefix (`AddSource("FabrCore.*")`) to pick all of them up in one line.
+
+### Meters emitted by FabrCore
+
+- `FabrCore.Host.Extensions` — `fabrcore.host.server.configured`, `fabrcore.host.errors`
+- `FabrCore.Client.ClientContext` — `MessageProcessingDuration` (histogram), `MessagesProcessedCounter` (counter), error counters
+
+### Correlating with the in-process monitor
+
+`MonitoredMessage.TraceId` and `MonitoredLlmCall.TraceId` are the same W3C 32-char hex values stamped by `StartIngressActivity` and visible in your exporter. Join on `TraceId` to pivot between in-process monitor queries (agent/tool/LLM provenance) and external span timing views. See **fabrcore-agentmonitor → Correlating with OpenTelemetry traces** and **fabrcore-messaging → Correlation and Tracing**.
+
 ## IAgentManagementProvider
 
 Pluggable provider for agent/client registration and lifecycle tracking:

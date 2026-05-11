@@ -656,7 +656,7 @@ namespace FabrCore.Sdk
             var enabled = compaction.Enabled;
             var maxContextTokens = compaction.MaxContextTokens;
             var threshold = compaction.Threshold;
-            var minKeepLastN = 4;
+            var minKeepLastN = 2;
 
             if (args.TryGetValue("_ProjectionEnabled", out var enabledStr) && bool.TryParse(enabledStr, out var enabledVal))
                 enabled = enabledVal;
