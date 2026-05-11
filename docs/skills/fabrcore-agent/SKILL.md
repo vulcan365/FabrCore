@@ -250,7 +250,7 @@ Called when a new message arrives while `OnMessage` is already executing. The `O
 public override Task<AgentMessage> OnMessageBusy(AgentMessage message)
 {
     var primaryMsg = ActiveMessage;
-    return Task.FromResult(new AgentMessage
+    var response = new AgentMessage
     {
         ToHandle = message.FromHandle,
         FromHandle = config.Handle,
@@ -258,9 +258,12 @@ public override Task<AgentMessage> OnMessageBusy(AgentMessage message)
         Message = $"I'm currently processing a request from {primaryMsg?.FromHandle ?? "another user"}. " +
                   "I'll be available shortly.",
         MessageType = message.MessageType,
-        Kind = MessageKind.Response,
-        TraceId = message.TraceId
-    });
+        Kind = MessageKind.Response
+    };
+    // Stamp W3C trace fields from the ambient Activity — do NOT hand-copy message.TraceId.
+    // The grain's OnMessageBusy ingress already opened an Activity; this keeps the response in the same trace.
+    response.StampFromActivity(Activity.Current);
+    return Task.FromResult(response);
 }
 
 // Example: Route timer messages differently when busy
@@ -296,6 +299,52 @@ public override Task OnEvent(EventMessage eventMessage)
     return Task.CompletedTask;
 }
 ```
+
+## Telemetry (OpenTelemetry / W3C TraceContext)
+
+Every `AgentMessage` carries W3C `TraceId` / `SpanId` / `ParentSpanId`. Your agent's lifecycle methods run **inside** an Activity started by `AgentGrain` at source `FabrCore.Host.AgentGrain` (parented on the inbound message's trace context via `StartIngressActivity`). That means:
+
+- `Activity.Current` is non-null inside `OnMessage` / `OnMessageBusy` / `OnEvent` — use it.
+- Any child span you start from your own `ActivitySource` auto-parents on the grain span; no context plumbing needed.
+- Outbound responses returned from `OnMessage` are auto-stamped by the grain before delivery (see `src/FabrCore.Host/Grains/AgentGrain.cs:673,795`) — you only need to stamp when you build a response in a method that returns the `AgentMessage` directly *and* want to be safe (e.g. `OnMessageBusy`).
+
+### Creating child spans in your agent
+
+```csharp
+public class MyAgent : FabrCoreAgentProxy
+{
+    private static readonly ActivitySource Source = new("MyCompany.MyAgent");
+
+    public override async Task<AgentMessage> OnMessage(AgentMessage message)
+    {
+        using var activity = Source.StartActivity("search-docs");
+        activity?.SetTag("query.length", message.Message?.Length ?? 0);
+
+        var result = await DoTheWork(message);
+
+        var response = message.Response();
+        response.Message = result;
+        // Grain will StampFromActivity before returning to the caller; optional here.
+        return response;
+    }
+}
+```
+
+### Fire-and-forget sends from inside your agent
+
+When you push a message into a stream yourself (fire-and-forget), stamp it so downstream receivers can parent their spans on yours:
+
+```csharp
+var outbound = new AgentMessage { ToHandle = "peer", Message = "tick", Kind = MessageKind.OneWay };
+outbound.StampFromActivity(Activity.Current);
+await someStream.OnNextAsync(outbound);
+```
+
+This is the pattern `FabrCoreAgentService` uses internally — see `src/FabrCore.Host/Services/FabrCoreAgentService.cs:88-127`.
+
+### Viewing the spans
+
+FabrCore ships `OpenTelemetry.Api` only — no exporter. See **fabrcore-server → OpenTelemetry exporter setup** to wire Jaeger / OTLP / Console and actually see your spans. See **fabrcore-messaging → Correlation and Tracing** for the full W3C surface and helper reference.
 
 ## Custom State Persistence
 

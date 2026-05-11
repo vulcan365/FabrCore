@@ -38,6 +38,7 @@ Build distributed AI agent systems with FabrCore — an open-source .NET 10 fram
 | Messaging | Agent communication | `AgentMessage`, `HandleUtilities` | fabrcore-messaging |
 | MCP | External tool protocol | `McpServerConfig` | fabrcore-mcp |
 | Configuration | Agent definition | `AgentConfiguration` | fabrcore-server |
+| Telemetry | W3C TraceContext on every message | `AgentMessageTelemetry`, `StampFromActivity`, `StartIngressActivity` | fabrcore-messaging (surface), fabrcore-server (exporter setup) |
 
 ## Architecture Overview
 

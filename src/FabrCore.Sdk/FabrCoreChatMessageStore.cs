@@ -239,7 +239,7 @@ namespace FabrCore.Sdk
             var keptIndex = nonSystem.Count; // exclusive start index of the kept window
             for (var i = nonSystem.Count - 1; i >= 0; i--)
             {
-                var msgTokens = CompactionService.EstimateTokens(new List<StoredChatMessage> { nonSystem[i] });
+                var msgTokens = CompactionService.EstimateTokens(nonSystem[i]);
                 if (consumed + msgTokens > budget && (nonSystem.Count - i) > cfg.MinKeepLastN)
                 {
                     break;
