@@ -51,7 +51,7 @@ public record ProjectionConfig
     /// if the token ceiling would otherwise clip them. Prevents pathological
     /// single-message-over-budget cases from dropping the user's own turn.
     /// </summary>
-    public int MinKeepLastN { get; init; } = 4;
+    public int MinKeepLastN { get; init; } = 2;
 }
 
 public record CompactionResult
@@ -129,20 +129,35 @@ public class CompactionService
         if (onCompacting is not null)
             await onCompacting();
 
-        // Split: summarize older messages, keep recent ones
-        var keepCount = Math.Min(config.KeepLastN, messages.Count);
+        // Budget-aware keep window: walk backward from newest, accumulating
+        // tokens until we'd exceed what the model can hold after the summary.
+        const int summaryReserve = 2500;
+        var keepBudget = Math.Max(0, threshold - summaryReserve);
+
+        var keepCount = 0;
+        var keepTokens = 0;
+        for (var i = messages.Count - 1; i >= 0; i--)
+        {
+            var msgTokens = EstimateTokens(messages[i]);
+            if (keepTokens + msgTokens > keepBudget && keepCount >= 1)
+                break;
+            if (keepCount >= config.KeepLastN)
+                break;
+            keepTokens += msgTokens;
+            keepCount++;
+        }
+
+        keepCount = Math.Max(1, keepCount);
         var splitIndex = messages.Count - keepCount;
 
-        // If KeepLastN covers all messages but we're over threshold,
-        // reduce the keep window so we actually compact something.
-        // Always keep at least 2 messages (the most recent exchange).
-        if (splitIndex == 0 && messages.Count > 2)
+        // If the budget walk kept everything, force at least one message
+        // into the summarize window so compaction actually does something.
+        if (splitIndex == 0 && messages.Count > 1)
         {
-            keepCount = Math.Max(2, messages.Count / 2);
-            splitIndex = messages.Count - keepCount;
+            splitIndex = 1;
             _logger.LogInformation(
-                "KeepLastN ({KeepLastN}) covers all {Count} messages — reducing keep window to {Keep} to force compaction",
-                config.KeepLastN, messages.Count, keepCount);
+                "Budget-aware keep window covers all {Count} messages — forcing oldest into summarization",
+                messages.Count);
         }
 
         // Adjust split point forward past any orphaned "tool" role messages.
@@ -156,6 +171,14 @@ public class CompactionService
 
         var toSummarize = messages.Take(splitIndex).ToList();
         var toKeep = messages.Skip(splitIndex).ToList();
+
+        // Truncate oversized tool results in the kept window so the
+        // post-compaction state actually fits under the threshold.
+        if (toKeep.Count > 0)
+        {
+            var perMsgBudget = Math.Max(4000, keepBudget / Math.Max(1, toKeep.Count));
+            toKeep = TruncateOversizedMessages(toKeep, perMsgBudget);
+        }
 
         if (toSummarize.Count == 0)
         {
@@ -192,6 +215,32 @@ public class CompactionService
 
         var tokensAfter = EstimateTokens(newMessages);
 
+        // Post-compaction validation: if still over threshold, aggressively
+        // truncate non-summary messages as a last resort.
+        if (tokensAfter > threshold && newMessages.Count > 1)
+        {
+            _logger.LogWarning(
+                "Post-compaction tokens ({TokensAfter}) still exceed threshold ({Threshold}) — applying aggressive truncation",
+                tokensAfter, threshold);
+
+            var summaryTokens = EstimateTokens(newMessages[0]);
+            var remainingBudget = Math.Max(0, threshold - summaryTokens);
+            var nonSummaryCount = newMessages.Count - 1;
+            var aggressiveBudget = Math.Max(2000, remainingBudget / Math.Max(1, nonSummaryCount));
+
+            var truncated = new List<StoredChatMessage> { newMessages[0] };
+            truncated.AddRange(TruncateOversizedMessages(
+                newMessages.Skip(1).ToList(), aggressiveBudget));
+
+            await provider.ReplaceAndResetCacheAsync(truncated);
+            newMessages = truncated;
+            tokensAfter = EstimateTokens(newMessages);
+
+            _logger.LogInformation(
+                "Aggressive truncation complete: ~{TokensAfter} tokens after truncation",
+                tokensAfter);
+        }
+
         _logger.LogInformation(
             "Compaction complete: {Before} -> {After} messages, ~{TokensBefore} -> ~{TokensAfter} tokens",
             messages.Count, newMessages.Count, estimatedTokens, tokensAfter);
@@ -206,17 +255,21 @@ public class CompactionService
         };
     }
 
-    public static int EstimateTokens(List<StoredChatMessage> messages)
+    public static int EstimateTokens(StoredChatMessage message)
     {
         var totalChars = 0;
-        foreach (var m in messages)
-        {
-            totalChars += m.ContentsJson?.Length ?? 0;
-            totalChars += m.Role?.Length ?? 0;
-            totalChars += m.AuthorName?.Length ?? 0;
-        }
-        // chars / 4 heuristic
+        totalChars += message.ContentsJson?.Length ?? 0;
+        totalChars += message.Role?.Length ?? 0;
+        totalChars += message.AuthorName?.Length ?? 0;
         return totalChars / 4;
+    }
+
+    public static int EstimateTokens(List<StoredChatMessage> messages)
+    {
+        var total = 0;
+        foreach (var m in messages)
+            total += EstimateTokens(m);
+        return total;
     }
 
     private async Task<string> SummarizeAsync(
@@ -261,6 +314,16 @@ public class CompactionService
             return $"[{m.Role}] {content}";
         }));
 
+        const int maxSummarizationInputChars = 200_000;
+        if (formattedMessages.Length > maxSummarizationInputChars)
+        {
+            _logger.LogWarning(
+                "Summarization input too large ({Chars} chars), truncating to {Max}",
+                formattedMessages.Length, maxSummarizationInputChars);
+            formattedMessages = formattedMessages[..maxSummarizationInputChars]
+                + "\n\n[... remaining conversation truncated for summarization]";
+        }
+
         var prompt = $"""
             Summarize the following conversation history concisely. Preserve:
             - Key decisions and conclusions
@@ -278,5 +341,90 @@ public class CompactionService
             ct);
 
         return response.Text ?? "Unable to generate summary.";
+    }
+
+    internal static List<StoredChatMessage> TruncateOversizedMessages(
+        List<StoredChatMessage> messages, int perMessageTokenBudget)
+    {
+        var result = new List<StoredChatMessage>(messages.Count);
+        foreach (var msg in messages)
+        {
+            if (EstimateTokens(msg) > perMessageTokenBudget)
+            {
+                var truncated = TruncateSingleMessage(msg, perMessageTokenBudget);
+                result.Add(truncated);
+            }
+            else
+            {
+                result.Add(msg);
+            }
+        }
+        return result;
+    }
+
+    internal static StoredChatMessage TruncateSingleMessage(
+        StoredChatMessage message, int tokenBudget)
+    {
+        if (message.ContentsJson is null)
+            return message;
+
+        List<AIContent>? contents;
+        try
+        {
+            contents = System.Text.Json.JsonSerializer.Deserialize<List<AIContent>>(
+                message.ContentsJson,
+                Microsoft.Agents.AI.AgentAbstractionsJsonUtilities.DefaultOptions);
+        }
+        catch
+        {
+            return message;
+        }
+
+        if (contents is null || contents.Count == 0)
+            return message;
+
+        var changed = false;
+        var charBudget = tokenBudget * 4;
+        var perContentBudget = Math.Max(8000, charBudget / Math.Max(1, contents.Count));
+
+        for (var i = 0; i < contents.Count; i++)
+        {
+            if (contents[i] is FunctionResultContent frc)
+            {
+                var resultStr = frc.Result?.ToString();
+                if (resultStr is not null && resultStr.Length > perContentBudget)
+                {
+                    var truncatedResult = resultStr[..perContentBudget]
+                        + $"\n\n[... truncated from ~{resultStr.Length / 4} estimated tokens during compaction]";
+                    contents[i] = new FunctionResultContent(frc.CallId, truncatedResult);
+                    changed = true;
+                }
+            }
+            else if (contents[i] is TextContent tc)
+            {
+                if (tc.Text is not null && tc.Text.Length > perContentBudget)
+                {
+                    contents[i] = new TextContent(
+                        tc.Text[..perContentBudget]
+                        + "\n\n[... truncated during compaction]");
+                    changed = true;
+                }
+            }
+        }
+
+        if (!changed)
+            return message;
+
+        var newJson = System.Text.Json.JsonSerializer.Serialize(
+            contents,
+            Microsoft.Agents.AI.AgentAbstractionsJsonUtilities.DefaultOptions);
+
+        return new StoredChatMessage
+        {
+            Role = message.Role,
+            AuthorName = message.AuthorName,
+            Timestamp = message.Timestamp,
+            ContentsJson = newJson
+        };
     }
 }
