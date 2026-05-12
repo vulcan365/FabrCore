@@ -8,7 +8,7 @@
 
 	<PropertyGroup>
 		<Title>FabrCore Client</Title>
-		<Description>Client library for connecting to FabrCore agents</Description>
+		<Description>Client library for connecting to FabrCore agents </Description>
 	</PropertyGroup>
 
 	<ItemGroup>
