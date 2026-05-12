@@ -618,6 +618,7 @@ namespace FabrCore.Host.Grains
                     args.TryGetValue("_tokens_output", out var tokOut);
                     args.TryGetValue("_tokens_reasoning", out var tokReasoning);
                     args.TryGetValue("_tokens_cached_input", out var tokCached);
+                    args.TryGetValue("_tokens_input_max_per_call", out var tokMaxInPerCall);
                     args.TryGetValue("_llm_calls", out var llmCalls);
                     args.TryGetValue("_llm_duration_ms", out var llmDuration);
                     args.TryGetValue("_model", out var model);
@@ -627,10 +628,10 @@ namespace FabrCore.Host.Grains
                     {
                         logger.LogDebug(
                             "LLM usage — Calls: {LlmCalls}, InputTokens: {InputTokens}, OutputTokens: {OutputTokens}, " +
-                            "ReasoningTokens: {ReasoningTokens}, CachedInputTokens: {CachedInputTokens}, " +
+                            "ReasoningTokens: {ReasoningTokens}, CachedInputTokens: {CachedInputTokens}, MaxInputTokensPerCall: {MaxInputTokensPerCall}, " +
                             "Duration: {LlmDurationMs}ms, Model: {Model}, FinishReason: {FinishReason}",
                             llmCalls, tokIn ?? "0", tokOut ?? "0",
-                            tokReasoning ?? "0", tokCached ?? "0",
+                            tokReasoning ?? "0", tokCached ?? "0", tokMaxInPerCall ?? "0",
                             llmDuration ?? "0", model ?? "n/a", finishReason ?? "n/a");
                     }
                 }
