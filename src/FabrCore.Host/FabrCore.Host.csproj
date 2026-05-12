@@ -8,7 +8,7 @@
 
 	<PropertyGroup>
 		<Title>FabrCore Host</Title>
-		<Description>Orleans server host for the FabrCore agent framework</Description>
+		<Description>Orleans server host for the FabrCore agent framework </Description>
 	</PropertyGroup>
 
 	<ItemGroup>
