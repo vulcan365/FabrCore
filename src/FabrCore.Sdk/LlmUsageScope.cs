@@ -13,6 +13,7 @@ namespace FabrCore.Sdk
         private long _outputTokens;
         private long _reasoningTokens;
         private long _cachedInputTokens;
+        private long _maxInputTokensPerCall;
         private long _callCount;
         private long _durationMs;
         private string? _modelId;
@@ -37,6 +38,7 @@ namespace FabrCore.Sdk
         public long OutputTokens => Interlocked.Read(ref _outputTokens);
         public long ReasoningTokens => Interlocked.Read(ref _reasoningTokens);
         public long CachedInputTokens => Interlocked.Read(ref _cachedInputTokens);
+        public long MaxInputTokensPerCall => Interlocked.Read(ref _maxInputTokensPerCall);
         public long CallCount => Interlocked.Read(ref _callCount);
         public long DurationMs => Interlocked.Read(ref _durationMs);
         public string? ModelId => _modelId;
@@ -72,6 +74,7 @@ namespace FabrCore.Sdk
                 Interlocked.Add(ref _outputTokens, usage.OutputTokenCount ?? 0);
                 Interlocked.Add(ref _reasoningTokens, usage.ReasoningTokenCount ?? 0);
                 Interlocked.Add(ref _cachedInputTokens, usage.CachedInputTokenCount ?? 0);
+                UpdateMax(ref _maxInputTokensPerCall, usage.InputTokenCount ?? 0);
             }
 
             if (response.ModelId is { } model) _modelId = model;
@@ -85,6 +88,7 @@ namespace FabrCore.Sdk
             if (OutputTokens > 0) args["_tokens_output"] = OutputTokens.ToString();
             if (ReasoningTokens > 0) args["_tokens_reasoning"] = ReasoningTokens.ToString();
             if (CachedInputTokens > 0) args["_tokens_cached_input"] = CachedInputTokens.ToString();
+            if (MaxInputTokensPerCall > 0) args["_tokens_input_max_per_call"] = MaxInputTokensPerCall.ToString();
             if (CallCount > 0) args["_llm_calls"] = CallCount.ToString();
             if (DurationMs > 0) args["_llm_duration_ms"] = DurationMs.ToString();
             if (ModelId is not null) args["_model"] = ModelId;
@@ -92,5 +96,15 @@ namespace FabrCore.Sdk
         }
 
         public void Dispose() => _current.Value = null;
+
+        private static void UpdateMax(ref long target, long candidate)
+        {
+            long current;
+            while (candidate > (current = Interlocked.Read(ref target)))
+            {
+                if (Interlocked.CompareExchange(ref target, candidate, current) == current)
+                    break;
+            }
+        }
     }
 }

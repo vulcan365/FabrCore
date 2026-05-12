@@ -9,6 +9,7 @@ namespace FabrCore.Core.Monitoring
         public long OutputTokens { get; set; }
         public long ReasoningTokens { get; set; }
         public long CachedInputTokens { get; set; }
+        public long MaxInputTokensPerCall { get; set; }
         public long LlmCalls { get; set; }
         public long LlmDurationMs { get; set; }
         public string? Model { get; set; }
@@ -27,6 +28,7 @@ namespace FabrCore.Core.Monitoring
             args.TryGetValue("_tokens_output", out var tokOut);
             args.TryGetValue("_tokens_reasoning", out var tokReasoning);
             args.TryGetValue("_tokens_cached_input", out var tokCached);
+            args.TryGetValue("_tokens_input_max_per_call", out var tokMaxInPerCall);
             args.TryGetValue("_llm_duration_ms", out var llmDuration);
             args.TryGetValue("_model", out var model);
             args.TryGetValue("_finish_reason", out var finishReason);
@@ -37,6 +39,7 @@ namespace FabrCore.Core.Monitoring
                 OutputTokens = long.TryParse(tokOut, out var o) ? o : 0,
                 ReasoningTokens = long.TryParse(tokReasoning, out var r) ? r : 0,
                 CachedInputTokens = long.TryParse(tokCached, out var c) ? c : 0,
+                MaxInputTokensPerCall = long.TryParse(tokMaxInPerCall, out var max) ? max : 0,
                 LlmCalls = long.TryParse(llmCalls, out var calls) ? calls : 0,
                 LlmDurationMs = long.TryParse(llmDuration, out var dur) ? dur : 0,
                 Model = model,
