@@ -8,7 +8,7 @@
 
 	<PropertyGroup>
 		<Title>FabrCore Sdk</Title>
-		<Description>SDK for building AI agents with the FabrCore framework</Description>
+		<Description>SDK for building AI agents with the FabrCore framework </Description>
 	</PropertyGroup>
 
 	<ItemGroup>
