@@ -513,14 +513,11 @@ namespace FabrCore.Sdk
         }
 
         /// <summary>
-        /// Pre-flight compaction: runs *before* <see cref="OnMessage"/> when the chat thread
-        /// has been dormant (newest stored message older than <see cref="CompactionConfig.StaleAfterMinutes"/>)
-        /// AND estimated stored tokens already exceed the compaction threshold.
-        /// This handles the rehydration case where a user comes back after a long gap to a
-        /// thread that accumulated a lot of context. Projection would still protect the LLM
-        /// call, but preflight also shrinks storage so future turns see a smaller thread.
-        /// Active conversations skip this entirely — they rely on the existing post-<see cref="OnMessage"/>
-        /// compaction so every turn doesn't pay compaction latency.
+        /// Pre-flight compaction: runs *before* <see cref="OnMessage"/> when estimated
+        /// stored tokens already exceed the compaction threshold. This prevents an
+        /// oversized persisted thread from reaching the provider before post-message
+        /// compaction has a chance to run. Projection still acts as the hard safety net
+        /// regardless of whether preflight ran.
         /// </summary>
         private async Task<CompactionResult?> TryPreflightCompactAsync()
         {
@@ -545,29 +542,21 @@ namespace FabrCore.Sdk
                 if (messages.Count == 0)
                     return null;
 
-                var newest = messages[messages.Count - 1].Timestamp;
-                var dormantFor = DateTime.UtcNow - newest;
-                if (dormantFor < TimeSpan.FromMinutes(_compactionConfig.StaleAfterMinutes))
-                {
-                    logger.LogDebug(
-                        "Preflight compaction skipped for '{Handle}': thread active (last message {Minutes:F1}m ago)",
-                        config.Handle, dormantFor.TotalMinutes);
-                    return null;
-                }
-
                 var estimatedTokens = CompactionService.EstimateTokens(messages);
                 var threshold = (int)(_compactionConfig.MaxContextTokens * _compactionConfig.Threshold);
                 if (estimatedTokens <= threshold)
                 {
                     logger.LogDebug(
-                        "Preflight compaction skipped for '{Handle}': thread dormant {Minutes:F1}m but under threshold (~{Tokens} <= {Threshold})",
-                        config.Handle, dormantFor.TotalMinutes, estimatedTokens, threshold);
+                        "Preflight compaction skipped for '{Handle}': stored history under threshold (~{Tokens} <= {Threshold})",
+                        config.Handle, estimatedTokens, threshold);
                     return null;
                 }
 
+                var newest = messages[messages.Count - 1].Timestamp;
+                var newestAge = DateTime.UtcNow - newest;
                 logger.LogInformation(
-                    "Preflight compaction for '{Handle}': thread dormant {Minutes:F1}m with ~{Tokens} estimated tokens (>{Threshold}) — compacting before LLM call",
-                    config.Handle, dormantFor.TotalMinutes, estimatedTokens, threshold);
+                    "Preflight compaction for '{Handle}': stored history has ~{Tokens} estimated tokens (>{Threshold}); newest message age {Minutes:F1}m — compacting before LLM call",
+                    config.Handle, estimatedTokens, threshold, newestAge.TotalMinutes);
 
                 var result = await OnCompaction(_chatHistoryProvider, _compactionConfig, estimatedTokens);
 

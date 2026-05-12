@@ -187,6 +187,7 @@ namespace FabrCore.Sdk
             }
 
             var projected = ProjectForLlm(all, projection);
+            projected = EnforceProjectionBudget(projected, projection);
 
             if (projected.Count < all.Count)
             {
@@ -198,6 +199,35 @@ namespace FabrCore.Sdk
             }
 
             return projected.Select(DeserializeChatMessage).ToList();
+        }
+
+        /// <summary>
+        /// Trims oversized messages in the projected view so MinKeepLastN cannot
+        /// accidentally reintroduce an over-window payload. This only affects the
+        /// messages handed to the LLM; persisted storage remains unchanged.
+        /// </summary>
+        private List<StoredChatMessage> EnforceProjectionBudget(List<StoredChatMessage> projected, ProjectionConfig projection)
+        {
+            if (projected.Count == 0)
+                return projected;
+
+            var budget = (int)(projection.MaxContextTokens * projection.Threshold);
+            if (budget <= 0)
+                return projected;
+
+            var projectedTokens = CompactionService.EstimateTokens(projected);
+            if (projectedTokens <= budget)
+                return projected;
+
+            var perMessageBudget = Math.Max(2000, budget / Math.Max(1, projected.Count));
+            var trimmed = CompactionService.TruncateOversizedMessages(projected, perMessageBudget);
+            var trimmedTokens = CompactionService.EstimateTokens(trimmed);
+
+            _logger?.LogWarning(
+                "Projection trimmed oversized messages for thread {ThreadId}: ~{BeforeTokens} -> ~{AfterTokens} estimated tokens (budget {Budget})",
+                _threadId, projectedTokens, trimmedTokens, budget);
+
+            return trimmed;
         }
 
         /// <summary>

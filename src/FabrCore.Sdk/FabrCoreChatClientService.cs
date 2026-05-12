@@ -444,7 +444,8 @@ namespace FabrCore.Sdk
                     ContextWindowTokens = result.ContextWindowTokens,
                     CompactionEnabled = result.CompactionEnabled,
                     CompactionKeepLastN = result.CompactionKeepLastN,
-                    CompactionThreshold = result.CompactionThreshold
+                    CompactionThreshold = result.CompactionThreshold,
+                    CompactionStaleAfterMinutes = result.CompactionStaleAfterMinutes
                 };
             }
             catch (Exception ex)
@@ -532,6 +533,7 @@ namespace FabrCore.Sdk
             public bool? CompactionEnabled { get; set; }
             public int? CompactionKeepLastN { get; set; }
             public double? CompactionThreshold { get; set; }
+            public int? CompactionStaleAfterMinutes { get; set; }
         }
 
         private class ApiKeyResponse
