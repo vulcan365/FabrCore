@@ -7,7 +7,7 @@
 	</PropertyGroup>
 	<PropertyGroup>
 		<Title>FabrCore Core</Title>
-		<Description>Core interfaces and data models for the FabrCore agent framework</Description>
+		<Description>Core interfaces and data models for the FabrCore agent framework </Description>
 	</PropertyGroup>
 
 	<ItemGroup>
