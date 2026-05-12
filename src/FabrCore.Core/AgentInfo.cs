@@ -2,21 +2,15 @@ using Orleans;
 
 namespace FabrCore.Core
 {
-    [GenerateSerializer]
     public enum AgentStatus
     {
-        [Id(0)]
         Active,
-        [Id(1)]
         Deactivated
     }
 
-    [GenerateSerializer]
     public enum EntityType
     {
-        [Id(0)]
         Agent,
-        [Id(1)]
         Client
     }
 
