@@ -168,13 +168,22 @@ namespace FabrCore.Sdk
         // MCP client lifecycle tracking
         private readonly List<McpClient> _mcpClients = new();
 
-        // Compaction plumbing — lazily initialized on first TryCompactAsync() call
+        // Compaction plumbing — lazily initialized per history provider.
+        private sealed class ChatHistoryCompactionRegistration
+        {
+            public required FabrCoreChatHistoryProvider Provider { get; init; }
+            public required string ChatClientConfigName { get; init; }
+            public CompactionConfig? CompactionConfig { get; set; }
+            public ProjectionConfig? ProjectionConfig { get; set; }
+            public bool Initialized { get; set; }
+        }
+
+        private readonly List<ChatHistoryCompactionRegistration> _chatHistoryCompactionRegistrations = new();
         private FabrCoreChatHistoryProvider? _chatHistoryProvider;
         private string? _chatClientConfigName;
         private CompactionService? _compactionService;
         private CompactionConfig? _compactionConfig;
         private ProjectionConfig? _projectionConfig;
-        private bool _compactionInitialized;
 
         /// <summary>The lazily-resolved CompactionService instance, available after the first TryCompactAsync() call.</summary>
         protected CompactionService? CompactionServiceInstance => _compactionService;
@@ -265,12 +274,18 @@ namespace FabrCore.Sdk
             // Auto-store for compaction support
             _chatHistoryProvider = historyProvider;
             _chatClientConfigName = chatClientConfigName;
+            var compactionRegistration = new ChatHistoryCompactionRegistration
+            {
+                Provider = historyProvider,
+                ChatClientConfigName = chatClientConfigName
+            };
+            _chatHistoryCompactionRegistrations.Add(compactionRegistration);
 
             // Eagerly initialize compaction + projection config so the sliding-window
             // projection is active for the very first ProvideChatHistoryAsync call.
             // Without this, the first LLM request after rehydration would see the full
             // unbounded history.
-            await EnsureCompactionInitializedAsync();
+            await EnsureCompactionInitializedAsync(compactionRegistration);
 
             logger.LogDebug("Created ChatClientAgent - Config: {Config}, ThreadId: {ThreadId}",
                 chatClientConfigName, threadId);
@@ -429,23 +444,40 @@ namespace FabrCore.Sdk
         /// </summary>
         private async Task EnsureCompactionInitializedAsync()
         {
-            if (_compactionInitialized)
-                return;
-            if (_chatHistoryProvider is null || _chatClientConfigName is null)
+            foreach (var registration in _chatHistoryCompactionRegistrations.ToArray())
+            {
+                await EnsureCompactionInitializedAsync(registration);
+            }
+        }
+
+        private async Task EnsureCompactionInitializedAsync(ChatHistoryCompactionRegistration registration)
+        {
+            if (registration.Initialized)
                 return;
 
-            _compactionService = serviceProvider.GetService<CompactionService>();
-            _compactionConfig = await BuildCompactionConfigAsync();
-            _projectionConfig = BuildProjectionConfig(_compactionConfig);
-            _chatHistoryProvider.ActiveProjection = _projectionConfig;
-            _compactionInitialized = true;
+            _compactionService ??= serviceProvider.GetService<CompactionService>();
+            registration.CompactionConfig = await BuildCompactionConfigAsync(registration.ChatClientConfigName);
+            registration.ProjectionConfig = BuildProjectionConfig(registration.CompactionConfig);
+            registration.Provider.ActiveProjection = registration.ProjectionConfig;
+            registration.Initialized = true;
+
+            // Keep the legacy fields pointed at the most recently initialized provider
+            // for overrides that inspect CompactionChatClientConfigName.
+            _chatHistoryProvider = registration.Provider;
+            _chatClientConfigName = registration.ChatClientConfigName;
+            _compactionConfig = registration.CompactionConfig;
+            _projectionConfig = registration.ProjectionConfig;
 
             logger.LogDebug(
-                "Compaction initialized for '{Handle}': Enabled={Enabled}, MaxContextTokens={MaxTokens}, Threshold={Threshold}, KeepLastN={KeepLastN}, StaleAfterMinutes={Stale}",
-                config.Handle, _compactionConfig.Enabled, _compactionConfig.MaxContextTokens, _compactionConfig.Threshold, _compactionConfig.KeepLastN, _compactionConfig.StaleAfterMinutes);
+                "Compaction initialized for '{Handle}' provider '{ThreadId}' using model config '{ModelConfig}': Enabled={Enabled}, MaxContextTokens={MaxTokens}, Threshold={Threshold}, KeepLastN={KeepLastN}, StaleAfterMinutes={Stale}",
+                config.Handle, registration.Provider.ThreadId, registration.ChatClientConfigName,
+                registration.CompactionConfig.Enabled, registration.CompactionConfig.MaxContextTokens, registration.CompactionConfig.Threshold,
+                registration.CompactionConfig.KeepLastN, registration.CompactionConfig.StaleAfterMinutes);
             logger.LogDebug(
-                "Projection initialized for '{Handle}': Enabled={Enabled}, MaxContextTokens={MaxTokens}, Threshold={Threshold}, MinKeepLastN={MinKeep}",
-                config.Handle, _projectionConfig.Enabled, _projectionConfig.MaxContextTokens, _projectionConfig.Threshold, _projectionConfig.MinKeepLastN);
+                "Projection initialized for '{Handle}' provider '{ThreadId}': Enabled={Enabled}, MaxContextTokens={MaxTokens}, Threshold={Threshold}, MinKeepLastN={MinKeep}",
+                config.Handle, registration.Provider.ThreadId,
+                registration.ProjectionConfig.Enabled, registration.ProjectionConfig.MaxContextTokens, registration.ProjectionConfig.Threshold,
+                registration.ProjectionConfig.MinKeepLastN);
         }
 
         /// <summary>
@@ -455,50 +487,71 @@ namespace FabrCore.Sdk
         /// </summary>
         private async Task<CompactionResult?> TryCompactAsync(Func<Task>? onCompacting = null)
         {
-            if (_chatHistoryProvider is null || _chatClientConfigName is null)
+            if (_chatHistoryCompactionRegistrations.Count == 0)
                 return null;
 
+            CompactionResult? lastResult = null;
+            foreach (var registration in _chatHistoryCompactionRegistrations.ToArray())
+            {
+                var result = await TryCompactAsync(registration, onCompacting);
+                if (result is not null)
+                    lastResult = result;
+            }
+
+            return lastResult;
+        }
+
+        private async Task<CompactionResult?> TryCompactAsync(
+            ChatHistoryCompactionRegistration registration,
+            Func<Task>? onCompacting = null)
+        {
             try
             {
-                await EnsureCompactionInitializedAsync();
+                await EnsureCompactionInitializedAsync(registration);
 
-                if (_compactionConfig is null || !_compactionConfig.Enabled)
+                var compactionConfig = registration.CompactionConfig;
+                if (compactionConfig is null || !compactionConfig.Enabled)
                     return null;
 
-                if (_compactionConfig.MaxContextTokens <= 0)
+                if (compactionConfig.MaxContextTokens <= 0)
                     return null;
 
                 // Check threshold before calling OnCompaction
-                if (_chatHistoryProvider.HasPendingMessages)
-                    await _chatHistoryProvider.FlushAsync();
+                if (registration.Provider.HasPendingMessages)
+                    await registration.Provider.FlushAsync();
 
-                var messages = await _chatHistoryProvider.GetStoredMessagesAsync();
+                var messages = await registration.Provider.GetStoredMessagesAsync();
                 var estimatedTokens = CompactionService.EstimateTokens(messages);
-                var threshold = (int)(_compactionConfig.MaxContextTokens * _compactionConfig.Threshold);
+                var threshold = (int)(compactionConfig.MaxContextTokens * compactionConfig.Threshold);
 
                 if (estimatedTokens <= threshold)
                 {
                     logger.LogDebug(
-                        "Compaction not needed for '{Handle}': ~{EstimatedTokens} estimated tokens <= {Threshold} threshold ({MessageCount} messages)",
-                        config.Handle, estimatedTokens, threshold, messages.Count);
+                        "Compaction not needed for '{Handle}' provider '{ThreadId}': ~{EstimatedTokens} estimated tokens <= {Threshold} threshold ({MessageCount} messages)",
+                        config.Handle, registration.Provider.ThreadId, estimatedTokens, threshold, messages.Count);
                     return null;
                 }
 
                 logger.LogInformation(
-                    "Compaction needed for '{Handle}': ~{EstimatedTokens} estimated tokens exceeds {Threshold} threshold ({Ratio:P0} of {Max})",
-                    config.Handle, estimatedTokens, threshold, _compactionConfig.Threshold, _compactionConfig.MaxContextTokens);
+                    "Compaction needed for '{Handle}' provider '{ThreadId}': ~{EstimatedTokens} estimated tokens exceeds {Threshold} threshold ({Ratio:P0} of {Max})",
+                    config.Handle, registration.Provider.ThreadId, estimatedTokens, threshold, compactionConfig.Threshold, compactionConfig.MaxContextTokens);
 
                 if (onCompacting is not null)
                     await onCompacting();
 
+                _chatHistoryProvider = registration.Provider;
+                _chatClientConfigName = registration.ChatClientConfigName;
+                _compactionConfig = compactionConfig;
+                _projectionConfig = registration.ProjectionConfig;
+
                 // Delegate to OnCompaction — only called when threshold is exceeded
-                var result = await OnCompaction(_chatHistoryProvider, _compactionConfig, estimatedTokens);
+                var result = await OnCompaction(registration.Provider, compactionConfig, estimatedTokens);
 
                 if (result?.WasCompacted == true)
                 {
                     logger.LogInformation(
-                        "Compacted history for '{Handle}': {Before} → {After} messages (~{TokensBefore} → ~{TokensAfter} tokens)",
-                        config.Handle,
+                        "Compacted history for '{Handle}' provider '{ThreadId}': {Before} → {After} messages (~{TokensBefore} → ~{TokensAfter} tokens)",
+                        config.Handle, registration.Provider.ThreadId,
                         result.OriginalMessageCount, result.CompactedMessageCount,
                         result.EstimatedTokensBefore, result.EstimatedTokensAfter);
                 }
@@ -507,7 +560,8 @@ namespace FabrCore.Sdk
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Compaction failed for '{Handle}' — continuing without compaction", config.Handle);
+                logger.LogWarning(ex, "Compaction failed for '{Handle}' provider '{ThreadId}' — continuing without compaction",
+                    config.Handle, registration.Provider.ThreadId);
                 return null;
             }
         }
@@ -521,50 +575,69 @@ namespace FabrCore.Sdk
         /// </summary>
         private async Task<CompactionResult?> TryPreflightCompactAsync()
         {
-            if (_chatHistoryProvider is null || _chatClientConfigName is null)
+            if (_chatHistoryCompactionRegistrations.Count == 0)
                 return null;
 
+            CompactionResult? lastResult = null;
+            foreach (var registration in _chatHistoryCompactionRegistrations.ToArray())
+            {
+                var result = await TryPreflightCompactAsync(registration);
+                if (result is not null)
+                    lastResult = result;
+            }
+
+            return lastResult;
+        }
+
+        private async Task<CompactionResult?> TryPreflightCompactAsync(ChatHistoryCompactionRegistration registration)
+        {
             try
             {
-                await EnsureCompactionInitializedAsync();
+                await EnsureCompactionInitializedAsync(registration);
 
-                if (_compactionConfig is null || !_compactionConfig.Enabled)
+                var compactionConfig = registration.CompactionConfig;
+                if (compactionConfig is null || !compactionConfig.Enabled)
                     return null;
-                if (_compactionConfig.MaxContextTokens <= 0)
+                if (compactionConfig.MaxContextTokens <= 0)
                     return null;
-                if (_compactionConfig.StaleAfterMinutes <= 0)
+                if (compactionConfig.StaleAfterMinutes <= 0)
                     return null;
 
-                if (_chatHistoryProvider.HasPendingMessages)
-                    await _chatHistoryProvider.FlushAsync();
+                if (registration.Provider.HasPendingMessages)
+                    await registration.Provider.FlushAsync();
 
-                var messages = await _chatHistoryProvider.GetStoredMessagesAsync();
+                var messages = await registration.Provider.GetStoredMessagesAsync();
                 if (messages.Count == 0)
                     return null;
 
                 var estimatedTokens = CompactionService.EstimateTokens(messages);
-                var threshold = (int)(_compactionConfig.MaxContextTokens * _compactionConfig.Threshold);
+                var threshold = (int)(compactionConfig.MaxContextTokens * compactionConfig.Threshold);
                 if (estimatedTokens <= threshold)
                 {
                     logger.LogDebug(
-                        "Preflight compaction skipped for '{Handle}': stored history under threshold (~{Tokens} <= {Threshold})",
-                        config.Handle, estimatedTokens, threshold);
+                        "Preflight compaction skipped for '{Handle}' provider '{ThreadId}': stored history under threshold (~{Tokens} <= {Threshold})",
+                        config.Handle, registration.Provider.ThreadId, estimatedTokens, threshold);
                     return null;
                 }
 
                 var newest = messages[messages.Count - 1].Timestamp;
                 var newestAge = DateTime.UtcNow - newest;
                 logger.LogInformation(
-                    "Preflight compaction for '{Handle}': stored history has ~{Tokens} estimated tokens (>{Threshold}); newest message age {Minutes:F1}m — compacting before LLM call",
-                    config.Handle, estimatedTokens, threshold, newestAge.TotalMinutes);
+                    "Preflight compaction for '{Handle}' provider '{ThreadId}': stored history has ~{Tokens} estimated tokens (>{Threshold}); newest message age {Minutes:F1}m — compacting before LLM call",
+                    config.Handle, registration.Provider.ThreadId, estimatedTokens, threshold, newestAge.TotalMinutes);
 
-                var result = await OnCompaction(_chatHistoryProvider, _compactionConfig, estimatedTokens);
+                _chatHistoryProvider = registration.Provider;
+                _chatClientConfigName = registration.ChatClientConfigName;
+                _compactionConfig = compactionConfig;
+                _projectionConfig = registration.ProjectionConfig;
+
+                var result = await OnCompaction(registration.Provider, compactionConfig, estimatedTokens);
 
                 if (result?.WasCompacted == true)
                 {
                     logger.LogInformation(
-                        "Preflight compaction complete for '{Handle}': {Before} → {After} messages (~{TokensBefore} → ~{TokensAfter} tokens)",
-                        config.Handle,
+                        "Preflight compaction complete for '{Handle}' provider '{ThreadId}': {Before} → {After} messages (~{TokensBefore} → ~{TokensAfter} tokens)",
+                        config.Handle, registration.Provider.ThreadId,
                         result.OriginalMessageCount, result.CompactedMessageCount,
                         result.EstimatedTokensBefore, result.EstimatedTokensAfter);
                 }
@@ -573,12 +646,13 @@ namespace FabrCore.Sdk
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Preflight compaction failed for '{Handle}' — continuing without compaction (projection will still protect the call)", config.Handle);
+                logger.LogWarning(ex, "Preflight compaction failed for '{Handle}' provider '{ThreadId}' — continuing without compaction (projection will still protect the call)",
+                    config.Handle, registration.Provider.ThreadId);
                 return null;
             }
         }
 
-        private async Task<CompactionConfig> BuildCompactionConfigAsync()
+        private async Task<CompactionConfig> BuildCompactionConfigAsync(string chatClientConfigName)
         {
             var args = config.Args ?? new Dictionary<string, string>();
 
@@ -592,7 +666,7 @@ namespace FabrCore.Sdk
             // Layer 2: Model configuration overrides defaults
             try
             {
-                var modelConfig = await chatClientService.GetModelConfigurationAsync(_chatClientConfigName!);
+                var modelConfig = await chatClientService.GetModelConfigurationAsync(chatClientConfigName);
                 if (modelConfig.ContextWindowTokens is { } ctxTokens)
                     maxContextTokens = ctxTokens;
                 if (modelConfig.CompactionEnabled is { } mcEnabled)
@@ -1067,10 +1141,8 @@ namespace FabrCore.Sdk
                     traceId: message.TraceId,
                     originContext: $"OnMessage:{message.Id}"))
                 {
-                    // Preflight: if the thread is dormant and bloated, compact *before*
-                    // OnMessage so the LLM call doesn't pay the full historical token cost.
-                    // Projection still acts as the hard safety net regardless of whether
-                    // preflight ran.
+                    // Preflight: compact any registered history provider that is already
+                    // over budget before OnMessage can make an LLM call.
                     await TryPreflightCompactAsync();
 
                     response = await OnMessage(message);
