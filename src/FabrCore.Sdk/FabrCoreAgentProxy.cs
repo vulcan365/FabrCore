@@ -453,7 +453,17 @@ namespace FabrCore.Sdk
         private async Task EnsureCompactionInitializedAsync(ChatHistoryCompactionRegistration registration)
         {
             if (registration.Initialized)
+            {
+                if (registration.CompactionConfig is not null)
+                {
+                    ChatRunSafetyScope.Current?.RegisterCheckpointProvider(
+                        registration.Provider,
+                        registration.CompactionConfig,
+                        _compactionService,
+                        registration.ChatClientConfigName);
+                }
                 return;
+            }
 
             _compactionService ??= serviceProvider.GetService<CompactionService>();
             registration.CompactionConfig = await BuildCompactionConfigAsync(registration.ChatClientConfigName);
@@ -478,6 +488,12 @@ namespace FabrCore.Sdk
                 config.Handle, registration.Provider.ThreadId,
                 registration.ProjectionConfig.Enabled, registration.ProjectionConfig.MaxContextTokens, registration.ProjectionConfig.Threshold,
                 registration.ProjectionConfig.MinKeepLastN);
+
+            ChatRunSafetyScope.Current?.RegisterCheckpointProvider(
+                registration.Provider,
+                registration.CompactionConfig,
+                _compactionService,
+                registration.ChatClientConfigName);
         }
 
         /// <summary>
@@ -703,6 +719,50 @@ namespace FabrCore.Sdk
                 MaxContextTokens = maxContextTokens,
                 Threshold = threshold,
                 StaleAfterMinutes = staleAfterMinutes
+            };
+        }
+
+        private async Task<ChatRunSafetyConfig> BuildRunSafetyConfigAsync(string chatClientConfigName, CompactionConfig compactionConfig)
+        {
+            var args = config.Args ?? new Dictionary<string, string>();
+
+            var midTurnCompactionEnabled = compactionConfig.Enabled;
+            var perTurnMaxInputTokens = 0;
+            var maxPromptInputTokens = compactionConfig.Enabled ? compactionConfig.MaxContextTokens : 0;
+            var runawayBudgetBehavior = "StopWithDiagnostic";
+
+            try
+            {
+                var modelConfig = await chatClientService.GetModelConfigurationAsync(chatClientConfigName);
+                if (modelConfig.MidTurnCompactionEnabled is { } modelMidTurn)
+                    midTurnCompactionEnabled = modelMidTurn;
+                if (modelConfig.PerTurnMaxInputTokens is { } modelPerTurn)
+                    perTurnMaxInputTokens = modelPerTurn;
+                if (modelConfig.MaxPromptInputTokens is { } modelMaxPrompt)
+                    maxPromptInputTokens = modelMaxPrompt;
+                if (!string.IsNullOrWhiteSpace(modelConfig.RunawayBudgetBehavior))
+                    runawayBudgetBehavior = modelConfig.RunawayBudgetBehavior;
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "Could not load model configuration for run safety settings fallback");
+            }
+
+            if (args.TryGetValue("_MidTurnCompactionEnabled", out var midTurnStr) && bool.TryParse(midTurnStr, out var midTurnVal))
+                midTurnCompactionEnabled = midTurnVal;
+            if (args.TryGetValue("_PerTurnMaxInputTokens", out var perTurnStr) && int.TryParse(perTurnStr, out var perTurnVal))
+                perTurnMaxInputTokens = perTurnVal;
+            if (args.TryGetValue("_MaxPromptInputTokens", out var maxPromptStr) && int.TryParse(maxPromptStr, out var maxPromptVal))
+                maxPromptInputTokens = maxPromptVal;
+            if (args.TryGetValue("_RunawayBudgetBehavior", out var behaviorStr) && !string.IsNullOrWhiteSpace(behaviorStr))
+                runawayBudgetBehavior = behaviorStr;
+
+            return new ChatRunSafetyConfig
+            {
+                MidTurnCompactionEnabled = midTurnCompactionEnabled,
+                PerTurnMaxInputTokens = perTurnMaxInputTokens,
+                MaxPromptInputTokens = maxPromptInputTokens,
+                RunawayBudgetBehavior = runawayBudgetBehavior
             };
         }
 
@@ -1141,14 +1201,51 @@ namespace FabrCore.Sdk
                     traceId: message.TraceId,
                     originContext: $"OnMessage:{message.Id}"))
                 {
-                    // Preflight: compact any registered history provider that is already
-                    // over budget before OnMessage can make an LLM call.
-                    await TryPreflightCompactAsync();
+                    await EnsureCompactionInitializedAsync();
+                    var runSafetyModelConfig = _chatClientConfigName ?? config.Models ?? "default";
+                    var runSafetyCompaction = _compactionConfig ?? await BuildCompactionConfigAsync(runSafetyModelConfig);
+                    var runSafetyConfig = await BuildRunSafetyConfigAsync(runSafetyModelConfig, runSafetyCompaction);
+                    var monitor = serviceProvider.GetService<FabrCore.Core.Monitoring.IAgentMessageMonitor>();
+                    using var runSafetyScope = ChatRunSafetyScope.Begin(
+                        agentHandle: fabrcoreAgentHost.GetHandle(),
+                        parentMessageId: message.Id,
+                        traceId: message.TraceId,
+                        config: runSafetyConfig,
+                        monitor: monitor,
+                        logger: logger);
 
-                    response = await OnMessage(message);
+                    if (_chatHistoryProvider is not null && _compactionConfig is not null)
+                    {
+                        runSafetyScope.RegisterCheckpointProvider(
+                            _chatHistoryProvider,
+                            _compactionConfig,
+                            _compactionService,
+                            _chatClientConfigName ?? runSafetyModelConfig);
+                    }
 
-                    // Auto-compact chat history if threshold exceeded
-                    await TryCompactAsync();
+                    try
+                    {
+                        // Preflight: compact any registered history provider that is already
+                        // over budget before OnMessage can make an LLM call.
+                        await TryPreflightCompactAsync();
+
+                        response = await OnMessage(message);
+
+                        // Auto-compact chat history if threshold exceeded
+                        await TryCompactAsync();
+                    }
+                    catch (FabrCoreRunStoppedException ex)
+                    {
+                        response = message.Response();
+                        response.MessageType = SystemMessageTypes.Error;
+                        response.Message = ex.Message;
+                        response.Args ??= new Dictionary<string, string>();
+                        response.Args["_fabrcore_run_stop_reason"] = ex.Reason.ToString();
+                        response.Args["_actual_prompt_input_tokens"] = ex.ActualPromptInputTokens.ToString();
+                        response.Args["_turn_cumulative_input_tokens"] = ex.TurnCumulativeInputTokens.ToString();
+                        response.Args["_fabrcore_llm_calls"] = ex.LlmCalls.ToString();
+                        response.Args["_fabrcore_checkpoint_count"] = ex.CheckpointCount.ToString();
+                    }
 
                     // Attach LLM usage metrics to the response
                     if (llmScope.CallCount > 0)
@@ -1156,6 +1253,11 @@ namespace FabrCore.Sdk
                         response.Args ??= new Dictionary<string, string>();
                         llmScope.ApplyTo(response.Args);
                     }
+
+                    response.Args ??= new Dictionary<string, string>();
+                    runSafetyScope.ApplyTo(response.Args);
+                    if (!response.Args.ContainsKey("_llm_calls") && (runSafetyScope.LlmCalls > 0 || runSafetyScope.StopReason != RunStopReason.None))
+                        response.Args["_llm_calls"] = runSafetyScope.LlmCalls.ToString();
                 }
 
                 var elapsed = Stopwatch.GetElapsedTime(startTime).TotalMilliseconds;
