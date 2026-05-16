@@ -652,7 +652,7 @@ NuGet packages to add to your host project: `OpenTelemetry.Extensions.Hosting`, 
 
 | Source | Emitted by | When |
 |---|---|---|
-| `FabrCore.Host.AgentGrain` | `AgentGrain.OnMessage` / `OnMessageBusy` | Every inbound agent message — ingress span, parented on the message's `TraceId`/`SpanId` when present |
+| `FabrCore.Host.AgentGrain` | `AgentGrain.ReceivedChatMessage` / `OnMessage` / `OnMessageBusy` | Inbound agent stream messages, including underscore-prefixed system messages that are recorded then ignored before `OnMessage`; ingress spans are parented on the message's `TraceId`/`SpanId` when present |
 | `FabrCore.Host.Extensions` | `FabrCoreHostExtensions` | Server configuration / startup |
 | `FabrCore.Host.WebSocketSession` | `WebSocketSession` | Every WebSocket frame ingress; honors `traceparent` |
 | `FabrCore.Host.WebSocketMiddleware` | WebSocket middleware | Connection accept/reject |
