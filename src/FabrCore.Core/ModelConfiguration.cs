@@ -46,6 +46,26 @@ namespace FabrCore.Core
         /// (preflight compaction). Default is null (uses system default: 60). Set to 0 to disable.
         /// </summary>
         public int? CompactionStaleAfterMinutes { get; set; }
+
+        /// <summary>
+        /// Maximum cumulative input tokens allowed during a single agent turn. Null or 0 disables the guard.
+        /// </summary>
+        public int? PerTurnMaxInputTokens { get; set; }
+
+        /// <summary>
+        /// Maximum estimated prompt tokens allowed for a single LLM call. Null or 0 disables the guard.
+        /// </summary>
+        public int? MaxPromptInputTokens { get; set; }
+
+        /// <summary>
+        /// Enable mid-turn compaction checkpoints before tool-loop LLM calls. Null inherits compaction enablement.
+        /// </summary>
+        public bool? MidTurnCompactionEnabled { get; set; }
+
+        /// <summary>
+        /// Behavior when a runaway prompt or turn budget is exceeded. Default is StopWithDiagnostic.
+        /// </summary>
+        public string? RunawayBudgetBehavior { get; set; }
     }
 
     public class ApiKeyConfiguration

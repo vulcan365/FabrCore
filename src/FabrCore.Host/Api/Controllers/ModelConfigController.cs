@@ -41,7 +41,15 @@ namespace FabrCore.Host.Api.Controllers
                     modelConfig.ApiKeyAlias,
                     modelConfig.TimeoutSeconds,
                     modelConfig.MaxOutputTokens,
-                    modelConfig.ContextWindowTokens
+                    modelConfig.ContextWindowTokens,
+                    modelConfig.CompactionEnabled,
+                    modelConfig.CompactionKeepLastN,
+                    modelConfig.CompactionThreshold,
+                    modelConfig.CompactionStaleAfterMinutes,
+                    modelConfig.PerTurnMaxInputTokens,
+                    modelConfig.MaxPromptInputTokens,
+                    modelConfig.MidTurnCompactionEnabled,
+                    modelConfig.RunawayBudgetBehavior
                 });
             }
             catch (Exception ex)

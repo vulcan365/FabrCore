@@ -383,6 +383,8 @@ State is stored as `JsonElement` in the grain's persistent state. It is automati
 
 Compaction runs automatically after every `OnMessage`. When stored chat history exceeds the configured token threshold, older messages are summarized via an LLM call and replaced with a compact summary.
 
+FabrCore also runs a parent-agent run-safety guard before each LLM call made through `TokenTrackingChatClient`. This guard labels actual prompt estimates separately from cumulative turn usage, can checkpoint compaction during long tool loops, and can stop a call before sending an oversized prompt.
+
 **No agent code is needed** — compaction is handled by the framework. Settings resolve in order: **defaults → fabrcore.json model config → agent Args overrides**.
 
 **Model-level** (in `fabrcore.json` on each model entry):
@@ -393,6 +395,10 @@ Compaction runs automatically after every `OnMessage`. When stored chat history 
 | `CompactionEnabled` | `true` | Enable/disable compaction |
 | `CompactionKeepLastN` | `20` | Keep this many recent messages |
 | `CompactionThreshold` | `0.75` | Trigger at this fraction of context window |
+| `PerTurnMaxInputTokens` | unset | Stop a single `OnMessage` turn after cumulative input exceeds this budget |
+| `MaxPromptInputTokens` | `ContextWindowTokens` when compaction is enabled | Stop a single LLM call before sending an oversized prompt |
+| `MidTurnCompactionEnabled` | same as `CompactionEnabled` | Allow pre-call compaction checkpoints during tool loops |
+| `RunawayBudgetBehavior` | `StopWithDiagnostic` | Behavior when a run-safety budget is exceeded |
 
 **Agent-level overrides** (in `AgentConfiguration.Args`, prefixed with `_`):
 
@@ -402,6 +408,10 @@ Compaction runs automatically after every `OnMessage`. When stored chat history 
 | `_CompactionMaxContextTokens` | Override context window size |
 | `_CompactionKeepLastN` | Override keep-last-N |
 | `_CompactionThreshold` | Override threshold ratio |
+| `_PerTurnMaxInputTokens` | Override cumulative per-turn input budget |
+| `_MaxPromptInputTokens` | Override single-call prompt budget |
+| `_MidTurnCompactionEnabled` | Override mid-turn compaction checkpointing |
+| `_RunawayBudgetBehavior` | Override runaway budget behavior |
 
 ### Custom Compaction
 
