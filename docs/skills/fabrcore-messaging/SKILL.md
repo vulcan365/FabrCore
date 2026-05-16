@@ -100,8 +100,9 @@ All `MessageType` values starting with `_` are reserved for FabrCore internal us
 ```csharp
 public static class SystemMessageTypes
 {
-    public const string Status = "_status";   // Thinking heartbeat (every 3s)
-    public const string Error = "_error";     // Error notification
+    public const string Status = "_status";     // Heartbeat while an agent is processing
+    public const string Thinking = "_thinking"; // Progress/thinking update for user-facing clients
+    public const string Error = "_error";       // Error notification
 
     public static bool IsSystemMessage(string? messageType)
         => messageType != null && messageType.StartsWith('_');
@@ -110,9 +111,12 @@ public static class SystemMessageTypes
 
 **Automatic behavior:**
 - `AgentGrain` sends `_status` heartbeats every 3 seconds during processing
+- Agents and tools should use `_thinking` for progress updates intended for users
 - On exception, sends `_error` to original sender then rethrows
-- `ChatDock` shows `_status` as thinking indicator, `_error` as error message
+- `ChatDock` shows `_status` and `_thinking` as thinking/progress indicators, `_error` as an error message
+- Agent chat stream delivery ignores underscore-prefixed system messages before `OnMessage`/`OnMessageBusy`
 - System messages are NOT stored in chat history
+- Do not use non-prefixed message types such as `thinking` for FabrCore system/control traffic
 - **Busy routing:** `OnMessage` is marked `[AlwaysInterleave]`, so a second message can enter the grain while the first is processing. The grain routes the concurrent message to `OnMessageBusy` instead of `OnMessage`. No heartbeat, compaction, or chat history flush occurs for busy-routed messages. The monitor records busy-routed messages with `BusyRouted = true`.
 
 ## Handle Routing

@@ -615,6 +615,7 @@ builder.AddFabrCoreServer(options =>
 |--------|-------------|-----------|-----------|-------|
 | Agent receives a message (via `AgentGrain.OnMessage`) | `MonitoredMessage` | Inbound | No | Every request hitting an agent |
 | Agent sends a response (via `AgentGrain.OnMessage`) | `MonitoredMessage` | Outbound | Yes | Response after LLM processing |
+| Agent receives an underscore-prefixed system message (via `AgentGrain.ReceivedChatMessage`) | `MonitoredMessage` | Inbound | No | Recorded then ignored before `OnMessage`/`OnMessageBusy` |
 | Agent receives a message while busy (via `OnMessageBusy`) | `MonitoredMessage` | Inbound | No | `BusyRouted = true` — no heartbeat, compaction, or flush |
 | Agent sends a busy response (via `OnMessageBusy`) | `MonitoredMessage` | Outbound | No | `BusyRouted = true` |
 | Client receives a stream message | `MonitoredMessage` | Inbound | If present | Responses flowing back to clients |
@@ -628,7 +629,7 @@ builder.AddFabrCoreServer(options =>
 | `CompactionService` summarization LLM call | `MonitoredLlmCall` | — | Yes | `OriginContext = Compaction`; inherits parent `AgentHandle` / `TraceId` from the surrounding `OnMessage` scope when present |
 | Background LLM call wrapped in `LlmCallContext.Begin(...)` | `MonitoredLlmCall` | — | Yes | `OriginContext` is whatever the caller supplied; `AgentHandle` comes from the context or the chat client constructor fallback |
 
-System messages (`_status` heartbeats, `_error` messages) are captured like any other message. Filter by `MessageType` if needed:
+System messages (`_status` heartbeats, `_thinking` progress updates, `_error` messages, and any other underscore-prefixed control messages) are captured like any other message. Agent chat stream delivery ignores these before `OnMessage`/`OnMessageBusy`, while clients may render them. Use `_thinking` for user-facing progress updates; do not use non-prefixed `thinking` for FabrCore system traffic. Filter by `MessageType` if needed:
 
 ```csharp
 var chatMessages = messages.Where(m => !SystemMessageTypes.IsSystemMessage(m.MessageType));

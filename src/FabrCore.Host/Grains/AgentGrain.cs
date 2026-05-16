@@ -1637,6 +1637,36 @@ namespace FabrCore.Host.Grains
 
             try
             {
+                if (request.IsSystemMessage)
+                {
+                    activity?.SetTag("message.system", true);
+                    var handle = this.GetPrimaryKeyString();
+
+                    _messageMonitor.RecordMessageAsync(new MonitoredMessage
+                    {
+                        AgentHandle = handle,
+                        FromHandle = request.FromHandle,
+                        ToHandle = request.ToHandle,
+                        OnBehalfOfHandle = request.OnBehalfOfHandle,
+                        DeliverToHandle = request.DeliverToHandle,
+                        Channel = request.Channel,
+                        Message = request.Message,
+                        MessageType = request.MessageType,
+                        Kind = request.Kind,
+                        DataType = request.DataType,
+                        Files = request.Files,
+                        State = request.State,
+                        Args = request.Args,
+                        Direction = MessageDirection.Inbound,
+                        TraceId = request.TraceId
+                    }).TrackRecording(logger, ErrorCounter, "RecordMessage.SystemInbound", handle);
+
+                    logger.LogTrace("Ignoring system chat message for agent stream - From: {FromHandle}, To: {ToHandle}, MessageType: {MessageType}",
+                        request.FromHandle, request.ToHandle, request.MessageType);
+                    activity?.SetStatus(ActivityStatusCode.Ok);
+                    return;
+                }
+
                 var response = await OnMessage(request);
 
                 if (response != null && request.Kind == MessageKind.Request && response.ToHandle == request.FromHandle)

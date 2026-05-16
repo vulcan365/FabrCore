@@ -233,6 +233,8 @@ public override async Task<AgentMessage> OnMessage(AgentMessage message)
 // _agentHost.SetStatusMessage("Processing..");
 ```
 
+For explicit progress updates that are sent as messages, use `SystemMessageTypes.Thinking` (`"_thinking"`). All underscore-prefixed message types are reserved for FabrCore system/control traffic and are ignored by agent chat stream delivery before `OnMessage`/`OnMessageBusy`.
+
 ### OnMessageBusy(AgentMessage)
 
 Called when a new message arrives while `OnMessage` is already executing. The `OnMessage` method on `IAgentGrain` is marked `[AlwaysInterleave]`, which allows a second message to enter the grain while the first is still processing. The grain checks whether `OnMessage` is already running and routes to `OnMessageBusy` instead.

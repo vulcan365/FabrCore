@@ -693,8 +693,8 @@
         {
             InvokeAsync(async () =>
             {
-                // Handle _status messages (thinking heartbeat from AgentGrain)
-                if (message.MessageType == SystemMessageTypes.Status || message.MessageType == "thinking")
+                // Handle progress messages from AgentGrain and other user-facing agent updates.
+                if (message.MessageType == SystemMessageTypes.Status || message.MessageType == SystemMessageTypes.Thinking)
                 {
                     // P3: Cancel and dispose previous fade timer before creating new one
                     _thinkingFadeCts?.Cancel();
