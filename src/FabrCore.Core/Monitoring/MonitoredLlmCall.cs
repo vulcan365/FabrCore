@@ -42,6 +42,15 @@ namespace FabrCore.Core.Monitoring
         public long ReasoningTokens { get; set; }
         public long CachedInputTokens { get; set; }
 
+        /// <summary>Estimated tokens in the prompt assembled immediately before this model call.</summary>
+        public long ActualPromptInputTokens { get; set; }
+
+        /// <summary>Cumulative input tokens recorded during the current agent turn after this call.</summary>
+        public long TurnCumulativeInputTokens { get; set; }
+
+        /// <summary>Maximum prompt estimate seen in the current agent turn after this call.</summary>
+        public long MaxPromptInputTokensPerCall { get; set; }
+
         /// <summary>Populated when the underlying LLM call threw.</summary>
         public string? ErrorMessage { get; set; }
 

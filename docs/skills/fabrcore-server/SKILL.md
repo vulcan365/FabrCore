@@ -113,7 +113,11 @@ Place `fabrcore.json` in the server project root. **Add to .gitignore** (contain
       "ContextWindowTokens": 128000, // Optional: total context window size
       "CompactionEnabled": true,     // Optional: enable compaction (default true)
       "CompactionKeepLastN": 20,     // Optional: messages to keep (default 20)
-      "CompactionThreshold": 0.75    // Optional: trigger threshold (default 0.75)
+      "CompactionThreshold": 0.75,   // Optional: trigger threshold (default 0.75)
+      "PerTurnMaxInputTokens": 120000, // Optional: cumulative input budget per agent turn
+      "MaxPromptInputTokens": 128000,  // Optional: hard ceiling for one prompt
+      "MidTurnCompactionEnabled": true, // Optional: checkpoint compaction inside tool loops
+      "RunawayBudgetBehavior": "StopWithDiagnostic"
     }
   ],
   "ApiKeys": [

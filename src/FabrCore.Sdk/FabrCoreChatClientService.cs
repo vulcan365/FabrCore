@@ -445,7 +445,11 @@ namespace FabrCore.Sdk
                     CompactionEnabled = result.CompactionEnabled,
                     CompactionKeepLastN = result.CompactionKeepLastN,
                     CompactionThreshold = result.CompactionThreshold,
-                    CompactionStaleAfterMinutes = result.CompactionStaleAfterMinutes
+                    CompactionStaleAfterMinutes = result.CompactionStaleAfterMinutes,
+                    PerTurnMaxInputTokens = result.PerTurnMaxInputTokens,
+                    MaxPromptInputTokens = result.MaxPromptInputTokens,
+                    MidTurnCompactionEnabled = result.MidTurnCompactionEnabled,
+                    RunawayBudgetBehavior = result.RunawayBudgetBehavior
                 };
             }
             catch (Exception ex)
@@ -534,6 +538,10 @@ namespace FabrCore.Sdk
             public int? CompactionKeepLastN { get; set; }
             public double? CompactionThreshold { get; set; }
             public int? CompactionStaleAfterMinutes { get; set; }
+            public int? PerTurnMaxInputTokens { get; set; }
+            public int? MaxPromptInputTokens { get; set; }
+            public bool? MidTurnCompactionEnabled { get; set; }
+            public string? RunawayBudgetBehavior { get; set; }
         }
 
         private class ApiKeyResponse
