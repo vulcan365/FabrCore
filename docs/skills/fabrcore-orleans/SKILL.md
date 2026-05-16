@@ -229,6 +229,8 @@ FabrCore.Client includes automatic retry with exponential backoff:
 Client (Blazor)
   └─> ClientContext.SendMessage()
         └─> ClientGrain (Orleans)
+              └─> AgentGrain.ReceivedChatMessage()
+                    └─> underscore-prefixed system messages are recorded and ignored
               └─> AgentGrain.OnMessage()
                     └─> FabrCoreAgentProxy.OnMessage()
                           └─> ChatClientAgent → LLM API Call

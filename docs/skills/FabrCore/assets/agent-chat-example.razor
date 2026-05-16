@@ -77,7 +77,7 @@
     {
         InvokeAsync(() =>
         {
-            // Skip system messages (e.g., _status heartbeats)
+            // Skip system messages (e.g., _status heartbeats and _thinking progress updates)
             if (SystemMessageTypes.IsSystemMessage(message.MessageType))
                 return;
 
