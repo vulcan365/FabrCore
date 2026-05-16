@@ -51,20 +51,14 @@ namespace FabrCore.Sdk
         {
             var sw = Stopwatch.StartNew();
 
-            // Materialize once if we'll need to snapshot the request.
-            IReadOnlyList<ChatMessage>? materialized = null;
-            IEnumerable<ChatMessage> toSend = messages;
-            if (ShouldCapturePayloads())
-            {
-                materialized = messages as IReadOnlyList<ChatMessage> ?? messages.ToList();
-                toSend = materialized;
-            }
+            var materialized = messages as IReadOnlyList<ChatMessage> ?? messages.ToList();
+            var callInfo = await PrepareRunSafetyCallAsync(materialized, streaming: false, cancellationToken);
 
             ChatResponse? response = null;
             Exception? error = null;
             try
             {
-                response = await base.GetResponseAsync(toSend, options, cancellationToken);
+                response = await base.GetResponseAsync(materialized, options, cancellationToken);
                 return response;
             }
             catch (Exception ex)
@@ -79,9 +73,15 @@ namespace FabrCore.Sdk
                 if (response is not null)
                 {
                     LlmUsageScope.Current?.Record(response, sw.ElapsedMilliseconds);
+                    if (!ShouldBypassRunSafety())
+                    {
+                        ChatRunSafetyScope.Current?.RecordCompletedCall(
+                            response.Usage?.InputTokenCount ?? 0,
+                            callInfo.ActualPromptInputTokens);
+                    }
                 }
 
-                TryRecordLlmCall(materialized, response, sw.ElapsedMilliseconds, streaming: false, error);
+                TryRecordLlmCall(materialized, response, sw.ElapsedMilliseconds, streaming: false, error, callInfo);
             }
         }
 
@@ -98,69 +98,94 @@ namespace FabrCore.Sdk
             string? modelId = null;
             string? finishReason = null;
 
-            // Materialize once if we'll need to snapshot the request.
-            IReadOnlyList<ChatMessage>? materialized = null;
-            IEnumerable<ChatMessage> toSend = messages;
-            if (ShouldCapturePayloads())
-            {
-                materialized = messages as IReadOnlyList<ChatMessage> ?? messages.ToList();
-                toSend = materialized;
-            }
+            var materialized = messages as IReadOnlyList<ChatMessage> ?? messages.ToList();
+            var callInfo = await PrepareRunSafetyCallAsync(materialized, streaming: true, cancellationToken);
 
             // Accumulate updates only when the monitor is interested in the full response.
             List<ChatResponseUpdate>? collectedUpdates = (_capture?.Enabled == true) ? new List<ChatResponseUpdate>() : null;
-
-            await foreach (var update in base.GetStreamingResponseAsync(toSend, options, cancellationToken))
+            try
             {
-                collectedUpdates?.Add(update);
-
-                foreach (var content in update.Contents)
+                await foreach (var update in base.GetStreamingResponseAsync(materialized, options, cancellationToken))
                 {
-                    if (content is UsageContent usageContent && usageContent.Details is { } usage)
+                    collectedUpdates?.Add(update);
+
+                    foreach (var content in update.Contents)
                     {
-                        inputTokens += usage.InputTokenCount ?? 0;
-                        outputTokens += usage.OutputTokenCount ?? 0;
-                        reasoningTokens += usage.ReasoningTokenCount ?? 0;
-                        cachedInputTokens += usage.CachedInputTokenCount ?? 0;
+                        if (content is UsageContent usageContent && usageContent.Details is { } usage)
+                        {
+                            inputTokens += usage.InputTokenCount ?? 0;
+                            outputTokens += usage.OutputTokenCount ?? 0;
+                            reasoningTokens += usage.ReasoningTokenCount ?? 0;
+                            cachedInputTokens += usage.CachedInputTokenCount ?? 0;
+                        }
                     }
+
+                    if (update.ModelId is not null) modelId = update.ModelId;
+                    if (update.FinishReason is { } fr) finishReason = fr.Value;
+
+                    yield return update;
                 }
-
-                if (update.ModelId is not null) modelId = update.ModelId;
-                if (update.FinishReason is { } fr) finishReason = fr.Value;
-
-                yield return update;
             }
-
-            sw.Stop();
-
-            var aggregated = collectedUpdates is not null
-                ? collectedUpdates.ToChatResponse()
-                : new ChatResponse([]);
-            aggregated.ModelId = modelId;
-            aggregated.FinishReason = finishReason is not null ? new ChatFinishReason(finishReason) : null;
-            aggregated.Usage = new UsageDetails
+            finally
             {
-                InputTokenCount = inputTokens,
-                OutputTokenCount = outputTokens,
-                ReasoningTokenCount = reasoningTokens,
-                CachedInputTokenCount = cachedInputTokens
-            };
+                sw.Stop();
 
-            LlmUsageScope.Current?.Record(aggregated, sw.ElapsedMilliseconds);
+                ChatResponse? aggregated = null;
+                aggregated = collectedUpdates is not null
+                    ? collectedUpdates.ToChatResponse()
+                    : new ChatResponse([]);
+                aggregated.ModelId = modelId;
+                aggregated.FinishReason = finishReason is not null ? new ChatFinishReason(finishReason) : null;
+                aggregated.Usage = new UsageDetails
+                {
+                    InputTokenCount = inputTokens,
+                    OutputTokenCount = outputTokens,
+                    ReasoningTokenCount = reasoningTokens,
+                    CachedInputTokenCount = cachedInputTokens
+                };
 
-            TryRecordLlmCall(materialized, aggregated, sw.ElapsedMilliseconds, streaming: true, error: null);
+                LlmUsageScope.Current?.Record(aggregated, sw.ElapsedMilliseconds);
+                if (!ShouldBypassRunSafety())
+                    ChatRunSafetyScope.Current?.RecordCompletedCall(inputTokens, callInfo.ActualPromptInputTokens);
+
+                TryRecordLlmCall(materialized, aggregated, sw.ElapsedMilliseconds, streaming: true, error: null, callInfo);
+            }
         }
 
         // ── LLM call capture ──
 
         private bool ShouldCapturePayloads() => _capture is { Enabled: true, CapturePayloads: true };
 
+        private static async Task<ChatRunSafetyCallInfo> PrepareRunSafetyCallAsync(
+            IReadOnlyList<ChatMessage> materialized,
+            bool streaming,
+            CancellationToken cancellationToken)
+        {
+            var promptEstimate = ChatRunSafetyScope.EstimateTokens(materialized);
+            var fallback = new ChatRunSafetyCallInfo(promptEstimate, ChatRunSafetyScope.Current?.TurnCumulativeInputTokens ?? 0, promptEstimate);
+
+            var runSafety = ChatRunSafetyScope.Current;
+            if (ShouldBypassRunSafety())
+                return fallback;
+
+            return await runSafety!.PrepareCallAsync(materialized, streaming, cancellationToken);
+        }
+
+        private static bool ShouldBypassRunSafety()
+        {
+            var runSafety = ChatRunSafetyScope.Current;
+            return runSafety is null
+                || runSafety.IsCompacting
+                || string.Equals(LlmCallContext.Current?.OriginContext, "Compaction", StringComparison.OrdinalIgnoreCase);
+        }
+
         private void TryRecordLlmCall(
             IReadOnlyList<ChatMessage>? requestMessages,
             ChatResponse? response,
             long elapsedMs,
             bool streaming,
-            Exception? error)
+            Exception? error,
+            ChatRunSafetyCallInfo callInfo)
         {
             if (_monitor is null || _capture is null || !_capture.Enabled)
             {
@@ -197,6 +222,9 @@ namespace FabrCore.Sdk
                 OutputTokens = response?.Usage?.OutputTokenCount ?? 0,
                 ReasoningTokens = response?.Usage?.ReasoningTokenCount ?? 0,
                 CachedInputTokens = response?.Usage?.CachedInputTokenCount ?? 0,
+                ActualPromptInputTokens = callInfo.ActualPromptInputTokens,
+                TurnCumulativeInputTokens = ChatRunSafetyScope.Current?.TurnCumulativeInputTokens ?? callInfo.TurnCumulativeInputTokens,
+                MaxPromptInputTokensPerCall = ChatRunSafetyScope.Current?.MaxPromptInputTokensPerCall ?? callInfo.MaxPromptInputTokensPerCall,
             };
 
             if (_capture.CapturePayloads)
