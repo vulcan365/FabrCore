@@ -25,13 +25,16 @@ namespace FabrCore.Core
 
     /// <summary>
     /// Reserved system message type constants. All MessageTypes starting with '_' are
-    /// reserved for FabrCore internal use. They route normally but clients handle them
-    /// differently (not displayed as chat messages).
+    /// reserved for FabrCore internal use. Clients may render them as control/progress
+    /// updates, while agent chat streams ignore them before normal OnMessage handling.
     /// </summary>
     public static class SystemMessageTypes
     {
         /// <summary>Periodic heartbeat sent while an agent is processing a message.</summary>
         public const string Status = "_status";
+
+        /// <summary>Progress/thinking update intended for user-facing clients.</summary>
+        public const string Thinking = "_thinking";
 
         /// <summary>Sent when an agent encounters an error processing a message.</summary>
         public const string Error = "_error";
@@ -78,6 +81,9 @@ namespace FabrCore.Core
 
         /// <summary>W3C span id (16-char lowercase hex) of the publisher span's parent.</summary>
         public string? ParentSpanId { get; set; }
+
+        /// <summary>True when this message uses a reserved FabrCore system message type.</summary>
+        public bool IsSystemMessage => SystemMessageTypes.IsSystemMessage(MessageType);
 
         public AgentMessage Response()
         {

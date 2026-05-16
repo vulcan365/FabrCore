@@ -18,7 +18,7 @@ Messages record agent-level traffic. LLM calls record the layer *below* that —
 
 | Track | Buffer | Query | Notification | Recorded from |
 |-------|--------|-------|--------------|---------------|
-| Messages | `_messages` | `GetMessagesAsync` | `OnMessageRecorded` | `AgentGrain.OnMessage` (inbound + outbound), `ClientGrain.OnMessageStream` |
+| Messages | `_messages` | `GetMessagesAsync` | `OnMessageRecorded` | `AgentGrain.OnMessage` (inbound + outbound), `AgentGrain.ReceivedChatMessage` (system messages), `ClientGrain.OnMessageStream` |
 | Events | `_events` | `GetEventsAsync` | `OnEventRecorded` | `AgentGrain.ReceivedEventMessage` (the `OnEvent` stream handler) |
 | **LLM calls** | **`_llmCalls`** | **`GetLlmCallsAsync`** | **`OnLlmCallRecorded`** | **`TokenTrackingChatClient.GetResponseAsync` / `GetStreamingResponseAsync`** |
 
