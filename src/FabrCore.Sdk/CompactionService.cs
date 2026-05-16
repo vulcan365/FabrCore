@@ -2,6 +2,7 @@ using FabrCore.Core;
 using FabrCore.Core.Monitoring;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
+using System.Text;
 
 namespace FabrCore.Sdk;
 
@@ -65,6 +66,10 @@ public record CompactionResult
 
 public class CompactionService
 {
+    private const int MaxSummarizationInputChars = 200_000;
+    private const int ChunkSummaryMaxOutputTokens = 1536;
+    private const int FinalSummaryMaxOutputTokens = 2048;
+
     private readonly IFabrCoreChatClientService _chatClientService;
     private readonly ILogger<CompactionService> _logger;
     private readonly IAgentMessageMonitor? _monitor;
@@ -293,51 +298,177 @@ public class CompactionService
             "Compaction",
             LlmUsageScope.Current?.TraceId);
 
-        var formattedMessages = string.Join("\n", messages.Select(m =>
-        {
-            var content = m.ContentsJson ?? "";
-            // Try to extract plain text from the JSON for readability
-            try
-            {
-                var contents = System.Text.Json.JsonSerializer.Deserialize<List<AIContent>>(
-                    content, Microsoft.Agents.AI.AgentAbstractionsJsonUtilities.DefaultOptions);
-                var text = string.Join(" ", contents?
-                    .OfType<TextContent>()
-                    .Select(tc => tc.Text) ?? []);
-                if (!string.IsNullOrWhiteSpace(text))
-                    content = text;
-            }
-            catch
-            {
-                // Fall back to raw JSON
-            }
-            return $"[{m.Role}] {content}";
-        }));
+        var formattedMessages = messages
+            .Select(FormatStoredMessageForSummary)
+            .ToList();
 
-        const int maxSummarizationInputChars = 200_000;
-        if (formattedMessages.Length > maxSummarizationInputChars)
+        var chunks = BuildSummaryChunks(formattedMessages, MaxSummarizationInputChars);
+        if (chunks.Count > 1)
         {
-            _logger.LogWarning(
-                "Summarization input too large ({Chars} chars), truncating to {Max}",
-                formattedMessages.Length, maxSummarizationInputChars);
-            formattedMessages = formattedMessages[..maxSummarizationInputChars]
-                + "\n\n[... remaining conversation truncated for summarization]";
+            var totalChars = formattedMessages.Sum(m => m.Length);
+            _logger.LogInformation(
+                "Summarization input too large ({Chars} chars); summarizing in {ChunkCount} chunks of up to {Max} chars",
+                totalChars, chunks.Count, MaxSummarizationInputChars);
         }
 
+        var summaries = new List<string>(chunks.Count);
+        for (var i = 0; i < chunks.Count; i++)
+        {
+            var label = chunks.Count == 1
+                ? "conversation history"
+                : $"conversation history chunk {i + 1} of {chunks.Count}";
+
+            summaries.Add(await SummarizeTextAsync(
+                chatClient,
+                chunks[i],
+                label,
+                ChunkSummaryMaxOutputTokens,
+                ct));
+        }
+
+        if (summaries.Count == 1)
+            return summaries[0];
+
+        return await ReduceSummariesAsync(chatClient, summaries, ct);
+    }
+
+    private async Task<string> ReduceSummariesAsync(
+        IChatClient chatClient,
+        IReadOnlyList<string> summaries,
+        CancellationToken ct)
+    {
+        var current = summaries.ToList();
+        var pass = 1;
+
+        while (current.Count > 1)
+        {
+            var summaryInputs = current
+                .Select((summary, index) => $"Partial summary {index + 1}:\n{summary}")
+                .ToList();
+            var chunks = BuildSummaryChunks(summaryInputs, MaxSummarizationInputChars);
+
+            if (chunks.Count == 1)
+            {
+                return await SummarizeTextAsync(
+                    chatClient,
+                    chunks[0],
+                    "partial compaction summaries",
+                    FinalSummaryMaxOutputTokens,
+                    ct);
+            }
+
+            _logger.LogInformation(
+                "Merging {SummaryCount} partial compaction summaries in {ChunkCount} chunks (pass {Pass})",
+                current.Count, chunks.Count, pass);
+
+            var next = new List<string>(chunks.Count);
+            for (var i = 0; i < chunks.Count; i++)
+            {
+                next.Add(await SummarizeTextAsync(
+                    chatClient,
+                    chunks[i],
+                    $"partial compaction summary batch {i + 1} of {chunks.Count}",
+                    ChunkSummaryMaxOutputTokens,
+                    ct));
+            }
+
+            current = next;
+            pass++;
+        }
+
+        return current.Count == 1 ? current[0] : "Unable to generate summary.";
+    }
+
+    private static List<string> BuildSummaryChunks(
+        IReadOnlyList<string> entries,
+        int maxChars)
+    {
+        var chunks = new List<string>();
+        var current = new StringBuilder();
+
+        foreach (var entry in entries)
+        {
+            if (entry.Length > maxChars)
+            {
+                FlushCurrent();
+
+                for (var offset = 0; offset < entry.Length; offset += maxChars)
+                {
+                    var length = Math.Min(maxChars, entry.Length - offset);
+                    chunks.Add(entry.Substring(offset, length));
+                }
+
+                continue;
+            }
+
+            var separatorLength = current.Length == 0 ? 0 : 1;
+            if (current.Length + separatorLength + entry.Length > maxChars)
+            {
+                FlushCurrent();
+            }
+
+            if (current.Length > 0)
+                current.AppendLine();
+            current.Append(entry);
+        }
+
+        FlushCurrent();
+        return chunks;
+
+        void FlushCurrent()
+        {
+            if (current.Length == 0)
+                return;
+
+            chunks.Add(current.ToString());
+            current.Clear();
+        }
+    }
+
+    private static string FormatStoredMessageForSummary(StoredChatMessage message)
+    {
+        var content = message.ContentsJson ?? "";
+
+        // Try to extract plain text from the JSON for readability.
+        try
+        {
+            var contents = System.Text.Json.JsonSerializer.Deserialize<List<AIContent>>(
+                content, Microsoft.Agents.AI.AgentAbstractionsJsonUtilities.DefaultOptions);
+            var text = string.Join(" ", contents?
+                .OfType<TextContent>()
+                .Select(tc => tc.Text) ?? []);
+            if (!string.IsNullOrWhiteSpace(text))
+                content = text;
+        }
+        catch
+        {
+            // Fall back to raw JSON.
+        }
+
+        return $"[{message.Role}] {content}";
+    }
+
+    private static async Task<string> SummarizeTextAsync(
+        IChatClient chatClient,
+        string text,
+        string label,
+        int maxOutputTokens,
+        CancellationToken ct)
+    {
         var prompt = $"""
-            Summarize the following conversation history concisely. Preserve:
+            Summarize the following {label} concisely. Preserve:
             - Key decisions and conclusions
             - Important facts, names, and numbers
             - Outstanding tasks or open questions
             - The overall topic and context
 
             Conversation:
-            {formattedMessages}
+            {text}
             """;
 
         var response = await chatClient.GetResponseAsync(
             [new ChatMessage(ChatRole.User, prompt)],
-            new ChatOptions { MaxOutputTokens = 2048 },
+            new ChatOptions { MaxOutputTokens = maxOutputTokens },
             ct);
 
         return response.Text ?? "Unable to generate summary.";
