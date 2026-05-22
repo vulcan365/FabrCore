@@ -39,9 +39,10 @@ namespace FabrCore.Core.Interfaces
         /// <summary>
         /// Gets the list of agents created by this client.
         /// </summary>
+        /// <param name="activate">When true, activates each tracked agent by querying health and includes the health result on each returned item.</param>
         /// <returns>List of tracked agents with handle and type.</returns>
         [AlwaysInterleave]
-        Task<List<TrackedAgentInfo>> GetTrackedAgents();
+        Task<List<TrackedAgentInfo>> GetTrackedAgents(bool activate = false);
 
         /// <summary>
         /// Checks if an agent with the specified handle is tracked by this client.

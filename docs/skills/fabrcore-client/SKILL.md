@@ -212,7 +212,10 @@ switch (health.State)
 ```csharp
 bool isTracked = await _context.IsAgentTracked("my-agent");
 var agents = await _context.GetTrackedAgents();
+var warmedAgents = await _context.GetTrackedAgents(activate: true);
 ```
+
+When `activate` is true, each returned `TrackedAgentInfo.Health` contains the result of the agent health check.
 
 ### Discovering Shared Agents
 
@@ -234,7 +237,7 @@ public interface IClientContext
     Task SendEvent(EventMessage request, string? streamName = null);
     Task<AgentHealthStatus> CreateAgent(AgentConfiguration agentConfiguration);
     Task<AgentHealthStatus> GetAgentHealth(string handle, HealthDetailLevel detailLevel = HealthDetailLevel.Basic);
-    Task<List<TrackedAgentInfo>> GetTrackedAgents();
+    Task<List<TrackedAgentInfo>> GetTrackedAgents(bool activate = false);
     Task<bool> IsAgentTracked(string handle);
     Task<List<AgentInfo>> GetAccessibleSharedAgents();
 }

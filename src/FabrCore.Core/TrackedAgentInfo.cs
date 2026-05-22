@@ -10,6 +10,11 @@ public class TrackedAgentInfo
     public string Handle { get; set; } = string.Empty;
     public string AgentType { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Health status populated when tracked agents are requested with activation enabled.
+    /// </summary>
+    public AgentHealthStatus? Health { get; set; }
+
     public TrackedAgentInfo()
     {
     }
@@ -29,6 +34,9 @@ internal struct TrackedAgentInfoSurrogate
 
     [Id(1)]
     public string AgentType { get; set; }
+
+    [Id(2)]
+    public AgentHealthStatus? Health { get; set; }
 }
 
 [RegisterConverter]
@@ -39,7 +47,8 @@ internal sealed class TrackedAgentInfoSurrogateConverter : IConverter<TrackedAge
         return new TrackedAgentInfo
         {
             Handle = surrogate.Handle,
-            AgentType = surrogate.AgentType
+            AgentType = surrogate.AgentType,
+            Health = surrogate.Health
         };
     }
 
@@ -48,7 +57,8 @@ internal sealed class TrackedAgentInfoSurrogateConverter : IConverter<TrackedAge
         return new TrackedAgentInfoSurrogate
         {
             Handle = value.Handle,
-            AgentType = value.AgentType
+            AgentType = value.AgentType,
+            Health = value.Health
         };
     }
 }
