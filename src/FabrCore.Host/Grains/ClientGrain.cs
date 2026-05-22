@@ -744,9 +744,50 @@ namespace FabrCore.Host.Grains
             }
         }
 
-        public Task<List<TrackedAgentInfo>> GetTrackedAgents()
+        public async Task<List<TrackedAgentInfo>> GetTrackedAgents(bool activate = false)
         {
-            return Task.FromResult(_trackedAgents.Values.ToList());
+            var agents = _trackedAgents.Values
+                .Select(CloneTrackedAgentInfo)
+                .ToList();
+
+            if (!activate)
+            {
+                return agents;
+            }
+
+            await Task.WhenAll(agents.Select(PopulateHealthAsync));
+            return agents;
+        }
+
+        private async Task PopulateHealthAsync(TrackedAgentInfo agent)
+        {
+            try
+            {
+                var agentGrain = clusterClient.GetGrain<IAgentGrain>(agent.Handle);
+                agent.Health = await agentGrain.GetHealth(HealthDetailLevel.Basic);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to activate tracked agent during health warm-up: {Handle}", agent.Handle);
+                agent.Health = new AgentHealthStatus
+                {
+                    Handle = agent.Handle,
+                    State = HealthState.Unhealthy,
+                    Timestamp = DateTime.UtcNow,
+                    IsConfigured = false,
+                    Message = $"Health check failed: {ex.Message}",
+                    AgentType = agent.AgentType
+                };
+            }
+        }
+
+        private static TrackedAgentInfo CloneTrackedAgentInfo(TrackedAgentInfo agent)
+        {
+            return new TrackedAgentInfo
+            {
+                Handle = agent.Handle,
+                AgentType = agent.AgentType
+            };
         }
 
         public Task<bool> IsAgentTracked(string handle)

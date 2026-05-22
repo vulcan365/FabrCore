@@ -390,10 +390,10 @@ namespace FabrCore.Client
         }
 
         /// <inheritdoc/>
-        public async Task<List<TrackedAgentInfo>> GetTrackedAgents()
+        public async Task<List<TrackedAgentInfo>> GetTrackedAgents(bool activate = false)
         {
             ThrowIfDisposed();
-            return await _clientGrain.GetTrackedAgents();
+            return await _clientGrain.GetTrackedAgents(activate);
         }
 
         /// <inheritdoc/>
