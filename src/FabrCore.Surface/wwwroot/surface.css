@@ -1,0 +1,28 @@
+.fabrcore-surface {
+    display: grid;
+    gap: 1rem;
+    color: inherit;
+}
+
+.fabrcore-surface-card-host {
+    border: 1px solid rgba(127, 127, 127, 0.24);
+    border-radius: 8px;
+    padding: 1rem;
+    background: Canvas;
+}
+
+.fabrcore-surface-alert {
+    border: 1px solid #d73a49;
+    border-radius: 6px;
+    padding: 0.75rem;
+    color: #86181d;
+    background: #ffeef0;
+}
+
+.fabrcore-surface .ac-adaptiveCard {
+    font-family: inherit;
+}
+
+.fabrcore-surface button.ac-pushButton {
+    border-radius: 6px;
+}

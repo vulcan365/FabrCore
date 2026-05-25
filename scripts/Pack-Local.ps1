@@ -7,6 +7,13 @@ if (-not (Test-Path $localFeed)) {
 }
 
 $solutionDir = Join-Path $PSScriptRoot "..\src"
+$packages = @(
+    "FabrCore.Core",
+    "FabrCore.Sdk",
+    "FabrCore.Host",
+    "FabrCore.Client",
+    "FabrCore.Surface"
+)
 
 # Use the latest git tag (across all branches) to determine the base version,
 # since MinVer only sees tags that are ancestors of the current branch.
@@ -26,12 +33,21 @@ $localVersion = "$baseVersion-local.$timestamp"
 
 Write-Host ""
 Write-Host "Package version: $localVersion" -ForegroundColor Cyan
+Write-Host "Packages: $($packages -join ', ')" -ForegroundColor Cyan
 Write-Host ""
 
 dotnet pack "$solutionDir\FabrCore.sln" `
     --configuration Release `
     --output $localFeed `
     /p:MinVerVersionOverride=$localVersion
+
+foreach ($package in $packages) {
+    $packagePath = Join-Path $localFeed "$package.$localVersion.nupkg"
+    if (-not (Test-Path $packagePath)) {
+        Write-Error "Expected package was not created: $packagePath"
+        exit 1
+    }
+}
 
 Write-Host ""
 Write-Host "Packages published to $localFeed" -ForegroundColor Green

@@ -1,0 +1,255 @@
+@using System.Text.Json
+@using FabrCore.Surface.Templating
+@using FabrCore.Surface.Validation
+@using Microsoft.Extensions.Logging
+@inject ISurfaceClientContextFactory ContextFactory
+@inject AdaptiveCardSurfaceValidator Validator
+@inject ISurfaceActionDispatcher Dispatcher
+@inject IJSRuntime JSRuntime
+@inject Microsoft.Extensions.Options.IOptions<SurfaceOptions> SurfaceOptions
+@inject Microsoft.Extensions.Logging.ILogger<DynamicAgentSurface> Logger
+@implements IAsyncDisposable
+
+<div class="fabrcore-surface">
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="fabrcore-surface-alert">@_error</div>
+    }
+
+    @foreach (var item in _items)
+    {
+        if (item.Validation.IsValid)
+        {
+            <div class="fabrcore-surface-card-host" @key="item.Envelope.Id" @ref="item.Container"></div>
+        }
+        else
+        {
+            <div class="fabrcore-surface-alert">
+                @string.Join(" ", item.Validation.Errors)
+            </div>
+        }
+    }
+
+    @ChildContent
+</div>
+
+@code {
+    private readonly List<SurfaceItem> _items = [];
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<DynamicAgentSurface>? _dotNetRef;
+    private ISurfaceClientContext? _context;
+    private string? _error;
+
+    [Parameter, EditorRequired]
+    public string UserHandle { get; set; } = string.Empty;
+
+    [Parameter]
+    public int MaxItems { get; set; } = 10;
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _context = await ContextFactory.GetOrCreateAsync(UserHandle);
+        _context.AgentMessageReceived += OnAgentMessageReceived;
+        _dotNetRef = DotNetObjectReference.Create(this);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_module is null)
+        {
+            _module = await JSRuntime.InvokeAsync<IJSObjectReference>(
+                "import",
+                "./_content/FabrCore.Surface/adaptiveCardsSurface.js");
+        }
+
+        foreach (var item in _items.Where(item => item.Validation.IsValid && !item.Rendered))
+        {
+            await _module.InvokeVoidAsync(
+                "renderAdaptiveCard",
+                item.Container,
+                item.Envelope.Id,
+                item.ExpandedCard,
+                _dotNetRef);
+            item.Rendered = true;
+        }
+    }
+
+    private async void OnAgentMessageReceived(object? sender, AgentMessage message)
+    {
+        if (!string.Equals(message.MessageType, SurfaceMessageTypes.UiRender, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(message.DataType, SurfaceMessageTypes.DataType, StringComparison.OrdinalIgnoreCase)
+            || message.Data is not { Length: > 0 })
+        {
+            return;
+        }
+
+        try
+        {
+            var envelope = JsonSerializer.Deserialize<AdaptiveCardSurfaceEnvelope>(message.Data, SurfaceJson.Options);
+            var validation = Validator.Validate(envelope);
+
+            await InvokeAsync(() =>
+            {
+                if (envelope != null)
+                {
+                    var expanded = validation.IsValid
+                        ? AdaptiveCardTemplateExpander.Expand(envelope.Card, envelope.Data)
+                        : default;
+                    _items.Add(new SurfaceItem(envelope, message, validation, expanded));
+                    while (_items.Count > MaxItems)
+                    {
+                        _items.RemoveAt(0);
+                    }
+                }
+                else
+                {
+                    _error = "Surface message did not contain a valid Adaptive Card envelope.";
+                }
+
+                StateHasChanged();
+            });
+        }
+        catch (Exception ex)
+        {
+            await InvokeAsync(() =>
+            {
+                _error = $"Unable to render Surface message: {ex.Message}";
+                StateHasChanged();
+            });
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnAdaptiveCardActionAsync(string envelopeId, JsonElement action, JsonElement inputs)
+    {
+        if (_context is null)
+        {
+            return;
+        }
+
+        var item = _items.LastOrDefault(i => string.Equals(i.Envelope.Id, envelopeId, StringComparison.OrdinalIgnoreCase));
+        if (item is null)
+        {
+            return;
+        }
+
+        var surfaceAction = new AdaptiveCardSurfaceAction
+        {
+            Type = ReadString(action, "type") ?? AdaptiveCardActionTypes.Execute,
+            Title = ReadString(action, "title"),
+            Verb = ReadString(action, "verb"),
+            Url = ReadString(action, "url"),
+            Data = action.TryGetProperty("data", out var data) ? data.Clone() : null,
+            Inputs = ReadInputs(inputs)
+        };
+
+        await Dispatcher.DispatchAsync(
+            new SurfaceRenderContext
+            {
+                Envelope = item.Envelope,
+                ClientContext = _context,
+                SourceMessage = item.SourceMessage
+            },
+            surfaceAction);
+    }
+
+    [JSInvokable]
+    public Task OnAdaptiveCardRenderedAsync(string envelopeId, int renderedActionCount)
+    {
+        var item = _items.LastOrDefault(i => string.Equals(i.Envelope.Id, envelopeId, StringComparison.OrdinalIgnoreCase));
+        if (item is not null && SurfaceOptions.Value.EnableDiagnostics)
+        {
+            item.SourceMessage.Args ??= new Dictionary<string, string>();
+            item.SourceMessage.Args[SurfaceDiagnosticArgs.RenderedActionCount] = renderedActionCount.ToString();
+            Logger.LogInformation(
+                "Surface rendered card {EnvelopeId} with {RenderedActionCount} visible Adaptive Card actions.",
+                envelopeId,
+                renderedActionCount);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private static string? ReadString(JsonElement element, string propertyName)
+        => element.ValueKind == JsonValueKind.Object
+           && element.TryGetProperty(propertyName, out var property)
+           && property.ValueKind == JsonValueKind.String
+            ? property.GetString()
+            : null;
+
+    private static Dictionary<string, object?> ReadInputs(JsonElement inputs)
+    {
+        var values = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        if (inputs.ValueKind != JsonValueKind.Object)
+        {
+            return values;
+        }
+
+        foreach (var property in inputs.EnumerateObject())
+        {
+            values[property.Name] = JsonElementToObject(property.Value);
+        }
+
+        return values;
+    }
+
+    private static object? JsonElementToObject(JsonElement element)
+        => element.ValueKind switch
+        {
+            JsonValueKind.String => element.GetString(),
+            JsonValueKind.Number when element.TryGetInt64(out var longValue) => longValue,
+            JsonValueKind.Number when element.TryGetDouble(out var doubleValue) => doubleValue,
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Null => null,
+            JsonValueKind.Object => element.EnumerateObject()
+                .ToDictionary(p => p.Name, p => JsonElementToObject(p.Value), StringComparer.OrdinalIgnoreCase),
+            JsonValueKind.Array => element.EnumerateArray().Select(JsonElementToObject).ToList(),
+            _ => element.Clone()
+        };
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_context != null)
+        {
+            _context.AgentMessageReceived -= OnAgentMessageReceived;
+        }
+
+        _dotNetRef?.Dispose();
+
+        if (_module is not null)
+        {
+            await _module.DisposeAsync();
+        }
+    }
+
+    private sealed class SurfaceItem
+    {
+        public SurfaceItem(
+            AdaptiveCardSurfaceEnvelope envelope,
+            AgentMessage sourceMessage,
+            AdaptiveCardSurfaceValidationResult validation,
+            JsonElement expandedCard)
+        {
+            Envelope = envelope;
+            SourceMessage = sourceMessage;
+            Validation = validation;
+            ExpandedCard = expandedCard;
+        }
+
+        public AdaptiveCardSurfaceEnvelope Envelope { get; }
+
+        public AgentMessage SourceMessage { get; }
+
+        public AdaptiveCardSurfaceValidationResult Validation { get; }
+
+        public JsonElement ExpandedCard { get; }
+
+        public ElementReference Container { get; set; }
+
+        public bool Rendered { get; set; }
+    }
+}

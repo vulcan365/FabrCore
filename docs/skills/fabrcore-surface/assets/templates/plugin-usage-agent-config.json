@@ -1,0 +1,11 @@
+{
+  "handle": "user1:billing-agent",
+  "agentType": "your-billing-agent",
+  "models": "planner",
+  "plugins": [
+    "surface-ui"
+  ],
+  "args": {
+    "surface:Config": "accounting"
+  }
+}

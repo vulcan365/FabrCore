@@ -1,0 +1,31 @@
+{
+  "surfaces": [
+    {
+      "name": "default",
+      "planningModelName": "planner",
+      "maxAdaptiveCardVersion": "1.6",
+      "allowedActionTypes": [
+        "Action.Execute",
+        "Action.Submit",
+        "Action.OpenUrl",
+        "Action.ShowCard",
+        "Action.ToggleVisibility"
+      ],
+      "allowedActionVerbs": [],
+      "allowAnyActionVerb": true,
+      "allowHttpUrls": false,
+      "enableDiagnostics": true,
+      "requiredActions": [
+        {
+          "appliesTo": "customer",
+          "title": "View",
+          "verb": "crm.customer.view",
+          "routeTo": "agent",
+          "targetAgent": "crm-agent",
+          "idField": "customerId",
+          "messageTemplate": "show me the customer view for customer {customerId}"
+        }
+      ]
+    }
+  ]
+}

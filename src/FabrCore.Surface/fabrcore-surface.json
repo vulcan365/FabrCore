@@ -1,0 +1,22 @@
+{
+  "surfaces": [
+    {
+      "name": "default",
+      "description": "Default FabrCore Adaptive Card Surface planning profile.",
+      "planningModelName": "default",
+      "maxAdaptiveCardVersion": "1.6",
+      "allowedActionTypes": [
+        "Action.Execute",
+        "Action.Submit",
+        "Action.OpenUrl",
+        "Action.ShowCard",
+        "Action.ToggleVisibility"
+      ],
+      "allowedActionVerbs": [],
+      "allowAnyActionVerb": true,
+      "allowHttpUrls": false,
+      "allowedTargetAgents": [],
+      "systemPrompt": "Prefer concise Adaptive Cards. Use template bindings and a separate data object when rendering user or business data. Use Action.Execute for app or agent workflows. Put FabrCore routing metadata inside action data when needed, for example { \"fabrcore\": { \"routeTo\": \"agent\", \"messageTemplate\": \"show details for {id}\" } }."
+    }
+  ]
+}

@@ -10,6 +10,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FabrCore.Core", "FabrCore.C
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FabrCore.Client", "FabrCore.Client\FabrCore.Client.csproj", "{A39247FB-4CC3-4DFA-9D8C-8DBFD6B59706}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FabrCore.Surface", "FabrCore.Surface\FabrCore.Surface.csproj", "{B7B926A3-C3C3-4880-96F1-7CAFA2D1BE0A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FabrCore.Surface.Tests", "FabrCore.Surface.Tests\FabrCore.Surface.Tests.csproj", "{E5A2D5E6-12BB-45A5-885A-70AD8C117296}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -32,6 +36,14 @@ Global
 		{A39247FB-4CC3-4DFA-9D8C-8DBFD6B59706}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A39247FB-4CC3-4DFA-9D8C-8DBFD6B59706}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A39247FB-4CC3-4DFA-9D8C-8DBFD6B59706}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B7B926A3-C3C3-4880-96F1-7CAFA2D1BE0A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B7B926A3-C3C3-4880-96F1-7CAFA2D1BE0A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B7B926A3-C3C3-4880-96F1-7CAFA2D1BE0A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B7B926A3-C3C3-4880-96F1-7CAFA2D1BE0A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E5A2D5E6-12BB-45A5-885A-70AD8C117296}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E5A2D5E6-12BB-45A5-885A-70AD8C117296}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E5A2D5E6-12BB-45A5-885A-70AD8C117296}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E5A2D5E6-12BB-45A5-885A-70AD8C117296}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

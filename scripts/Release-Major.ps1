@@ -18,9 +18,10 @@ $newTag = "v$([int]$parts[0] + 1).0.0"
 
 Write-Host "Current: $lastTag"
 Write-Host "New:     $newTag"
+Write-Host "Packages: FabrCore.Core, FabrCore.Sdk, FabrCore.Host, FabrCore.Client, FabrCore.Surface"
 
 if ($DryRun) {
-    Write-Host "[DryRun] Would create and push tag $newTag." -ForegroundColor Yellow
+    Write-Host "[DryRun] Would create and push tag $newTag for all FabrCore packages, including FabrCore.Surface." -ForegroundColor Yellow
     exit 0
 }
 
@@ -38,6 +39,6 @@ git pull origin main
 git tag $newTag
 git push origin $newTag
 
-Write-Host "Tag $newTag pushed - GitHub Actions is building and pushing the Docker image." -ForegroundColor Green
+Write-Host "Tag $newTag pushed - GitHub Actions is building and publishing all FabrCore packages, including FabrCore.Surface." -ForegroundColor Green
 Write-Host 'Create the release notes at:' -ForegroundColor Cyan
 Write-Host "  https://github.com/vulcan365/OpenCaddis/releases/new?tag=$newTag" -ForegroundColor Cyan

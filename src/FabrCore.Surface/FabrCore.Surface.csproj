@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<Title>FabrCore Surface</Title>
+		<Description>Agent-driven UI intent surface for FabrCore Blazor applications</Description>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\FabrCore.Sdk\FabrCore.Sdk.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+		<PackageReference Include="Microsoft.Orleans.Client" Version="10.1.0" />
+		<PackageReference Include="Microsoft.Orleans.Streaming" Version="10.1.0" />
+		<PackageReference Include="Microsoft.Orleans.Clustering.AdoNet" Version="10.1.0" />
+		<PackageReference Include="Microsoft.Orleans.Clustering.AzureStorage" Version="10.1.0" />
+		<PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.1" />
+		<PackageReference Include="OpenTelemetry.Api" Version="1.15.3" />
+		<PackageReference Include="AdaptiveCards" Version="3.1.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Compile Remove="skills\**\*.cs" />
+		<Content Remove="skills\**\*" />
+		<None Remove="skills\**\*" />
+		<None Include="..\..\docs\skills\fabrcore-surface\**\*" Pack="true" PackagePath="skills\fabrcore-surface\%(RecursiveDir)%(Filename)%(Extension)" />
+		<None Include="fabrcore-surface.json" Pack="true" PackagePath="contentFiles\any\any\fabrcore-surface.json" />
+	</ItemGroup>
+
+</Project>
