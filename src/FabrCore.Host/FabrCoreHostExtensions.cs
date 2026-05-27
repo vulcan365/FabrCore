@@ -267,7 +267,10 @@ namespace FabrCore.Host
                 builder.Services.AddSingleton(typeof(IAgentManagementProvider), options.AgentManagementProviderType);
                 logger.LogDebug("AgentManagementProvider added: {ProviderType}", options.AgentManagementProviderType.Name);
 
-                // Configure ACL Provider (pluggable — default is in-memory from config)
+                // Configure ACL Provider (pluggable — default is in-memory from fabrcore.json).
+                // Most FabrCore config files keep ACL at the root ("Acl"); the FabrCore:Acl
+                // section remains supported for hosts that wrap settings under a FabrCore node.
+                builder.Services.Configure<FabrCoreAclOptions>(builder.Configuration.GetSection("Acl"));
                 builder.Services.Configure<FabrCoreAclOptions>(builder.Configuration.GetSection("FabrCore:Acl"));
                 builder.Services.AddSingleton(typeof(IAclProvider), options.AclProviderType);
                 logger.LogDebug("AclProvider added: {ProviderType}", options.AclProviderType.Name);

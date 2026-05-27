@@ -37,8 +37,8 @@
 		<PackageReference Include="Azure.Identity" Version="1.21.0" />
 		<PackageReference Include="Azure.AI.OpenAI" Version="2.9.0-beta.1" />
 		<PackageReference Include="ModelContextProtocol" Version="1.3.0" />
-		<PackageReference Include="Microsoft.Agents.AI" Version="1.6.1" />
-		<PackageReference Include="Microsoft.Agents.AI.OpenAi" Version="1.6.1" />
+		<PackageReference Include="Microsoft.Agents.AI" Version="1.6.2" />
+		<PackageReference Include="Microsoft.Agents.AI.OpenAi" Version="1.6.2" />
 	</ItemGroup>
 
 </Project>

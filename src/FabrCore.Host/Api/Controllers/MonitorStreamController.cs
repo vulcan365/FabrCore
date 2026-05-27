@@ -1,6 +1,9 @@
+using FabrCore.Core;
+using FabrCore.Core.Acl;
 using System.Text.Json;
 using System.Threading.Channels;
 using FabrCore.Core.Monitoring;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 
@@ -28,20 +31,40 @@ namespace FabrCore.Host.Api.Controllers
         };
 
         private readonly IAgentMessageMonitor _monitor;
+        private readonly IAclProvider _aclProvider;
         private readonly ILogger<MonitorStreamController> _logger;
 
-        public MonitorStreamController(IAgentMessageMonitor monitor, ILogger<MonitorStreamController> logger)
+        public MonitorStreamController(
+            IAgentMessageMonitor monitor,
+            IAclProvider aclProvider,
+            ILogger<MonitorStreamController> logger)
         {
             _monitor = monitor;
+            _aclProvider = aclProvider;
             _logger = logger;
         }
 
         [HttpGet("")]
         public async Task Get(
+            [FromHeader(Name = "x-user")] string userId,
             [FromQuery] string? agentHandle = null,
             [FromQuery] string? channels = null,
             CancellationToken cancellationToken = default)
         {
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                Response.StatusCode = StatusCodes.Status400BadRequest;
+                await WriteRawAsync("x-user header is required for monitor stream access", cancellationToken);
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(agentHandle) && !await CanReadAgentAsync(userId, agentHandle))
+            {
+                Response.StatusCode = StatusCodes.Status403Forbidden;
+                await WriteRawAsync($"Access denied: '{userId}' cannot Read monitor data for '{agentHandle}'.", cancellationToken);
+                return;
+            }
+
             // channels is a comma-separated filter: "messages,events,llm-calls".
             // Default is all three.
             var include = ParseChannels(channels);
@@ -63,21 +86,39 @@ namespace FabrCore.Host.Api.Controllers
             {
                 if (!include.Messages) return;
                 if (!string.IsNullOrEmpty(agentHandle) && m.AgentHandle != agentHandle) return;
-                queue.Writer.TryWrite(new SseEvent("message", m));
+                _ = QueueWhenReadableAsync(
+                    userId,
+                    queue,
+                    "message",
+                    m,
+                    MessageHandles(m),
+                    cancellationToken);
             }
 
             void OnEvent(MonitoredEvent e)
             {
                 if (!include.Events) return;
                 if (!string.IsNullOrEmpty(agentHandle) && e.AgentHandle != agentHandle) return;
-                queue.Writer.TryWrite(new SseEvent("event", e));
+                _ = QueueWhenReadableAsync(
+                    userId,
+                    queue,
+                    "event",
+                    e,
+                    [e.AgentHandle],
+                    cancellationToken);
             }
 
             void OnLlmCall(MonitoredLlmCall c)
             {
                 if (!include.LlmCalls) return;
                 if (!string.IsNullOrEmpty(agentHandle) && c.AgentHandle != agentHandle) return;
-                queue.Writer.TryWrite(new SseEvent("llm-call", c));
+                _ = QueueWhenReadableAsync(
+                    userId,
+                    queue,
+                    "llm-call",
+                    c,
+                    [c.AgentHandle],
+                    cancellationToken);
             }
 
             _monitor.OnMessageRecorded += OnMessage;
@@ -163,6 +204,67 @@ namespace FabrCore.Host.Api.Controllers
                 }
             }
             return new ChannelFilter(m, e, l);
+        }
+
+        private async Task QueueWhenReadableAsync(
+            string userId,
+            Channel<SseEvent> queue,
+            string eventName,
+            object payload,
+            IEnumerable<string?> handles,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                foreach (var handle in handles)
+                {
+                    if (await CanReadAgentAsync(userId, handle))
+                    {
+                        queue.Writer.TryWrite(new SseEvent(eventName, payload));
+                        return;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Monitor SSE ACL filter failed for event {EventName}", eventName);
+            }
+        }
+
+        private async Task<bool> CanReadAgentAsync(string userId, string? agentHandle)
+        {
+            if (string.IsNullOrWhiteSpace(agentHandle))
+            {
+                return false;
+            }
+
+            var (targetOwner, agentAlias) = HandleUtilities.ParseHandle(agentHandle);
+            if (string.IsNullOrWhiteSpace(targetOwner) || string.IsNullOrWhiteSpace(agentAlias))
+            {
+                return false;
+            }
+
+            if (string.Equals(userId, targetOwner, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            var result = await _aclProvider.EvaluateAsync(userId, targetOwner, agentAlias, AclPermission.Read);
+            return result.Allowed;
+        }
+
+        private static IEnumerable<string?> MessageHandles(MonitoredMessage message)
+        {
+            yield return message.AgentHandle;
+            yield return message.ToHandle;
+            yield return message.FromHandle;
+            yield return message.DeliverToHandle;
+            yield return message.OnBehalfOfHandle;
         }
 
         private readonly record struct ChannelFilter(bool Messages, bool Events, bool LlmCalls);

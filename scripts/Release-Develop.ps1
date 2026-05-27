@@ -29,6 +29,7 @@ Write-Host ''
 
 if ($DryRun) {
     Write-Host '[DryRun] Would merge develop into main via merge commit.' -ForegroundColor Yellow
+    Write-Host '[DryRun] Release package set includes FabrCore.Core, FabrCore.Sdk, FabrCore.Host, FabrCore.Client.' -ForegroundColor Yellow
     exit 0
 }
 
@@ -49,6 +50,7 @@ git push origin main
 
 Write-Host ''
 Write-Host 'develop merged into main.' -ForegroundColor Green
+Write-Host 'Release package set includes FabrCore.Core, FabrCore.Sdk, FabrCore.Host, FabrCore.Client.' -ForegroundColor Green
 Write-Host 'Run one of the following to tag and release:' -ForegroundColor Cyan
 Write-Host '  .\scripts\Release-Patch.ps1'
 Write-Host '  .\scripts\Release-Minor.ps1'
