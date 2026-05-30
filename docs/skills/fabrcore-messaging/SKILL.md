@@ -8,7 +8,7 @@ description: >
   "SendAndReceiveMessage", "SendEvent", "inter-agent", "agent-to-agent", "multi-agent", "orchestration",
   "ACL", "shared agent", "access control", "MessageKind", "cross-owner", "fan-out", "pipeline",
   "supervisor", "delegator", "AclRule", "AclPermission", "IAclProvider", "SystemMessageTypes",
-  "FromHandle", "ToHandle", "OnBehalfOfHandle", "TraceId", "message routing".
+  "FromHandle", "ToHandle", "OnBehalfOfHandle", "TraceId", "message routing", "storage owner".
   Do NOT use for: agent lifecycle — use fabrcore-agent.
   Do NOT use for: ChatDock — use fabrcore-chatdock.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
@@ -450,6 +450,15 @@ public enum AclPermission
 | `CreateAgent` | `Configure` | Cross-owner only |
 
 Agent-to-agent communication within the cluster is **trusted** and bypasses ACL.
+
+### Storage owner partitioning
+
+Typed entity storage is not message routing, but it uses the same owner discipline. The Storage API requires `x-user`; that value is the owner partition for `container/entityKey`. Treat it as an ACL boundary:
+
+- User data should use the user id or owner handle as `x-user`.
+- Agent-owned shared data should use the owning agent/user partition deliberately.
+- The same `container/entityKey` can exist independently under different owners.
+- Do not use owner-free Host `IFabrCoreStorageProvider` calls for user data; those are system-scoped.
 
 ### Custom ACL Provider
 

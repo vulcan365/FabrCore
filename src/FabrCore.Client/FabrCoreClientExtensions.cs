@@ -91,9 +91,13 @@ namespace FabrCore.Client
                 builder.Services.AddSingleton<IDirectMessageSender, DirectMessageSender>();
                 logger.LogInformation("DirectMessageSender registered as singleton service");
 
-                // Register FabrCoreHostApiClient with HttpClient
+                // Register canonical SDK FabrCoreHostApiClient with HttpClient
+                builder.Services.AddHttpClient<FabrCore.Sdk.IFabrCoreHostApiClient, FabrCore.Sdk.FabrCoreHostApiClient>();
+                logger.LogInformation("SDK FabrCoreHostApiClient registered with HttpClient");
+
+                // Register obsolete Client host API client for backwards compatibility
                 builder.Services.AddHttpClient<IFabrCoreHostApiClient, FabrCoreHostApiClient>();
-                logger.LogInformation("FabrCoreHostApiClient registered with HttpClient");
+                logger.LogInformation("Obsolete Client FabrCoreHostApiClient registered with HttpClient");
 
                 ClientsConfiguredCounter.Add(1,
                     new KeyValuePair<string, object?>("environment", builder.Environment.EnvironmentName),

@@ -8,7 +8,8 @@ description: >
   "FabrCoreOrleansConstants", "ClusteringMode", "SqlServer clustering", "AzureStorage clustering",
   "Orleans configuration", "multi-silo", "Orleans persistence", "Orleans streaming",
   "AddFabrCoreServices", "StorageProviderName", "PubSubStoreName", "StreamProviderName",
-  "OrleansClusterOptions", "ConnectionRetryCount", "GatewayListRefreshPeriod".
+  "OrleansClusterOptions", "ConnectionRetryCount", "GatewayListRefreshPeriod",
+  "IFabrCoreStorageProvider", "typed entity storage".
   Do NOT use for: FabrCore server setup (AddFabrCoreServer, REST API) — use fabrcore-server.
   Do NOT use for: general Orleans unrelated to FabrCore.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
@@ -206,6 +207,37 @@ When using the advanced path, you must register these providers:
 - **Streams** — Pub/sub messaging between grains. Used for chat and event delivery.
 - **Reminders** — Persistent timers surviving grain deactivation and silo restarts.
 - **Timers** — Non-persistent timers for periodic tasks within an active grain.
+
+## Typed Entity Storage and Orleans
+
+FabrCore typed entity storage is implemented by the Host using the configured Orleans grain storage provider. Consumers should use `FabrCore.Sdk.IFabrCoreStorageProvider` or `FabrCore.Sdk.IFabrCoreHostApiClient`; they should not reference Orleans storage types directly.
+
+Internal mapping:
+
+| FabrCore concept | Orleans storage mapping |
+|------------------|-------------------------|
+| Provider | Named provider `FabrCoreOrleansConstants.StorageProviderName` (`"fabrcoreStorage"`) |
+| Owner | First segment of the internal grain key |
+| Container | Orleans state name |
+| Entity key | Second segment of the internal grain key |
+| Value | FabrCore envelope containing `ValueJson`, `ValueType`, `CreatedUtc`, `UpdatedUtc` |
+
+Persistence follows whatever Orleans storage is configured to do:
+
+| Mode/provider | Entity storage behavior |
+|---------------|-------------------------|
+| Localhost with memory storage | Non-persistent; data is lost on restart |
+| SQL storage | Persists in the configured Orleans storage tables/schema |
+| Azure storage | Persists in the configured Azure storage provider |
+| Custom provider | Persists according to that provider |
+
+When using the advanced Orleans path, make sure `FabrCoreOrleansConstants.StorageProviderName` is registered. Entity storage, agent state, client state, and management state all depend on this provider existing.
+
+Pitfalls:
+- Do not inject keyed `IGrainStorage` into SDK, client, agent, or plugin consumers. That leaks Orleans and bypasses FabrCore's owner/container/key abstraction.
+- Orleans storage providers may enforce ETags, but FabrCore entity storage v1 is last-writer-wins and does not expose ETags.
+- The storage API is not Azure Table Storage. It has similar owner/container/key semantics but no table query surface in v1.
+- `container` becomes the Orleans state name, so keep it stable and use simple names such as `"preferences"`, `"workflow-checkpoints"`, or `"integration-cursors"`.
 
 ## Connection Resilience
 

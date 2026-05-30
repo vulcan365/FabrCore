@@ -253,6 +253,14 @@ namespace FabrCore.Host
                 // Configure Embeddings
                 builder.Services.AddSingleton<IEmbeddings, Embeddings>();
 
+                // Configure typed entity storage over the configured Orleans grain storage provider.
+                builder.Services.AddSingleton<OrleansEntityStorageProvider>();
+                builder.Services.AddSingleton<IOwnerScopedFabrCoreStorageProvider>(sp =>
+                    sp.GetRequiredService<OrleansEntityStorageProvider>());
+                builder.Services.AddSingleton<IFabrCoreStorageProvider>(sp =>
+                    sp.GetRequiredService<OrleansEntityStorageProvider>());
+                logger.LogDebug("FabrCore typed entity storage configured");
+
                 // Configure File Storage
                 builder.Services.Configure<FileStorageSettings>(builder.Configuration.GetSection("FileStorage"));
                 builder.Services.AddSingleton<IFileStorageService, FileStorageService>();

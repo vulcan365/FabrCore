@@ -2,10 +2,12 @@
 name: fabrcore-client
 description: >
   Set up FabrCore Blazor Server clients — AddFabrCoreClient, ClientContext, ClientContextFactory,
-  manual messaging, agent tracking, health monitoring, DirectMessageSender, and FabrCoreHostApiClient.
+  manual messaging, agent tracking, health monitoring, DirectMessageSender, FabrCoreHostApiClient,
+  and typed entity storage.
   Triggers on: "FabrCore client", "AddFabrCoreClient", "UseFabrCoreClient", "AddFabrCoreClientComponents",
   "ClientContext", "ClientContextFactory", "IClientContext", "IClientContextFactory",
-  "Blazor agent", "DirectMessageSender", "FabrCoreHostApiClient", "AgentMessageReceived",
+  "Blazor agent", "DirectMessageSender", "FabrCoreHostApiClient", "IFabrCoreStorageProvider",
+  "storage entity", "typed storage", "AgentMessageReceived",
   "CreateAgent", "GetAgentHealth", "IsAgentTracked", "GetTrackedAgents", "GetAccessibleSharedAgents",
   "client setup", "Blazor Server agent".
   Do NOT use for: ChatDock component — use fabrcore-chatdock.
@@ -261,6 +263,16 @@ await DirectSender.SendAsync("user1", "user1:agent-handle", new AgentMessage
 
 ## FabrCoreHostApiClient
 
+The canonical Host API client lives in `FabrCore.Sdk`:
+
+```csharp
+using FabrCore.Sdk;
+
+@inject IFabrCoreHostApiClient ApiClient
+```
+
+Older `FabrCore.Client` Host API client types are obsolete compatibility shims. New code should reference `FabrCore.Sdk.IFabrCoreHostApiClient` and `FabrCore.Sdk.FabrCoreHostApiClient`.
+
 REST client for the Host API. The base URL is read from the `FabrCoreHostUrl` configuration key (see appsettings.json above; defaults to `http://localhost:5000` if missing).
 
 Agent-scoped methods take a **fully-qualified handle** in the form `"owner:alias"`. The client parses the owner out of the handle via `HandleUtilities.ParseHandle` and sends it as the `x-user` header automatically — callers do not pass the user id separately. Bare aliases are rejected with `ArgumentException`.
@@ -293,9 +305,63 @@ var created = await ApiClient.CreateAgentsAsync(new List<AgentConfiguration>
 
 Under the hood, for `GetAgentHealthAsync("user1:my-agent")` the client issues `GET {FabrCoreHostUrl}/fabrcoreapi/Agent/health/my-agent` with header `x-user: user1`. You never have to split the handle yourself.
 
+### Typed entity storage
+
+Use typed entity storage for small JSON-serializable application data keyed by owner, container, and entity key. The SDK hides JSON and Orleans; consumers read and write generic .NET types.
+
+```csharp
+using FabrCore.Sdk;
+
+@inject IFabrCoreHostApiClient ApiClient
+
+public sealed record UserPreferences(string Theme, string Locale);
+
+await ApiClient.UpsertStorageEntityAsync(
+    owner: "user1",
+    container: "preferences",
+    entityKey: "ui",
+    value: new UserPreferences("dark", "en-US"));
+
+UserPreferences? prefs = await ApiClient.GetStorageEntityAsync<UserPreferences>(
+    owner: "user1",
+    container: "preferences",
+    entityKey: "ui");
+
+bool deleted = await ApiClient.DeleteStorageEntityAsync(
+    owner: "user1",
+    container: "preferences",
+    entityKey: "ui");
+```
+
+Endpoints:
+
+| Method | HTTP | Endpoint | Owner |
+|---|---|---|---|
+| `GetStorageEntityAsync<T>` | GET | `/fabrcoreapi/Storage/{container}/{entityKey}` | `x-user` header |
+| `UpsertStorageEntityAsync<T>` | PUT | `/fabrcoreapi/Storage/{container}/{entityKey}` | `x-user` header |
+| `DeleteStorageEntityAsync` | DELETE | `/fabrcoreapi/Storage/{container}/{entityKey}` | `x-user` header |
+
+`entityKey` is a route catch-all on the Host, so slash-delimited keys such as `"projects/123/settings"` are allowed through the SDK client. Missing reads return `default`; deletes return `true` only when an entity existed.
+
+`FabrCoreHostApiClient` also implements `IFabrCoreStorageProvider`:
+
+```csharp
+@inject IFabrCoreStorageProvider Storage
+
+var prefs = await Storage.GetAsync<UserPreferences>("preferences", "ui");
+```
+
+The owner-free `IFabrCoreStorageProvider` methods require `FabrCoreStorageOwner` or `FabrCore:Storage:Owner` configuration. Use the owner-explicit `IFabrCoreHostApiClient` methods when a component can act for more than one user.
+
+Storage pitfalls:
+- Do not store raw JSON strings unless the value is actually a string; pass typed POCOs, primitives, dictionaries, or arrays.
+- Reads deserialize into the caller-requested `T`; the stored `ValueType` is metadata, not enforcement.
+- This is CRUD-only in v1: no list/query API and no ETag concurrency. Last writer wins.
+- Owner partitioning is the ACL boundary. Always pass the correct owner, usually the user id or agent owner handle.
+
 ### Host-scoped methods (no `x-user` required)
 
-Discovery, embeddings, file, model-config, and diagnostics endpoints are **global to the host** and do not require a handle or `x-user` header. Call them straight off the injected client:
+Discovery, embeddings, file, model-config, and diagnostics endpoints are **global to the host** and do not require a handle or `x-user` header. Storage is different: it is owner-scoped and requires `x-user`. Call global endpoints straight off the injected client:
 
 ```csharp
 // Discovery — list registered agent types, plugins, tools, and any alias collisions

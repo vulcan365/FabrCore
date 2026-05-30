@@ -6,7 +6,7 @@ using System.Diagnostics.Metrics;
 using System.Net.Http.Json;
 using System.Text.Json;
 
-namespace FabrCore.Client
+namespace FabrCore.Sdk
 {
     /// <summary>
     /// Response from model configuration endpoint.
@@ -248,6 +248,29 @@ namespace FabrCore.Client
     }
 
     /// <summary>
+    /// Typed entity storage abstraction for FabrCore consumers.
+    /// Values are serialized by the provider; callers do not need to manage JSON or Orleans types.
+    /// </summary>
+    public interface IFabrCoreStorageProvider
+    {
+        /// <summary>
+        /// Gets a value from the specified container/key, or <c>default</c> when no value exists.
+        /// </summary>
+        Task<T?> GetAsync<T>(string container, string entityKey, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Creates or replaces a value at the specified container/key.
+        /// </summary>
+        Task UpsertAsync<T>(string container, string entityKey, T value, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Deletes a value from the specified container/key.
+        /// Returns true when a value existed before deletion.
+        /// </summary>
+        Task<bool> DeleteAsync(string container, string entityKey, CancellationToken cancellationToken = default);
+    }
+
+    /// <summary>
     /// Client interface for the FabrCore Host API.
     /// <para>
     /// Agent-scoped methods accept a fully-qualified handle in the form <c>"owner:alias"</c>.
@@ -255,7 +278,6 @@ namespace FabrCore.Client
     /// and sends it as the <c>x-user</c> header — callers no longer need to pass the user id separately.
     /// </para>
     /// </summary>
-    [Obsolete("Use FabrCore.Sdk.IFabrCoreHostApiClient instead.")]
     public interface IFabrCoreHostApiClient
     {
         /// <summary>
@@ -376,16 +398,33 @@ namespace FabrCore.Client
         /// Convenience overload: sends a single user prompt with optional options.
         /// </summary>
         Task<ChatCompletionResponse> GetChatCompletionAsync(string prompt, ChatCompletionOptions? options = null, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Gets a typed storage entity for the specified owner, container, and key.
+        /// The owner is sent as the <c>x-user</c> header and forms the storage partition.
+        /// </summary>
+        Task<T?> GetStorageEntityAsync<T>(string owner, string container, string entityKey, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Creates or replaces a typed storage entity for the specified owner, container, and key.
+        /// The owner is sent as the <c>x-user</c> header and forms the storage partition.
+        /// </summary>
+        Task UpsertStorageEntityAsync<T>(string owner, string container, string entityKey, T value, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Deletes a storage entity for the specified owner, container, and key.
+        /// The owner is sent as the <c>x-user</c> header and forms the storage partition.
+        /// </summary>
+        Task<bool> DeleteStorageEntityAsync(string owner, string container, string entityKey, CancellationToken cancellationToken = default);
     }
 
     /// <summary>
     /// HTTP client implementation for the FabrCore Host API.
     /// </summary>
-    [Obsolete("Use FabrCore.Sdk.FabrCoreHostApiClient instead.")]
-    public class FabrCoreHostApiClient : IFabrCoreHostApiClient
+    public class FabrCoreHostApiClient : IFabrCoreHostApiClient, IFabrCoreStorageProvider
     {
-        private static readonly ActivitySource ActivitySource = new("FabrCore.Client.FabrCoreHostApiClient");
-        private static readonly Meter Meter = new("FabrCore.Client.FabrCoreHostApiClient");
+        private static readonly ActivitySource ActivitySource = new("FabrCore.Sdk.FabrCoreHostApiClient");
+        private static readonly Meter Meter = new("FabrCore.Sdk.FabrCoreHostApiClient");
 
         private static readonly Counter<long> RequestCounter = Meter.CreateCounter<long>(
             "fabrcore.api_client.requests",
@@ -403,6 +442,7 @@ namespace FabrCore.Client
         private readonly HttpClient _httpClient;
         private readonly ILogger<FabrCoreHostApiClient> _logger;
         private readonly string _baseUrl;
+        private readonly string? _storageOwner;
 
         private static readonly JsonSerializerOptions JsonOptions = new()
         {
@@ -414,6 +454,7 @@ namespace FabrCore.Client
             _httpClient = httpClient;
             _logger = logger;
             _baseUrl = configuration["FabrCoreHostUrl"] ?? "http://localhost:5000";
+            _storageOwner = configuration["FabrCoreStorageOwner"] ?? configuration["FabrCore:Storage:Owner"];
 
             _logger.LogDebug("FabrCoreApiClient initialized with base URL: {BaseUrl}", _baseUrl);
         }
@@ -1029,6 +1070,143 @@ namespace FabrCore.Client
                 Options = options
             };
             return GetChatCompletionAsync(request, cancellationToken);
+        }
+
+        public Task<T?> GetAsync<T>(string container, string entityKey, CancellationToken cancellationToken = default)
+            => GetStorageEntityAsync<T>(GetConfiguredStorageOwner(), container, entityKey, cancellationToken);
+
+        public Task UpsertAsync<T>(string container, string entityKey, T value, CancellationToken cancellationToken = default)
+            => UpsertStorageEntityAsync(GetConfiguredStorageOwner(), container, entityKey, value, cancellationToken);
+
+        public Task<bool> DeleteAsync(string container, string entityKey, CancellationToken cancellationToken = default)
+            => DeleteStorageEntityAsync(GetConfiguredStorageOwner(), container, entityKey, cancellationToken);
+
+        public async Task<T?> GetStorageEntityAsync<T>(string owner, string container, string entityKey, CancellationToken cancellationToken = default)
+        {
+            ValidateStorageAddress(owner, container, entityKey);
+
+            using var activity = ActivitySource.StartActivity("GetStorageEntity", ActivityKind.Client);
+            activity?.SetTag("storage.owner", owner);
+            activity?.SetTag("storage.container", container);
+            activity?.SetTag("storage.key", entityKey);
+
+            var url = BuildStorageUrl(container, entityKey);
+            var startTime = Stopwatch.GetTimestamp();
+
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.Add("x-user", owner);
+
+                var response = await _httpClient.SendAsync(request, cancellationToken);
+                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    RecordSuccess(activity, startTime, "GetStorageEntity");
+                    return default;
+                }
+
+                response.EnsureSuccessStatusCode();
+
+                var result = await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken);
+                RecordSuccess(activity, startTime, "GetStorageEntity");
+                return result;
+            }
+            catch (Exception ex)
+            {
+                RecordError(activity, startTime, "GetStorageEntity", ex);
+                _logger.LogError(ex, "Failed to get storage entity {Container}/{EntityKey} for owner {Owner}", container, entityKey, owner);
+                throw;
+            }
+        }
+
+        public async Task UpsertStorageEntityAsync<T>(string owner, string container, string entityKey, T value, CancellationToken cancellationToken = default)
+        {
+            ValidateStorageAddress(owner, container, entityKey);
+
+            using var activity = ActivitySource.StartActivity("UpsertStorageEntity", ActivityKind.Client);
+            activity?.SetTag("storage.owner", owner);
+            activity?.SetTag("storage.container", container);
+            activity?.SetTag("storage.key", entityKey);
+
+            var url = BuildStorageUrl(container, entityKey);
+            var startTime = Stopwatch.GetTimestamp();
+
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Put, url);
+                request.Headers.Add("x-user", owner);
+                request.Content = JsonContent.Create(value, options: JsonOptions);
+
+                var response = await _httpClient.SendAsync(request, cancellationToken);
+                response.EnsureSuccessStatusCode();
+
+                RecordSuccess(activity, startTime, "UpsertStorageEntity");
+            }
+            catch (Exception ex)
+            {
+                RecordError(activity, startTime, "UpsertStorageEntity", ex);
+                _logger.LogError(ex, "Failed to upsert storage entity {Container}/{EntityKey} for owner {Owner}", container, entityKey, owner);
+                throw;
+            }
+        }
+
+        public async Task<bool> DeleteStorageEntityAsync(string owner, string container, string entityKey, CancellationToken cancellationToken = default)
+        {
+            ValidateStorageAddress(owner, container, entityKey);
+
+            using var activity = ActivitySource.StartActivity("DeleteStorageEntity", ActivityKind.Client);
+            activity?.SetTag("storage.owner", owner);
+            activity?.SetTag("storage.container", container);
+            activity?.SetTag("storage.key", entityKey);
+
+            var url = BuildStorageUrl(container, entityKey);
+            var startTime = Stopwatch.GetTimestamp();
+
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Delete, url);
+                request.Headers.Add("x-user", owner);
+
+                var response = await _httpClient.SendAsync(request, cancellationToken);
+                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    RecordSuccess(activity, startTime, "DeleteStorageEntity");
+                    return false;
+                }
+
+                response.EnsureSuccessStatusCode();
+                RecordSuccess(activity, startTime, "DeleteStorageEntity");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                RecordError(activity, startTime, "DeleteStorageEntity", ex);
+                _logger.LogError(ex, "Failed to delete storage entity {Container}/{EntityKey} for owner {Owner}", container, entityKey, owner);
+                throw;
+            }
+        }
+
+        private string GetConfiguredStorageOwner()
+        {
+            if (!string.IsNullOrWhiteSpace(_storageOwner))
+                return _storageOwner;
+
+            throw new InvalidOperationException(
+                "FabrCoreHostApiClient storage provider methods require FabrCoreStorageOwner or FabrCore:Storage:Owner configuration. " +
+                "Use the owner-explicit storage methods on IFabrCoreHostApiClient when calling across owner partitions.");
+        }
+
+        private string BuildStorageUrl(string container, string entityKey)
+            => $"{_baseUrl}/fabrcoreapi/Storage/{Uri.EscapeDataString(container)}/{Uri.EscapeDataString(entityKey)}";
+
+        private static void ValidateStorageAddress(string owner, string container, string entityKey)
+        {
+            if (string.IsNullOrWhiteSpace(owner))
+                throw new ArgumentException("Owner cannot be null or empty.", nameof(owner));
+            if (string.IsNullOrWhiteSpace(container))
+                throw new ArgumentException("Container cannot be null or empty.", nameof(container));
+            if (string.IsNullOrWhiteSpace(entityKey))
+                throw new ArgumentException("Entity key cannot be null or empty.", nameof(entityKey));
         }
 
         /// <summary>

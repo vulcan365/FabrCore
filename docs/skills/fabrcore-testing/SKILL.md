@@ -11,7 +11,8 @@ description: >
   "test plugin", "MSTest FabrCore", "LLM eval", "evaluation", "evaluator", "eval agent",
   "RelevanceEvaluator", "CoherenceEvaluator", "FluencyEvaluator", "GroundednessEvaluator",
   "CompositeEvaluator", "EvaluationResult", "ScenarioRun", "ReportingConfiguration",
-  "quality eval", "safety eval", "BLEU", "agent evaluation", "eval metrics".
+  "quality eval", "safety eval", "BLEU", "agent evaluation", "eval metrics",
+  "IFabrCoreStorageProvider", "typed storage", "storage test".
   Do NOT use for: agent development — use fabrcore-agent.
   Do NOT use for: server/client setup — use fabrcore-server or fabrcore-client.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
@@ -300,6 +301,61 @@ CollectionAssert.Contains(harness.AgentHost.RegisteredTimers, "my-timer");
 // Check status message set by agent or plugins
 Assert.AreEqual("Processing..", harness.AgentHost.CurrentStatusMessage);
 ```
+
+## Testing Typed Entity Storage
+
+Typed entity storage should be tested at two levels:
+
+1. Unit-test consumers against an in-memory fake `IFabrCoreStorageProvider`.
+2. Integration-test the Host API when you need to verify owner partitioning and the configured Orleans provider.
+
+### In-memory fake provider
+
+Use this shape for agent/plugin unit tests that only need CRUD behavior:
+
+```csharp
+public sealed class FakeFabrCoreStorageProvider : IFabrCoreStorageProvider
+{
+    private readonly Dictionary<(string Container, string Key), string> _values = new();
+    private readonly JsonSerializerOptions _json = new(JsonSerializerDefaults.Web);
+
+    public Task<T?> GetAsync<T>(string container, string entityKey, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(_values.TryGetValue((container, entityKey), out var json)
+            ? JsonSerializer.Deserialize<T>(json, _json)
+            : default);
+    }
+
+    public Task UpsertAsync<T>(string container, string entityKey, T value, CancellationToken cancellationToken = default)
+    {
+        _values[(container, entityKey)] = JsonSerializer.Serialize(value, _json);
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> DeleteAsync(string container, string entityKey, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(_values.Remove((container, entityKey)));
+    }
+}
+```
+
+Register it in a test service collection for plugins or services that consume `IFabrCoreStorageProvider`.
+
+### Integration checklist
+
+Verify these behaviors against a running Host when storage is part of the feature:
+
+- POCOs, primitives, dictionaries, and arrays round-trip through `UpsertStorageEntityAsync<T>` and `GetStorageEntityAsync<T>`.
+- Missing reads return `default`/`null`.
+- Deletes return `true` only when a value existed.
+- The same `container/entityKey` is isolated across different owners (`x-user` values).
+- The behavior follows the configured Orleans storage provider: localhost memory is non-persistent, SQL/Azure/custom providers persist according to their configuration.
+- No public SDK or client API exposes Orleans storage types such as `IGrainStorage`, `GrainId`, or `IGrainState<T>`.
+
+Pitfalls:
+- Do not assert against the internal envelope shape from consumer tests. `ValueJson`, `ValueType`, and timestamps are Host implementation details.
+- Do not assume query/list support. Storage v1 is CRUD-only.
+- Do not write tests that depend on ETags or optimistic concurrency; upsert is last-writer-wins.
 
 ## Running Tests
 

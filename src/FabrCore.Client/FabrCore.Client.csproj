@@ -13,6 +13,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\FabrCore.Core\FabrCore.Core.csproj" />
+		<ProjectReference Include="..\FabrCore.Sdk\FabrCore.Sdk.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
