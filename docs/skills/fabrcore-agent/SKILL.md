@@ -8,7 +8,7 @@ description: >
   "SetState", "FlushStateAsync", "compaction", "agent timer", "RegisterTimer", "agent reminder", "RegisterReminder",
   "OnReminder", "agent health", "GetHealth", "AgentHealthStatus", "build agent", "create agent",
   "FabrCoreCapabilities", "FabrCoreNote", "agent capabilities", "agent notes", "busy message", "concurrent message",
-  "AlwaysInterleave", "busy routing", "agent busy".
+  "AlwaysInterleave", "busy routing", "agent busy", "IFabrCoreStorageProvider", "typed storage".
   Do NOT use for: Microsoft Agent Framework internals (AIAgent, AgentSession) — use fabrcore-agentframework.
   Do NOT use for: plugins, tools, MCP — use fabrcore-plugins-tools or fabrcore-mcp.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
@@ -378,6 +378,25 @@ var hasPrefs = await HasStateAsync("preferences");
 ```
 
 State is stored as `JsonElement` in the grain's persistent state. It is automatically flushed after `OnMessage` completes and on grain deactivation. Call `FlushStateAsync()` explicitly if you need durability mid-operation.
+
+### Agent state vs typed entity storage
+
+Use the built-in state API above for private state owned by the current agent, such as conversation counters, local preferences, or per-agent caches. It is single-agent state and participates in the grain lifecycle.
+
+Use typed entity storage when the data is application-level and should be addressable by `owner/container/entityKey`, especially when clients, host services, plugins, or multiple agents need to share the same record. The public abstraction is in `FabrCore.Sdk`:
+
+```csharp
+public interface IFabrCoreStorageProvider
+{
+    Task<T?> GetAsync<T>(string container, string entityKey, CancellationToken cancellationToken = default);
+    Task UpsertAsync<T>(string container, string entityKey, T value, CancellationToken cancellationToken = default);
+    Task<bool> DeleteAsync(string container, string entityKey, CancellationToken cancellationToken = default);
+}
+```
+
+Important pitfall for agents: when resolving `IFabrCoreStorageProvider` directly inside the Host DI container, the owner-free methods use the system partition. That is appropriate for system/shared data, not per-user data. For per-agent or per-user data, prefer `GetStateAsync`/`SetState` or call an owner-aware Host/API path that explicitly supplies the owner from `fabrcoreAgentHost.GetOwnerHandle()`.
+
+Do not reference Orleans storage APIs (`IGrainStorage`, `GrainId`, `IGrainState<T>`) from agent code. FabrCore keeps those Host-internal so agents and SDK consumers do not depend on Orleans storage internals.
 
 ## Chat History Compaction
 

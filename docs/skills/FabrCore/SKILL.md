@@ -33,6 +33,7 @@ Build distributed AI agent systems with FabrCore — an open-source .NET 10 fram
 | Server/Host | Orleans silo + REST API | `AddFabrCoreServer()` | fabrcore-server (includes full REST API docs with I/O models) |
 | Orleans | Distributed runtime | Clustering, Persistence | fabrcore-orleans |
 | Client | Blazor UI + Orleans client | `AddFabrCoreClient()` | fabrcore-client |
+| Entity Storage | Typed key/value app data | `IFabrCoreStorageProvider`, `FabrCore.Sdk.IFabrCoreHostApiClient` | fabrcore-client, fabrcore-server, fabrcore-orleans |
 | ChatDock | Floating icon → chat overlay | `<ChatDock>` component | fabrcore-chatdock |
 | Handle Access | Owner/agent handle parsing | `IFabrCoreAgentHost.GetOwnerHandle()`, `GetAgentHandle()` | fabrcore-agent |
 | Messaging | Agent communication | `AgentMessage`, `HandleUtilities` | fabrcore-messaging |
@@ -61,7 +62,7 @@ FabrCore layers on top of Orleans (distributed actor model) and Microsoft.Extens
 ```
 
 - **FabrCore.Core** — Interfaces (`IAgentGrain`, `IClientGrain`), models (`AgentConfiguration`, `AgentMessage`, `AgentHealthStatus`), Orleans surrogates
-- **FabrCore.Sdk** — Agent base class (`FabrCoreAgentProxy`), plugin system, tool registry, chat client factory, MCP integration, compaction, state persistence
+- **FabrCore.Sdk** — Agent base class (`FabrCoreAgentProxy`), plugin system, tool registry, chat client factory, MCP integration, compaction, state persistence, Host API client, typed entity storage contracts
 - **FabrCore.Host** — Orleans grains (`AgentGrain`, `ClientGrain`), REST API controllers, streaming, WebSocket, agent service
 - **FabrCore.Client** — Blazor components (`ChatDock`), `ClientContext`/`ClientContextFactory`, Orleans client configuration
 
@@ -95,12 +96,33 @@ Create `fabrcore.json` in the server project root with your LLM provider configu
 ```csharp
 using FabrCore.Core;          // AgentMessage, AgentConfiguration, MessageKind
 using FabrCore.Core.Acl;      // IAclProvider, AclRule, AclPermission
-using FabrCore.Sdk;           // FabrCoreAgentProxy, IFabrCoreAgentHost, IFabrCorePlugin, FabrCoreCapabilitiesAttribute, FabrCoreNoteAttribute
+using FabrCore.Sdk;           // FabrCoreAgentProxy, IFabrCoreAgentHost, IFabrCorePlugin, IFabrCoreStorageProvider, IFabrCoreHostApiClient
 using FabrCore.Client;        // IClientContextFactory, IClientContext
 using FabrCore.Host;          // AddFabrCoreServer, UseFabrCoreServer, FabrCoreServerOptions
 using Microsoft.Agents.AI;    // AIAgent, AgentSession, ChatClientAgent
 using Microsoft.Extensions.AI; // ChatMessage, ChatRole, IChatClient, AITool
 ```
+
+## Typed Entity Storage
+
+FabrCore exposes a typed entity key/value store through `FabrCore.Sdk` without exposing Orleans storage types to consumers.
+
+```csharp
+public interface IFabrCoreStorageProvider
+{
+    Task<T?> GetAsync<T>(string container, string entityKey, CancellationToken cancellationToken = default);
+    Task UpsertAsync<T>(string container, string entityKey, T value, CancellationToken cancellationToken = default);
+    Task<bool> DeleteAsync(string container, string entityKey, CancellationToken cancellationToken = default);
+}
+```
+
+Use it for application-level typed data such as preferences, cached lookup results, workflow checkpoints, or small JSON-serializable records. Values are stored internally as JSON inside a FabrCore envelope with value type and timestamps; callers read and write normal .NET types.
+
+Storage is backed by the configured Orleans provider named `FabrCoreOrleansConstants.StorageProviderName` (`"fabrcoreStorage"`). Localhost uses whatever storage Orleans was configured with for localhost, and SQL/Azure/custom modes persist according to their provider.
+
+Owner partitioning is part of the Host API: `x-user` is the owner partition, `container` is the logical bucket, and `entityKey` is the key inside that owner/container. The same `container/entityKey` can exist independently for different owners.
+
+Prefer agent custom state (`GetStateAsync`, `SetState`, `FlushStateAsync`) for private state owned by a single agent. Prefer typed entity storage when clients, host services, plugins, or multiple agents need to share app data by owner/container/key.
 
 ## Project Templates
 

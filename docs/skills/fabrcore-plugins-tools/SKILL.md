@@ -6,7 +6,8 @@ description: >
   Triggers on: "build plugin", "create plugin", "IFabrCorePlugin", "PluginAlias", "standalone tool", "ToolAlias",
   "tool calling", "AIFunctionFactory", "add tools to agent", "[Description]", "plugin settings",
   "GetPluginSetting", "plugin DI", "tool description", "tool method",
-  "FabrCoreCapabilities", "FabrCoreNote", "plugin capabilities", "tool capabilities".
+  "FabrCoreCapabilities", "FabrCoreNote", "plugin capabilities", "tool capabilities",
+  "IFabrCoreStorageProvider", "typed storage", "entity storage".
   Do NOT use for: MCP integration — use fabrcore-mcp.
   Do NOT use for: agent lifecycle — use fabrcore-agent.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
@@ -140,6 +141,7 @@ var allSettings = config.GetPluginSettings("my-plugin");
 
 The `IServiceProvider` in `InitializeAsync` includes:
 - `IFabrCoreAgentHost` — For inter-agent communication, handle access, and status messages
+- `IFabrCoreStorageProvider` — For Host-backed typed entity storage when registered by FabrCore.Host
 - `IEmbeddings` — For generating vector embeddings (see below)
 - All services registered in the server's DI container
 - `ILogger<T>` — For structured logging
@@ -387,6 +389,46 @@ public class SemanticPlugin : IFabrCorePlugin
 ```
 
 **Requires** a `"embeddings"` entry in `fabrcore.json` `ModelConfigurations` (see fabrcore-server skill).
+
+## Using Typed Entity Storage in Plugins
+
+Plugins can use typed entity storage for small JSON-serializable app data that should outlive the current tool call, such as lookup caches, workflow checkpoints, shared system settings, or integration cursors.
+
+```csharp
+[PluginAlias("workflow")]
+public class WorkflowPlugin : IFabrCorePlugin
+{
+    private IFabrCoreStorageProvider _storage = default!;
+    private IFabrCoreAgentHost _agentHost = default!;
+
+    public Task InitializeAsync(AgentConfiguration config, IServiceProvider serviceProvider)
+    {
+        _storage = serviceProvider.GetRequiredService<IFabrCoreStorageProvider>();
+        _agentHost = serviceProvider.GetRequiredService<IFabrCoreAgentHost>();
+        return Task.CompletedTask;
+    }
+
+    [Description("Saves the current workflow checkpoint.")]
+    public async Task<string> SaveCheckpoint(string workflowId, string status)
+    {
+        await _storage.UpsertAsync("workflow-checkpoints", workflowId, new
+        {
+            Agent = _agentHost.GetHandle(),
+            Status = status,
+            UpdatedUtc = DateTime.UtcNow
+        });
+
+        return "Checkpoint saved.";
+    }
+}
+```
+
+Pitfalls:
+- In Host DI, owner-free `IFabrCoreStorageProvider` writes to the system partition. Use this for shared/system plugin data.
+- For per-user data, make owner partitioning explicit in a Host service or through the Storage HTTP API. Use `fabrcoreAgentHost.GetOwnerHandle()` as the owner when appropriate.
+- Prefer `GetStateAsync`/`SetState` on the agent for private per-agent state; it is simpler and benefits from grain single-threaded execution.
+- Typed storage is CRUD-only in v1. There is no query/list API, no partial update, and no optimistic concurrency token.
+- Do not resolve Orleans `IGrainStorage` in plugin code. Keep Orleans storage details inside FabrCore.Host.
 
 ## Plugin Best Practices
 

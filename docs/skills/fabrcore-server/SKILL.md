@@ -7,7 +7,8 @@ description: >
   "FabrCoreServerOptions", "fabrcore.json", "ModelConfigurations", "ApiKeys", "REST API", "/fabrcoreapi",
   "deploy FabrCore", "system agent", "ConfigureSystemAgentAsync", "IFabrCoreAgentService",
   "AgentManagementProvider", "UseAgentManagementProvider", "IAgentManagementProvider",
-  "AdditionalAssemblies", "WebSocket", "server setup", "LLM provider".
+  "AdditionalAssemblies", "WebSocket", "server setup", "LLM provider", "Storage API",
+  "typed entity storage", "IFabrCoreStorageProvider".
   Do NOT use for: Orleans clustering/configuration — use fabrcore-orleans.
   Do NOT use for: client setup — use fabrcore-client.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
@@ -83,9 +84,10 @@ builder.AddFabrCoreServer(new FabrCoreServerOptions
 
 1. **Orleans Silo** — Clustering, persistence, reminders, streaming based on `OrleansClusterOptions`
 2. **Services** — `FabrCoreChatClientService`, `FabrCoreToolRegistry`, `FabrCoreRegistry`, `FabrCoreAgentService`, `IAgentManagementProvider`, `IAclProvider`
-3. **Background Services** — `AgentRegistryCleanupService`, `FileCleanupService`
-4. **Assembly Discovery** — Scans `AdditionalAssemblies` for agent, plugin, and tool types
-5. **ACL Configuration** — Loads `Acl` section from `fabrcore.json`, registers `IAclProvider`
+3. **Typed Entity Storage** — `IFabrCoreStorageProvider` backed by the configured Orleans storage provider
+4. **Background Services** — `AgentRegistryCleanupService`, `FileCleanupService`
+5. **Assembly Discovery** — Scans `AdditionalAssemblies` for agent, plugin, and tool types
+6. **ACL Configuration** — Loads `Acl` section from `fabrcore.json`, registers `IAclProvider`
 
 ## What UseFabrCoreServer Configures
 
@@ -268,7 +270,7 @@ The agent grain key becomes `"system:{config.Handle}"`. Any user can message it 
 
 Base path: `/fabrcoreapi/`. All agent-scoped endpoints require the `x-user` header to identify the caller.
 
-> **Typed C# client:** `IFabrCoreHostApiClient` in `FabrCore.Client` wraps every endpoint below (Agent, Discovery, Embeddings, File, ModelConfig, Diagnostics). Agent-scoped methods take a fully-qualified `"owner:alias"` handle and the client extracts the owner into the `x-user` header automatically. See the **FabrCoreHostApiClient** section in the `fabrcore-client` skill for usage.
+> **Typed C# client:** `IFabrCoreHostApiClient` in `FabrCore.Sdk` wraps every endpoint below (Agent, Storage, Discovery, Embeddings, File, ModelConfig, Diagnostics). Agent-scoped methods take a fully-qualified `"owner:alias"` handle and the client extracts the owner into the `x-user` header automatically. Storage methods take an explicit owner. Older `FabrCore.Client` Host API client types are obsolete. See the **FabrCoreHostApiClient** section in the `fabrcore-client` skill for usage.
 
 ---
 
@@ -362,6 +364,70 @@ Returns the file contents with the correct `Content-Type`. Supports HTTP range r
   "ContentType": "application/pdf"
 }
 ```
+
+---
+
+### Storage API (`/fabrcoreapi/storage`)
+
+Typed owner-scoped entity storage for application data. Values are sent and returned as JSON over HTTP, but consumers use generic .NET values through `FabrCore.Sdk.IFabrCoreHostApiClient` or `IFabrCoreStorageProvider`.
+
+The Host stores each value internally in an envelope:
+
+| Field | Purpose |
+|-------|---------|
+| `ValueJson` | Serialized value JSON |
+| `ValueType` | Metadata containing the original .NET type name |
+| `CreatedUtc` | First write time |
+| `UpdatedUtc` | Last write time |
+
+Storage uses the configured Orleans grain storage provider named `FabrCoreOrleansConstants.StorageProviderName` (`"fabrcoreStorage"`). Localhost, SQL, Azure, and custom Orleans storage modes all follow the provider already configured for the host.
+
+Addressing:
+- `x-user` is the owner partition and ACL boundary.
+- `container` is the logical bucket, mapped to the Orleans state name.
+- `entityKey` is the key within the owner/container. The route is a catch-all, so slash-delimited keys are allowed.
+
+#### GET `/storage/{container}/{entityKey}` — Read an entity
+
+| Parameter | Source | Type | Required |
+|-----------|--------|------|----------|
+| `x-user` | Header | string | Yes |
+| `container` | Route | string | Yes |
+| `entityKey` | Route | string | Yes |
+
+**Response** `200 OK`: the stored JSON value.
+
+**Response** `404 Not Found`: no value exists.
+
+#### PUT `/storage/{container}/{entityKey}` — Create or replace an entity
+
+| Parameter | Source | Type | Required |
+|-----------|--------|------|----------|
+| `x-user` | Header | string | Yes |
+| `container` | Route | string | Yes |
+| `entityKey` | Route | string | Yes |
+| body | Body | JSON value | Yes |
+
+**Response** `204 No Content`.
+
+#### DELETE `/storage/{container}/{entityKey}` — Delete an entity
+
+| Parameter | Source | Type | Required |
+|-----------|--------|------|----------|
+| `x-user` | Header | string | Yes |
+| `container` | Route | string | Yes |
+| `entityKey` | Route | string | Yes |
+
+**Response** `204 No Content`: a value existed and was deleted.
+
+**Response** `404 Not Found`: no value existed.
+
+Pitfalls:
+- This is CRUD-only in v1: no list/query API, no partial updates, and no ETags.
+- Upserts are last-writer-wins.
+- `ValueType` is informational; reads deserialize into the caller-requested type.
+- Do not resolve Orleans `IGrainStorage` directly from application code. Use the FabrCore SDK or Host services so Orleans does not leak into clients.
+- Host-internal `IFabrCoreStorageProvider` calls are owner-free and use the system partition. For user data, go through the owner-scoped API/client or a Host service that explicitly supplies the owner.
 
 ---
 
