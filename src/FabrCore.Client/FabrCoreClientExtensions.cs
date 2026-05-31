@@ -91,12 +91,22 @@ namespace FabrCore.Client
                 builder.Services.AddSingleton<IDirectMessageSender, DirectMessageSender>();
                 logger.LogInformation("DirectMessageSender registered as singleton service");
 
-                // Register canonical SDK FabrCoreHostApiClient with HttpClient
-                builder.Services.AddHttpClient<FabrCore.Sdk.IFabrCoreHostApiClient, FabrCore.Sdk.FabrCoreHostApiClient>();
+                // Register canonical SDK FabrCoreHostApiClient with an explicit name.
+                // HttpClientFactory's typed-client default name ignores namespaces, so it
+                // collides with the obsolete FabrCore.Client.IFabrCoreHostApiClient.
+                builder.Services
+                    .AddHttpClient("FabrCore.Sdk.FabrCoreHostApiClient")
+                    .AddTypedClient<FabrCore.Sdk.IFabrCoreHostApiClient, FabrCore.Sdk.FabrCoreHostApiClient>();
+                builder.Services.AddTransient<FabrCore.Sdk.IFabrCoreStorageProvider>(sp =>
+                    (FabrCore.Sdk.IFabrCoreStorageProvider)sp.GetRequiredService<FabrCore.Sdk.IFabrCoreHostApiClient>());
                 logger.LogInformation("SDK FabrCoreHostApiClient registered with HttpClient");
 
                 // Register obsolete Client host API client for backwards compatibility
-                builder.Services.AddHttpClient<IFabrCoreHostApiClient, FabrCoreHostApiClient>();
+#pragma warning disable CS0618 // Backwards-compatible obsolete service registration.
+                builder.Services
+                    .AddHttpClient("FabrCore.Client.FabrCoreHostApiClient")
+                    .AddTypedClient<IFabrCoreHostApiClient, FabrCoreHostApiClient>();
+#pragma warning restore CS0618
                 logger.LogInformation("Obsolete Client FabrCoreHostApiClient registered with HttpClient");
 
                 ClientsConfiguredCounter.Add(1,
