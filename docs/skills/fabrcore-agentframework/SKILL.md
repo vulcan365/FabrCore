@@ -607,7 +607,7 @@ var chatOptions = new ChatOptions
 
 ## LLM Usage Tracking
 
-FabrCore automatically tracks LLM metrics across all calls within a single `OnMessage` invocation:
+FabrCore automatically tracks LLM metrics across all calls within a single `OnMessage` invocation, including delegated agent calls made during that turn. The aggregate is attached to the final response `AgentMessage.Args` so UI clients can read it without enabling Agent Monitor.
 
 | Args Key | Description |
 |----------|-------------|
@@ -615,12 +615,16 @@ FabrCore automatically tracks LLM metrics across all calls within a single `OnMe
 | `_tokens_output` | Total output tokens |
 | `_tokens_reasoning` | Thinking/reasoning tokens |
 | `_tokens_cached_input` | Cached input tokens |
+| `_tokens_input_max_per_call` | Largest provider-reported input token count for any single LLM call in the turn |
 | `_llm_calls` | Number of LLM calls (includes tool loops) |
 | `_llm_duration_ms` | Total LLM response time |
 | `_model` | Model ID from last call |
 | `_finish_reason` | Finish reason (`stop`, `length`, `tool_calls`, `content_filter`) |
+| `_actual_prompt_input_tokens` | Estimated prompt tokens for the current/last guarded LLM prompt |
+| `_turn_cumulative_input_tokens` | Cumulative guarded input tokens for the turn |
+| `_max_prompt_input_tokens_per_call` | Largest prompt-token estimate seen before an LLM call in the turn |
 
-These are attached to the response `AgentMessage.Args` automatically. Only non-zero/non-null values are set.
+These underscore-prefixed keys are attached automatically. Only non-zero/non-null values are set. `LlmUsageInfo` is used by Agent Monitor as a projection from these args; it is not part of the `AgentMessage` contract.
 
 ## References
 

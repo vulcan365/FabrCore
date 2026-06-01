@@ -28,6 +28,8 @@ The Agent Message Monitor provides a pluggable provider for observing message, e
 - LLM token usage per response (input, output, reasoning, cached tokens, model, duration)
 - Accumulated token totals per agent
 
+Response-level LLM usage is first written to `AgentMessage.Args` using underscore-prefixed keys such as `_tokens_input`, `_tokens_output`, and `_llm_calls`. Agent Monitor is optional for UI clients that only need usage on the response; the monitor projects those args into `MonitoredMessage.LlmUsage` for historical/debug views.
+
 Messages, events, and LLM calls live in **three separate buffers** with **separate query methods and notification events**, so a client output viewer can toggle any combination — messages only, events only, LLM calls only, or any merge — with independent FIFO eviction so a chatty stream in one track cannot evict entries from another.
 
 > **See also:** [references/llm-call-capture.md](references/llm-call-capture.md) for a deep dive on the LLM call track — attribution rules, payload redaction, streaming aggregation, and the `LlmCallContext` / `LlmUsageScope` precedence model.
@@ -44,7 +46,7 @@ Messages, events, and LLM calls live in **three separate buffers** with **separa
 | `LlmMessageSnapshot` | `FabrCore.Core.Monitoring` | Per-chat-message payload snapshot inside a `MonitoredLlmCall` |
 | `LlmToolCallSnapshot` | `FabrCore.Core.Monitoring` | Per-tool-call snapshot inside a `MonitoredLlmCall` |
 | `LlmCaptureOptions` | `FabrCore.Core.Monitoring` | Capture configuration (enabled / payloads / size caps / redaction / buffer size) |
-| `LlmUsageInfo` | `FabrCore.Core.Monitoring` | Aggregated LLM usage metrics stamped on a response `MonitoredMessage` |
+| `LlmUsageInfo` | `FabrCore.Core.Monitoring` | Monitor projection parsed from response `AgentMessage.Args` usage keys |
 | `AgentTokenSummary` | `FabrCore.Core.Monitoring` | Accumulated token totals per agent |
 | `MessageDirection` | `FabrCore.Core.Monitoring` | `Inbound` / `Outbound` enum |
 | `LlmUsageScope` | `FabrCore.Sdk` | AsyncLocal scope set by `OnMessage` carrying agent handle, parent message id, trace id, and origin |
@@ -360,7 +362,7 @@ await _monitor.ClearAsync(); // Clears messages, events, LLM calls, and token su
 | `Direction` | `MessageDirection` | `Inbound` or `Outbound` |
 | `Timestamp` | `DateTimeOffset` | UTC timestamp |
 | `TraceId` | `string?` | W3C trace id (32-char hex) — same value stamped on `AgentMessage.TraceId`; use it to join monitor records with OpenTelemetry spans from your exporter. Only `TraceId` is persisted — `SpanId`/`ParentSpanId` from `AgentMessage` are not captured on the monitor record. |
-| `LlmUsage` | `LlmUsageInfo?` | LLM metrics (null if no LLM was invoked) |
+| `LlmUsage` | `LlmUsageInfo?` | Monitor projection of response `AgentMessage.Args` usage keys (null if no LLM was invoked) |
 | `BusyRouted` | `bool` | True if this message was routed through `OnMessageBusy` because the agent was already processing |
 
 ## MonitoredEvent Properties
@@ -488,6 +490,8 @@ public class ReportingAgent : FabrCoreAgentProxy
 > See [references/llm-call-capture.md](references/llm-call-capture.md) for the full precedence rules, streaming aggregation details, and error-path behavior.
 
 ## LlmUsageInfo Properties
+
+`LlmUsageInfo` is a monitor/core helper parsed from underscore-prefixed `AgentMessage.Args` keys. UI clients receiving `AgentMessage` responses should read the args keys directly; monitor consumers can use this typed projection.
 
 | Property | Type | Description |
 |----------|------|-------------|

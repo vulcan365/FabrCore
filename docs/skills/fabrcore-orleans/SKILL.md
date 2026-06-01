@@ -48,7 +48,7 @@ Configure in `appsettings.json`:
 }
 ```
 
-- In-memory persistence (data lost on restart)
+- In-memory persistence (typed storage entities, agent state, client state, and management state are lost on restart)
 - Single-silo only
 - No external dependencies
 
@@ -203,7 +203,7 @@ When using the advanced path, you must register these providers:
 - **Grains** — Virtual actors automatically activated/deactivated. Each agent is a grain identified by a string key (the handle).
 - **Silos** — Server processes hosting grains. FabrCore.Host configures one or more silos.
 - **Clustering** — How silos discover each other. Localhost for dev, SqlServer/Azure for production.
-- **Persistence** — Grain state survives restarts. Configured per clustering mode.
+- **Persistence** — Grain state survives restarts only when the configured provider is durable. `Localhost` uses memory storage and loses state on process exit.
 - **Streams** — Pub/sub messaging between grains. Used for chat and event delivery.
 - **Reminders** — Persistent timers surviving grain deactivation and silo restarts.
 - **Timers** — Non-persistent timers for periodic tasks within an active grain.
