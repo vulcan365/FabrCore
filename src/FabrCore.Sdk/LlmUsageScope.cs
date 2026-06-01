@@ -1,3 +1,4 @@
+using FabrCore.Core.Monitoring;
 using Microsoft.Extensions.AI;
 
 namespace FabrCore.Sdk
@@ -18,6 +19,7 @@ namespace FabrCore.Sdk
         private long _durationMs;
         private string? _modelId;
         private string? _finishReason;
+        private LlmUsageScope? _previous;
 
         /// <summary>Gets the current active scope, or null if none.</summary>
         public static LlmUsageScope? Current => _current.Value;
@@ -56,7 +58,8 @@ namespace FabrCore.Sdk
                 AgentHandle = agentHandle,
                 ParentMessageId = parentMessageId,
                 TraceId = traceId,
-                OriginContext = originContext
+                OriginContext = originContext,
+                _previous = _current.Value
             };
             _current.Value = scope;
             return scope;
@@ -81,6 +84,30 @@ namespace FabrCore.Sdk
             if (response.FinishReason is { } reason) _finishReason = reason.Value;
         }
 
+        /// <summary>Merges usage metrics captured on a delegated agent response.</summary>
+        public void MergeFromArgs(Dictionary<string, string>? args)
+        {
+            if (LlmUsageInfo.FromArgs(args) is { } usage)
+            {
+                Merge(usage);
+            }
+        }
+
+        /// <summary>Merges usage metrics from an already parsed usage summary.</summary>
+        public void Merge(LlmUsageInfo usage)
+        {
+            Interlocked.Add(ref _inputTokens, usage.InputTokens);
+            Interlocked.Add(ref _outputTokens, usage.OutputTokens);
+            Interlocked.Add(ref _reasoningTokens, usage.ReasoningTokens);
+            Interlocked.Add(ref _cachedInputTokens, usage.CachedInputTokens);
+            Interlocked.Add(ref _callCount, usage.LlmCalls);
+            Interlocked.Add(ref _durationMs, usage.LlmDurationMs);
+            UpdateMax(ref _maxInputTokensPerCall, usage.MaxInputTokensPerCall);
+
+            if (usage.Model is not null) _modelId = usage.Model;
+            if (usage.FinishReason is not null) _finishReason = usage.FinishReason;
+        }
+
         /// <summary>Applies accumulated metrics to an AgentMessage Args dictionary.</summary>
         public void ApplyTo(Dictionary<string, string> args)
         {
@@ -95,7 +122,7 @@ namespace FabrCore.Sdk
             if (FinishReason is not null) args["_finish_reason"] = FinishReason;
         }
 
-        public void Dispose() => _current.Value = null;
+        public void Dispose() => _current.Value = _previous;
 
         private static void UpdateMax(ref long target, long candidate)
         {

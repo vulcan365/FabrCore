@@ -1080,6 +1080,7 @@ namespace FabrCore.Host.Grains
             {
                 var agentProxy = clusterClient.GetGrain<IAgentGrain>(request.ToHandle);
                 var response = await agentProxy.OnMessage(request);
+                LlmUsageScope.Current?.MergeFromArgs(response.Args);
                 logger.LogDebug("SendAndReceiveMessage completed - Response received from: {ToHandle}",
                     request.ToHandle);
 

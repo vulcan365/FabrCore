@@ -100,7 +100,7 @@ A single streaming call produces exactly one `MonitoredLlmCall`, not one per upd
 - **LLM throws mid-call (non-streaming):** recorded with `ErrorMessage` populated; the exception still propagates to the caller.
 - **LLM throws mid-stream:** the `await foreach` wrapper will propagate the exception. The aggregation block after the loop will not run in that case. If you need to capture partial streams on error, add a try/catch around the foreach — today the implementation records the call only on successful stream completion, matching the behavior of the pre-change `LlmUsageScope` integration.
 - **Cancellation:** `OperationCanceledException` propagates normally; no partial call is recorded.
-- **Fire-and-forget monitor failures:** `RecordLlmCallAsync` is invoked via `_ = monitor.RecordLlmCallAsync(call).ContinueWith(..., OnlyOnFaulted)`. A slow monitor will not block an LLM response, and a throwing monitor will not fail the call — failures are logged via the client's `ILogger`.
+- **Fire-and-forget monitor failures:** `RecordLlmCallAsync` is invoked via `_ = monitor.RecordLlmCallAsync(call).ContinueWith(..., OnlyOnFaulted)`. A slow monitor will not block an LLM response, and a throwing monitor will not fail the call — failures are logged via the client's `ILogger`. Response-level usage still comes from `AgentMessage.Args`, not from querying the monitor.
 
 ## Payload Capture, Redaction, and Size Caps
 
@@ -152,7 +152,7 @@ The metadata-only default (`CapturePayloads == false`) has a slightly higher but
 
 ## Correlating LLM Calls with Messages
 
-When a call has `ParentMessageId` set, you can join it back to the outbound `MonitoredMessage` recorded by `AgentGrain.OnMessage`. A typical viewer layout:
+Response-level aggregate usage is written to the outbound `AgentMessage.Args` first. When Agent Monitor is enabled, `AgentGrain.OnMessage` records an outbound `MonitoredMessage` whose `LlmUsage` is parsed from those args. When a call has `ParentMessageId` set, you can join it back to that outbound message in a viewer:
 
 ```
 [14:23:01] OUT  user1:agent -> user1:client  kind=Response  msg=MSG123   (LlmUsage: 2 calls, 450in/120out)
@@ -160,13 +160,13 @@ When a call has `ParentMessageId` set, you can join it back to the outbound `Mon
            └── [14:23:02] LLM OnMessage:MSG123  model=gpt-4  100in/30out  streaming=false
 ```
 
-Multiple LLM calls per outbound message is normal — agents often call the LLM more than once (planner + executor, tool loops, compaction, etc.).
+Multiple LLM calls per outbound message is normal — agents often call the LLM more than once (planner + executor, tool loops, compaction, delegated agents, etc.).
 
 ## Testing Checklist
 
 When adding or modifying capture behavior, verify:
 
-1. **OnMessage call:** exactly one `MonitoredLlmCall` per LLM round-trip; `OriginContext` starts with `"OnMessage:"`; `ParentMessageId` equals the inbound `MonitoredMessage.Id`; the existing outbound `MonitoredMessage.LlmUsage` is still populated (no regression in the `LlmUsageScope` path).
+1. **OnMessage call:** exactly one `MonitoredLlmCall` per LLM round-trip; `OriginContext` starts with `"OnMessage:"`; `ParentMessageId` equals the inbound message id; the outbound `AgentMessage.Args` contains usage keys, and monitor-enabled runs still project those keys into `MonitoredMessage.LlmUsage`.
 2. **Streaming call:** `Streaming == true`, tokens aggregated correctly across updates, `ResponseText` is the concatenated stream text.
 3. **OnEvent call:** `OriginContext` starts with `"OnEvent:"`, `ParentMessageId == null`.
 4. **Timer/Reminder:** `OriginContext` starts with `"Timer:"` / `"Reminder:"`, `AgentHandle` matches the grain handle.

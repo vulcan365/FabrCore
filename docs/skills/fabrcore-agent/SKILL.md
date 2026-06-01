@@ -207,7 +207,7 @@ public override async Task<AgentMessage> OnMessage(AgentMessage message)
 }
 ```
 
-**LLM Usage Tracking:** Token counts are automatically captured and attached to the response `Args` (e.g., `_tokens_input`, `_tokens_output`, `_llm_calls`).
+**LLM Usage Tracking:** Token counts are automatically captured and attached to the response `Args` (e.g., `_tokens_input`, `_tokens_output`, `_llm_calls`). Clients can read these underscore-prefixed keys directly from `AgentMessage.Args`; Agent Monitor is not required for response-level usage.
 
 ### SetStatusMessage(string? message)
 

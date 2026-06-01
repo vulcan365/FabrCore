@@ -549,6 +549,11 @@ namespace FabrCore.Host
                 default:
                     siloBuilder.AddMemoryGrainStorage(FabrCoreOrleansConstants.StorageProviderName);
                     siloBuilder.AddMemoryGrainStorage(FabrCoreOrleansConstants.PubSubStoreName);
+                    logger.LogWarning(
+                        "Orleans Localhost mode uses in-memory grain storage for {StorageProviderName}. " +
+                        "FabrCore typed storage entities, agent state, client state, and management state will be lost when the process exits. " +
+                        "Use SqlServer, AzureStorage, or custom Orleans storage for restart-safe persistence.",
+                        FabrCoreOrleansConstants.StorageProviderName);
                     logger.LogDebug("Orleans memory grain storage configured");
                     break;
             }
