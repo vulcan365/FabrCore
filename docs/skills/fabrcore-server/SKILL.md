@@ -365,6 +365,14 @@ Returns the file contents with the correct `Content-Type`. Supports HTTP range r
 }
 ```
 
+#### DELETE `/file/{fileId}` — Delete a file
+
+Deletes a temporary file before its TTL expires.
+
+**Response** `204 No Content`: file existed and was deleted.
+
+**Response** `404 Not Found`: no file existed for the supplied ID.
+
 ---
 
 ### Storage API (`/fabrcoreapi/storage`)

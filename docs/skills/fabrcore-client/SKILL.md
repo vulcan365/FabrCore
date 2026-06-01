@@ -419,6 +419,8 @@ if (download != null)
     await download.CopyToAsync(outFile);
 }
 
+bool fileDeleted = await ApiClient.DeleteFileAsync(fileId);
+
 // Model config and API keys (from fabrcore.json)
 ModelConfigResponse model = await ApiClient.GetModelConfigAsync("gpt-4o-mini");
 ApiKeyResponse apiKey = await ApiClient.GetApiKeyAsync("openai");
@@ -437,6 +439,7 @@ AgentStatisticsResponse stats = await ApiClient.GetAgentStatisticsAsync();
 | `UploadFileAsync` | POST | `/fabrcoreapi/File/upload` | `string` (file id) |
 | `GetFileAsync` | GET | `/fabrcoreapi/File/{fileId}` | `Stream?` |
 | `GetFileInfoAsync` | GET | `/fabrcoreapi/File/{fileId}/info` | `FileMetadataResponse?` |
+| `DeleteFileAsync` | DELETE | `/fabrcoreapi/File/{fileId}` | `bool` |
 | `GetModelConfigAsync` | GET | `/fabrcoreapi/ModelConfig/model/{name}` | `ModelConfigResponse` |
 | `GetApiKeyAsync` | GET | `/fabrcoreapi/ModelConfig/apikey/{alias}` | `ApiKeyResponse` |
 | `GetAgentsAsync` | GET | `/fabrcoreapi/Diagnostics/agents` | `AgentsListResponse` |

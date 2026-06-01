@@ -351,6 +351,12 @@ namespace FabrCore.Client
         Task<FileMetadataResponse?> GetFileInfoAsync(string fileId, CancellationToken cancellationToken = default);
 
         /// <summary>
+        /// Deletes a file by ID.
+        /// Returns true when the file existed before deletion.
+        /// </summary>
+        Task<bool> DeleteFileAsync(string fileId, CancellationToken cancellationToken = default);
+
+        /// <summary>
         /// Generates embeddings for the given text.
         /// </summary>
         Task<EmbeddingResponse> GetEmbeddingsAsync(string text, CancellationToken cancellationToken = default);
@@ -893,6 +899,40 @@ namespace FabrCore.Client
             {
                 RecordError(activity, startTime, "GetFileInfo", ex);
                 _logger.LogError(ex, "Failed to get file metadata: {FileId}", fileId);
+                throw;
+            }
+        }
+
+        public async Task<bool> DeleteFileAsync(string fileId, CancellationToken cancellationToken = default)
+        {
+            using var activity = ActivitySource.StartActivity("DeleteFile", ActivityKind.Client);
+            activity?.SetTag("file.id", fileId);
+
+            var url = $"{_baseUrl}/fabrcoreapi/File/{fileId}";
+            var startTime = Stopwatch.GetTimestamp();
+
+            try
+            {
+                var response = await _httpClient.DeleteAsync(url, cancellationToken);
+
+                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    RecordSuccess(activity, startTime, "DeleteFile");
+                    _logger.LogDebug("File not found for delete: {FileId}", fileId);
+                    return false;
+                }
+
+                response.EnsureSuccessStatusCode();
+
+                RecordSuccess(activity, startTime, "DeleteFile");
+                _logger.LogDebug("Deleted file: {FileId}", fileId);
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                RecordError(activity, startTime, "DeleteFile", ex);
+                _logger.LogError(ex, "Failed to delete file: {FileId}", fileId);
                 throw;
             }
         }

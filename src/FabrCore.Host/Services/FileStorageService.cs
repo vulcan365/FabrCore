@@ -88,7 +88,7 @@ namespace FabrCore.Host.Services
 
         public async Task<(Stream? fileStream, string? contentType)> GetFileAsync(string fileId)
         {
-            var files = Directory.GetFiles(_settings.StoragePath, $"{fileId}.*");
+            var files = GetFilePaths(fileId);
 
             if (files.Length == 0)
             {
@@ -120,7 +120,7 @@ namespace FabrCore.Host.Services
 
         public async Task<FileMetadata?> GetFileMetadataAsync(string fileId)
         {
-            var files = Directory.GetFiles(_settings.StoragePath, $"{fileId}.*");
+            var files = GetFilePaths(fileId);
 
             if (files.Length == 0)
             {
@@ -159,6 +159,39 @@ namespace FabrCore.Host.Services
 
             _logger.LogInformation("File metadata retrieved: {FileId}", fileId);
             return await Task.FromResult(metadata);
+        }
+
+        public async Task<bool> DeleteFileAsync(string fileId)
+        {
+            var files = GetFilePaths(fileId);
+
+            if (files.Length == 0)
+            {
+                _logger.LogWarning("File delete skipped because file was not found: {FileId}", fileId);
+                return await Task.FromResult(false);
+            }
+
+            foreach (var filePath in files)
+            {
+                File.Delete(filePath);
+                _logger.LogInformation("Deleted file: {FileName}", Path.GetFileName(filePath));
+            }
+
+            _fileTtlTracker.TryRemove(fileId, out _);
+            _fileNameTracker.TryRemove(fileId, out _);
+
+            return await Task.FromResult(true);
+        }
+
+        private string[] GetFilePaths(string fileId)
+        {
+            if (!Guid.TryParse(fileId, out _))
+            {
+                _logger.LogWarning("Invalid file ID: {FileId}", fileId);
+                return [];
+            }
+
+            return Directory.GetFiles(_settings.StoragePath, $"{fileId}.*");
         }
 
         private async Task CleanupOrphanedFilesAsync()

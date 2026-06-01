@@ -8,5 +8,6 @@ namespace FabrCore.Host.Services
         Task CleanupExpiredFilesAsync();
         Task<(Stream? fileStream, string? contentType)> GetFileAsync(string fileId);
         Task<FileMetadata?> GetFileMetadataAsync(string fileId);
+        Task<bool> DeleteFileAsync(string fileId);
     }
 }

@@ -100,5 +100,27 @@ namespace FabrCore.Host.Api.Controllers
                 return StatusCode(500, "Error retrieving file metadata");
             }
         }
+
+        [HttpDelete("{fileId}")]
+        public async Task<IActionResult> DeleteFile(string fileId)
+        {
+            try
+            {
+                var deleted = await _fileStorageService.DeleteFileAsync(fileId);
+
+                if (!deleted)
+                {
+                    return NotFound($"File with ID {fileId} not found.");
+                }
+
+                _logger.LogInformation("File deleted: {FileId}", fileId);
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error deleting file: {fileId}");
+                return StatusCode(500, "Error deleting file");
+            }
+        }
     }
 }
