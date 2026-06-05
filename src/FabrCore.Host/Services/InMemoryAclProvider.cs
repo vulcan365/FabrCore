@@ -8,7 +8,7 @@ namespace FabrCore.Host.Services
     /// Default in-memory ACL provider that loads rules from <see cref="FabrCoreAclOptions"/> configuration.
     /// Rules are evaluated in order; first match wins. Supports runtime add/remove (in-memory only).
     /// <para>
-    /// If no rules are configured, a default rule is applied: all callers can Message and Read system-owned agents.
+    /// If no rules are configured, a default rule is applied: all callers can Message and Read system user agents.
     /// </para>
     /// </summary>
     public class InMemoryAclProvider : IAclProvider
@@ -36,7 +36,7 @@ namespace FabrCore.Host.Services
             {
                 _rules.Add(new AclRule
                 {
-                    OwnerPattern = "system",
+                    UserHandlePattern = "system",
                     AgentPattern = "*",
                     CallerPattern = "*",
                     Permission = AclPermission.Message | AclPermission.Read
@@ -50,13 +50,13 @@ namespace FabrCore.Host.Services
         }
 
         public Task<AclEvaluationResult> EvaluateAsync(
-            string callerOwner,
-            string targetOwner,
-            string agentAlias,
+            string callerUserHandle,
+            string targetUserHandle,
+            string agentHandle,
             AclPermission required)
         {
-            // Implicit rule: owner always has full access to their own agents
-            if (string.Equals(callerOwner, targetOwner, StringComparison.OrdinalIgnoreCase))
+            // Implicit rule: users always have full access to their own agents
+            if (string.Equals(callerUserHandle, targetUserHandle, StringComparison.OrdinalIgnoreCase))
             {
                 return Task.FromResult(new AclEvaluationResult(true, AclPermission.All));
             }
@@ -65,9 +65,9 @@ namespace FabrCore.Host.Services
             {
                 foreach (var rule in _rules)
                 {
-                    if (MatchesPattern(rule.OwnerPattern, targetOwner) &&
-                        MatchesPattern(rule.AgentPattern, agentAlias) &&
-                        MatchesCaller(rule.CallerPattern, callerOwner))
+                    if (MatchesPattern(rule.UserHandlePattern, targetUserHandle) &&
+                        MatchesPattern(rule.AgentPattern, agentHandle) &&
+                        MatchesCaller(rule.CallerPattern, callerUserHandle))
                     {
                         if (rule.Permission.HasFlag(required))
                         {
@@ -78,7 +78,7 @@ namespace FabrCore.Host.Services
                         return Task.FromResult(new AclEvaluationResult(
                             false,
                             rule.Permission,
-                            $"Rule matched ({rule.OwnerPattern}:{rule.AgentPattern} -> {rule.CallerPattern}) but grants [{rule.Permission}], not [{required}]"));
+                            $"Rule matched ({rule.UserHandlePattern}:{rule.AgentPattern} -> {rule.CallerPattern}) but grants [{rule.Permission}], not [{required}]"));
                     }
                 }
             }
@@ -86,7 +86,7 @@ namespace FabrCore.Host.Services
             return Task.FromResult(new AclEvaluationResult(
                 false,
                 AclPermission.None,
-                $"No ACL rule matched for caller '{callerOwner}' accessing '{targetOwner}:{agentAlias}'"));
+                $"No ACL rule matched for caller '{callerUserHandle}' accessing '{targetUserHandle}:{agentHandle}'"));
         }
 
         public Task<List<AclRule>> GetRulesAsync()
@@ -104,8 +104,8 @@ namespace FabrCore.Host.Services
                 _rules.Add(rule);
             }
 
-            _logger.LogInformation("ACL rule added: {Owner}:{Agent} -> {Caller} [{Permission}]",
-                rule.OwnerPattern, rule.AgentPattern, rule.CallerPattern, rule.Permission);
+            _logger.LogInformation("ACL rule added: {UserHandle}:{Agent} -> {Caller} [{Permission}]",
+                rule.UserHandlePattern, rule.AgentPattern, rule.CallerPattern, rule.Permission);
 
             return Task.CompletedTask;
         }
@@ -115,14 +115,14 @@ namespace FabrCore.Host.Services
             lock (_lock)
             {
                 _rules.RemoveAll(r =>
-                    string.Equals(r.OwnerPattern, rule.OwnerPattern, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(r.UserHandlePattern, rule.UserHandlePattern, StringComparison.OrdinalIgnoreCase) &&
                     string.Equals(r.AgentPattern, rule.AgentPattern, StringComparison.OrdinalIgnoreCase) &&
                     string.Equals(r.CallerPattern, rule.CallerPattern, StringComparison.OrdinalIgnoreCase) &&
                     r.Permission == rule.Permission);
             }
 
-            _logger.LogInformation("ACL rule removed: {Owner}:{Agent} -> {Caller} [{Permission}]",
-                rule.OwnerPattern, rule.AgentPattern, rule.CallerPattern, rule.Permission);
+            _logger.LogInformation("ACL rule removed: {UserHandle}:{Agent} -> {Caller} [{Permission}]",
+                rule.UserHandlePattern, rule.AgentPattern, rule.CallerPattern, rule.Permission);
 
             return Task.CompletedTask;
         }
@@ -190,15 +190,15 @@ namespace FabrCore.Host.Services
         /// <summary>
         /// Matches a caller pattern, with additional support for <c>"group:name"</c> syntax.
         /// </summary>
-        private bool MatchesCaller(string pattern, string callerOwner)
+        private bool MatchesCaller(string pattern, string callerUserHandle)
         {
             if (pattern.StartsWith("group:", StringComparison.OrdinalIgnoreCase))
             {
                 var groupName = pattern[6..];
-                return IsInGroup(groupName, callerOwner);
+                return IsInGroup(groupName, callerUserHandle);
             }
 
-            return MatchesPattern(pattern, callerOwner);
+            return MatchesPattern(pattern, callerUserHandle);
         }
 
         private bool IsInGroup(string groupName, string member)

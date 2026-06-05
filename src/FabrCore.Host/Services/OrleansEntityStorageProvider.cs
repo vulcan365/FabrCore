@@ -9,21 +9,21 @@ using System.Text.Json;
 
 namespace FabrCore.Host.Services;
 
-public interface IOwnerScopedFabrCoreStorageProvider
+public interface IUserScopedFabrCoreStorageProvider
 {
-    Task<T?> GetAsync<T>(string owner, string container, string entityKey, CancellationToken cancellationToken = default);
-    Task UpsertAsync<T>(string owner, string container, string entityKey, T value, CancellationToken cancellationToken = default);
-    Task<bool> DeleteAsync(string owner, string container, string entityKey, CancellationToken cancellationToken = default);
+    Task<T?> GetAsync<T>(string userHandle, string container, string entityKey, CancellationToken cancellationToken = default);
+    Task UpsertAsync<T>(string userHandle, string container, string entityKey, T value, CancellationToken cancellationToken = default);
+    Task<bool> DeleteAsync(string userHandle, string container, string entityKey, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
 /// FabrCore entity storage backed by the configured Orleans grain storage provider.
 /// Orleans types remain internal to the Host implementation.
 /// </summary>
-internal sealed class OrleansEntityStorageProvider : IFabrCoreStorageProvider, IOwnerScopedFabrCoreStorageProvider
+internal sealed class OrleansEntityStorageProvider : IFabrCoreStorageProvider, IUserScopedFabrCoreStorageProvider
 {
     private const string EntityGrainType = "fabrcore.entity-storage";
-    private const string DefaultOwner = "system";
+    private const string DefaultUserHandle = "system";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -43,28 +43,28 @@ internal sealed class OrleansEntityStorageProvider : IFabrCoreStorageProvider, I
     }
 
     public Task<T?> GetAsync<T>(string container, string entityKey, CancellationToken cancellationToken = default)
-        => GetAsync<T>(DefaultOwner, container, entityKey, cancellationToken);
+        => GetAsync<T>(DefaultUserHandle, container, entityKey, cancellationToken);
 
     public Task UpsertAsync<T>(string container, string entityKey, T value, CancellationToken cancellationToken = default)
-        => UpsertAsync(DefaultOwner, container, entityKey, value, cancellationToken);
+        => UpsertAsync(DefaultUserHandle, container, entityKey, value, cancellationToken);
 
     public Task<bool> DeleteAsync(string container, string entityKey, CancellationToken cancellationToken = default)
-        => DeleteAsync(DefaultOwner, container, entityKey, cancellationToken);
+        => DeleteAsync(DefaultUserHandle, container, entityKey, cancellationToken);
 
     public async Task<T?> GetAsync<T>(
-        string owner,
+        string userHandle,
         string container,
         string entityKey,
         CancellationToken cancellationToken = default)
     {
-        ValidateAddress(owner, container, entityKey);
+        ValidateAddress(userHandle, container, entityKey);
 
         var grainState = new SimpleGrainState<FabrCoreEntityStorageEnvelope>();
-        await _storage.ReadStateAsync(container, BuildGrainId(owner, entityKey), grainState);
+        await _storage.ReadStateAsync(container, BuildGrainId(userHandle, entityKey), grainState);
 
         if (!grainState.RecordExists || grainState.State is null)
         {
-            _logger.LogDebug("Storage entity not found: {Owner}/{Container}/{EntityKey}", owner, container, entityKey);
+            _logger.LogDebug("Storage entity not found: {UserHandle}/{Container}/{EntityKey}", userHandle, container, entityKey);
             return default;
         }
 
@@ -72,15 +72,15 @@ internal sealed class OrleansEntityStorageProvider : IFabrCoreStorageProvider, I
     }
 
     public async Task UpsertAsync<T>(
-        string owner,
+        string userHandle,
         string container,
         string entityKey,
         T value,
         CancellationToken cancellationToken = default)
     {
-        ValidateAddress(owner, container, entityKey);
+        ValidateAddress(userHandle, container, entityKey);
 
-        var grainId = BuildGrainId(owner, entityKey);
+        var grainId = BuildGrainId(userHandle, entityKey);
         var grainState = new SimpleGrainState<FabrCoreEntityStorageEnvelope>();
         await _storage.ReadStateAsync(container, grainId, grainState);
 
@@ -99,39 +99,39 @@ internal sealed class OrleansEntityStorageProvider : IFabrCoreStorageProvider, I
         grainState.RecordExists = true;
 
         await _storage.WriteStateAsync(container, grainId, grainState);
-        _logger.LogDebug("Storage entity upserted: {Owner}/{Container}/{EntityKey}", owner, container, entityKey);
+        _logger.LogDebug("Storage entity upserted: {UserHandle}/{Container}/{EntityKey}", userHandle, container, entityKey);
     }
 
     public async Task<bool> DeleteAsync(
-        string owner,
+        string userHandle,
         string container,
         string entityKey,
         CancellationToken cancellationToken = default)
     {
-        ValidateAddress(owner, container, entityKey);
+        ValidateAddress(userHandle, container, entityKey);
 
-        var grainId = BuildGrainId(owner, entityKey);
+        var grainId = BuildGrainId(userHandle, entityKey);
         var grainState = new SimpleGrainState<FabrCoreEntityStorageEnvelope>();
         await _storage.ReadStateAsync(container, grainId, grainState);
 
         if (!grainState.RecordExists)
         {
-            _logger.LogDebug("Storage entity delete skipped because it did not exist: {Owner}/{Container}/{EntityKey}", owner, container, entityKey);
+            _logger.LogDebug("Storage entity delete skipped because it did not exist: {UserHandle}/{Container}/{EntityKey}", userHandle, container, entityKey);
             return false;
         }
 
         await _storage.ClearStateAsync(container, grainId, grainState);
-        _logger.LogDebug("Storage entity deleted: {Owner}/{Container}/{EntityKey}", owner, container, entityKey);
+        _logger.LogDebug("Storage entity deleted: {UserHandle}/{Container}/{EntityKey}", userHandle, container, entityKey);
         return true;
     }
 
-    private static GrainId BuildGrainId(string owner, string entityKey)
-        => GrainId.Create(GrainType.Create(EntityGrainType), $"{owner}:{entityKey}");
+    private static GrainId BuildGrainId(string userHandle, string entityKey)
+        => GrainId.Create(GrainType.Create(EntityGrainType), $"{userHandle}:{entityKey}");
 
-    private static void ValidateAddress(string owner, string container, string entityKey)
+    private static void ValidateAddress(string userHandle, string container, string entityKey)
     {
-        if (string.IsNullOrWhiteSpace(owner))
-            throw new ArgumentException("Owner cannot be null or empty.", nameof(owner));
+        if (string.IsNullOrWhiteSpace(userHandle))
+            throw new ArgumentException("User handle cannot be null or empty.", nameof(userHandle));
         if (string.IsNullOrWhiteSpace(container))
             throw new ArgumentException("Container cannot be null or empty.", nameof(container));
         if (string.IsNullOrWhiteSpace(entityKey))

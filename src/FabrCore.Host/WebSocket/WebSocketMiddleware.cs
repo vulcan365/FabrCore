@@ -59,7 +59,7 @@ namespace FabrCore.Host.WebSocket
                 // Run pluggable authentication. Default implementation preserves the
                 // pre-auth header/query behavior; production hosts register their own.
                 var authResult = await authenticator.AuthenticateAsync(context);
-                if (!authResult.Allowed || string.IsNullOrWhiteSpace(authResult.UserId))
+                if (!authResult.Allowed || string.IsNullOrWhiteSpace(authResult.UserHandle))
                 {
                     logger.LogWarning(
                         "WebSocket connection rejected by authenticator from {RemoteIp}: {Reason}",
@@ -73,11 +73,11 @@ namespace FabrCore.Host.WebSocket
                     return;
                 }
 
-                var userId = authResult.UserId;
-                activity?.SetTag("user.id", userId);
+                var userHandle = authResult.UserHandle;
+                activity?.SetTag("user.id", userHandle);
 
-                logger.LogInformation("WebSocket connection request from {RemoteIp} for user {UserId}",
-                    context.Connection.RemoteIpAddress, userId);
+                logger.LogInformation("WebSocket connection request from {RemoteIp} for user {userHandle}",
+                    context.Connection.RemoteIpAddress, userHandle);
 
                 try
                 {
@@ -87,11 +87,11 @@ namespace FabrCore.Host.WebSocket
                     // cardinality. Trace/activity tags still carry it for drill-down.
                     ConnectionsAcceptedCounter.Add(1);
 
-                    logger.LogInformation("WebSocket connection accepted for user {UserId}", userId);
+                    logger.LogInformation("WebSocket connection accepted for user {userHandle}", userHandle);
 
-                    // Create a new session with the user ID as the handle
+                    // Create a new session with the user handle as the handle
                     var sessionLogger = loggerFactory.CreateLogger<WebSocketSession>();
-                    var session = new WebSocketSession(webSocket, clusterClient, sessionLogger, userId, hostOptions.Value);
+                    var session = new WebSocketSession(webSocket, clusterClient, sessionLogger, userHandle, hostOptions.Value);
 
                     // Capture the upgrade-request's trace context (populated by ASP.NET Core
                     // from an incoming traceparent header, or from our own InvokeAsync activity)
@@ -115,7 +115,7 @@ namespace FabrCore.Host.WebSocket
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "Error handling WebSocket connection for user {UserId}", userId);
+                    logger.LogError(ex, "Error handling WebSocket connection for user {userHandle}", userHandle);
                     activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                     activity?.AddException(ex);
                     ErrorCounter.Add(1,

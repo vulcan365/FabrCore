@@ -29,6 +29,9 @@ namespace FabrCore.Host.Services
         public Task DeactivateAgentAsync(string key, string reason)
             => GetGrain().DeactivateAgent(key, reason);
 
+        public Task<bool> RemoveAgentAsync(string key)
+            => GetGrain().RemoveAgent(key);
+
         public Task RegisterClientAsync(string clientId)
             => GetGrain().RegisterClient(clientId);
 

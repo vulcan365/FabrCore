@@ -18,16 +18,16 @@ For secure connections: `wss://your-fabrcore-host/ws`
 
 ## Authentication
 
-**Required Header:** `x-fabrcore-userid`
+**Required Header:** `x-fabrcore-userhandle`
 
-The client handle is determined by the `x-fabrcore-userid` header sent during the WebSocket handshake. This header is required and cannot be empty.
+The client handle is determined by the `x-fabrcore-userhandle` header sent during the WebSocket handshake. This header is required and cannot be empty.
 
 **Example:**
 ```
-x-fabrcore-userid: user123
+x-fabrcore-userhandle: user123
 ```
 
-The session will automatically initialize and subscribe to the ClientGrain using this user ID upon connection.
+The session will automatically initialize and subscribe to the ClientGrain using this user handle upon connection.
 
 ## Message Format
 
@@ -116,14 +116,14 @@ Where the AgentConfiguration JSON structure is:
 
 The WebSocket session automatically manages the ClientGrain subscription:
 
-- **On Connect**: Automatically subscribes to ClientGrain using the user ID
+- **On Connect**: Automatically subscribes to ClientGrain using the user handle
 - **On Disconnect**: Automatically unsubscribes and cleans up resources
 
 You don't need to manually manage subscriptions or unsubscriptions.
 
 ## Sending Messages to Agents
 
-Once you've connected (with the `x-fabrcore-userid` header) and created an agent, you can send messages to agents.
+Once you've connected (with the `x-fabrcore-userhandle` header) and created an agent, you can send messages to agents.
 
 **Request:**
 ```json
@@ -185,7 +185,7 @@ For general errors:
 1. **Connect to WebSocket (with header)**
    ```
    Connect to ws://localhost:5000/ws
-   Header: x-fabrcore-userid: user123
+   Header: x-fabrcore-userhandle: user123
    ```
 
    The session automatically initializes and subscribes to the ClientGrain.
@@ -233,7 +233,7 @@ For general errors:
 **Note:** JavaScript WebSocket API doesn't support custom headers during the handshake. You have two options:
 
 1. **Use a WebSocket library that supports headers** (e.g., `ws` in Node.js)
-2. **Pass the user ID as a query parameter** and update the middleware to read from query string
+2. **Pass the user handle as a query parameter** and update the middleware to read from query string
 
 ### Option 1: Node.js with 'ws' library
 
@@ -242,7 +242,7 @@ const WebSocket = require('ws');
 
 const ws = new WebSocket('ws://localhost:5000/ws', {
   headers: {
-    'x-fabrcore-userid': 'user123'
+    'x-fabrcore-userhandle': 'user123'
   }
 });
 
@@ -292,12 +292,12 @@ function sendMessage(text) {
 
 ### Option 2: Browser with Query Parameter
 
-If you need to use the browser's native WebSocket API, pass the user ID as a query parameter:
+If you need to use the browser's native WebSocket API, pass the user handle as a query parameter:
 
 ```javascript
 // Note: This requires updating the middleware to read from query string
-const userId = 'user123';
-const ws = new WebSocket(`ws://localhost:5000/ws?userid=${userId}`);
+const userHandle = 'user123';
+const ws = new WebSocket(`ws://localhost:5000/ws?userhandle=${userHandle}`);
 
 ws.onopen = () => {
   console.log('Connected to FabrCore WebSocket');
@@ -323,7 +323,7 @@ The WebSocket implementation consists of:
 
 1. **WebSocketMiddleware** (`WebSocketMiddleware.cs`)
    - Handles incoming WebSocket connections at `/ws`
-   - Extracts user ID from header or query parameter
+   - Extracts user handle from header or query parameter
    - Creates WebSocketSession instances
    - Manages connection lifecycle
 
@@ -363,13 +363,13 @@ All operations are also traced via OpenTelemetry for distributed tracing.
 
 ## Troubleshooting
 
-### Connection Rejected - Missing x-fabrcore-userid Header
-- Ensure the `x-fabrcore-userid` header is sent during the WebSocket handshake
+### Connection Rejected - Missing x-fabrcore-userhandle Header
+- Ensure the `x-fabrcore-userhandle` header is sent during the WebSocket handshake
 - If using a browser's native WebSocket API, consider using query parameters instead
 - If using Node.js, use the `ws` library which supports headers
 
 ### Connection Rejected - Empty Header
-- Ensure the `x-fabrcore-userid` header has a non-empty value
+- Ensure the `x-fabrcore-userhandle` header has a non-empty value
 
 ### "Client not initialized" Error
 - This shouldn't occur if the connection was successful
@@ -393,11 +393,11 @@ A full-featured chat interface is available in Demo.Server:
 
 1. Start Demo.Server: `dotnet run` from `src/Demo.Server`
 2. Navigate to `http://localhost:5000/` (automatically redirects to chat)
-3. Enter your User ID and click "Connect"
+3. Enter your User handle and click "Connect"
 4. Create agents and start chatting immediately
 
 The chat interface includes:
-- User ID configuration for testing
+- User handle configuration for testing
 - Agent creation form
 - Real-time chat with message history
 - Visual message types (user, agent, system, error)

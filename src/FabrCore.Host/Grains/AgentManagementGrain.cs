@@ -101,6 +101,19 @@ namespace FabrCore.Host.Grains
             }
         }
 
+        public async Task<bool> RemoveAgent(string key)
+        {
+            if (!_state.State.Remove(key))
+            {
+                _logger.LogInformation("Agent not present in registry during removal: {Key}", key);
+                return false;
+            }
+
+            await _state.WriteStateAsync();
+            _logger.LogInformation("Removed agent from registry: {Key}", key);
+            return true;
+        }
+
         public Task<List<AgentInfo>> GetAllAgents()
         {
             return Task.FromResult(_state.State.Values.ToList());

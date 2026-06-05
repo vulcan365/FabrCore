@@ -164,7 +164,7 @@ namespace FabrCore.Client
         ///
         /// // In a Razor component, use CascadingValue to provide the manager:
         /// &lt;CascadingValue Value="@_dockManager"&gt;
-        ///     &lt;ChatDock UserHandle="@userId" AgentHandle="assistant" AgentType="MyAgent" /&gt;
+        ///     &lt;ChatDock UserHandle="@userHandle" AgentHandle="assistant" AgentType="MyAgent" /&gt;
         /// &lt;/CascadingValue&gt;
         /// </code>
         /// </remarks>

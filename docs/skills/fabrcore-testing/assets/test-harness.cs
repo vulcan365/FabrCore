@@ -140,7 +140,7 @@ public class FabrCoreTestHarness : IDisposable
     {
         var aliasAttr = typeof(TAgent).GetCustomAttributes(typeof(AgentAliasAttribute), false)
             .FirstOrDefault() as AgentAliasAttribute;
-        var alias = aliasAttr?.Alias ?? typeof(TAgent).Name.ToLowerInvariant();
+        var alias = aliasAttr?.AgentHandle ?? typeof(TAgent).Name.ToLowerInvariant();
 
         return new AgentConfiguration
         {

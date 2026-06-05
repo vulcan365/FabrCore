@@ -17,7 +17,7 @@ namespace FabrCore.Core.Acl
         /// <summary>Can read threads, state, and health.</summary>
         Read = 4,
 
-        /// <summary>Can modify ACL rules for this agent's owner.</summary>
+        /// <summary>Can modify ACL rules for this agent's user handle.</summary>
         Admin = 8,
 
         All = Message | Configure | Read | Admin

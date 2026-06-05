@@ -123,7 +123,7 @@ public class TestChatClientService : IFabrCoreChatClientService
     private string GetApiKeyValue(string alias)
     {
         var key = _liveConfig?.ApiKeys
-            .FirstOrDefault(k => k.Alias.Equals(alias, StringComparison.OrdinalIgnoreCase));
+            .FirstOrDefault(k => k.AgentHandle.Equals(alias, StringComparison.OrdinalIgnoreCase));
 
         return key?.Value ?? throw new InvalidOperationException(
             $"API key alias '{alias}' not found in fabrcore.json.");

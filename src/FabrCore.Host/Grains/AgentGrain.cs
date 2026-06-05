@@ -1,4 +1,4 @@
-﻿using FabrCore.Core;
+using FabrCore.Core;
 using FabrCore.Core.Interfaces;
 using FabrCore.Core.Monitoring;
 using FabrCore.Core.Streaming;
@@ -92,6 +92,7 @@ namespace FabrCore.Host.Grains
         private readonly Dictionary<string, IDisposable> _timers = new();
         private readonly Dictionary<string, (string MessageType, string? Message)> _timerMessages = new();
         private readonly Dictionary<string, (string MessageType, string? Message)> _reminderMessages = new();
+        private bool _isEvicting;
 
         // Health tracking state
         private DateTime? _configuredAt;
@@ -181,21 +182,28 @@ namespace FabrCore.Host.Grains
             logger.LogInformation("AgentGrain deactivating: {Key}, Reason: {Reason}",
                 this.GetPrimaryKeyString(), reason.Description);
 
-            // Flush any pending messages from active stores before deactivation
-            await FlushAllChatHistoryProvidersAsync();
-
-            // Flush any pending custom state changes before deactivation
-            if (fabrcoreAgentProxy != null && fabrcoreAgentProxy.InternalHasPendingStateChanges)
+            if (!_isEvicting)
             {
-                try
+                // Flush any pending messages from active stores before deactivation
+                await FlushAllChatHistoryProvidersAsync();
+
+                // Flush any pending custom state changes before deactivation
+                if (fabrcoreAgentProxy != null && fabrcoreAgentProxy.InternalHasPendingStateChanges)
                 {
-                    await fabrcoreAgentProxy.InternalFlushStateAsync();
-                    logger.LogDebug("Flushed pending custom state changes");
+                    try
+                    {
+                        await fabrcoreAgentProxy.InternalFlushStateAsync();
+                        logger.LogDebug("Flushed pending custom state changes");
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Failed to flush custom state changes");
+                    }
                 }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "Failed to flush custom state changes");
-                }
+            }
+            else
+            {
+                logger.LogDebug("Skipping state flush during agent eviction: {Key}", this.GetPrimaryKeyString());
             }
 
             // Dispose MCP clients
@@ -212,7 +220,7 @@ namespace FabrCore.Host.Grains
             }
 
             // Notify management provider of deactivation
-            if (agentConfiguration != null)
+            if (agentConfiguration != null && !_isEvicting)
             {
                 try
                 {
@@ -258,6 +266,9 @@ namespace FabrCore.Host.Grains
             bool forceReconfigure = false,
             HealthDetailLevel detailLevel = HealthDetailLevel.Basic)
         {
+            if (_isEvicting)
+                throw new InvalidOperationException("Agent is being evicted and cannot be configured.");
+
             using var activity = ActivitySource.StartActivity("ConfigureAgent", ActivityKind.Internal);
             activity?.SetTag("agent.type", config.AgentType);
             activity?.SetTag("agent.handle", config.Handle);
@@ -527,6 +538,189 @@ namespace FabrCore.Host.Grains
             }
         }
 
+        public async Task<AgentEvictionResult> EvictAgent()
+        {
+            using var activity = ActivitySource.StartActivity("EvictAgent", ActivityKind.Internal);
+            var handle = this.GetPrimaryKeyString();
+            activity?.SetTag("agent.handle", handle);
+
+            if (fabrcoreAgentProxy?.InternalIsProcessingMessage == true)
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, "Agent is actively processing");
+                throw new InvalidOperationException("Agent is actively processing a message and cannot be evicted.");
+            }
+
+            logger.LogInformation("Evicting agent: {Handle}", handle);
+            _isEvicting = true;
+
+            var existed = agentConfiguration != null
+                || fabrcoreAgentProxy != null
+                || _messageState.State.Configuration != null
+                || _messageState.State.MessageThreads.Count > 0
+                || _messageState.State.CustomState.Count > 0
+                || _timers.Count > 0
+                || _reminderMessages.Count > 0;
+
+            try
+            {
+                var timersDisposed = DisposeAllTimers();
+                var remindersUnregistered = await UnregisterAllRemindersAsync();
+                var streamSubscriptionsRemoved = await UnsubscribeFromAllStreamsAsync();
+
+                if (fabrcoreAgentProxy != null)
+                {
+                    await fabrcoreAgentProxy.InternalDisposeAsync();
+                }
+
+                fabrcoreAgentProxy = null;
+                agentConfiguration = null;
+                _activeChatHistoryProviders.Clear();
+
+                await _messageState.ClearStateAsync();
+                var registryRemoved = await _agentService.RemoveAgentAsync(handle);
+                existed = existed || registryRemoved || timersDisposed > 0 || remindersUnregistered > 0 || streamSubscriptionsRemoved > 0;
+
+                DeactivateOnIdle();
+
+                activity?.SetStatus(ActivityStatusCode.Ok);
+                logger.LogInformation(
+                    "Agent evicted: {Handle}, Timers: {Timers}, Reminders: {Reminders}, Streams: {Streams}, RegistryRemoved: {RegistryRemoved}",
+                    handle, timersDisposed, remindersUnregistered, streamSubscriptionsRemoved, registryRemoved);
+
+                return new AgentEvictionResult
+                {
+                    Handle = handle,
+                    Success = true,
+                    Existed = existed,
+                    Message = existed ? "Agent evicted." : "Agent was not present.",
+                    TimersDisposed = timersDisposed,
+                    RemindersUnregistered = remindersUnregistered,
+                    StreamSubscriptionsRemoved = streamSubscriptionsRemoved,
+                    StateCleared = true,
+                    RegistryRemoved = registryRemoved,
+                    Timestamp = DateTime.UtcNow
+                };
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to evict agent: {Handle}", handle);
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                activity?.AddException(ex);
+                ErrorCounter.Add(1,
+                    new KeyValuePair<string, object?>("error.type", "eviction_failed"));
+                _isEvicting = false;
+                throw;
+            }
+        }
+
+        private int DisposeAllTimers()
+        {
+            var disposed = 0;
+
+            foreach (var timer in _timers.Values.ToList())
+            {
+                timer.Dispose();
+                disposed++;
+            }
+
+            _timers.Clear();
+            _timerMessages.Clear();
+            return disposed;
+        }
+
+        private async Task<int> UnregisterAllRemindersAsync()
+        {
+            var reminders = await this.GetReminders();
+            var unregistered = 0;
+
+            foreach (var reminder in reminders.ToList())
+            {
+                await this.UnregisterReminder(reminder);
+                unregistered++;
+                logger.LogDebug("Unregistered reminder during eviction: {ReminderName}", reminder.ReminderName);
+            }
+
+            _reminderMessages.Clear();
+            return unregistered;
+        }
+
+        private async Task<int> UnsubscribeFromAllStreamsAsync()
+        {
+            var removed = 0;
+
+            foreach (var streamName in GetConfiguredStreamNames())
+            {
+                removed += streamName.IsAgentEvent
+                    ? await UnsubscribeFromEventStreamAsync(streamName)
+                    : await UnsubscribeFromChatStreamAsync(streamName);
+            }
+
+            return removed;
+        }
+
+        private List<StreamName> GetConfiguredStreamNames()
+        {
+            var handle = this.GetPrimaryKeyString();
+            var streamNames = new List<StreamName>
+            {
+                StreamName.ForAgentChat(handle),
+                StreamName.ForAgentEvent(handle)
+            };
+
+            var configuredStreams = agentConfiguration?.Streams
+                ?? _messageState.State.Configuration?.Streams
+                ?? new List<string>();
+
+            foreach (var streamConfig in configuredStreams)
+            {
+                try
+                {
+                    var parsedStream = StreamName.ParseConfigEntry(streamConfig);
+                    if (!streamNames.Contains(parsedStream))
+                    {
+                        streamNames.Add(parsedStream);
+                    }
+                }
+                catch (Exception ex) when (ex is FormatException or ArgumentException)
+                {
+                    logger.LogWarning("Invalid stream config during eviction: {StreamConfig} - {Error}",
+                        streamConfig, ex.Message);
+                }
+            }
+
+            return streamNames;
+        }
+
+        private async Task<int> UnsubscribeFromChatStreamAsync(StreamName streamName)
+        {
+            var stream = this.GetStream<AgentMessage>(streamName);
+            var handles = await stream.GetAllSubscriptionHandles();
+            var removed = 0;
+
+            foreach (var handle in handles.ToList())
+            {
+                await handle.UnsubscribeAsync();
+                removed++;
+            }
+
+            return removed;
+        }
+
+        private async Task<int> UnsubscribeFromEventStreamAsync(StreamName streamName)
+        {
+            var stream = this.GetStream<EventMessage>(streamName);
+            var handles = await stream.GetAllSubscriptionHandles();
+            var removed = 0;
+
+            foreach (var handle in handles.ToList())
+            {
+                await handle.UnsubscribeAsync();
+                removed++;
+            }
+
+            return removed;
+        }
+
         /// <summary>
         /// Messages that have been processing for longer than this threshold are considered stale.
         /// A new message arriving while a stale primary is running will be treated as a fresh primary
@@ -536,6 +730,9 @@ namespace FabrCore.Host.Grains
 
         public async Task<AgentMessage> OnMessage(AgentMessage request)
         {
+            if (_isEvicting)
+                throw new InvalidOperationException("Agent is being evicted.");
+
             if (fabrcoreAgentProxy == null)
                 throw new InvalidOperationException("Agent has not been configured. Call ConfigureAgent first.");
 
@@ -603,7 +800,9 @@ namespace FabrCore.Host.Grains
                     TraceId = request.TraceId
                 }).TrackRecording(logger, ErrorCounter, "RecordMessage.Inbound", handle);
 
-                var response = await fabrcoreAgentProxy.InternalOnMessage(request);
+                var agentProxy = fabrcoreAgentProxy
+                    ?? throw new InvalidOperationException("Agent has not been configured. Call ConfigureAgent first.");
+                var response = await agentProxy.InternalOnMessage(request);
 
                 // Stop heartbeat
                 heartbeatCts.Cancel();
@@ -972,16 +1171,16 @@ namespace FabrCore.Host.Grains
             return handle;
         }
 
-        public (string Owner, string AgentHandle) GetParsedHandle()
+        public (string UserHandle, string AgentHandle) GetParsedHandle()
             => HandleUtilities.ParseHandle(this.GetPrimaryKeyString());
 
-        public string GetOwnerHandle()
-            => HandleUtilities.ParseHandle(this.GetPrimaryKeyString()).Owner;
+        public string GetUserHandle()
+            => HandleUtilities.ParseHandle(this.GetPrimaryKeyString()).UserHandle;
 
         public string GetAgentHandle()
-            => HandleUtilities.ParseHandle(this.GetPrimaryKeyString()).Alias;
+            => HandleUtilities.ParseHandle(this.GetPrimaryKeyString()).AgentHandle;
 
-        public bool HasOwner()
+        public bool HasUserHandle()
             => this.GetPrimaryKeyString().Contains(':');
 
         public async Task<AgentHealthStatus> GetAgentHealth(string? handle = null, HealthDetailLevel detailLevel = HealthDetailLevel.Detailed)
@@ -1020,8 +1219,8 @@ namespace FabrCore.Host.Grains
         }
 
         /// <summary>
-        /// Resolves a target agent handle. If it already contains ':', uses as-is (fully qualified or cross-owner).
-        /// Otherwise, prefixes with this agent's owner to form a fully-qualified handle.
+        /// Resolves a target agent handle. If it already contains ':', uses as-is (fully qualified or cross-user).
+        /// Otherwise, prefixes with this agent's user handle to form a fully-qualified handle.
         /// </summary>
         private string ResolveTargetHandle(string? handle)
         {
@@ -1037,17 +1236,17 @@ namespace FabrCore.Host.Grains
                 return handle;
             }
 
-            var ownerId = myHandle.Contains(':') ? myHandle[..myHandle.IndexOf(':')] : myHandle;
+            var userHandle = myHandle.Contains(':') ? myHandle[..myHandle.IndexOf(':')] : myHandle;
 
-            // Target IS the owner (client handle) — don't prefix it
-            if (handle == ownerId)
+            // Target IS the user handle (client handle) - don't prefix it
+            if (handle == userHandle)
             {
-                logger.LogDebug("ResolveTargetHandle: '{Handle}' matches owner, routing to client (agent: {MyHandle})", handle, myHandle);
+                logger.LogDebug("ResolveTargetHandle: '{Handle}' matches user handle, routing to client (agent: {MyHandle})", handle, myHandle);
                 return handle;
             }
 
-            // Bare agent alias — prefix with owner
-            var prefix = HandleUtilities.BuildPrefix(ownerId);
+            // Bare agent handle - prefix with user handle
+            var prefix = HandleUtilities.BuildPrefix(userHandle);
             var resolved = HandleUtilities.EnsurePrefix(handle, prefix);
             logger.LogDebug("ResolveTargetHandle: '{Handle}' resolved to '{Resolved}' (agent: {MyHandle})", handle, resolved, myHandle);
             return resolved;
@@ -1061,7 +1260,7 @@ namespace FabrCore.Host.Grains
                 request.FromHandle = this.GetPrimaryKeyString();
             }
 
-            // Resolve ToHandle - if bare alias, prefix with this agent's owner.
+            // Resolve ToHandle - if bare agent handle, prefix with this agent's user handle.
             // Skip for Response messages (see SendMessage comment for rationale).
             if (request.Kind != MessageKind.Response)
             {
@@ -1078,6 +1277,9 @@ namespace FabrCore.Host.Grains
 
             try
             {
+                if (string.IsNullOrWhiteSpace(request.ToHandle))
+                    throw new InvalidOperationException("Message ToHandle is required for agent-to-agent communication.");
+
                 var agentProxy = clusterClient.GetGrain<IAgentGrain>(request.ToHandle);
                 var response = await agentProxy.OnMessage(request);
                 LlmUsageScope.Current?.MergeFromArgs(response.Args);
@@ -1106,11 +1308,11 @@ namespace FabrCore.Host.Grains
                 request.FromHandle = this.GetPrimaryKeyString();
             }
 
-            // Resolve ToHandle - if bare alias, prefix with this agent's owner.
+            // Resolve ToHandle - if bare agent handle, prefix with this agent's user handle.
             // Skip resolution for Response messages — the ToHandle was already set
             // correctly by Response() (from the original FromHandle). Re-resolving
-            // would incorrectly prefix a client handle with this agent's owner
-            // (e.g., "default-user" → "system:default-user" for a system-owned agent).
+            // would incorrectly prefix a client handle with this agent's user handle
+            // (e.g., "default-user" -> "system:default-user" for a system user agent).
             if (request.Kind != MessageKind.Response)
             {
                 request.ToHandle = ResolveTargetHandle(request.ToHandle);
@@ -1373,6 +1575,12 @@ namespace FabrCore.Host.Grains
         // IRemindable implementation
         public async Task ReceiveReminder(string reminderName, TickStatus status)
         {
+            if (_isEvicting)
+            {
+                logger.LogDebug("Ignoring reminder during eviction: {ReminderName}", reminderName);
+                return;
+            }
+
             using var activity = ActivitySource.StartActivity("ReceiveReminder", ActivityKind.Internal);
             activity?.SetTag("reminder.name", reminderName);
             activity?.SetTag("reminder.current_tick", status.CurrentTickTime);
@@ -1409,6 +1617,12 @@ namespace FabrCore.Host.Grains
 
         private async Task OnTimerTick(string timerName)
         {
+            if (_isEvicting)
+            {
+                logger.LogDebug("Ignoring timer during eviction: {TimerName}", timerName);
+                return;
+            }
+
             using var activity = ActivitySource.StartActivity("OnTimerTick", ActivityKind.Internal);
             activity?.SetTag("timer.name", timerName);
 
@@ -1620,6 +1834,12 @@ namespace FabrCore.Host.Grains
 
         private async Task ReceivedChatMessage(AgentMessage request, StreamSequenceToken? token = null)
         {
+            if (_isEvicting)
+            {
+                logger.LogDebug("Ignoring chat stream message during eviction: {AgentMessage}", SerializeForLog(request));
+                return;
+            }
+
             using var activity = ActivitySource.StartActivity("ReceivedChatMessage", ActivityKind.Consumer);
             activity?.SetTag("message.from", request.FromHandle);
             activity?.SetTag("message.to", request.ToHandle);
@@ -1694,6 +1914,13 @@ namespace FabrCore.Host.Grains
 
         private async Task ReceivedEventMessage(EventMessage request, StreamSequenceToken? token = null)
         {
+            if (_isEvicting)
+            {
+                logger.LogDebug("Ignoring event stream message during eviction: Type={EventType}, Source={Source}",
+                    request.Type, request.Source);
+                return;
+            }
+
             using var activity = ActivitySource.StartActivity("ReceivedEventMessage", ActivityKind.Consumer);
             activity?.SetTag("event.source", request.Source);
             activity?.SetTag("event.type", request.Type);

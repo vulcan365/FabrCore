@@ -13,7 +13,7 @@ namespace FabrCore.Client
     /// All messages are automatically marked as OneWay since there is no mechanism to receive responses.
     /// <para>
     /// <strong>Important:</strong> This sender performs no handle normalization. All handles must be
-    /// fully-qualified in <c>"owner:agent"</c> format. Bare aliases will be rejected with an
+    /// fully-qualified in <c>"userHandle:agentHandle"</c> format. Bare agent handles will be rejected with an
     /// <see cref="ArgumentException"/>.
     /// </para>
     /// </summary>
@@ -54,7 +54,7 @@ namespace FabrCore.Client
 
             if (!message.ToHandle.Contains(':'))
                 throw new ArgumentException(
-                    $"DirectMessageSender requires fully-qualified handles (owner:agent). Got '{message.ToHandle}'. " +
+                    $"DirectMessageSender requires fully-qualified handles (userHandle:agentHandle). Got '{message.ToHandle}'. " +
                     "Use ClientContext.SendMessage for automatic handle resolution.", nameof(message));
 
             using var activity = ActivitySource.StartActivity("SendDirectMessage", ActivityKind.Producer);
@@ -106,7 +106,7 @@ namespace FabrCore.Client
 
             if (streamName == null && !message.Channel!.Contains(':'))
                 throw new ArgumentException(
-                    $"DirectMessageSender requires fully-qualified handles (owner:agent). Got '{message.Channel}'. " +
+                    $"DirectMessageSender requires fully-qualified handles (userHandle:agentHandle). Got '{message.Channel}'. " +
                     "Use ClientContext.SendEvent for automatic handle resolution.", nameof(message));
 
             using var activity = ActivitySource.StartActivity("SendDirectEvent", ActivityKind.Producer);

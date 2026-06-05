@@ -197,15 +197,15 @@ private readonly Dictionary<string, (AIAgent Agent, AgentSession Session)> _user
 
 public override async Task<AgentMessage> OnMessage(AgentMessage message)
 {
-    var userId = message.FromHandle ?? "anonymous";
-    if (!_userSessions.TryGetValue(userId, out var session))
+    var userHandle = message.FromHandle ?? "anonymous";
+    if (!_userSessions.TryGetValue(userHandle, out var session))
     {
         var result = await CreateChatClientAgent(
             config.Models ?? "default",
-            threadId: $"{config.Handle}-{userId}",
+            threadId: $"{config.Handle}-{userHandle}",
             tools: await ResolveConfiguredToolsAsync());
         session = (result.Agent, result.Session);
-        _userSessions[userId] = session;
+        _userSessions[userHandle] = session;
     }
 
     var response = message.Response();

@@ -8,19 +8,15 @@ namespace FabrCore.Core.Acl
     /// </summary>
     public interface IAclProvider
     {
-        // ── Evaluation ──
-
         /// <summary>
-        /// Evaluates whether <paramref name="callerOwner"/> has the <paramref name="required"/> permission
-        /// on the agent identified by <paramref name="targetOwner"/>:<paramref name="agentAlias"/>.
+        /// Evaluates whether <paramref name="callerUserHandle"/> has the <paramref name="required"/> permission
+        /// on the agent identified by <paramref name="targetUserHandle"/>:<paramref name="agentHandle"/>.
         /// </summary>
         Task<AclEvaluationResult> EvaluateAsync(
-            string callerOwner,
-            string targetOwner,
-            string agentAlias,
+            string callerUserHandle,
+            string targetUserHandle,
+            string agentHandle,
             AclPermission required);
-
-        // ── Rule Management ──
 
         /// <summary>Gets all configured ACL rules.</summary>
         Task<List<AclRule>> GetRulesAsync();
@@ -30,8 +26,6 @@ namespace FabrCore.Core.Acl
 
         /// <summary>Removes an ACL rule.</summary>
         Task RemoveRuleAsync(AclRule rule);
-
-        // ── Group Management ──
 
         /// <summary>Gets all groups and their members.</summary>
         Task<Dictionary<string, HashSet<string>>> GetGroupsAsync();

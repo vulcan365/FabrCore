@@ -23,7 +23,7 @@ namespace FabrCore.Client
         /// Creates a new client context with the specified handle.
         /// The returned context is fully initialized and ready to use.
         /// </summary>
-        /// <param name="handle">The unique handle/identifier for this client (typically a user ID).</param>
+        /// <param name="handle">The unique handle/identifier for this client (typically a user handle).</param>
         /// <param name="cancellationToken">Optional cancellation token.</param>
         /// <returns>A fully initialized client context. The caller is responsible for disposing this context.</returns>
         /// <exception cref="ArgumentNullException">Thrown when handle is null or empty.</exception>
@@ -38,7 +38,7 @@ namespace FabrCore.Client
         /// Gets an existing context for the specified handle, or creates a new one if none exists.
         /// The context is cached and shared across all callers with the same handle.
         /// </summary>
-        /// <param name="handle">The unique handle/identifier for this client (typically a user ID).</param>
+        /// <param name="handle">The unique handle/identifier for this client (typically a user handle).</param>
         /// <param name="cancellationToken">Optional cancellation token.</param>
         /// <returns>A fully initialized client context. This context is managed by the factory and should NOT be disposed by the caller.</returns>
         /// <exception cref="ArgumentNullException">Thrown when handle is null or empty.</exception>

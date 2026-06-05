@@ -255,7 +255,7 @@ namespace FabrCore.Host
 
                 // Configure typed entity storage over the configured Orleans grain storage provider.
                 builder.Services.AddSingleton<OrleansEntityStorageProvider>();
-                builder.Services.AddSingleton<IOwnerScopedFabrCoreStorageProvider>(sp =>
+                builder.Services.AddSingleton<IUserScopedFabrCoreStorageProvider>(sp =>
                     sp.GetRequiredService<OrleansEntityStorageProvider>());
                 builder.Services.AddSingleton<IFabrCoreStorageProvider>(sp =>
                     sp.GetRequiredService<OrleansEntityStorageProvider>());

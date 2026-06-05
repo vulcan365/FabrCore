@@ -9,11 +9,11 @@ namespace FabrCore.Host.Api.Controllers;
 [Route("fabrcoreapi/[controller]")]
 public class StorageController : ControllerBase
 {
-    private readonly IOwnerScopedFabrCoreStorageProvider _storageProvider;
+    private readonly IUserScopedFabrCoreStorageProvider _storageProvider;
     private readonly ILogger<StorageController> _logger;
 
     public StorageController(
-        IOwnerScopedFabrCoreStorageProvider storageProvider,
+        IUserScopedFabrCoreStorageProvider storageProvider,
         ILogger<StorageController> logger)
     {
         _storageProvider = storageProvider;
@@ -22,17 +22,17 @@ public class StorageController : ControllerBase
 
     [HttpGet("{container}/{*entityKey}")]
     public async Task<IActionResult> GetStorageEntity(
-        [FromHeader(Name = "x-user")] string owner,
+        [FromHeader(Name = "x-user-handle")] string userHandle,
         [FromRoute] string container,
         [FromRoute] string entityKey,
         CancellationToken cancellationToken)
     {
-        if (!TryValidateAddress(owner, container, entityKey, out var validationResult))
+        if (!TryValidateAddress(userHandle, container, entityKey, out var validationResult))
             return validationResult;
 
         try
         {
-            var value = await _storageProvider.GetAsync<JsonElement>(owner, container, entityKey, cancellationToken);
+            var value = await _storageProvider.GetAsync<JsonElement>(userHandle, container, entityKey, cancellationToken);
             if (value.ValueKind == JsonValueKind.Undefined)
                 return NotFound();
 
@@ -40,20 +40,20 @@ public class StorageController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting storage entity {Owner}/{Container}/{EntityKey}", owner, container, entityKey);
+            _logger.LogError(ex, "Error getting storage entity {UserHandle}/{Container}/{EntityKey}", userHandle, container, entityKey);
             return StatusCode(500, "Error getting storage entity");
         }
     }
 
     [HttpPut("{container}/{*entityKey}")]
     public async Task<IActionResult> UpsertStorageEntity(
-        [FromHeader(Name = "x-user")] string owner,
+        [FromHeader(Name = "x-user-handle")] string userHandle,
         [FromRoute] string container,
         [FromRoute] string entityKey,
         [FromBody] JsonElement value,
         CancellationToken cancellationToken)
     {
-        if (!TryValidateAddress(owner, container, entityKey, out var validationResult))
+        if (!TryValidateAddress(userHandle, container, entityKey, out var validationResult))
             return validationResult;
 
         if (value.ValueKind == JsonValueKind.Undefined)
@@ -61,47 +61,47 @@ public class StorageController : ControllerBase
 
         try
         {
-            await _storageProvider.UpsertAsync(owner, container, entityKey, value, cancellationToken);
+            await _storageProvider.UpsertAsync(userHandle, container, entityKey, value, cancellationToken);
             return NoContent();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error upserting storage entity {Owner}/{Container}/{EntityKey}", owner, container, entityKey);
+            _logger.LogError(ex, "Error upserting storage entity {UserHandle}/{Container}/{EntityKey}", userHandle, container, entityKey);
             return StatusCode(500, "Error upserting storage entity");
         }
     }
 
     [HttpDelete("{container}/{*entityKey}")]
     public async Task<IActionResult> DeleteStorageEntity(
-        [FromHeader(Name = "x-user")] string owner,
+        [FromHeader(Name = "x-user-handle")] string userHandle,
         [FromRoute] string container,
         [FromRoute] string entityKey,
         CancellationToken cancellationToken)
     {
-        if (!TryValidateAddress(owner, container, entityKey, out var validationResult))
+        if (!TryValidateAddress(userHandle, container, entityKey, out var validationResult))
             return validationResult;
 
         try
         {
-            var deleted = await _storageProvider.DeleteAsync(owner, container, entityKey, cancellationToken);
+            var deleted = await _storageProvider.DeleteAsync(userHandle, container, entityKey, cancellationToken);
             return deleted ? NoContent() : NotFound();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error deleting storage entity {Owner}/{Container}/{EntityKey}", owner, container, entityKey);
+            _logger.LogError(ex, "Error deleting storage entity {UserHandle}/{Container}/{EntityKey}", userHandle, container, entityKey);
             return StatusCode(500, "Error deleting storage entity");
         }
     }
 
     private static bool TryValidateAddress(
-        string owner,
+        string userHandle,
         string container,
         string entityKey,
         out IActionResult result)
     {
-        if (string.IsNullOrWhiteSpace(owner))
+        if (string.IsNullOrWhiteSpace(userHandle))
         {
-            result = new BadRequestObjectResult("x-user header is required.");
+            result = new BadRequestObjectResult("x-user-handle header is required.");
             return false;
         }
 

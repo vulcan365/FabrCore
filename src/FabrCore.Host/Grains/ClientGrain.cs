@@ -1,4 +1,4 @@
-﻿using Azure.Data.Tables;
+using Azure.Data.Tables;
 using FabrCore.Core;
 using FabrCore.Core.Acl;
 using FabrCore.Core.Interfaces;
@@ -190,7 +190,7 @@ namespace FabrCore.Host.Grains
             // Resolve the ToHandle - if it contains ':', use as-is; otherwise prefix with client ID
             var resolvedToHandle = ResolveAgentHandle(request.ToHandle, clientId);
 
-            // ACL check for cross-owner access
+            // ACL check for cross-user access
             await AuthorizeOrThrow(resolvedToHandle, AclPermission.Message);
 
             // Defense-in-depth: ensure FromHandle is set so the agent can route responses back
@@ -248,7 +248,7 @@ namespace FabrCore.Host.Grains
             // Resolve the ToHandle - if it contains ':', use as-is; otherwise prefix with client ID
             var resolvedToHandle = ResolveAgentHandle(request.ToHandle, clientId);
 
-            // ACL check for cross-owner access
+            // ACL check for cross-user access
             await AuthorizeOrThrow(resolvedToHandle, AclPermission.Message);
 
             // Defense-in-depth: ensure FromHandle is set so the agent can route responses back
@@ -320,7 +320,7 @@ namespace FabrCore.Host.Grains
                     // Default agent event stream — resolve handle from Channel
                     var resolvedChannel = ResolveAgentHandle(request.Channel, clientId);
 
-                    // ACL check for cross-owner event delivery
+                    // ACL check for cross-user event delivery
                     await AuthorizeOrThrow(resolvedChannel, AclPermission.Message);
 
                     request.Channel = resolvedChannel;
@@ -606,13 +606,13 @@ namespace FabrCore.Host.Grains
             var clientId = this.GetPrimaryKeyString();
             var originalHandle = agentConfiguration.Handle;
 
-            // Normalize handle to prevent double-prefixing (e.g., if caller passes "owner:agent")
+            // Normalize handle to prevent double-prefixing (e.g., if caller passes "userHandle:agentHandle")
             var handlePrefix = HandleUtilities.BuildPrefix(clientId);
             agentConfiguration.Handle = HandleUtilities.EnsurePrefix(
                 agentConfiguration.Handle ?? throw new ArgumentException("Handle is required"),
                 handlePrefix);
 
-            // ACL check for cross-owner agent creation
+            // ACL check for cross-user agent creation
             await AuthorizeOrThrow(agentConfiguration.Handle, AclPermission.Configure);
 
             activity?.SetTag("client.id", clientId);
@@ -713,6 +713,33 @@ namespace FabrCore.Host.Grains
             }
         }
 
+        public async Task<bool> UntrackAgent(string handle)
+        {
+            var clientId = this.GetPrimaryKeyString();
+            var resolvedHandle = ResolveAgentHandle(handle, clientId);
+
+            await AuthorizeOrThrow(resolvedHandle, AclPermission.Configure);
+
+            var removed = _trackedAgents.Remove(resolvedHandle);
+            var stateRemoved = _state.State.TrackedAgents.Remove(resolvedHandle);
+
+            if (removed || stateRemoved)
+            {
+                _state.State.LastModified = DateTime.UtcNow;
+                await _state.WriteStateAsync();
+
+                logger.LogInformation("Removed tracked agent - ClientId: {ClientId}, Handle: {Handle}",
+                    clientId, resolvedHandle);
+            }
+            else
+            {
+                logger.LogInformation("Tracked agent not present during removal - ClientId: {ClientId}, Handle: {Handle}",
+                    clientId, resolvedHandle);
+            }
+
+            return removed || stateRemoved;
+        }
+
         /// <summary>
         /// For tracked agents: try GetHealth first, only ConfigureAgent if NotConfigured or on error.
         /// </summary>
@@ -807,13 +834,13 @@ namespace FabrCore.Host.Grains
 
             foreach (var agent in allAgents)
             {
-                var (owner, alias) = HandleUtilities.ParseHandle(agent.Key);
+                var (targetUserHandle, agentHandle) = HandleUtilities.ParseHandle(agent.Key);
 
                 // Skip own agents (already tracked via GetTrackedAgents)
-                if (string.Equals(clientId, owner, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(clientId, targetUserHandle, StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                var result = await _aclProvider.EvaluateAsync(clientId, owner, alias, AclPermission.Message);
+                var result = await _aclProvider.EvaluateAsync(clientId, targetUserHandle, agentHandle, AclPermission.Message);
                 if (result.Allowed)
                     accessible.Add(agent);
             }
@@ -822,18 +849,18 @@ namespace FabrCore.Host.Grains
         }
 
         /// <summary>
-        /// Checks ACL permissions for cross-owner access. Own-agent access is always allowed.
+        /// Checks ACL permissions for cross-user access. Own-agent access is always allowed.
         /// </summary>
         private async Task AuthorizeOrThrow(string targetHandle, AclPermission required)
         {
             var clientId = this.GetPrimaryKeyString();
-            var (targetOwner, agentAlias) = HandleUtilities.ParseHandle(targetHandle);
+            var (targetUserHandle, agentHandle) = HandleUtilities.ParseHandle(targetHandle);
 
             // Own agents always allowed — short-circuit with zero overhead
-            if (string.Equals(clientId, targetOwner, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(clientId, targetUserHandle, StringComparison.OrdinalIgnoreCase))
                 return;
 
-            var result = await _aclProvider.EvaluateAsync(clientId, targetOwner, agentAlias, required);
+            var result = await _aclProvider.EvaluateAsync(clientId, targetUserHandle, agentHandle, required);
             if (!result.Allowed)
             {
                 logger.LogWarning("ACL denied: '{ClientId}' cannot {Permission} on '{TargetHandle}'. {Reason}",

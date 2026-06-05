@@ -252,7 +252,7 @@
 
     /// <summary>
     /// Additional arguments to pass to the agent configuration.
-    /// These are merged with the default args (userId is always included).
+    /// These are merged with the default args (userHandle is always included).
     /// </summary>
     [Parameter]
     public Dictionary<string, string>? AdditionalArgs { get; set; }
@@ -584,7 +584,7 @@
             }
             else if (AgentHandle.Contains(':'))
             {
-                // Step 2b: Cross-owner agent — not in this user's tracked list, but may
+                // Step 2b: Cross-user agent — not in this user's tracked list, but may
                 // exist server-side. GetAgentHealth goes directly to the grain.
                 try
                 {
@@ -593,27 +593,27 @@
                 catch (Exception ex)
                 {
                     // Agent grain doesn't exist or is unreachable — will be handled below
-                    Logger.LogDebug(ex, "Cross-owner agent health check failed for {AgentHandle}", AgentHandle);
+                    Logger.LogDebug(ex, "Cross-user agent health check failed for {AgentHandle}", AgentHandle);
                 }
             }
 
-            // Step 3: Create only if not configured AND this client owns the agent.
-            // Cross-owner agents (e.g., "system:automation_agent-123") must be created
+            // Step 3: Create only if not configured AND this agent belongs to the current user.
+            // Cross-user agents (e.g., "system:automation_agent-123") must be created
             // server-side — the ChatDock should never attempt to configure them.
-            var isCrossOwner = AgentHandle.Contains(':');
+            var isCrossUser = AgentHandle.Contains(':');
 
             if (_agentHealth is null || !_agentHealth.IsConfigured)
             {
-                if (isCrossOwner)
+                if (isCrossUser)
                 {
-                    // Cross-owner agent not configured — cannot create from here
+                    // Cross-user agent not configured — cannot create from here
                     _error = $"Shared agent '{AgentHandle}' is not configured. It must be created server-side.";
                     return;
                 }
 
                 var args = new Dictionary<string, string>
                 {
-                    { "userId", UserHandle }
+                    { "userHandle", UserHandle }
                 };
 
                 // Merge additional args if provided
@@ -683,7 +683,7 @@
     private void OnAgentMessageReceived(object? sender, AgentMessage message)
     {
         // Resolve the expected agent handle using centralized handle utilities.
-        // For cross-owner agents (handle contains ':'), use as-is since the agent's
+        // For cross-user agents (handle contains ':'), use as-is since the agent's
         // FromHandle will be its full handle (e.g., "system:automation_agent-123").
         var expectedFromHandle = AgentHandle.Contains(':')
             ? AgentHandle

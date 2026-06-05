@@ -44,13 +44,13 @@ namespace FabrCore.Host.Api.Controllers
 
         [HttpGet("messages")]
         public async Task<IActionResult> GetMessages(
-            [FromHeader(Name = "x-user")] string userId,
+            [FromHeader(Name = "x-user-handle")] string userHandle,
             [FromQuery] string? agentHandle = null,
             [FromQuery] int? limit = null,
             [FromQuery] DateTimeOffset? since = null,
             [FromQuery] string? direction = null)
         {
-            var authorization = await AuthorizeMonitorReadAsync(userId, agentHandle);
+            var authorization = await AuthorizeMonitorReadAsync(userHandle, agentHandle);
             if (authorization is not null) return authorization;
 
             var effectiveLimit = ClampLimit(limit);
@@ -65,7 +65,7 @@ namespace FabrCore.Host.Api.Controllers
             var messages = await _monitor.GetMessagesAsync(agentHandle, pullLimit);
 
             IEnumerable<MonitoredMessage> filtered = string.IsNullOrWhiteSpace(agentHandle)
-                ? await FilterMessagesAsync(userId, messages)
+                ? await FilterMessagesAsync(userHandle, messages)
                 : messages;
             if (since.HasValue)
                 filtered = filtered.Where(m => m.Timestamp >= since.Value);
@@ -78,12 +78,12 @@ namespace FabrCore.Host.Api.Controllers
 
         [HttpGet("events")]
         public async Task<IActionResult> GetEvents(
-            [FromHeader(Name = "x-user")] string userId,
+            [FromHeader(Name = "x-user-handle")] string userHandle,
             [FromQuery] string? agentHandle = null,
             [FromQuery] int? limit = null,
             [FromQuery] DateTimeOffset? since = null)
         {
-            var authorization = await AuthorizeMonitorReadAsync(userId, agentHandle);
+            var authorization = await AuthorizeMonitorReadAsync(userHandle, agentHandle);
             if (authorization is not null) return authorization;
 
             var effectiveLimit = ClampLimit(limit);
@@ -94,7 +94,7 @@ namespace FabrCore.Host.Api.Controllers
             var events = await _monitor.GetEventsAsync(agentHandle, pullLimit);
 
             IEnumerable<MonitoredEvent> filtered = string.IsNullOrWhiteSpace(agentHandle)
-                ? await FilterEventsAsync(userId, events)
+                ? await FilterEventsAsync(userHandle, events)
                 : events;
             if (since.HasValue)
                 filtered = filtered.Where(e => e.Timestamp >= since.Value);
@@ -105,13 +105,13 @@ namespace FabrCore.Host.Api.Controllers
 
         [HttpGet("llm-calls")]
         public async Task<IActionResult> GetLlmCalls(
-            [FromHeader(Name = "x-user")] string userId,
+            [FromHeader(Name = "x-user-handle")] string userHandle,
             [FromQuery] string? agentHandle = null,
             [FromQuery] int? limit = null,
             [FromQuery] DateTimeOffset? since = null,
             [FromQuery] bool? failedOnly = null)
         {
-            var authorization = await AuthorizeMonitorReadAsync(userId, agentHandle);
+            var authorization = await AuthorizeMonitorReadAsync(userHandle, agentHandle);
             if (authorization is not null) return authorization;
 
             var effectiveLimit = ClampLimit(limit);
@@ -124,7 +124,7 @@ namespace FabrCore.Host.Api.Controllers
             var calls = await _monitor.GetLlmCallsAsync(agentHandle, pullLimit);
 
             IEnumerable<MonitoredLlmCall> filtered = string.IsNullOrWhiteSpace(agentHandle)
-                ? await FilterLlmCallsAsync(userId, calls)
+                ? await FilterLlmCallsAsync(userHandle, calls)
                 : calls;
             if (since.HasValue)
                 filtered = filtered.Where(c => c.Timestamp >= since.Value);
@@ -142,13 +142,13 @@ namespace FabrCore.Host.Api.Controllers
         }
 
         [HttpGet("tokens")]
-        public async Task<IActionResult> GetAllTokenSummaries([FromHeader(Name = "x-user")] string userId)
+        public async Task<IActionResult> GetAllTokenSummaries([FromHeader(Name = "x-user-handle")] string userHandle)
         {
-            var authorization = RequireUser(userId);
+            var authorization = RequireUser(userHandle);
             if (authorization is not null) return authorization;
 
             var summaries = await _monitor.GetAllAgentTokenSummariesAsync();
-            summaries = await FilterTokenSummariesAsync(userId, summaries);
+            summaries = await FilterTokenSummariesAsync(userHandle, summaries);
 
             long totalIn = 0, totalOut = 0, totalReasoning = 0, totalCached = 0, totalCalls = 0, totalMessages = 0;
             foreach (var s in summaries)
@@ -183,9 +183,9 @@ namespace FabrCore.Host.Api.Controllers
         /// from configuration under <c>FabrCore:ModelPricing</c>).
         /// </summary>
         [HttpGet("costs")]
-        public async Task<IActionResult> GetCosts([FromHeader(Name = "x-user")] string userId)
+        public async Task<IActionResult> GetCosts([FromHeader(Name = "x-user-handle")] string userHandle)
         {
-            var authorization = RequireUser(userId);
+            var authorization = RequireUser(userHandle);
             if (authorization is not null) return authorization;
 
             if (_costCalculator is null)
@@ -200,7 +200,7 @@ namespace FabrCore.Host.Api.Controllers
             // Walk the recent LLM call buffer — cost must be attributed per (agent, model)
             // pair because token summaries don't track model mix.
             var calls = await _monitor.GetLlmCallsAsync(null, MaxLimit);
-            calls = await FilterLlmCallsAsync(userId, calls);
+            calls = await FilterLlmCallsAsync(userHandle, calls);
 
             var perAgentPerModel = calls
                 .Where(c => !string.IsNullOrEmpty(c.AgentHandle))
@@ -245,13 +245,13 @@ namespace FabrCore.Host.Api.Controllers
 
         [HttpGet("tokens/{agentHandle}")]
         public async Task<IActionResult> GetTokenSummary(
-            [FromHeader(Name = "x-user")] string userId,
+            [FromHeader(Name = "x-user-handle")] string userHandle,
             string agentHandle)
         {
             if (string.IsNullOrWhiteSpace(agentHandle))
                 return BadRequest(new { Error = "agentHandle is required" });
 
-            var authorization = await AuthorizeMonitorReadAsync(userId, agentHandle);
+            var authorization = await AuthorizeMonitorReadAsync(userHandle, agentHandle);
             if (authorization is not null) return authorization;
 
             var summary = await _monitor.GetAgentTokenSummaryAsync(agentHandle);
@@ -268,13 +268,13 @@ namespace FabrCore.Host.Api.Controllers
         /// </summary>
         [HttpGet("tool-calls")]
         public async Task<IActionResult> GetToolCalls(
-            [FromHeader(Name = "x-user")] string userId,
+            [FromHeader(Name = "x-user-handle")] string userHandle,
             [FromQuery] string? agentHandle = null,
             [FromQuery] string? toolName = null,
             [FromQuery] DateTimeOffset? since = null,
             [FromQuery] int? limit = null)
         {
-            var authorization = await AuthorizeMonitorReadAsync(userId, agentHandle);
+            var authorization = await AuthorizeMonitorReadAsync(userHandle, agentHandle);
             if (authorization is not null) return authorization;
 
             if (!_monitor.LlmCaptureOptions.CapturePayloads)
@@ -292,7 +292,7 @@ namespace FabrCore.Host.Api.Controllers
             var calls = await _monitor.GetLlmCallsAsync(agentHandle, MaxLimit);
 
             IEnumerable<MonitoredLlmCall> filtered = string.IsNullOrWhiteSpace(agentHandle)
-                ? await FilterLlmCallsAsync(userId, calls)
+                ? await FilterLlmCallsAsync(userHandle, calls)
                 : calls;
             if (since.HasValue)
                 filtered = filtered.Where(c => c.Timestamp >= since.Value);
@@ -333,12 +333,12 @@ namespace FabrCore.Host.Api.Controllers
         /// </summary>
         [HttpGet("errors")]
         public async Task<IActionResult> GetErrors(
-            [FromHeader(Name = "x-user")] string userId,
+            [FromHeader(Name = "x-user-handle")] string userHandle,
             [FromQuery] string? agentHandle = null,
             [FromQuery] DateTimeOffset? since = null,
             [FromQuery] int? limit = null)
         {
-            var authorization = await AuthorizeMonitorReadAsync(userId, agentHandle);
+            var authorization = await AuthorizeMonitorReadAsync(userHandle, agentHandle);
             if (authorization is not null) return authorization;
 
             var effectiveLimit = ClampLimit(limit);
@@ -346,7 +346,7 @@ namespace FabrCore.Host.Api.Controllers
             var calls = await _monitor.GetLlmCallsAsync(agentHandle, MaxLimit);
 
             IEnumerable<MonitoredLlmCall> visibleCalls = string.IsNullOrWhiteSpace(agentHandle)
-                ? await FilterLlmCallsAsync(userId, calls)
+                ? await FilterLlmCallsAsync(userHandle, calls)
                 : calls;
             IEnumerable<MonitoredLlmCall> failed = visibleCalls.Where(c => !string.IsNullOrEmpty(c.ErrorMessage));
             if (since.HasValue)
@@ -410,9 +410,9 @@ namespace FabrCore.Host.Api.Controllers
         /// Inspect current LLM capture configuration.
         /// </summary>
         [HttpGet("config")]
-        public IActionResult GetConfig([FromHeader(Name = "x-user")] string userId)
+        public IActionResult GetConfig([FromHeader(Name = "x-user-handle")] string userHandle)
         {
-            var authorization = RequireUser(userId);
+            var authorization = RequireUser(userHandle);
             if (authorization is not null) return authorization;
 
             var opts = _monitor.LlmCaptureOptions;
@@ -435,10 +435,10 @@ namespace FabrCore.Host.Api.Controllers
         /// </summary>
         [HttpPost("config")]
         public IActionResult SetConfig(
-            [FromHeader(Name = "x-user")] string userId,
+            [FromHeader(Name = "x-user-handle")] string userHandle,
             [FromBody] MonitorConfigUpdate update)
         {
-            var authorization = RequireUser(userId);
+            var authorization = RequireUser(userHandle);
             if (authorization is not null) return authorization;
 
             if (!IsRecordingAvailable)
@@ -502,16 +502,16 @@ namespace FabrCore.Host.Api.Controllers
             return limit.Value;
         }
 
-        private IActionResult? RequireUser(string? userId)
+        private IActionResult? RequireUser(string? userHandle)
         {
-            return string.IsNullOrWhiteSpace(userId)
-                ? BadRequest(new { Error = "x-user header is required for monitor access" })
+            return string.IsNullOrWhiteSpace(userHandle)
+                ? BadRequest(new { Error = "x-user-handle header is required for monitor access" })
                 : null;
         }
 
-        private async Task<IActionResult?> AuthorizeMonitorReadAsync(string? userId, string? agentHandle)
+        private async Task<IActionResult?> AuthorizeMonitorReadAsync(string? userHandle, string? agentHandle)
         {
-            var userResult = RequireUser(userId);
+            var userResult = RequireUser(userHandle);
             if (userResult is not null)
             {
                 return userResult;
@@ -522,41 +522,41 @@ namespace FabrCore.Host.Api.Controllers
                 return null;
             }
 
-            return await CanReadAgentAsync(userId!, agentHandle)
+            return await CanReadAgentAsync(userHandle!, agentHandle)
                 ? null
-                : StatusCode(403, new { Error = $"Access denied: '{userId}' cannot Read monitor data for '{agentHandle}'." });
+                : StatusCode(403, new { Error = $"Access denied: '{userHandle}' cannot Read monitor data for '{agentHandle}'." });
         }
 
-        private async Task<bool> CanReadAgentAsync(string userId, string? agentHandle)
+        private async Task<bool> CanReadAgentAsync(string userHandle, string? agentHandle)
         {
             if (string.IsNullOrWhiteSpace(agentHandle))
             {
                 return false;
             }
 
-            var (targetOwner, agentAlias) = HandleUtilities.ParseHandle(agentHandle);
-            if (string.IsNullOrWhiteSpace(targetOwner) || string.IsNullOrWhiteSpace(agentAlias))
+            var (targetUserHandle, targetAgentHandle) = HandleUtilities.ParseHandle(agentHandle);
+            if (string.IsNullOrWhiteSpace(targetUserHandle) || string.IsNullOrWhiteSpace(targetAgentHandle))
             {
                 return false;
             }
 
-            if (string.Equals(userId, targetOwner, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(userHandle, targetUserHandle, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
 
-            var result = await _aclProvider.EvaluateAsync(userId, targetOwner, agentAlias, AclPermission.Read);
+            var result = await _aclProvider.EvaluateAsync(userHandle, targetUserHandle, targetAgentHandle, AclPermission.Read);
             return result.Allowed;
         }
 
-        private async Task<List<MonitoredMessage>> FilterMessagesAsync(string userId, IEnumerable<MonitoredMessage> messages)
+        private async Task<List<MonitoredMessage>> FilterMessagesAsync(string userHandle, IEnumerable<MonitoredMessage> messages)
         {
             var visible = new List<MonitoredMessage>();
             var cache = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var message in messages)
             {
-                if (await AnyReadableHandleAsync(userId, MessageHandles(message), cache))
+                if (await AnyReadableHandleAsync(userHandle, MessageHandles(message), cache))
                 {
                     visible.Add(message);
                 }
@@ -565,14 +565,14 @@ namespace FabrCore.Host.Api.Controllers
             return visible;
         }
 
-        private async Task<List<MonitoredEvent>> FilterEventsAsync(string userId, IEnumerable<MonitoredEvent> events)
+        private async Task<List<MonitoredEvent>> FilterEventsAsync(string userHandle, IEnumerable<MonitoredEvent> events)
         {
             var visible = new List<MonitoredEvent>();
             var cache = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var monitoredEvent in events)
             {
-                if (await AnyReadableHandleAsync(userId, [monitoredEvent.AgentHandle], cache))
+                if (await AnyReadableHandleAsync(userHandle, [monitoredEvent.AgentHandle], cache))
                 {
                     visible.Add(monitoredEvent);
                 }
@@ -581,14 +581,14 @@ namespace FabrCore.Host.Api.Controllers
             return visible;
         }
 
-        private async Task<List<MonitoredLlmCall>> FilterLlmCallsAsync(string userId, IEnumerable<MonitoredLlmCall> calls)
+        private async Task<List<MonitoredLlmCall>> FilterLlmCallsAsync(string userHandle, IEnumerable<MonitoredLlmCall> calls)
         {
             var visible = new List<MonitoredLlmCall>();
             var cache = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var call in calls)
             {
-                if (await AnyReadableHandleAsync(userId, [call.AgentHandle], cache))
+                if (await AnyReadableHandleAsync(userHandle, [call.AgentHandle], cache))
                 {
                     visible.Add(call);
                 }
@@ -598,7 +598,7 @@ namespace FabrCore.Host.Api.Controllers
         }
 
         private async Task<List<AgentTokenSummary>> FilterTokenSummariesAsync(
-            string userId,
+            string userHandle,
             IEnumerable<AgentTokenSummary> summaries)
         {
             var visible = new List<AgentTokenSummary>();
@@ -606,7 +606,7 @@ namespace FabrCore.Host.Api.Controllers
 
             foreach (var summary in summaries)
             {
-                if (await AnyReadableHandleAsync(userId, [summary.AgentHandle], cache))
+                if (await AnyReadableHandleAsync(userHandle, [summary.AgentHandle], cache))
                 {
                     visible.Add(summary);
                 }
@@ -616,7 +616,7 @@ namespace FabrCore.Host.Api.Controllers
         }
 
         private async Task<bool> AnyReadableHandleAsync(
-            string userId,
+            string userHandle,
             IEnumerable<string?> handles,
             Dictionary<string, bool> cache)
         {
@@ -629,7 +629,7 @@ namespace FabrCore.Host.Api.Controllers
 
                 if (!cache.TryGetValue(handle, out var allowed))
                 {
-                    allowed = await CanReadAgentAsync(userId, handle);
+                    allowed = await CanReadAgentAsync(userHandle, handle);
                     cache[handle] = allowed;
                 }
 

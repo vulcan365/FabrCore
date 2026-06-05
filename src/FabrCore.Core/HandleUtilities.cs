@@ -3,71 +3,71 @@ namespace FabrCore.Core
     /// <summary>
     /// Utility methods for agent handle normalization.
     /// <para>
-    /// Handle format: <c>"owner:agentAlias"</c> (e.g., <c>"user123:assistant"</c>).
+    /// Handle format: <c>"userHandle:agentHandle"</c> (e.g., <c>"user123:assistant"</c>).
     /// </para>
     /// <para>
     /// <strong>Routing rules:</strong>
     /// <list type="bullet">
-    ///   <item>Bare alias (no colon): auto-prefixed with the caller's owner — routes to the caller's own agent.</item>
-    ///   <item>Fully-qualified handle (contains colon): used as-is — enables cross-owner routing override.</item>
+    ///   <item>Bare agent handle (no colon): auto-prefixed with the caller's user handle — routes to the caller's own agent.</item>
+    ///   <item>Fully-qualified handle (contains colon): used as-is — enables cross-user routing override.</item>
     /// </list>
-    /// To send a message to another owner's agent, supply the full <c>"otherOwner:agent"</c> handle.
+    /// To send a message to another user's agent, supply the full <c>"otherUserHandle:agentHandle"</c> handle.
     /// The system will not re-prefix it because it already contains a colon.
     /// </para>
     /// </summary>
     public static class HandleUtilities
     {
         /// <summary>
-        /// Normalizes an agent handle by ensuring it has the correct owner prefix.
+        /// Normalizes an agent handle by ensuring it has the correct user handle prefix.
         /// <list type="bullet">
-        ///   <item>If handle already has the exact <paramref name="ownerPrefix"/>, returns as-is.</item>
-        ///   <item>If handle contains <c>':'</c> with a different prefix, returns as-is (cross-owner routing override).</item>
-        ///   <item>If handle has no <c>':'</c>, prepends <paramref name="ownerPrefix"/> to scope it to the owner.</item>
+        ///   <item>If handle already has the exact <paramref name="userHandlePrefix"/>, returns as-is.</item>
+        ///   <item>If handle contains <c>':'</c> with a different prefix, returns as-is (cross-user routing override).</item>
+        ///   <item>If handle has no <c>':'</c>, prepends <paramref name="userHandlePrefix"/> to scope it to the user handle.</item>
         /// </list>
         /// </summary>
-        public static string EnsurePrefix(string handle, string ownerPrefix)
+        public static string EnsurePrefix(string handle, string userHandlePrefix)
         {
             if (string.IsNullOrEmpty(handle))
                 throw new ArgumentException("Handle cannot be null or empty", nameof(handle));
-            if (string.IsNullOrEmpty(ownerPrefix))
-                throw new ArgumentException("Owner prefix cannot be null or empty", nameof(ownerPrefix));
+            if (string.IsNullOrEmpty(userHandlePrefix))
+                throw new ArgumentException("User handle prefix cannot be null or empty", nameof(userHandlePrefix));
 
-            if (handle.StartsWith(ownerPrefix, StringComparison.Ordinal))
+            if (handle.StartsWith(userHandlePrefix, StringComparison.Ordinal))
                 return handle;
 
             if (handle.Contains(':'))
                 return handle;
 
-            return $"{ownerPrefix}{handle}";
+            return $"{userHandlePrefix}{handle}";
         }
 
         /// <summary>
-        /// Strips the owner prefix from a handle if present.
+        /// Strips the user handle prefix from a handle if present.
         /// </summary>
-        public static string StripPrefix(string handle, string ownerPrefix)
+        public static string StripPrefix(string handle, string userHandlePrefix)
         {
             if (string.IsNullOrEmpty(handle))
                 throw new ArgumentException("Handle cannot be null or empty", nameof(handle));
 
-            if (!string.IsNullOrEmpty(ownerPrefix) &&
-                handle.StartsWith(ownerPrefix, StringComparison.Ordinal))
+            if (!string.IsNullOrEmpty(userHandlePrefix) &&
+                handle.StartsWith(userHandlePrefix, StringComparison.Ordinal))
             {
-                return handle.Substring(ownerPrefix.Length);
+                return handle.Substring(userHandlePrefix.Length);
             }
 
             return handle;
         }
 
         /// <summary>
-        /// Builds an owner prefix string from an owner/client ID.
+        /// Builds a user handle prefix string from a user handle.
         /// </summary>
-        public static string BuildPrefix(string ownerId) => $"{ownerId}:";
+        public static string BuildPrefix(string userHandle) => $"{userHandle}:";
 
         /// <summary>
-        /// Parses a handle into its owner and alias components.
-        /// Returns an empty owner if the handle has no colon (bare alias).
+        /// Parses a handle into its user handle and agent handle components.
+        /// Returns an empty user handle if the handle has no colon (bare agent handle).
         /// </summary>
-        public static (string Owner, string Alias) ParseHandle(string handle)
+        public static (string UserHandle, string AgentHandle) ParseHandle(string handle)
         {
             if (string.IsNullOrEmpty(handle))
                 throw new ArgumentException("Handle cannot be null or empty", nameof(handle));

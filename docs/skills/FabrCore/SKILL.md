@@ -26,6 +26,7 @@ Build distributed AI agent systems with FabrCore — an open-source .NET 10 fram
 | Concept | Type | Key Class/Interface | Skill |
 |---------|------|-------------------|-------|
 | Agent | Business logic actor | `FabrCoreAgentProxy` | fabrcore-agent |
+| Agent Eviction | Hard-delete an agent instance | `AgentEvictionResult`, `DELETE /fabrcoreapi/Agent/{handle}` | fabrcore-server, fabrcore-orleans |
 | Agent Framework | LLM agent runtime | `AIAgent`, `AgentSession` | fabrcore-agentframework |
 | Plugin | Stateful tool collection | `IFabrCorePlugin` | fabrcore-plugins-tools |
 | Standalone Tool | Single static method | `[ToolAlias]` attribute | fabrcore-plugins-tools |
@@ -35,7 +36,7 @@ Build distributed AI agent systems with FabrCore — an open-source .NET 10 fram
 | Client | Blazor UI + Orleans client | `AddFabrCoreClient()` | fabrcore-client |
 | Entity Storage | Typed key/value app data | `IFabrCoreStorageProvider`, `FabrCore.Sdk.IFabrCoreHostApiClient` | fabrcore-client, fabrcore-server, fabrcore-orleans |
 | ChatDock | Floating icon → chat overlay | `<ChatDock>` component | fabrcore-chatdock |
-| Handle Access | Owner/agent handle parsing | `IFabrCoreAgentHost.GetOwnerHandle()`, `GetAgentHandle()` | fabrcore-agent |
+| Handle Access | User handle/agent handle parsing | `IFabrCoreAgentHost.GetUserHandle()`, `GetAgentHandle()` | fabrcore-agent |
 | Messaging | Agent communication | `AgentMessage`, `HandleUtilities` | fabrcore-messaging |
 | MCP | External tool protocol | `McpServerConfig` | fabrcore-mcp |
 | Configuration | Agent definition | `AgentConfiguration` | fabrcore-server |
@@ -61,7 +62,7 @@ FabrCore layers on top of Orleans (distributed actor model) and Microsoft.Extens
 └─────────────────────────────────────────────┘
 ```
 
-- **FabrCore.Core** — Interfaces (`IAgentGrain`, `IClientGrain`), models (`AgentConfiguration`, `AgentMessage`, `AgentHealthStatus`), Orleans surrogates
+- **FabrCore.Core** — Interfaces (`IAgentGrain`, `IClientGrain`), models (`AgentConfiguration`, `AgentMessage`, `AgentHealthStatus`, `AgentEvictionResult`), Orleans surrogates
 - **FabrCore.Sdk** — Agent base class (`FabrCoreAgentProxy`), plugin system, tool registry, chat client factory, MCP integration, compaction, state persistence, Host API client, typed entity storage contracts
 - **FabrCore.Host** — Orleans grains (`AgentGrain`, `ClientGrain`), REST API controllers, streaming, WebSocket, agent service
 - **FabrCore.Client** — Blazor components (`ChatDock`), `ClientContext`/`ClientContextFactory`, Orleans client configuration
@@ -120,9 +121,9 @@ Use it for application-level typed data such as preferences, cached lookup resul
 
 Storage is backed by the configured Orleans provider named `FabrCoreOrleansConstants.StorageProviderName` (`"fabrcoreStorage"`). Localhost uses whatever storage Orleans was configured with for localhost, and SQL/Azure/custom modes persist according to their provider.
 
-Owner partitioning is part of the Host API: `x-user` is the owner partition, `container` is the logical bucket, and `entityKey` is the key inside that owner/container. The same `container/entityKey` can exist independently for different owners.
+User handle partitioning is part of the Host API: `x-user-handle` is the user handle partition, `container` is the logical bucket, and `entityKey` is the key inside that userHandle/container. The same `container/entityKey` can exist independently for different user handles.
 
-Prefer agent custom state (`GetStateAsync`, `SetState`, `FlushStateAsync`) for private state owned by a single agent. Prefer typed entity storage when clients, host services, plugins, or multiple agents need to share app data by owner/container/key.
+Prefer agent custom state (`GetStateAsync`, `SetState`, `FlushStateAsync`) for private state private to a single agent. Prefer typed entity storage when clients, host services, plugins, or multiple agents need to share app data by userHandle/container/entityKey.
 
 ## Project Templates
 

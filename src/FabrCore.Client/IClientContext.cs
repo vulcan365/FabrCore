@@ -101,7 +101,7 @@ namespace FabrCore.Client
 
         /// <summary>
         /// Gets shared agents that this client has permission to access (via ACL).
-        /// Returns agents owned by other owners where the caller has at least Message permission.
+        /// Returns agents under other user handles where the caller has at least Message permission.
         /// </summary>
         /// <exception cref="ObjectDisposedException">Thrown if the context has been disposed.</exception>
         Task<List<AgentInfo>> GetAccessibleSharedAgents();

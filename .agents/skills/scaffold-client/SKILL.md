@@ -168,7 +168,7 @@ This page demonstrates the ChatDock component — a pre-built chat UI that conne
 <!-- UserHandle: identifies the current user session -->
 <!-- AgentHandle: the agent instance name -->
 <!-- AgentType: the [AgentAlias] registered agent type -->
-<ChatDock UserHandle="@_userId"
+<ChatDock UserHandle="@_userHandle"
           AgentHandle="assistant"
           AgentType="sample-agent"
           SystemPrompt="You are a helpful AI assistant."
@@ -178,8 +178,8 @@ This page demonstrates the ChatDock component — a pre-built chat UI that conne
           LazyLoad="true" />
 
 @code {
-    // In a real app, get userId from authentication
-    private string _userId = $"user-{Guid.NewGuid():N[..8]}";
+    // In a real app, get userHandle from authentication
+    private string _userHandle = $"user-{Guid.NewGuid():N[..8]}";
 }
 ```
 

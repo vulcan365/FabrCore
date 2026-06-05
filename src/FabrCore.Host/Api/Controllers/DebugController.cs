@@ -62,12 +62,12 @@ namespace FabrCore.Host.Api.Controllers
             if (string.IsNullOrWhiteSpace(original.AgentHandle))
                 return BadRequest(new { Error = "Original message has no AgentHandle." });
 
-            // AgentHandle format is "userId:handle". Split to resolve grain key + user id.
+            // AgentHandle format is "userHandle:handle". Split to resolve grain key + user handle.
             var separatorIndex = original.AgentHandle.IndexOf(':');
             if (separatorIndex <= 0 || separatorIndex >= original.AgentHandle.Length - 1)
-                return BadRequest(new { Error = $"AgentHandle '{original.AgentHandle}' is not in the expected 'userId:handle' form." });
+                return BadRequest(new { Error = $"AgentHandle '{original.AgentHandle}' is not in the expected 'userHandle:handle' form." });
 
-            var userId = original.AgentHandle[..separatorIndex];
+            var userHandle = original.AgentHandle[..separatorIndex];
             var handle = original.AgentHandle[(separatorIndex + 1)..];
 
             var replay = new AgentMessage
@@ -87,16 +87,16 @@ namespace FabrCore.Host.Api.Controllers
             };
 
             _logger.LogInformation(
-                "Replaying message {MessageId} for agent {UserId}:{Handle}",
-                original.Id, userId, handle);
+                "Replaying message {MessageId} for agent {userHandle}:{Handle}",
+                original.Id, userHandle, handle);
 
             try
             {
-                var response = await _agentService.SendAndReceiveMessageAsync(userId, handle, replay);
+                var response = await _agentService.SendAndReceiveMessageAsync(userHandle, handle, replay);
                 return Ok(new
                 {
                     ReplayedMessageId = original.Id,
-                    UserId = userId,
+                    userHandle = userHandle,
                     Handle = handle,
                     Response = response,
                 });

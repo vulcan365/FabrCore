@@ -79,13 +79,13 @@ namespace FabrCore.Host.WebSocket
             System.Net.WebSockets.WebSocket webSocket,
             IClusterClient clusterClient,
             ILogger<WebSocketSession> logger,
-            string userId,
+            string userHandle,
             FabrCoreHostOptions? hostOptions = null)
         {
             this.webSocket = webSocket ?? throw new ArgumentNullException(nameof(webSocket));
             this.clusterClient = clusterClient ?? throw new ArgumentNullException(nameof(clusterClient));
             this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            this.handle = userId ?? throw new ArgumentNullException(nameof(userId));
+            this.handle = userHandle ?? throw new ArgumentNullException(nameof(userHandle));
             this.cancellationTokenSource = new CancellationTokenSource();
 
             var options = hostOptions ?? new FabrCoreHostOptions();
@@ -100,7 +100,7 @@ namespace FabrCore.Host.WebSocket
 
             // user.id omitted from metric tags (unbounded cardinality); retained on activity/log context.
             SessionsCreatedCounter.Add(1);
-            logger.LogInformation("WebSocketSession created for user: {UserId}", handle);
+            logger.LogInformation("WebSocketSession created for user: {userHandle}", handle);
         }
 
         /// <summary>
@@ -111,7 +111,7 @@ namespace FabrCore.Host.WebSocket
             using var activity = ActivitySource.StartActivity("StartAsync", ActivityKind.Server);
             activity?.SetTag("user.id", handle);
 
-            logger.LogInformation("Starting WebSocket session for user: {UserId}", handle);
+            logger.LogInformation("Starting WebSocket session for user: {userHandle}", handle);
 
             try
             {
@@ -131,12 +131,12 @@ namespace FabrCore.Host.WebSocket
             }
             catch (Exception ex) when (ex is OperationCanceledException || ex is WebSocketException)
             {
-                logger.LogInformation("WebSocket session ended for user {UserId}: {Message}", handle, ex.Message);
+                logger.LogInformation("WebSocket session ended for user {userHandle}: {Message}", handle, ex.Message);
                 activity?.SetStatus(ActivityStatusCode.Ok);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error in WebSocket session for user {UserId}", handle);
+                logger.LogError(ex, "Error in WebSocket session for user {userHandle}", handle);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
                 ErrorCounter.Add(1,
@@ -153,26 +153,26 @@ namespace FabrCore.Host.WebSocket
             using var activity = ActivitySource.StartActivity("InitializeClientGrain", ActivityKind.Internal);
             activity?.SetTag("user.id", handle);
 
-            logger.LogInformation("Initializing ClientGrain for user: {UserId}", handle);
+            logger.LogInformation("Initializing ClientGrain for user: {userHandle}", handle);
 
             try
             {
                 // Get the grain with the handle as primary key
                 clientGrain = clusterClient.GetGrain<IClientGrain>(handle);
-                logger.LogDebug("Client grain obtained for user: {UserId}", handle);
+                logger.LogDebug("Client grain obtained for user: {userHandle}", handle);
 
                 // Create observer reference and subscribe to the grain
                 observerRef = clusterClient.CreateObjectReference<IClientGrainObserver>(this);
-                logger.LogDebug("Observer reference created for user: {UserId}", handle);
+                logger.LogDebug("Observer reference created for user: {userHandle}", handle);
 
                 await clientGrain.Subscribe(observerRef);
 
-                logger.LogInformation("WebSocket session subscribed to ClientGrain for user: {UserId}", handle);
+                logger.LogInformation("WebSocket session subscribed to ClientGrain for user: {userHandle}", handle);
                 activity?.SetStatus(ActivityStatusCode.Ok);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to initialize ClientGrain for user: {UserId}", handle);
+                logger.LogError(ex, "Failed to initialize ClientGrain for user: {userHandle}", handle);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
                 ErrorCounter.Add(1,
@@ -243,7 +243,7 @@ namespace FabrCore.Host.WebSocket
                 {
                     OversizeRejectedCounter.Add(1);
                     logger.LogWarning(
-                        "WebSocket message exceeded max size ({MaxBytes} bytes) for user {UserId}. Closing session.",
+                        "WebSocket message exceeded max size ({MaxBytes} bytes) for user {userHandle}. Closing session.",
                         maxIncomingMessageBytes, handle);
 
                     // Drain remaining fragments so the close handshake is clean, but cap the drain.
@@ -351,7 +351,7 @@ namespace FabrCore.Host.WebSocket
             activity?.SetTag("command.name", commandName);
             activity?.SetTag("user.id", handle);
 
-            logger.LogInformation("Processing command: {CommandName} for user: {UserId}", commandName, handle);
+            logger.LogInformation("Processing command: {CommandName} for user: {userHandle}", commandName, handle);
 
             CommandsProcessedCounter.Add(1,
                 new KeyValuePair<string, object?>("command.name", commandName));
@@ -389,7 +389,7 @@ namespace FabrCore.Host.WebSocket
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error processing command: {CommandName} for user: {UserId}", commandName, handle);
+                logger.LogError(ex, "Error processing command: {CommandName} for user: {userHandle}", commandName, handle);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
                 ErrorCounter.Add(1,
@@ -584,7 +584,7 @@ namespace FabrCore.Host.WebSocket
                 {
                     OutboundDroppedCounter.Add(1,
                         new KeyValuePair<string, object?>("reason", "channel_completed"));
-                    logger.LogWarning("Outbound queue refused message for user {UserId} (channel completed)", handle);
+                    logger.LogWarning("Outbound queue refused message for user {userHandle} (channel completed)", handle);
                 }
 
                 activity?.SetStatus(ActivityStatusCode.Ok);
@@ -592,7 +592,7 @@ namespace FabrCore.Host.WebSocket
             catch (Exception ex)
             {
                 // Log-and-swallow: throwing into Orleans' observer pipeline is worse than dropping one message.
-                logger.LogError(ex, "Error enqueuing message to outbound queue for user {UserId}", handle);
+                logger.LogError(ex, "Error enqueuing message to outbound queue for user {userHandle}", handle);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
                 ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "observer_error"));
@@ -625,7 +625,7 @@ namespace FabrCore.Host.WebSocket
                     }
                     catch (Exception ex)
                     {
-                        logger.LogError(ex, "Outbound pump failed to send message for user {UserId}", handle);
+                        logger.LogError(ex, "Outbound pump failed to send message for user {userHandle}", handle);
                         ErrorCounter.Add(1,
                             new KeyValuePair<string, object?>("error.type", "outbound_pump_send_error"));
                     }
@@ -637,7 +637,7 @@ namespace FabrCore.Host.WebSocket
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Outbound pump faulted for user {UserId}", handle);
+                logger.LogError(ex, "Outbound pump faulted for user {userHandle}", handle);
                 ErrorCounter.Add(1,
                     new KeyValuePair<string, object?>("error.type", "outbound_pump_faulted"));
             }

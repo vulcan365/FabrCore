@@ -105,29 +105,29 @@ protected readonly IFabrCoreChatClientService chatClientService;
 // Full handle (e.g., "user123:assistant")
 var full = fabrcoreAgentHost.GetHandle();
 
-// Owner portion (e.g., "user123") — empty string if no owner
-var owner = fabrcoreAgentHost.GetOwnerHandle();
+// User handle portion (e.g., "user123") — empty string if no user handle
+var userHandle = fabrcoreAgentHost.GetUserHandle();
 
-// Agent handle portion without owner prefix (e.g., "assistant")
+// Agent handle portion without user handle prefix (e.g., "assistant")
 var agent = fabrcoreAgentHost.GetAgentHandle();
 
 // Decompose into both parts at once
-var (owner, agentHandle) = fabrcoreAgentHost.GetParsedHandle();
+var (userHandle, agentHandle) = fabrcoreAgentHost.GetParsedHandle();
 
-// Check if this agent has an owner
-if (fabrcoreAgentHost.HasOwner())
+// Check if this agent has an user handle
+if (fabrcoreAgentHost.HasUserHandle())
 {
-    // Owner-scoped logic
+    // User-handle-scoped logic
 }
 ```
 
 | Method | Returns | Example (`"user123:assistant"`) | Example (`"assistant"`) |
 |--------|---------|-------------------------------|------------------------|
 | `GetHandle()` | Full handle string | `"user123:assistant"` | `"assistant"` |
-| `GetOwnerHandle()` | Owner portion | `"user123"` | `""` |
+| `GetUserHandle()` | User handle portion | `"user123"` | `""` |
 | `GetAgentHandle()` | Agent handle portion | `"assistant"` | `"assistant"` |
-| `GetParsedHandle()` | `(Owner, AgentHandle)` tuple | `("user123", "assistant")` | `("", "assistant")` |
-| `HasOwner()` | `bool` | `true` | `false` |
+| `GetParsedHandle()` | `(UserHandle, AgentHandle)` tuple | `("user123", "assistant")` | `("", "assistant")` |
+| `HasUserHandle()` | `bool` | `true` | `false` |
 
 These methods are available in both agents and plugins (via `IFabrCoreAgentHost`).
 
@@ -142,6 +142,13 @@ These methods are available in both agents and plugins (via `IFabrCoreAgentHost`
 | `OnEvent(EventMessage)` | Fire-and-forget event | Handle stream event notifications |
 | `OnCompaction(...)` | After OnMessage, when threshold exceeded | Custom compaction logic |
 | `GetHealth(HealthDetailLevel)` | Health check request | Return custom health metrics |
+| Agent eviction | Host-managed, not an agent override | Permanently clears runtime callbacks, persisted state, stream subscriptions, registry entries, and deactivates |
+
+### Reset vs Eviction
+
+`ResetAgent` is a soft lifecycle operation: it calls the agent reset hook, clears chat/custom state, and reconfigures the same agent.
+
+Eviction is a hard delete initiated through the Host API: `DELETE /fabrcoreapi/Agent/{handle}` with `x-user-handle`. It is handled by `AgentGrain`, not agent code. Eviction unregisters timers and reminders, removes stream subscriptions, clears persisted Orleans state, removes diagnostics/client tracking entries, and deactivates the grain. If the agent is actively processing a message, the API returns `409 Conflict` and the caller should retry later.
 
 ### OnInitialize()
 
@@ -377,13 +384,13 @@ await FlushStateAsync();
 var hasPrefs = await HasStateAsync("preferences");
 ```
 
-State is stored as `JsonElement` in the grain's persistent state. It is automatically flushed after `OnMessage` completes and on grain deactivation. Call `FlushStateAsync()` explicitly if you need durability mid-operation.
+State is stored as `JsonElement` in the grain's persistent state. It is automatically flushed after `OnMessage` completes and on normal grain deactivation. During hard eviction, pending state/chat buffers are intentionally not flushed because the persisted grain state is being deleted. Call `FlushStateAsync()` explicitly if you need durability mid-operation.
 
 ### Agent state vs typed entity storage
 
-Use the built-in state API above for private state owned by the current agent, such as conversation counters, local preferences, or per-agent caches. It is single-agent state and participates in the grain lifecycle.
+Use the built-in state API above for private state private to the current agent, such as conversation counters, local preferences, or per-agent caches. It is single-agent state and participates in the grain lifecycle.
 
-Use typed entity storage when the data is application-level and should be addressable by `owner/container/entityKey`, especially when clients, host services, plugins, or multiple agents need to share the same record. The public abstraction is in `FabrCore.Sdk`:
+Use typed entity storage when the data is application-level and should be addressable by `userHandle/container/entityKey`, especially when clients, host services, plugins, or multiple agents need to share the same record. The public abstraction is in `FabrCore.Sdk`:
 
 ```csharp
 public interface IFabrCoreStorageProvider
@@ -394,7 +401,7 @@ public interface IFabrCoreStorageProvider
 }
 ```
 
-Important pitfall for agents: when resolving `IFabrCoreStorageProvider` directly inside the Host DI container, the owner-free methods use the system partition. That is appropriate for system/shared data, not per-user data. For per-agent or per-user data, prefer `GetStateAsync`/`SetState` or call an owner-aware Host/API path that explicitly supplies the owner from `fabrcoreAgentHost.GetOwnerHandle()`.
+Important pitfall for agents: when resolving `IFabrCoreStorageProvider` directly inside the Host DI container, the user-handle-free methods use the system partition. That is appropriate for system/shared data, not per-user data. For per-agent or per-user data, prefer `GetStateAsync`/`SetState` or call an user-handle-aware Host/API path that explicitly supplies the user handle from `fabrcoreAgentHost.GetUserHandle()`.
 
 Do not reference Orleans storage APIs (`IGrainStorage`, `GrainId`, `IGrainState<T>`) from agent code. FabrCore keeps those Host-internal so agents and SDK consumers do not depend on Orleans storage internals.
 
@@ -452,7 +459,7 @@ public override async Task<CompactionResult?> OnCompaction(
 
 ### Timers (Non-Persistent)
 
-Active only while the grain is activated. Lost on deactivation.
+Active only while the grain is activated. Lost on normal deactivation and explicitly disposed during hard eviction.
 
 ```csharp
 // In OnInitialize or OnMessage
@@ -481,7 +488,7 @@ fabrcoreAgentHost.UnregisterTimer("health-check");
 
 ### Reminders (Persistent)
 
-Survive grain deactivation and silo restarts. Minimum 1-minute period. Override `OnReminder`:
+Survive normal grain deactivation and silo restarts. Minimum 1-minute period. Hard eviction enumerates and unregisters all Orleans reminders for the agent so they cannot wake the deleted grain.
 
 ```csharp
 await fabrcoreAgentHost.RegisterReminder(
@@ -590,3 +597,4 @@ var agentConfig = new AgentConfiguration
 - **`OnMessage` is single-entry** — Orleans interleaving allows `OnMessageBusy` to execute concurrently, but only one `OnMessage` runs at a time. Do not mutate shared state in `OnMessageBusy`.
 - **Chat history is auto-flushed** after `OnMessage` completes and on grain deactivation. Not flushed after `OnMessageBusy`.
 - **Custom state requires explicit flush** — call `FlushStateAsync()` if you need durability before `OnMessage` returns.
+- **Eviction is host-owned** — agents should unregister timers/reminders they no longer need during normal operation, but `DELETE /fabrcoreapi/Agent/{handle}` is responsible for final cleanup and rejects active `OnMessage` work with `409 Conflict`.
