@@ -15,9 +15,9 @@ namespace FabrCore.Core.Acl
     public class AclRule
     {
         /// <summary>
-        /// The owner whose agents are being accessed (e.g., <c>"system"</c>, <c>"alice"</c>, <c>"*"</c>).
+        /// The user handle whose agents are being accessed (e.g., <c>"system"</c>, <c>"alice"</c>, <c>"*"</c>).
         /// </summary>
-        public required string OwnerPattern { get; set; }
+        public required string UserHandlePattern { get; set; }
 
         /// <summary>
         /// The agent alias pattern (e.g., <c>"*"</c>, <c>"assistant"</c>, <c>"automation_*"</c>).

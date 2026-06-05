@@ -156,10 +156,10 @@ public Task InitializeAsync(AgentConfiguration config, IServiceProvider serviceP
     _agentHost = serviceProvider.GetRequiredService<IFabrCoreAgentHost>();
 
     var fullHandle = _agentHost.GetHandle();        // "user123:assistant"
-    var owner      = _agentHost.GetOwnerHandle();   // "user123"
+    var userHandle      = _agentHost.GetUserHandle();   // "user123"
     var agent      = _agentHost.GetAgentHandle();   // "assistant"
     var (o, a)     = _agentHost.GetParsedHandle();  // ("user123", "assistant")
-    var hasOwner   = _agentHost.HasOwner();         // true
+    var hasUserHandle   = _agentHost.HasUserHandle();         // true
 
     return Task.CompletedTask;
 }
@@ -424,8 +424,8 @@ public class WorkflowPlugin : IFabrCorePlugin
 ```
 
 Pitfalls:
-- In Host DI, owner-free `IFabrCoreStorageProvider` writes to the system partition. Use this for shared/system plugin data.
-- For per-user data, make owner partitioning explicit in a Host service or through the Storage HTTP API. Use `fabrcoreAgentHost.GetOwnerHandle()` as the owner when appropriate.
+- In Host DI, user-handle-free `IFabrCoreStorageProvider` writes to the system partition. Use this for shared/system plugin data.
+- For per-user data, make user handle partitioning explicit in a Host service or through the Storage HTTP API. Use `fabrcoreAgentHost.GetUserHandle()` as the user handle when appropriate.
 - Prefer `GetStateAsync`/`SetState` on the agent for private per-agent state; it is simpler and benefits from grain single-threaded execution.
 - Typed storage is CRUD-only in v1. There is no query/list API, no partial update, and no optimistic concurrency token.
 - Do not resolve Orleans `IGrainStorage` in plugin code. Keep Orleans storage details inside FabrCore.Host.

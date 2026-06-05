@@ -15,10 +15,10 @@ namespace FabrCore.Host.Services
         /// <summary>
         /// Configures a single agent and returns its health status.
         /// </summary>
-        Task<AgentHealthStatus> ConfigureAgentAsync(string userId, AgentConfiguration config, HealthDetailLevel detailLevel = HealthDetailLevel.Basic);
+        Task<AgentHealthStatus> ConfigureAgentAsync(string userHandle, AgentConfiguration config, HealthDetailLevel detailLevel = HealthDetailLevel.Basic);
 
         /// <summary>
-        /// Configures a system-owned agent (owner = "system"). Use this for shared agents
+        /// Configures a system user agent (user handle = "system"). Use this for shared agents
         /// that multiple users can access via ACL rules.
         /// The agent grain key will be <c>"system:{config.Handle}"</c>.
         /// </summary>
@@ -27,40 +27,45 @@ namespace FabrCore.Host.Services
         /// <summary>
         /// Configures multiple agents in batch. Failed configs get an Unhealthy entry.
         /// </summary>
-        Task<List<AgentHealthStatus>> ConfigureAgentsAsync(string userId, List<AgentConfiguration> configs, HealthDetailLevel detailLevel = HealthDetailLevel.Basic);
+        Task<List<AgentHealthStatus>> ConfigureAgentsAsync(string userHandle, List<AgentConfiguration> configs, HealthDetailLevel detailLevel = HealthDetailLevel.Basic);
 
         /// <summary>
         /// Sends a fire-and-forget message to an agent via the chat stream.
         /// The agent's OnMessage handler is invoked asynchronously.
         /// </summary>
-        Task SendMessageAsync(string userId, string handle, string message);
+        Task SendMessageAsync(string userHandle, string handle, string message);
 
         /// <summary>
         /// Sends a fire-and-forget AgentMessage to an agent via the chat stream.
         /// The agent's OnMessage handler is invoked asynchronously.
         /// </summary>
-        Task SendMessageAsync(string userId, string handle, AgentMessage message);
+        Task SendMessageAsync(string userHandle, string handle, AgentMessage message);
 
         /// <summary>
         /// Sends a message to an agent via direct grain RPC and waits for the response.
         /// </summary>
-        Task<AgentMessage> SendAndReceiveMessageAsync(string userId, string handle, string message);
+        Task<AgentMessage> SendAndReceiveMessageAsync(string userHandle, string handle, string message);
 
         /// <summary>
         /// Sends an AgentMessage to an agent via direct grain RPC and waits for the response.
         /// </summary>
-        Task<AgentMessage> SendAndReceiveMessageAsync(string userId, string handle, AgentMessage message);
+        Task<AgentMessage> SendAndReceiveMessageAsync(string userHandle, string handle, AgentMessage message);
 
         /// <summary>
         /// Gets the health status of an agent.
         /// </summary>
-        Task<AgentHealthStatus> GetHealthAsync(string userId, string handle, HealthDetailLevel detailLevel = HealthDetailLevel.Basic);
+        Task<AgentHealthStatus> GetHealthAsync(string userHandle, string handle, HealthDetailLevel detailLevel = HealthDetailLevel.Basic);
+
+        /// <summary>
+        /// Permanently evicts an agent and removes its persisted/runtime traces.
+        /// </summary>
+        Task<AgentEvictionResult> EvictAgentAsync(string userHandle, string handle);
 
         /// <summary>
         /// Sends a fire-and-forget event via the agent's event stream.
         /// When streamName is provided, publishes to that named stream instead.
         /// </summary>
-        Task SendEventAsync(string userId, string handle, EventMessage message, string? streamName = null);
+        Task SendEventAsync(string userHandle, string handle, EventMessage message, string? streamName = null);
 
         // ── Agent Management (registration / lifecycle) ──
 
@@ -69,6 +74,9 @@ namespace FabrCore.Host.Services
 
         /// <summary>Marks an agent as deactivated in the management provider.</summary>
         Task DeactivateAgentAsync(string key, string reason);
+
+        /// <summary>Removes an agent completely from the management provider.</summary>
+        Task<bool> RemoveAgentAsync(string key);
 
         /// <summary>Registers a client as active in the management provider.</summary>
         Task RegisterClientAsync(string clientId);
@@ -131,33 +139,33 @@ namespace FabrCore.Host.Services
         /// <summary>
         /// Gets all messages for a specific thread from an agent's persistent storage.
         /// </summary>
-        Task<List<StoredChatMessage>> GetThreadMessagesAsync(string userId, string handle, string threadId);
+        Task<List<StoredChatMessage>> GetThreadMessagesAsync(string userHandle, string handle, string threadId);
 
         /// <summary>
         /// Adds messages to a specific thread in an agent's persistent storage.
         /// </summary>
-        Task AddThreadMessagesAsync(string userId, string handle, string threadId, IEnumerable<StoredChatMessage> messages);
+        Task AddThreadMessagesAsync(string userHandle, string handle, string threadId, IEnumerable<StoredChatMessage> messages);
 
         /// <summary>
         /// Clears all messages for a specific thread.
         /// </summary>
-        Task ClearThreadMessagesAsync(string userId, string handle, string threadId);
+        Task ClearThreadMessagesAsync(string userHandle, string handle, string threadId);
 
         /// <summary>
         /// Atomically replaces all messages in a specific thread with a new set.
         /// </summary>
-        Task ReplaceThreadMessagesAsync(string userId, string handle, string threadId, IEnumerable<StoredChatMessage> messages);
+        Task ReplaceThreadMessagesAsync(string userHandle, string handle, string threadId, IEnumerable<StoredChatMessage> messages);
 
         // ── Custom State ──
 
         /// <summary>
         /// Gets the custom state dictionary for an agent.
         /// </summary>
-        Task<Dictionary<string, JsonElement>> GetCustomStateAsync(string userId, string handle);
+        Task<Dictionary<string, JsonElement>> GetCustomStateAsync(string userHandle, string handle);
 
         /// <summary>
         /// Merges custom state changes into an agent's persisted state.
         /// </summary>
-        Task MergeCustomStateAsync(string userId, string handle, Dictionary<string, JsonElement> changes, IEnumerable<string> deletes);
+        Task MergeCustomStateAsync(string userHandle, string handle, Dictionary<string, JsonElement> changes, IEnumerable<string> deletes);
     }
 }

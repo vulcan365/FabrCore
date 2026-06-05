@@ -3,12 +3,12 @@ name: fabrcore-messaging
 description: >
   FabrCore messaging, handle routing, inter-agent communication, orchestration patterns, and access control (ACL).
   Covers AgentMessage, EventMessage, HandleUtilities, SendMessage vs SendAndReceiveMessage vs SendEvent,
-  fan-out/gather, pipeline, supervisor patterns, ACL rules, shared agents, and cross-owner routing.
+  fan-out/gather, pipeline, supervisor patterns, ACL rules, shared agents, and cross-user routing.
   Triggers on: "AgentMessage", "EventMessage", "handle routing", "HandleUtilities", "SendMessage",
   "SendAndReceiveMessage", "SendEvent", "inter-agent", "agent-to-agent", "multi-agent", "orchestration",
-  "ACL", "shared agent", "access control", "MessageKind", "cross-owner", "fan-out", "pipeline",
+  "ACL", "shared agent", "access control", "MessageKind", "cross-user", "fan-out", "pipeline",
   "supervisor", "delegator", "AclRule", "AclPermission", "IAclProvider", "SystemMessageTypes",
-  "FromHandle", "ToHandle", "OnBehalfOfHandle", "TraceId", "message routing", "storage owner".
+  "FromHandle", "ToHandle", "OnBehalfOfHandle", "TraceId", "message routing", "storage user handle".
   Do NOT use for: agent lifecycle — use fabrcore-agent.
   Do NOT use for: ChatDock — use fabrcore-chatdock.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
@@ -25,7 +25,7 @@ public class AgentMessage
 {
     // Routing
     public string Id { get; set; } = Guid.NewGuid().ToString();
-    public string? ToHandle { get; set; }           // Target handle (bare alias or "owner:agent")
+    public string? ToHandle { get; set; }           // Target handle (bare agent handle or "userHandle:agentHandle")
     public string? FromHandle { get; set; }         // Sender (auto-filled by AgentGrain/ClientContext)
     public string? OnBehalfOfHandle { get; set; }   // Original requester (for delegation)
     public string? DeliverToHandle { get; set; }    // Final delivery target
@@ -121,7 +121,7 @@ public static class SystemMessageTypes
 
 ## Handle Routing
 
-Handles use the format `"owner:agentAlias"` (e.g., `"user1:assistant"`).
+Handles use the format `"userHandle:agentHandle"` (e.g., `"user1:assistant"`).
 
 ### HandleUtilities API
 
@@ -140,22 +140,22 @@ Agents and plugins can access their own handle components directly:
 
 ```csharp
 var full   = fabrcoreAgentHost.GetHandle();        // "user1:assistant"
-var owner  = fabrcoreAgentHost.GetOwnerHandle();   // "user1"
+var userHandle  = fabrcoreAgentHost.GetUserHandle();   // "user1"
 var agent  = fabrcoreAgentHost.GetAgentHandle();   // "assistant"
 var (o, a) = fabrcoreAgentHost.GetParsedHandle();  // ("user1", "assistant")
-if (fabrcoreAgentHost.HasOwner()) { /* ... */ }
+if (fabrcoreAgentHost.HasUserHandle()) { /* ... */ }
 ```
 
 ### Routing Rules
 
-- **Bare alias** (no colon, e.g., `"assistant"`) — auto-prefixed with caller's owner
-- **Fully-qualified handle** (contains colon, e.g., `"user2:assistant"`) — used as-is for cross-owner routing
+- **Bare agent handle** (no colon, e.g., `"assistant"`) — auto-prefixed with caller's user handle
+- **Fully-qualified handle** (contains colon, e.g., `"user2:assistant"`) — used as-is for cross-user routing
 
 ### Where Resolution Happens
 
 - **AgentGrain** — `ResolveTargetHandle()` normalizes `ToHandle` in all messaging methods
 - **ChatDock** — Uses `HandleUtilities.EnsurePrefix` to build expected `FromHandle`
-- **DirectMessageSender** — Requires fully-qualified handles (throws on bare alias)
+- **DirectMessageSender** — Requires fully-qualified handles (throws on bare agent handle)
 
 ## Messaging Patterns
 
@@ -181,9 +181,9 @@ context.AgentMessageReceived += (sender, response) => { /* process */ };
 ```csharp
 var request = new AgentMessage { ToHandle = "analyst", Message = "Analyze this data" };
 var reply = await fabrcoreAgentHost.SendAndReceiveMessage(request);
-// Cross-owner:
-var crossOwnerRequest = new AgentMessage { ToHandle = "user2:analyst", Message = "Analyze this data" };
-var reply = await fabrcoreAgentHost.SendAndReceiveMessage(crossOwnerRequest);
+// Cross-user:
+var crossUserHandleRequest = new AgentMessage { ToHandle = "user2:analyst", Message = "Analyze this data" };
+var reply = await fabrcoreAgentHost.SendAndReceiveMessage(crossUserHandleRequest);
 ```
 
 ### Events
@@ -365,11 +365,11 @@ For message-level observability (who sent what to whom, without needing an exter
 
 ### Overview
 
-The ACL system controls which clients can access agents owned by other users. By default, agents are scoped to their owner.
+The ACL system controls which clients can access agents under other user handles. By default, agents are scoped to their user handle.
 
 ### Implicit Rules
 
-- **Own-agent access is always allowed** — zero-overhead short-circuit
+- **Same-user agent access is always allowed** — zero-overhead short-circuit
 - **Default seed rule:** If no rules configured, `system:* -> * -> Message,Read` is seeded
 
 ### ACL Rule Structure
@@ -377,7 +377,7 @@ The ACL system controls which clients can access agents owned by other users. By
 ```csharp
 public class AclRule
 {
-    public string OwnerPattern { get; set; }   // Target agent's owner
+    public string UserHandlePattern { get; set; }   // Target agent's user handle
     public string AgentPattern { get; set; }   // Target agent's alias
     public string CallerPattern { get; set; }  // Who is allowed
     public AclPermission Permission { get; set; }
@@ -388,7 +388,7 @@ public class AclRule
 
 | Pattern | Matches | Example |
 |---------|---------|---------|
-| `"*"` | Anything | All owners/agents/callers |
+| `"*"` | Anything | All user handles/agents/callers |
 | `"prefix*"` | Starts-with | `"automation_*"` matches `"automation_agent-123"` |
 | `"group:name"` | Group members (CallerPattern only) | `"group:admins"` |
 | `"exact"` | Case-insensitive literal | `"system"` |
@@ -415,13 +415,13 @@ public enum AclPermission
   "Acl": {
     "Rules": [
       {
-        "OwnerPattern": "system",
+        "UserHandlePattern": "system",
         "AgentPattern": "*",
         "CallerPattern": "*",
         "Permission": "Message,Read"
       },
       {
-        "OwnerPattern": "shared",
+        "UserHandlePattern": "shared",
         "AgentPattern": "analytics_*",
         "CallerPattern": "group:premium",
         "Permission": "Message,Read"
@@ -437,7 +437,7 @@ public enum AclPermission
 
 ### Evaluation Order
 
-1. **Own-agent check** — caller == target owner → allow with `All` permissions
+1. **Same-user agent check** — caller == target user handle → allow with `All` permissions
 2. **Rule scan** — first match wins
 3. **No match** → deny
 
@@ -447,18 +447,18 @@ public enum AclPermission
 |--------|-------------------|-------|
 | `SendAndReceiveMessage` | `Message` | Checked in ClientGrain |
 | `SendMessage` | `Message` | Checked in ClientGrain |
-| `CreateAgent` | `Configure` | Cross-owner only |
+| `CreateAgent` | `Configure` | Cross-user only |
 
 Agent-to-agent communication within the cluster is **trusted** and bypasses ACL.
 
-### Storage owner partitioning
+### Storage user handle partitioning
 
-Typed entity storage is not message routing, but it uses the same owner discipline. The Storage API requires `x-user`; that value is the owner partition for `container/entityKey`. Treat it as an ACL boundary:
+Typed entity storage is not message routing, but it uses the same user handle discipline. The Storage API requires `x-user-handle`; that value is the user handle partition for `container/entityKey`. Treat it as an ACL boundary:
 
-- User data should use the user id or owner handle as `x-user`.
-- Agent-owned shared data should use the owning agent/user partition deliberately.
-- The same `container/entityKey` can exist independently under different owners.
-- Do not use owner-free Host `IFabrCoreStorageProvider` calls for user data; those are system-scoped.
+- User data should use the user handle as `x-user-handle`.
+- Agent-associated shared data should use the owning agent/user partition deliberately.
+- The same `container/entityKey` can exist independently under different user handles.
+- Do not use user-handle-free Host `IFabrCoreStorageProvider` calls for user data; those are system-scoped.
 
 ### Custom ACL Provider
 
@@ -466,7 +466,7 @@ Typed entity storage is not message routing, but it uses the same owner discipli
 public interface IAclProvider
 {
     Task<AclEvaluationResult> EvaluateAsync(
-        string callerOwner, string targetOwner, string agentAlias, AclPermission required);
+        string callerUserHandle, string targetUserHandle, string agentHandle, AclPermission required);
     Task<List<AclRule>> GetRulesAsync();
     Task AddRuleAsync(AclRule rule);
     Task RemoveRuleAsync(AclRule rule);
@@ -484,7 +484,7 @@ Register: `options.UseAclProvider<SqlAclProvider>()`
 var aclProvider = serviceProvider.GetRequiredService<IAclProvider>();
 await aclProvider.AddRuleAsync(new AclRule
 {
-    OwnerPattern = "system",
+    UserHandlePattern = "system",
     AgentPattern = "premium_*",
     CallerPattern = "group:premium",
     Permission = AclPermission.Message | AclPermission.Read

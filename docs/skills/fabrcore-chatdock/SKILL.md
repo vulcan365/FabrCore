@@ -109,16 +109,16 @@ Use `ChatDockManager` (registered via `AddFabrCoreClientComponents()`) to coordi
 ChatDock manages the full agent lifecycle internally:
 
 1. **Connect**: Gets or creates `IClientContext` via `IClientContextFactory`, subscribes to `AgentMessageReceived`
-2. **Check Existing Agent**: Calls `IsAgentTracked()` then `GetAgentHealth()` to check if already configured. For cross-owner agents (handle contains `:`), goes straight to `GetAgentHealth` — the agent won't be in the user's tracked list.
-3. **Create Agent (if needed)**: Only calls `context.CreateAgent(agentConfig)` if `IsConfigured == false` **and the agent is owned by the current user** (bare alias handle). Cross-owner agents must be created server-side.
+2. **Check Existing Agent**: Calls `IsAgentTracked()` then `GetAgentHealth()` to check if already configured. For cross-user agents (handle contains `:`), goes straight to `GetAgentHealth` — the agent won't be in the user's tracked list.
+3. **Create Agent (if needed)**: Only calls `context.CreateAgent(agentConfig)` if `IsConfigured == false` **and the agent is under the current user handle** (bare agent handle handle). Cross-user agents must be created server-side.
 4. **Send Messages**: Uses `context.SendMessage()` (fire-and-forget). Responses arrive via `AgentMessageReceived`.
 5. **Message Filtering**: Filters by `FromHandle` (must match expected agent) and `ToHandle` (must be UserHandle). System messages (`_status`, `_thinking`, `_error`) are handled internally; non-prefixed message types such as `thinking` are normal application messages.
 6. **Cleanup**: `IDisposable` — unregisters from DockManager, unsubscribes events, disposes context.
 
-## Cross-Owner Agents in ChatDock
+## Cross-User Agents in ChatDock
 
 ```razor
-<ChatDock UserHandle="@userId"
+<ChatDock UserHandle="@userHandle"
           AgentHandle="system:automation_agent-123"
           AgentType="automation-agent" />
 ```

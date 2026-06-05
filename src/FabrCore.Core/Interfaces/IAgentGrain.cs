@@ -40,6 +40,12 @@ namespace FabrCore.Core.Interfaces
         Task<AgentHealthStatus> ResetAgent();
 
         /// <summary>
+        /// Permanently evicts the agent by unregistering runtime callbacks,
+        /// clearing persisted state, and deactivating the grain.
+        /// </summary>
+        Task<AgentEvictionResult> EvictAgent();
+
+        /// <summary>
         /// Gets the current health status of the agent.
         /// This method is marked as interleaving to allow health checks
         /// while message processing is active.

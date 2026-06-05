@@ -29,12 +29,18 @@ namespace FabrCore.Core.Interfaces
 
         /// <summary>
         /// Resets an agent's state and reconfigures it.
-        /// Requires Configure permission for cross-owner agents.
+        /// Requires Configure permission for cross-user agents.
         /// </summary>
         /// <param name="handle">The agent handle.</param>
         /// <returns>Health status after reset.</returns>
         [AlwaysInterleave]
         Task<AgentHealthStatus> ResetAgent(string handle);
+
+        /// <summary>
+        /// Removes an agent from this client's tracked-agent list.
+        /// </summary>
+        [AlwaysInterleave]
+        Task<bool> UntrackAgent(string handle);
 
         /// <summary>
         /// Gets the list of agents created by this client.
@@ -55,7 +61,7 @@ namespace FabrCore.Core.Interfaces
 
         /// <summary>
         /// Gets shared agents that this client has permission to access (via ACL).
-        /// Returns agents owned by other owners where the caller has at least Message permission.
+        /// Returns agents under other user handles where the caller has at least Message permission.
         /// </summary>
         [AlwaysInterleave]
         Task<List<AgentInfo>> GetAccessibleSharedAgents();

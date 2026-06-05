@@ -24,7 +24,7 @@ namespace FabrCore.Sdk
         /// <summary>Gets the current active scope, or null if none.</summary>
         public static LlmUsageScope? Current => _current.Value;
 
-        /// <summary>Agent handle that owns this scope. Set by <see cref="Begin"/>.</summary>
+        /// <summary>Agent handle associated with this scope. Set by <see cref="Begin"/>.</summary>
         public string? AgentHandle { get; set; }
 
         /// <summary>Id of the parent <c>MonitoredMessage</c> that triggered this scope, if any.</summary>

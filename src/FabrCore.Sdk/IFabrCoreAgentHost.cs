@@ -137,25 +137,25 @@ namespace FabrCore.Sdk
         void SetStatusMessage(string? message);
 
         /// <summary>
-        /// Parses this agent's handle into its owner and agent handle components.
-        /// Owner will be empty if the handle has no owner prefix.
+        /// Parses this agent's handle into its user handle and agent handle components.
+        /// UserHandle will be empty if the handle has no user handle prefix.
         /// </summary>
-        (string Owner, string AgentHandle) GetParsedHandle() => HandleUtilities.ParseHandle(GetHandle());
+        (string UserHandle, string AgentHandle) GetParsedHandle() => HandleUtilities.ParseHandle(GetHandle());
 
         /// <summary>
-        /// Gets the owner portion of this agent's handle.
-        /// Returns empty string if the handle has no owner.
+        /// Gets the user handle portion of this agent's handle.
+        /// Returns empty string if the handle has no user handle.
         /// </summary>
-        string GetOwnerHandle() => HandleUtilities.ParseHandle(GetHandle()).Owner;
+        string GetUserHandle() => HandleUtilities.ParseHandle(GetHandle()).UserHandle;
 
         /// <summary>
-        /// Gets the agent handle portion (without the owner prefix).
+        /// Gets the agent handle portion (without the user handle prefix).
         /// </summary>
-        string GetAgentHandle() => HandleUtilities.ParseHandle(GetHandle()).Alias;
+        string GetAgentHandle() => HandleUtilities.ParseHandle(GetHandle()).AgentHandle;
 
         /// <summary>
-        /// Returns true if this agent's handle includes an owner.
+        /// Returns true if this agent's handle includes a user handle.
         /// </summary>
-        bool HasOwner() => !string.IsNullOrEmpty(HandleUtilities.ParseHandle(GetHandle()).Owner);
+        bool HasUserHandle() => !string.IsNullOrEmpty(HandleUtilities.ParseHandle(GetHandle()).UserHandle);
     }
 }

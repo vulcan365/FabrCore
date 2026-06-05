@@ -250,9 +250,9 @@ namespace FabrCore.Client
     /// <summary>
     /// Client interface for the FabrCore Host API.
     /// <para>
-    /// Agent-scoped methods accept a fully-qualified handle in the form <c>"owner:alias"</c>.
-    /// The client parses the owner out of the handle using <see cref="HandleUtilities.ParseHandle"/>
-    /// and sends it as the <c>x-user</c> header — callers no longer need to pass the user id separately.
+    /// Agent-scoped methods accept a fully-qualified handle in the form <c>"userHandle:agentHandle"</c>.
+    /// The client parses the user handle out of the handle using <see cref="HandleUtilities.ParseHandle"/>
+    /// and sends it as the <c>x-user-handle</c> header — callers no longer need to pass the user handle separately.
     /// </para>
     /// </summary>
     [Obsolete("Use FabrCore.Sdk.IFabrCoreHostApiClient instead.")]
@@ -262,11 +262,11 @@ namespace FabrCore.Client
         /// Creates agents with the specified configurations.
         /// <para>
         /// Every config's <see cref="AgentConfiguration.Handle"/> must be fully-qualified
-        /// (<c>"owner:alias"</c>) and all configs in the batch must share the same owner —
-        /// the REST endpoint accepts a single <c>x-user</c> header per call.
+        /// (<c>"userHandle:agentHandle"</c>) and all configs in the batch must share the same user handle —
+        /// the REST endpoint accepts a single <c>x-user-handle</c> header per call.
         /// </para>
         /// </summary>
-        /// <param name="configs">The agent configurations. Handles must be fully-qualified and share the same owner.</param>
+        /// <param name="configs">The agent configurations. Handles must be fully-qualified and share the same user handle.</param>
         /// <param name="detailLevel">The health detail level to return.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
         /// <returns>Response containing health status for each created agent.</returns>
@@ -278,7 +278,7 @@ namespace FabrCore.Client
         /// <summary>
         /// Gets the health status of an agent.
         /// </summary>
-        /// <param name="handle">Fully-qualified handle in the form <c>"owner:alias"</c>.</param>
+        /// <param name="handle">Fully-qualified handle in the form <c>"userHandle:agentHandle"</c>.</param>
         /// <param name="detailLevel">The health detail level to return.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
         /// <returns>Health status of the agent.</returns>
@@ -290,7 +290,7 @@ namespace FabrCore.Client
         /// <summary>
         /// Sends a chat message to an agent and returns the response.
         /// </summary>
-        /// <param name="handle">Fully-qualified handle in the form <c>"owner:alias"</c>.</param>
+        /// <param name="handle">Fully-qualified handle in the form <c>"userHandle:agentHandle"</c>.</param>
         /// <param name="message">The chat message.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
         Task<AgentMessage> ChatAsync(string handle, string message, CancellationToken cancellationToken = default);
@@ -299,7 +299,7 @@ namespace FabrCore.Client
         /// Sends a fire-and-forget event to an agent's AgentEvent stream.
         /// If streamName is provided, publishes to the named event stream.
         /// </summary>
-        /// <param name="handle">Fully-qualified handle in the form <c>"owner:alias"</c>.</param>
+        /// <param name="handle">Fully-qualified handle in the form <c>"userHandle:agentHandle"</c>.</param>
         /// <param name="message">The event to publish.</param>
         /// <param name="streamName">Optional named stream override.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
@@ -368,7 +368,7 @@ namespace FabrCore.Client
 
         /// <summary>
         /// Queries the Discovery API to list all registered agent types, plugins, tools,
-        /// and any alias collisions detected at startup. No <c>x-user</c> header required —
+        /// and any alias collisions detected at startup. No <c>x-user-handle</c> header required —
         /// discovery metadata is global to the host.
         /// </summary>
         Task<DiscoveryResponse> GetDiscoveryAsync(CancellationToken cancellationToken = default);
@@ -434,11 +434,11 @@ namespace FabrCore.Client
             if (configs.Count == 0)
                 throw new ArgumentException("At least one agent configuration is required.", nameof(configs));
 
-            // All configs in a batch must share the same owner because the endpoint
-            // accepts a single x-user header per call. Parse each handle, verify the
-            // common owner, and shallow-clone configs with alias-only Handle values so
-            // the server's BuildAgentKey(owner, handle) doesn't double-prefix.
-            string? batchOwner = null;
+            // All configs in a batch must share the same user handle because the endpoint
+            // accepts a single x-user-handle header per call. Parse each handle, verify the
+            // common user handle, and shallow-clone configs with agent-handle-only Handle values so
+            // the server's BuildAgentKey(userHandle, handle) doesn't double-prefix.
+            string? batchUserHandle = null;
             var outboundConfigs = new List<AgentConfiguration>(configs.Count);
             for (var i = 0; i < configs.Count; i++)
             {
@@ -448,19 +448,19 @@ namespace FabrCore.Client
                 if (string.IsNullOrEmpty(config.Handle))
                     throw new ArgumentException($"configs[{i}].Handle is required.", nameof(configs));
 
-                var (owner, alias) = SplitHandle(config.Handle, $"{nameof(configs)}[{i}].Handle");
+                var (userHandle, agentHandle) = SplitHandle(config.Handle, $"{nameof(configs)}[{i}].Handle");
 
-                if (batchOwner == null)
-                    batchOwner = owner;
-                else if (!string.Equals(batchOwner, owner, StringComparison.Ordinal))
+                if (batchUserHandle == null)
+                    batchUserHandle = userHandle;
+                else if (!string.Equals(batchUserHandle, userHandle, StringComparison.Ordinal))
                     throw new ArgumentException(
-                        $"All configs in a batch must share the same owner. Expected '{batchOwner}', got '{owner}' at configs[{i}].",
+                        $"All configs in a batch must share the same user handle. Expected '{batchUserHandle}', got '{userHandle}' at configs[{i}].",
                         nameof(configs));
 
                 // Shallow clone so we don't mutate the caller's objects
                 outboundConfigs.Add(new AgentConfiguration
                 {
-                    Handle = alias,
+                    Handle = agentHandle,
                     AgentType = config.AgentType,
                     Models = config.Models,
                     Streams = config.Streams,
@@ -475,7 +475,7 @@ namespace FabrCore.Client
             }
 
             using var activity = ActivitySource.StartActivity("CreateAgents", ActivityKind.Client);
-            activity?.SetTag("user.id", batchOwner);
+            activity?.SetTag("user.id", batchUserHandle);
             activity?.SetTag("agents.count", configs.Count);
             activity?.SetTag("detail.level", detailLevel.ToString());
 
@@ -485,7 +485,7 @@ namespace FabrCore.Client
             try
             {
                 using var request = new HttpRequestMessage(HttpMethod.Post, url);
-                request.Headers.Add("x-user", batchOwner);
+                request.Headers.Add("x-user-handle", batchUserHandle);
                 request.Content = JsonContent.Create(outboundConfigs, options: JsonOptions);
 
                 var response = await _httpClient.SendAsync(request, cancellationToken);
@@ -495,15 +495,15 @@ namespace FabrCore.Client
                     ?? throw new InvalidOperationException("Failed to deserialize create agents response");
 
                 RecordSuccess(activity, startTime, "CreateAgents");
-                _logger.LogInformation("Created {Success}/{Total} agents for owner {Owner}",
-                    result.SuccessCount, result.TotalRequested, batchOwner);
+                _logger.LogInformation("Created {Success}/{Total} agents for user handle {userHandle}",
+                    result.SuccessCount, result.TotalRequested, batchUserHandle);
 
                 return result;
             }
             catch (Exception ex)
             {
                 RecordError(activity, startTime, "CreateAgents", ex);
-                _logger.LogError(ex, "Failed to create agents for owner {Owner}", batchOwner);
+                _logger.LogError(ex, "Failed to create agents for user handle {userHandle}", batchUserHandle);
                 throw;
             }
         }
@@ -513,20 +513,20 @@ namespace FabrCore.Client
             HealthDetailLevel detailLevel = HealthDetailLevel.Basic,
             CancellationToken cancellationToken = default)
         {
-            var (owner, alias) = SplitHandle(handle, nameof(handle));
+            var (userHandle, agentHandle) = SplitHandle(handle, nameof(handle));
 
             using var activity = ActivitySource.StartActivity("GetAgentHealth", ActivityKind.Client);
-            activity?.SetTag("user.id", owner);
+            activity?.SetTag("user.id", userHandle);
             activity?.SetTag("agent.handle", handle);
             activity?.SetTag("detail.level", detailLevel.ToString());
 
-            var url = $"{_baseUrl}/fabrcoreapi/Agent/health/{alias}?detailLevel={detailLevel}";
+            var url = $"{_baseUrl}/fabrcoreapi/Agent/health/{agentHandle}?detailLevel={detailLevel}";
             var startTime = Stopwatch.GetTimestamp();
 
             try
             {
                 using var request = new HttpRequestMessage(HttpMethod.Get, url);
-                request.Headers.Add("x-user", owner);
+                request.Headers.Add("x-user-handle", userHandle);
 
                 var response = await _httpClient.SendAsync(request, cancellationToken);
                 response.EnsureSuccessStatusCode();
@@ -549,19 +549,19 @@ namespace FabrCore.Client
 
         public async Task<AgentMessage> ChatAsync(string handle, string message, CancellationToken cancellationToken = default)
         {
-            var (owner, alias) = SplitHandle(handle, nameof(handle));
+            var (userHandle, agentHandle) = SplitHandle(handle, nameof(handle));
 
             using var activity = ActivitySource.StartActivity("Chat", ActivityKind.Client);
-            activity?.SetTag("user.id", owner);
+            activity?.SetTag("user.id", userHandle);
             activity?.SetTag("agent.handle", handle);
 
-            var url = $"{_baseUrl}/fabrcoreapi/Agent/chat/{alias}";
+            var url = $"{_baseUrl}/fabrcoreapi/Agent/chat/{agentHandle}";
             var startTime = Stopwatch.GetTimestamp();
 
             try
             {
                 using var request = new HttpRequestMessage(HttpMethod.Post, url);
-                request.Headers.Add("x-user", owner);
+                request.Headers.Add("x-user-handle", userHandle);
                 request.Content = JsonContent.Create(message, options: JsonOptions);
 
                 var response = await _httpClient.SendAsync(request, cancellationToken);
@@ -585,21 +585,21 @@ namespace FabrCore.Client
 
         public async Task SendEventAsync(string handle, EventMessage message, string? streamName = null, CancellationToken cancellationToken = default)
         {
-            var (owner, alias) = SplitHandle(handle, nameof(handle));
+            var (userHandle, agentHandle) = SplitHandle(handle, nameof(handle));
 
             using var activity = ActivitySource.StartActivity("SendEvent", ActivityKind.Client);
-            activity?.SetTag("user.id", owner);
+            activity?.SetTag("user.id", userHandle);
             activity?.SetTag("agent.handle", handle);
 
             var url = streamName != null
-                ? $"{_baseUrl}/fabrcoreapi/Agent/event/{alias}?streamName={Uri.EscapeDataString(streamName)}"
-                : $"{_baseUrl}/fabrcoreapi/Agent/event/{alias}";
+                ? $"{_baseUrl}/fabrcoreapi/Agent/event/{agentHandle}?streamName={Uri.EscapeDataString(streamName)}"
+                : $"{_baseUrl}/fabrcoreapi/Agent/event/{agentHandle}";
             var startTime = Stopwatch.GetTimestamp();
 
             try
             {
                 using var request = new HttpRequestMessage(HttpMethod.Post, url);
-                request.Headers.Add("x-user", owner);
+                request.Headers.Add("x-user-handle", userHandle);
                 request.Content = JsonContent.Create(message, options: JsonOptions);
 
                 var response = await _httpClient.SendAsync(request, cancellationToken);
@@ -1072,22 +1072,22 @@ namespace FabrCore.Client
         }
 
         /// <summary>
-        /// Parses a fully-qualified handle (<c>"owner:alias"</c>) into its owner and alias components.
+        /// Parses a fully-qualified handle (<c>"userHandle:agentHandle"</c>) into its userHandle and agent handle components.
         /// Throws <see cref="ArgumentException"/> if the handle is null, empty, or bare (no colon),
-        /// because the owner is required to build the <c>x-user</c> header.
+        /// because the userHandle is required to build the <c>x-user-handle</c> header.
         /// </summary>
-        private static (string Owner, string Alias) SplitHandle(string handle, string paramName)
+        private static (string UserHandle, string AgentHandle) SplitHandle(string handle, string paramName)
         {
             if (string.IsNullOrEmpty(handle))
                 throw new ArgumentException("Handle cannot be null or empty.", paramName);
 
-            var (owner, alias) = HandleUtilities.ParseHandle(handle);
-            if (string.IsNullOrEmpty(owner))
+            var (userHandle, agentHandle) = HandleUtilities.ParseHandle(handle);
+            if (string.IsNullOrEmpty(userHandle))
                 throw new ArgumentException(
-                    $"FabrCoreHostApiClient requires fully-qualified handles (owner:alias). Got bare alias '{handle}'.",
+                    $"FabrCoreHostApiClient requires fully-qualified handles (userHandle:agentHandle). Got bare agent handle '{handle}'.",
                     paramName);
 
-            return (owner, alias);
+            return (userHandle, agentHandle);
         }
 
         private void RecordSuccess(Activity? activity, long startTime, string operation)

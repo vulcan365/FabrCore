@@ -270,20 +270,20 @@ For end-to-end `SpanId`/`ParentSpanId` propagation checks you need the grain ing
 `TestFabrCoreAgentHost` implements all handle methods from `IFabrCoreAgentHost`:
 
 ```csharp
-// Default handle is "test-agent" (no owner)
+// Default handle is "test-agent" (no user handle)
 var harness = new FabrCoreTestHarness();
 var host = harness.AgentHost;
 host.GetHandle();        // "test-agent"
-host.GetOwnerHandle();   // ""
+host.GetUserHandle();   // ""
 host.GetAgentHandle();   // "test-agent"
-host.HasOwner();         // false
+host.HasUserHandle();         // false
 
-// With owner-scoped handle
+// With user-handle-scoped handle
 var harness2 = new FabrCoreTestHarness(new() { Handle = "user1:my-agent" });
 var host2 = harness2.AgentHost;
-host2.GetOwnerHandle();  // "user1"
+host2.GetUserHandle();  // "user1"
 host2.GetAgentHandle();  // "my-agent"
-host2.HasOwner();        // true
+host2.HasUserHandle();        // true
 ```
 
 ## TestFabrCoreAgentHost Assertions
@@ -302,12 +302,27 @@ CollectionAssert.Contains(harness.AgentHost.RegisteredTimers, "my-timer");
 Assert.AreEqual("Processing..", harness.AgentHost.CurrentStatusMessage);
 ```
 
+## Testing Agent Eviction
+
+Agent eviction is a Host/Orleans lifecycle feature, so cover it with integration-style tests or manual Host API verification rather than only `FabrCoreTestHarness` unit tests.
+
+Verify these scenarios against a running Host:
+
+- `DELETE /fabrcoreapi/Agent/{handle}` with `x-user-handle` returns `AgentEvictionResult`.
+- Persisted chat/custom state is gone after eviction; a later health call reactivates the virtual grain as `NotConfigured`.
+- Registered timers are disposed and persistent reminders are unregistered, including reminders restored from Orleans storage.
+- Stream subscriptions are removed; publishing to the former agent chat/event streams does not invoke the evicted agent.
+- Diagnostics registry and `GetTrackedAgents()` no longer include the evicted agent.
+- `/fabrcoreapi/Discovery` still lists the agent type/alias, because discovery is assembly metadata rather than created-agent state.
+- Deleting while `OnMessage` is actively processing returns `409 Conflict`; retry after the agent is idle.
+- Deleting the same agent twice is idempotent and returns success with `Existed = false` if no traces remain.
+
 ## Testing Typed Entity Storage
 
 Typed entity storage should be tested at two levels:
 
 1. Unit-test consumers against an in-memory fake `IFabrCoreStorageProvider`.
-2. Integration-test the Host API when you need to verify owner partitioning and the configured Orleans provider.
+2. Integration-test the Host API when you need to verify user handle partitioning and the configured Orleans provider.
 
 ### In-memory fake provider
 
@@ -348,7 +363,7 @@ Verify these behaviors against a running Host when storage is part of the featur
 - POCOs, primitives, dictionaries, and arrays round-trip through `UpsertStorageEntityAsync<T>` and `GetStorageEntityAsync<T>`.
 - Missing reads return `default`/`null`.
 - Deletes return `true` only when a value existed.
-- The same `container/entityKey` is isolated across different owners (`x-user` values).
+- The same `container/entityKey` is isolated across different user handles (`x-user-handle` values).
 - The behavior follows the configured Orleans storage provider: localhost memory is non-persistent, SQL/Azure/custom providers persist according to their configuration.
 - No public SDK or client API exposes Orleans storage types such as `IGrainStorage`, `GrainId`, or `IGrainState<T>`.
 

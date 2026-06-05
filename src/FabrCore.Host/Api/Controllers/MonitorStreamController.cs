@@ -46,22 +46,22 @@ namespace FabrCore.Host.Api.Controllers
 
         [HttpGet("")]
         public async Task Get(
-            [FromHeader(Name = "x-user")] string userId,
+            [FromHeader(Name = "x-user-handle")] string userHandle,
             [FromQuery] string? agentHandle = null,
             [FromQuery] string? channels = null,
             CancellationToken cancellationToken = default)
         {
-            if (string.IsNullOrWhiteSpace(userId))
+            if (string.IsNullOrWhiteSpace(userHandle))
             {
                 Response.StatusCode = StatusCodes.Status400BadRequest;
-                await WriteRawAsync("x-user header is required for monitor stream access", cancellationToken);
+                await WriteRawAsync("x-user-handle header is required for monitor stream access", cancellationToken);
                 return;
             }
 
-            if (!string.IsNullOrWhiteSpace(agentHandle) && !await CanReadAgentAsync(userId, agentHandle))
+            if (!string.IsNullOrWhiteSpace(agentHandle) && !await CanReadAgentAsync(userHandle, agentHandle))
             {
                 Response.StatusCode = StatusCodes.Status403Forbidden;
-                await WriteRawAsync($"Access denied: '{userId}' cannot Read monitor data for '{agentHandle}'.", cancellationToken);
+                await WriteRawAsync($"Access denied: '{userHandle}' cannot Read monitor data for '{agentHandle}'.", cancellationToken);
                 return;
             }
 
@@ -87,7 +87,7 @@ namespace FabrCore.Host.Api.Controllers
                 if (!include.Messages) return;
                 if (!string.IsNullOrEmpty(agentHandle) && m.AgentHandle != agentHandle) return;
                 _ = QueueWhenReadableAsync(
-                    userId,
+                    userHandle,
                     queue,
                     "message",
                     m,
@@ -100,7 +100,7 @@ namespace FabrCore.Host.Api.Controllers
                 if (!include.Events) return;
                 if (!string.IsNullOrEmpty(agentHandle) && e.AgentHandle != agentHandle) return;
                 _ = QueueWhenReadableAsync(
-                    userId,
+                    userHandle,
                     queue,
                     "event",
                     e,
@@ -113,7 +113,7 @@ namespace FabrCore.Host.Api.Controllers
                 if (!include.LlmCalls) return;
                 if (!string.IsNullOrEmpty(agentHandle) && c.AgentHandle != agentHandle) return;
                 _ = QueueWhenReadableAsync(
-                    userId,
+                    userHandle,
                     queue,
                     "llm-call",
                     c,
@@ -207,7 +207,7 @@ namespace FabrCore.Host.Api.Controllers
         }
 
         private async Task QueueWhenReadableAsync(
-            string userId,
+            string userHandle,
             Channel<SseEvent> queue,
             string eventName,
             object payload,
@@ -223,7 +223,7 @@ namespace FabrCore.Host.Api.Controllers
 
                 foreach (var handle in handles)
                 {
-                    if (await CanReadAgentAsync(userId, handle))
+                    if (await CanReadAgentAsync(userHandle, handle))
                     {
                         queue.Writer.TryWrite(new SseEvent(eventName, payload));
                         return;
@@ -236,25 +236,25 @@ namespace FabrCore.Host.Api.Controllers
             }
         }
 
-        private async Task<bool> CanReadAgentAsync(string userId, string? agentHandle)
+        private async Task<bool> CanReadAgentAsync(string userHandle, string? agentHandle)
         {
             if (string.IsNullOrWhiteSpace(agentHandle))
             {
                 return false;
             }
 
-            var (targetOwner, agentAlias) = HandleUtilities.ParseHandle(agentHandle);
-            if (string.IsNullOrWhiteSpace(targetOwner) || string.IsNullOrWhiteSpace(agentAlias))
+            var (targetUserHandle, targetAgentHandle) = HandleUtilities.ParseHandle(agentHandle);
+            if (string.IsNullOrWhiteSpace(targetUserHandle) || string.IsNullOrWhiteSpace(targetAgentHandle))
             {
                 return false;
             }
 
-            if (string.Equals(userId, targetOwner, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(userHandle, targetUserHandle, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
 
-            var result = await _aclProvider.EvaluateAsync(userId, targetOwner, agentAlias, AclPermission.Read);
+            var result = await _aclProvider.EvaluateAsync(userHandle, targetUserHandle, targetAgentHandle, AclPermission.Read);
             return result.Allowed;
         }
 

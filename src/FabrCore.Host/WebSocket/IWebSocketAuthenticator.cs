@@ -4,8 +4,8 @@ namespace FabrCore.Host.WebSocket
 {
     /// <summary>
     /// Pluggable authenticator invoked before a WebSocket upgrade is accepted.
-    /// The default implementation preserves the pre-auth behavior (reads
-    /// <c>x-fabrcore-userid</c> header or <c>userid</c> query param). Production
+    /// The default implementation reads
+    /// <c>x-fabrcore-userhandle</c> header or <c>userhandle</c> query param). Production
     /// hosts should override via <see cref="FabrCoreServerOptions"/> with an
     /// implementation that validates JWT/cookies against their identity provider.
     /// </summary>
@@ -22,9 +22,9 @@ namespace FabrCore.Host.WebSocket
     /// <summary>
     /// Outcome of <see cref="IWebSocketAuthenticator.AuthenticateAsync"/>.
     /// </summary>
-    public sealed record WebSocketAuthResult(bool Allowed, string? UserId, string? Reason)
+    public sealed record WebSocketAuthResult(bool Allowed, string? UserHandle, string? Reason)
     {
         public static WebSocketAuthResult Deny(string reason) => new(false, null, reason);
-        public static WebSocketAuthResult Allow(string userId) => new(true, userId, null);
+        public static WebSocketAuthResult Allow(string userHandle) => new(true, userHandle, null);
     }
 }

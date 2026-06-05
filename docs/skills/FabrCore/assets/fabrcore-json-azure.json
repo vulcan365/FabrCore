@@ -20,7 +20,7 @@
   "Acl": {
     "Rules": [
       {
-        "OwnerPattern": "system",
+        "UserHandlePattern": "system",
         "AgentPattern": "*",
         "CallerPattern": "*",
         "Permission": "Message,Read"

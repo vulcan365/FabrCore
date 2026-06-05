@@ -90,7 +90,7 @@ When an agent initializes via `ResolveConfiguredToolsAsync()`:
 
 The MCP client lifecycle is managed by `FabrCoreAgentProxy`:
 - Connected during `OnInitialize()`
-- Disposed when the agent grain deactivates
+- Disposed when the agent grain deactivates or is hard-evicted with `DELETE /fabrcoreapi/Agent/{handle}`
 
 ## Config-Driven (Recommended)
 

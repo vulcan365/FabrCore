@@ -237,7 +237,7 @@ Supported providers for embeddings: `OpenAI`, `Azure`, `OpenRouter`, `Gemini`. G
 
 ## System Agents
 
-System agents are shared agents owned by `"system"` that multiple users can access. Create them server-side using `IFabrCoreAgentService`:
+System agents are shared agents under user handle `"system"` that multiple users can access. Create them server-side using `IFabrCoreAgentService`:
 
 ```csharp
 public class MyStartupService : IHostedService
@@ -268,15 +268,15 @@ The agent grain key becomes `"system:{config.Handle}"`. Any user can message it 
 
 ## REST API Endpoints
 
-Base path: `/fabrcoreapi/`. All agent-scoped endpoints require the `x-user` header to identify the caller.
+Base path: `/fabrcoreapi/`. All agent-scoped endpoints require the `x-user-handle` header to identify the caller.
 
-> **Typed C# client:** `IFabrCoreHostApiClient` in `FabrCore.Sdk` wraps every endpoint below (Agent, Storage, Discovery, Embeddings, File, ModelConfig, Diagnostics). Agent-scoped methods take a fully-qualified `"owner:alias"` handle and the client extracts the owner into the `x-user` header automatically. Storage methods take an explicit owner. Older `FabrCore.Client` Host API client types are obsolete. See the **FabrCoreHostApiClient** section in the `fabrcore-client` skill for usage.
+> **Typed C# client:** `IFabrCoreHostApiClient` in `FabrCore.Sdk` wraps the common endpoint groups below (Agent, Storage, Discovery, Embeddings, File, ModelConfig, Diagnostics). Agent-scoped methods take a fully-qualified `"userHandle:agentHandle"` handle and the client extracts the user handle into the `x-user-handle` header automatically. Storage methods take an explicit user handle. If a newly added endpoint is not yet surfaced by the typed client, call its REST route directly. Older `FabrCore.Client` Host API client types are obsolete. See the **FabrCoreHostApiClient** section in the `fabrcore-client` skill for usage.
 
 ---
 
 ### Agent API (`/fabrcoreapi/agent`)
 
-Create agents, send messages, and check health. This is the primary API for programmatic agent interaction.
+Create agents, send messages, check health, and hard-evict agent instances. This is the primary API for programmatic agent interaction.
 
 #### POST `/agent/create` — Create/configure agents (batch)
 
@@ -284,7 +284,7 @@ Creates one or more agents for a user. If the agent already exists it is reconfi
 
 | Parameter | Source | Type | Required | Description |
 |-----------|--------|------|----------|-------------|
-| `x-user` | Header | string | Yes | User/owner ID |
+| `x-user-handle` | Header | string | Yes | User handle |
 | body | Body | `List<AgentConfiguration>` | Yes | Agent configs to create |
 | `detailLevel` | Query | `HealthDetailLevel` | No | `Basic` (default), `Detailed`, or `Full` |
 
@@ -302,11 +302,24 @@ Creates one or more agents for a user. If the agent already exists it is reconfi
 
 | Parameter | Source | Type | Required |
 |-----------|--------|------|----------|
-| `x-user` | Header | string | Yes |
+| `x-user-handle` | Header | string | Yes |
 | `handle` | Route | string | Yes |
 | `detailLevel` | Query | `HealthDetailLevel` | No |
 
 **Response** `200 OK`: `AgentHealthStatus` (see models below).
+
+#### DELETE `/agent/{handle}` — Evict/delete an agent
+
+Permanently removes an agent instance for the user handle. This is a hard-delete operation, not a reset: it unregisters timers and reminders, removes stream subscriptions, clears the `AgentGrain` persisted Orleans state, removes management registry and client tracking entries, and deactivates the grain.
+
+| Parameter | Source | Type | Required |
+|-----------|--------|------|----------|
+| `x-user-handle` | Header | string | Yes |
+| `handle` | Route | string | Yes |
+
+**Response** `200 OK`: `AgentEvictionResult` (see models below).
+
+**Response** `409 Conflict`: agent is actively processing a message. Retry later; v1 does not force-delete active `OnMessage` work.
 
 #### POST `/agent/chat/{handle}` — Send chat message
 
@@ -314,7 +327,7 @@ Simple request/response chat. Blocks until the agent responds.
 
 | Parameter | Source | Type | Required |
 |-----------|--------|------|----------|
-| `x-user` | Header | string | Yes |
+| `x-user-handle` | Header | string | Yes |
 | `handle` | Route | string | Yes |
 | body | Body | `string` | Yes |
 
@@ -324,7 +337,7 @@ Simple request/response chat. Blocks until the agent responds.
 
 | Parameter | Source | Type | Required |
 |-----------|--------|------|----------|
-| `x-user` | Header | string | Yes |
+| `x-user-handle` | Header | string | Yes |
 | `handle` | Route | string | Yes |
 | body | Body | `EventMessage` | Yes |
 | `streamName` | Query | string | No |
@@ -377,7 +390,7 @@ Deletes a temporary file before its TTL expires.
 
 ### Storage API (`/fabrcoreapi/storage`)
 
-Typed owner-scoped entity storage for application data. Values are sent and returned as JSON over HTTP, but consumers use generic .NET values through `FabrCore.Sdk.IFabrCoreHostApiClient` or `IFabrCoreStorageProvider`.
+Typed user-handle-scoped entity storage for application data. Values are sent and returned as JSON over HTTP, but consumers use generic .NET values through `FabrCore.Sdk.IFabrCoreHostApiClient` or `IFabrCoreStorageProvider`.
 
 The Host stores each value internally in an envelope:
 
@@ -391,15 +404,15 @@ The Host stores each value internally in an envelope:
 Storage uses the configured Orleans grain storage provider named `FabrCoreOrleansConstants.StorageProviderName` (`"fabrcoreStorage"`). With the simple `AddFabrCoreServer` path, `ClusteringMode: Localhost` uses Orleans memory grain storage, so typed storage entities and grain state are lost when the process exits. Use `SqlServer`, `AzureStorage`, or custom Orleans storage for restart-safe persistence.
 
 Addressing:
-- `x-user` is the owner partition and ACL boundary.
+- `x-user-handle` is the user handle partition and ACL boundary.
 - `container` is the logical bucket, mapped to the Orleans state name.
-- `entityKey` is the key within the owner/container. The route is a catch-all, so slash-delimited keys are allowed.
+- `entityKey` is the key within the userHandle/container. The route is a catch-all, so slash-delimited keys are allowed.
 
 #### GET `/storage/{container}/{entityKey}` — Read an entity
 
 | Parameter | Source | Type | Required |
 |-----------|--------|------|----------|
-| `x-user` | Header | string | Yes |
+| `x-user-handle` | Header | string | Yes |
 | `container` | Route | string | Yes |
 | `entityKey` | Route | string | Yes |
 
@@ -411,7 +424,7 @@ Addressing:
 
 | Parameter | Source | Type | Required |
 |-----------|--------|------|----------|
-| `x-user` | Header | string | Yes |
+| `x-user-handle` | Header | string | Yes |
 | `container` | Route | string | Yes |
 | `entityKey` | Route | string | Yes |
 | body | Body | JSON value | Yes |
@@ -422,7 +435,7 @@ Addressing:
 
 | Parameter | Source | Type | Required |
 |-----------|--------|------|----------|
-| `x-user` | Header | string | Yes |
+| `x-user-handle` | Header | string | Yes |
 | `container` | Route | string | Yes |
 | `entityKey` | Route | string | Yes |
 
@@ -435,13 +448,15 @@ Pitfalls:
 - Upserts are last-writer-wins.
 - `ValueType` is informational; reads deserialize into the caller-requested type.
 - Do not resolve Orleans `IGrainStorage` directly from application code. Use the FabrCore SDK or Host services so Orleans does not leak into clients.
-- Host-internal `IFabrCoreStorageProvider` calls are owner-free and use the system partition. For user data, go through the owner-scoped API/client or a Host service that explicitly supplies the owner.
+- Host-internal `IFabrCoreStorageProvider` calls are user-handle-free and use the system partition. For user data, go through the user-handle-scoped API/client or a Host service that explicitly supplies the user handle.
 
 ---
 
 ### Discovery API (`/fabrcoreapi/discovery`)
 
 Introspect available agent types, plugins, and tools registered via `AdditionalAssemblies`. Returns full registry metadata including capabilities, notes, and method descriptions.
+
+Discovery is type-level, not instance-level. Evicting an agent removes that created agent from diagnostics/client tracking, but it does not remove the agent class/alias from `/discovery` unless the assembly/type is removed from the host.
 
 #### GET `/discovery` — List all registered types
 
@@ -643,6 +658,8 @@ Monitor and manage agent lifecycle across the cluster.
 
 #### POST `/diagnostics/agents/purge` — Purge old deactivated agents
 
+Removes old deactivated entries from the diagnostics/management registry only. It does not clear `AgentGrain` persisted state, timers, reminders, or stream subscriptions. Use `DELETE /agent/{handle}` for hard eviction.
+
 | Parameter | Source | Type | Required | Description |
 |-----------|--------|------|----------|-------------|
 | `olderThanHours` | Query | int | No | Hours threshold (default 24) |
@@ -673,6 +690,22 @@ Monitor and manage agent lifecycle across the cluster.
 | `ActiveStreams` | List\<string\>? | Full | Stream names |
 | `Diagnostics` | Dictionary\<string,string\>? | Full | Diagnostic key-value pairs |
 
+**`AgentEvictionResult`** — returned by agent eviction:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Handle` | string | Full agent grain key (`userHandle:agentHandle`) |
+| `Success` | bool | Whether eviction completed |
+| `Existed` | bool | Whether any agent state/registry/tracking evidence existed |
+| `Message` | string? | Human-readable result |
+| `TimersDisposed` | int | Active Orleans timers disposed |
+| `RemindersUnregistered` | int | Persistent Orleans reminders unregistered |
+| `StreamSubscriptionsRemoved` | int | Stream subscription handles unsubscribed |
+| `StateCleared` | bool | Whether `AgentGrain` persisted state was cleared |
+| `RegistryRemoved` | bool | Whether diagnostics/management registry entry was removed |
+| `ClientTrackingRemoved` | bool | Whether owning client tracked-agent entry was removed |
+| `Timestamp` | DateTime | When eviction completed (UTC) |
+
 **`AgentInfo`** — returned by diagnostics endpoints:
 
 | Field | Type | Description |
@@ -700,7 +733,7 @@ Monitor and manage agent lifecycle across the cluster.
 
 ## WebSocket
 
-Connect at `/ws` for real-time bidirectional communication. Requires user ID via `x-fabrcore-userid` header or `userid` query parameter.
+Connect at `/ws` for real-time bidirectional communication. Requires user handle via `x-fabrcore-userhandle` header or `userhandle` query parameter.
 
 The WebSocket ingress honors the W3C `traceparent` header — if a client sets it, the resulting `AgentMessage` ingress span parents on the caller's trace via `AgentMessageTelemetry.StartIngressActivity` (see `src/FabrCore.Host/WebSocket/WebSocketSession.cs:314`). Error responses are stamped from `Activity.Current` at lines 384, 413, 700.
 

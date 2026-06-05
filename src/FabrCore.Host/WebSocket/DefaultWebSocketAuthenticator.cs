@@ -5,8 +5,8 @@ using Microsoft.Extensions.Options;
 namespace FabrCore.Host.WebSocket
 {
     /// <summary>
-    /// Default backward-compatible authenticator. Reads the user handle from the
-    /// <c>x-fabrcore-userid</c> header or <c>userid</c> query parameter, and (optionally)
+    /// Default authenticator. Reads the user handle from the
+    /// <c>x-fabrcore-userhandle</c> header or <c>userhandle</c> query parameter, and (optionally)
     /// enforces a configured <c>Origin</c> allowlist. Does NOT validate an identity —
     /// replace in production with an implementation that verifies a bearer token
     /// or session cookie.
@@ -33,23 +33,23 @@ namespace FabrCore.Host.WebSocket
                 }
             }
 
-            string? userId = null;
-            if (context.Request.Headers.TryGetValue("x-fabrcore-userid", out var userIdValues))
+            string? userHandle = null;
+            if (context.Request.Headers.TryGetValue("x-fabrcore-userhandle", out var userHandleValues))
             {
-                userId = userIdValues.FirstOrDefault();
+                userHandle = userHandleValues.FirstOrDefault();
             }
-            else if (context.Request.Query.TryGetValue("userid", out var queryValues))
+            else if (context.Request.Query.TryGetValue("userhandle", out var queryValues))
             {
-                userId = queryValues.FirstOrDefault();
+                userHandle = queryValues.FirstOrDefault();
             }
 
-            if (string.IsNullOrWhiteSpace(userId))
+            if (string.IsNullOrWhiteSpace(userHandle))
             {
                 return Task.FromResult(WebSocketAuthResult.Deny(
-                    "Missing required user ID. Provide via x-fabrcore-userid header or userid query parameter."));
+                    "Missing required user handle. Provide via x-fabrcore-userhandle header or userhandle query parameter."));
             }
 
-            return Task.FromResult(WebSocketAuthResult.Allow(userId));
+            return Task.FromResult(WebSocketAuthResult.Allow(userHandle));
         }
     }
 }

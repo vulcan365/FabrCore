@@ -7,6 +7,7 @@ namespace FabrCore.Core.Interfaces
         // Agent Registration
         Task RegisterAgent(string key, string agentType, string handle);
         Task DeactivateAgent(string key, string reason);
+        Task<bool> RemoveAgent(string key);
 
         // Client Registration
         Task RegisterClient(string clientId);

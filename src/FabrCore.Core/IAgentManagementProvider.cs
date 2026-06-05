@@ -16,6 +16,9 @@ namespace FabrCore.Core
         /// <summary>Marks an agent as deactivated with a reason.</summary>
         Task DeactivateAgentAsync(string key, string reason);
 
+        /// <summary>Removes an agent entry completely from the management registry.</summary>
+        Task<bool> RemoveAgentAsync(string key);
+
         /// <summary>Registers a client as active.</summary>
         Task RegisterClientAsync(string clientId);
 

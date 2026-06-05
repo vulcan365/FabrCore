@@ -249,7 +249,7 @@ public interface IClientContext
 
 For simple fire-and-forget messaging without a full ClientContext.
 
-**Important:** Requires fully-qualified handles (`"owner:agent"`). Throws if passed a bare alias.
+**Important:** Requires fully-qualified handles (`"userHandle:agentHandle"`). Throws if passed a bare agent handle.
 
 ```csharp
 @inject IDirectMessageSender DirectSender
@@ -275,12 +275,12 @@ Older `FabrCore.Client` Host API client types are obsolete compatibility shims. 
 
 REST client for the Host API. The base URL is read from the `FabrCoreHostUrl` configuration key (see appsettings.json above; defaults to `http://localhost:5000` if missing).
 
-Agent-scoped methods take a **fully-qualified handle** in the form `"owner:alias"`. The client parses the owner out of the handle via `HandleUtilities.ParseHandle` and sends it as the `x-user` header automatically — callers do not pass the user id separately. Bare aliases are rejected with `ArgumentException`.
+Agent-scoped methods take a **fully-qualified handle** in the form `"userHandle:agentHandle"`. The client parses the user handle out of the handle via `HandleUtilities.ParseHandle` and sends it as the `x-user-handle` header automatically — callers do not pass the user handle separately. Bare agent handles are rejected with `ArgumentException`.
 
 ```csharp
 @inject IFabrCoreHostApiClient ApiClient
 
-// Health — handle is full "owner:alias"
+// Health — handle is full "userHandle:agentHandle"
 var health = await ApiClient.GetAgentHealthAsync("user1:my-agent");
 
 // Chat
@@ -294,8 +294,8 @@ await ApiClient.SendEventAsync("user1:my-agent", new EventMessage
     Channel = "user1:my-agent"
 });
 
-// Batch create — every config.Handle must be "owner:alias" and all
-// configs in the batch must share the same owner.
+// Batch create — every config.Handle must be "userHandle:agentHandle" and all
+// configs in the batch must share the same user handle.
 var created = await ApiClient.CreateAgentsAsync(new List<AgentConfiguration>
 {
     new() { Handle = "user1:assistant", AgentType = "ChatAgent", Models = "gpt-4o-mini" },
@@ -303,11 +303,37 @@ var created = await ApiClient.CreateAgentsAsync(new List<AgentConfiguration>
 });
 ```
 
-Under the hood, for `GetAgentHealthAsync("user1:my-agent")` the client issues `GET {FabrCoreHostUrl}/fabrcoreapi/Agent/health/my-agent` with header `x-user: user1`. You never have to split the handle yourself.
+Under the hood, for `GetAgentHealthAsync("user1:my-agent")` the client issues `GET {FabrCoreHostUrl}/fabrcoreapi/Agent/health/my-agent` with header `x-user-handle: user1`. You never have to split the handle yourself.
+
+### Agent eviction
+
+Hard agent eviction is currently a Host REST operation. Use it when an agent instance should be permanently removed from Orleans state, timers/reminders, stream subscriptions, diagnostics registry, and client tracking.
+
+```csharp
+// Fully-qualified handle: "userHandle:agentHandle"
+var (userHandle, agentHandle) = HandleUtilities.ParseHandle("user1:my-agent");
+
+using var request = new HttpRequestMessage(
+    HttpMethod.Delete,
+    $"{hostBaseUrl}/fabrcoreapi/Agent/{Uri.EscapeDataString(agentHandle)}");
+
+request.Headers.Add("x-user-handle", userHandle);
+
+using var response = await httpClient.SendAsync(request);
+if (response.StatusCode == HttpStatusCode.Conflict)
+{
+    // Agent is actively processing a message; retry later.
+}
+
+response.EnsureSuccessStatusCode();
+var eviction = await response.Content.ReadFromJsonAsync<AgentEvictionResult>();
+```
+
+Eviction is not the same as reset. `ResetAgent` clears state and reconfigures; eviction hard-deletes the persisted grain state and removes the agent from `GetTrackedAgents()` and diagnostics listings. `/fabrcoreapi/Discovery` still lists the agent type because discovery is assembly/type metadata, not created-agent state.
 
 ### Typed entity storage
 
-Use typed entity storage for small JSON-serializable application data keyed by owner, container, and entity key. The SDK hides JSON and Orleans; consumers read and write generic .NET types.
+Use typed entity storage for small JSON-serializable application data keyed by user handle, container, and entity key. The SDK hides JSON and Orleans; consumers read and write generic .NET types.
 
 ```csharp
 using FabrCore.Sdk;
@@ -317,29 +343,29 @@ using FabrCore.Sdk;
 public sealed record UserPreferences(string Theme, string Locale);
 
 await ApiClient.UpsertStorageEntityAsync(
-    owner: "user1",
+    userHandle: "user1",
     container: "preferences",
     entityKey: "ui",
     value: new UserPreferences("dark", "en-US"));
 
 UserPreferences? prefs = await ApiClient.GetStorageEntityAsync<UserPreferences>(
-    owner: "user1",
+    userHandle: "user1",
     container: "preferences",
     entityKey: "ui");
 
 bool deleted = await ApiClient.DeleteStorageEntityAsync(
-    owner: "user1",
+    userHandle: "user1",
     container: "preferences",
     entityKey: "ui");
 ```
 
 Endpoints:
 
-| Method | HTTP | Endpoint | Owner |
+| Method | HTTP | Endpoint | User handle |
 |---|---|---|---|
-| `GetStorageEntityAsync<T>` | GET | `/fabrcoreapi/Storage/{container}/{entityKey}` | `x-user` header |
-| `UpsertStorageEntityAsync<T>` | PUT | `/fabrcoreapi/Storage/{container}/{entityKey}` | `x-user` header |
-| `DeleteStorageEntityAsync` | DELETE | `/fabrcoreapi/Storage/{container}/{entityKey}` | `x-user` header |
+| `GetStorageEntityAsync<T>` | GET | `/fabrcoreapi/Storage/{container}/{entityKey}` | `x-user-handle` header |
+| `UpsertStorageEntityAsync<T>` | PUT | `/fabrcoreapi/Storage/{container}/{entityKey}` | `x-user-handle` header |
+| `DeleteStorageEntityAsync` | DELETE | `/fabrcoreapi/Storage/{container}/{entityKey}` | `x-user-handle` header |
 
 `entityKey` is a route catch-all on the Host, so slash-delimited keys such as `"projects/123/settings"` are allowed through the SDK client. Missing reads return `default`; deletes return `true` only when an entity existed.
 
@@ -351,28 +377,28 @@ Endpoints:
 var prefs = await Storage.GetAsync<UserPreferences>("preferences", "ui");
 ```
 
-The owner-free `IFabrCoreStorageProvider` methods require `FabrCoreStorageOwner` or `FabrCore:Storage:Owner` configuration. Use the owner-explicit `IFabrCoreHostApiClient` methods when a component can act for more than one user.
+The user-handle-free `IFabrCoreStorageProvider` methods require `FabrCoreStorageUserHandle` or `FabrCore:Storage:UserHandle` configuration. Use the user-handle-explicit `IFabrCoreHostApiClient` methods when a component can act for more than one user.
 
 Storage pitfalls:
 - Do not store raw JSON strings unless the value is actually a string; pass typed POCOs, primitives, dictionaries, or arrays.
 - Reads deserialize into the caller-requested `T`; the stored `ValueType` is metadata, not enforcement.
 - This is CRUD-only in v1: no list/query API and no ETag concurrency. Last writer wins.
-- Owner partitioning is the ACL boundary. Always pass the correct owner, usually the user id or agent owner handle.
+- User handle partitioning is the ACL boundary. Always pass the correct user handle, usually the user handle or agent user handle.
 
-### Host-scoped methods (no `x-user` required)
+### Host-scoped methods (no `x-user-handle` required)
 
-Discovery, embeddings, file, model-config, and diagnostics endpoints are **global to the host** and do not require a handle or `x-user` header. Storage is different: it is owner-scoped and requires `x-user`. Call global endpoints straight off the injected client:
+Discovery, embeddings, file, model-config, and diagnostics endpoints are **global to the host** and do not require a handle or `x-user-handle` header. Storage is different: it is user-handle-scoped and requires `x-user-handle`. Call global endpoints straight off the injected client:
 
 ```csharp
 // Discovery — list registered agent types, plugins, tools, and any alias collisions
 DiscoveryResponse discovery = await ApiClient.GetDiscoveryAsync();
 foreach (var agent in discovery.Agents)
-    Console.WriteLine($"{agent.Aliases.FirstOrDefault()} — {agent.Description}");
+    Console.WriteLine($"{agent.AgentHandlees.FirstOrDefault()} — {agent.Description}");
 foreach (var plugin in discovery.Plugins)
-    Console.WriteLine($"{plugin.Aliases.FirstOrDefault()} — {plugin.Methods.Count} method(s)");
+    Console.WriteLine($"{plugin.AgentHandlees.FirstOrDefault()} — {plugin.Methods.Count} method(s)");
 if (discovery.Collisions is { Count: > 0 } collisions)
     foreach (var c in collisions)
-        Console.WriteLine($"collision: {c.Category} alias '{c.Alias}' → {string.Join(", ", c.Types)}");
+        Console.WriteLine($"collision: {c.Category} alias '{c.AgentHandle}' → {string.Join(", ", c.Types)}");
 
 // Embeddings — single text
 EmbeddingResponse emb = await ApiClient.GetEmbeddingsAsync("The quick brown fox");
@@ -425,7 +451,7 @@ bool fileDeleted = await ApiClient.DeleteFileAsync(fileId);
 ModelConfigResponse model = await ApiClient.GetModelConfigAsync("gpt-4o-mini");
 ApiKeyResponse apiKey = await ApiClient.GetApiKeyAsync("openai");
 
-// Diagnostics — host-wide agent registry (independent of any single owner)
+// Diagnostics — host-wide agent registry (independent of any single user handle)
 AgentsListResponse agents = await ApiClient.GetAgentsAsync(status: "active");
 AgentStatisticsResponse stats = await ApiClient.GetAgentStatisticsAsync();
 ```
@@ -447,7 +473,7 @@ AgentStatisticsResponse stats = await ApiClient.GetAgentStatisticsAsync();
 | `GetAgentStatisticsAsync` | GET | `/fabrcoreapi/Diagnostics/agents/statistics` | `AgentStatisticsResponse` |
 | `PurgeOldAgentsAsync` | POST | `/fabrcoreapi/Diagnostics/agents/purge` | `PurgeAgentsResponse` |
 
-All of these are straight HTTP calls against `{FabrCoreHostUrl}` — no handle parsing, no `x-user` header, no ClientContext required. They're safe to call from any DI-registered consumer.
+All of these are straight HTTP calls against `{FabrCoreHostUrl}` — no handle parsing, no `x-user-handle` header, no ClientContext required. They're safe to call from any DI-registered consumer.
 
 ## Telemetry (OpenTelemetry)
 

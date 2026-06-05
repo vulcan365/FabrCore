@@ -548,7 +548,7 @@ namespace FabrCore.Client
         }
 
         /// <summary>
-        /// Ensures the handle has the correct owner prefix.
+        /// Ensures the handle has the correct user handle prefix.
         /// </summary>
         private string NormalizeHandle(string handle) => HandleUtilities.EnsurePrefix(handle, _handlePrefix);
 

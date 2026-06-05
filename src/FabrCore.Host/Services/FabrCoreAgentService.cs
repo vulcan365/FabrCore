@@ -32,13 +32,13 @@ namespace FabrCore.Host.Services
             _logger = logger;
         }
 
-        private static string BuildAgentKey(string userId, string handle) => $"{userId}:{handle}";
+        private static string BuildAgentKey(string userHandle, string handle) => $"{userHandle}:{handle}";
 
         // ── Agent Communication ──
 
-        public async Task<AgentHealthStatus> ConfigureAgentAsync(string userId, AgentConfiguration config, HealthDetailLevel detailLevel = HealthDetailLevel.Basic)
+        public async Task<AgentHealthStatus> ConfigureAgentAsync(string userHandle, AgentConfiguration config, HealthDetailLevel detailLevel = HealthDetailLevel.Basic)
         {
-            var key = BuildAgentKey(userId, config.Handle!);
+            var key = BuildAgentKey(userHandle, config.Handle!);
             var proxy = _clusterClient.GetGrain<IAgentGrain>(key);
             return await proxy.ConfigureAgent(config, config.ForceReconfigure, detailLevel);
         }
@@ -48,7 +48,7 @@ namespace FabrCore.Host.Services
             return ConfigureAgentAsync("system", config, detailLevel);
         }
 
-        public async Task<List<AgentHealthStatus>> ConfigureAgentsAsync(string userId, List<AgentConfiguration> configs, HealthDetailLevel detailLevel = HealthDetailLevel.Basic)
+        public async Task<List<AgentHealthStatus>> ConfigureAgentsAsync(string userHandle, List<AgentConfiguration> configs, HealthDetailLevel detailLevel = HealthDetailLevel.Basic)
         {
             var results = new List<AgentHealthStatus>();
 
@@ -56,13 +56,13 @@ namespace FabrCore.Host.Services
             {
                 try
                 {
-                    var health = await ConfigureAgentAsync(userId, config, detailLevel);
+                    var health = await ConfigureAgentAsync(userHandle, config, detailLevel);
                     results.Add(health);
                 }
                 catch (Exception ex)
                 {
-                    var key = BuildAgentKey(userId, config.Handle!);
-                    _logger.LogError(ex, "Error creating agent for user {UserId} with handle {Handle}", userId, key);
+                    var key = BuildAgentKey(userHandle, config.Handle!);
+                    _logger.LogError(ex, "Error creating agent for user {userHandle} with handle {Handle}", userHandle, key);
 
                     results.Add(new AgentHealthStatus
                     {
@@ -78,9 +78,9 @@ namespace FabrCore.Host.Services
             return results;
         }
 
-        public async Task SendMessageAsync(string userId, string handle, string message)
+        public async Task SendMessageAsync(string userHandle, string handle, string message)
         {
-            var key = BuildAgentKey(userId, handle);
+            var key = BuildAgentKey(userHandle, handle);
             var stream = _clusterClient.GetAgentChatStream(key);
             var msg = new AgentMessage
             {
@@ -91,23 +91,23 @@ namespace FabrCore.Host.Services
             };
             msg.StampFromActivity(Activity.Current);
             await stream.OnNextAsync(msg);
-            _logger.LogDebug("Fire-and-forget message sent to agent {Handle} for user {UserId}", handle, userId);
+            _logger.LogDebug("Fire-and-forget message sent to agent {Handle} for user {userHandle}", handle, userHandle);
         }
 
-        public async Task SendMessageAsync(string userId, string handle, AgentMessage message)
+        public async Task SendMessageAsync(string userHandle, string handle, AgentMessage message)
         {
-            var key = BuildAgentKey(userId, handle);
+            var key = BuildAgentKey(userHandle, handle);
             message.ToHandle = key;
             if (string.IsNullOrEmpty(message.TraceId))
                 message.StampFromActivity(Activity.Current);
             var stream = _clusterClient.GetAgentChatStream(key);
             await stream.OnNextAsync(message);
-            _logger.LogDebug("Fire-and-forget message sent to agent {Handle} for user {UserId}", handle, userId);
+            _logger.LogDebug("Fire-and-forget message sent to agent {Handle} for user {userHandle}", handle, userHandle);
         }
 
-        public async Task<AgentMessage> SendAndReceiveMessageAsync(string userId, string handle, string message)
+        public async Task<AgentMessage> SendAndReceiveMessageAsync(string userHandle, string handle, string message)
         {
-            var key = BuildAgentKey(userId, handle);
+            var key = BuildAgentKey(userHandle, handle);
             var proxy = _clusterClient.GetGrain<IAgentGrain>(key);
             var msg = new AgentMessage
             {
@@ -119,9 +119,9 @@ namespace FabrCore.Host.Services
             return await proxy.OnMessage(msg);
         }
 
-        public async Task<AgentMessage> SendAndReceiveMessageAsync(string userId, string handle, AgentMessage message)
+        public async Task<AgentMessage> SendAndReceiveMessageAsync(string userHandle, string handle, AgentMessage message)
         {
-            var key = BuildAgentKey(userId, handle);
+            var key = BuildAgentKey(userHandle, handle);
             message.ToHandle = key;
             if (string.IsNullOrEmpty(message.TraceId))
                 message.StampFromActivity(Activity.Current);
@@ -129,27 +129,53 @@ namespace FabrCore.Host.Services
             return await proxy.OnMessage(message);
         }
 
-        public async Task<AgentHealthStatus> GetHealthAsync(string userId, string handle, HealthDetailLevel detailLevel = HealthDetailLevel.Basic)
+        public async Task<AgentHealthStatus> GetHealthAsync(string userHandle, string handle, HealthDetailLevel detailLevel = HealthDetailLevel.Basic)
         {
-            var key = BuildAgentKey(userId, handle);
+            var key = BuildAgentKey(userHandle, handle);
             var proxy = _clusterClient.GetGrain<IAgentGrain>(key);
             return await proxy.GetHealth(detailLevel);
         }
 
-        public async Task SendEventAsync(string userId, string handle, EventMessage message, string? streamName = null)
+        public async Task<AgentEvictionResult> EvictAgentAsync(string userHandle, string handle)
+        {
+            var key = BuildAgentKey(userHandle, handle);
+            var proxy = _clusterClient.GetGrain<IAgentGrain>(key);
+            var result = await proxy.EvictAgent();
+
+            var clientTrackingRemoved = false;
+            try
+            {
+                var clientGrain = _clusterClient.GetGrain<IClientGrain>(userHandle);
+                clientTrackingRemoved = await clientGrain.UntrackAgent(handle);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Agent evicted but failed to remove client tracking for {UserHandle}:{Handle}",
+                    userHandle, handle);
+                throw;
+            }
+
+            return result with
+            {
+                ClientTrackingRemoved = clientTrackingRemoved,
+                Existed = result.Existed || clientTrackingRemoved
+            };
+        }
+
+        public async Task SendEventAsync(string userHandle, string handle, EventMessage message, string? streamName = null)
         {
             if (streamName != null)
             {
                 var stream = _clusterClient.GetAgentEventStream(streamName);
                 await stream.OnNextAsync(message);
-                _logger.LogDebug("Event published to named stream {StreamName} for user {UserId}", streamName, userId);
+                _logger.LogDebug("Event published to named stream {StreamName} for user {userHandle}", streamName, userHandle);
             }
             else
             {
-                var key = BuildAgentKey(userId, handle);
+                var key = BuildAgentKey(userHandle, handle);
                 var stream = _clusterClient.GetAgentEventStream(key);
                 await stream.OnNextAsync(message);
-                _logger.LogDebug("Event published to agent {Handle} for user {UserId}", handle, userId);
+                _logger.LogDebug("Event published to agent {Handle} for user {userHandle}", handle, userHandle);
             }
         }
 
@@ -160,6 +186,9 @@ namespace FabrCore.Host.Services
 
         public Task DeactivateAgentAsync(string key, string reason)
             => _managementProvider.DeactivateAgentAsync(key, reason);
+
+        public Task<bool> RemoveAgentAsync(string key)
+            => _managementProvider.RemoveAgentAsync(key);
 
         public Task RegisterClientAsync(string clientId)
             => _managementProvider.RegisterClientAsync(clientId);
@@ -203,46 +232,46 @@ namespace FabrCore.Host.Services
 
         // ── Thread Management ──
 
-        public async Task<List<StoredChatMessage>> GetThreadMessagesAsync(string userId, string handle, string threadId)
+        public async Task<List<StoredChatMessage>> GetThreadMessagesAsync(string userHandle, string handle, string threadId)
         {
-            var key = BuildAgentKey(userId, handle);
+            var key = BuildAgentKey(userHandle, handle);
             var proxy = _clusterClient.GetGrain<IAgentGrain>(key);
             return await proxy.GetThreadMessages(threadId);
         }
 
-        public async Task AddThreadMessagesAsync(string userId, string handle, string threadId, IEnumerable<StoredChatMessage> messages)
+        public async Task AddThreadMessagesAsync(string userHandle, string handle, string threadId, IEnumerable<StoredChatMessage> messages)
         {
-            var key = BuildAgentKey(userId, handle);
+            var key = BuildAgentKey(userHandle, handle);
             var proxy = _clusterClient.GetGrain<IAgentGrain>(key);
             await proxy.AddThreadMessages(threadId, messages);
         }
 
-        public async Task ClearThreadMessagesAsync(string userId, string handle, string threadId)
+        public async Task ClearThreadMessagesAsync(string userHandle, string handle, string threadId)
         {
-            var key = BuildAgentKey(userId, handle);
+            var key = BuildAgentKey(userHandle, handle);
             var proxy = _clusterClient.GetGrain<IAgentGrain>(key);
             await proxy.ClearThreadMessages(threadId);
         }
 
-        public async Task ReplaceThreadMessagesAsync(string userId, string handle, string threadId, IEnumerable<StoredChatMessage> messages)
+        public async Task ReplaceThreadMessagesAsync(string userHandle, string handle, string threadId, IEnumerable<StoredChatMessage> messages)
         {
-            var key = BuildAgentKey(userId, handle);
+            var key = BuildAgentKey(userHandle, handle);
             var proxy = _clusterClient.GetGrain<IAgentGrain>(key);
             await proxy.ReplaceThreadMessages(threadId, messages);
         }
 
         // ── Custom State ──
 
-        public async Task<Dictionary<string, JsonElement>> GetCustomStateAsync(string userId, string handle)
+        public async Task<Dictionary<string, JsonElement>> GetCustomStateAsync(string userHandle, string handle)
         {
-            var key = BuildAgentKey(userId, handle);
+            var key = BuildAgentKey(userHandle, handle);
             var proxy = _clusterClient.GetGrain<IAgentGrain>(key);
             return await proxy.GetCustomStateAsync();
         }
 
-        public async Task MergeCustomStateAsync(string userId, string handle, Dictionary<string, JsonElement> changes, IEnumerable<string> deletes)
+        public async Task MergeCustomStateAsync(string userHandle, string handle, Dictionary<string, JsonElement> changes, IEnumerable<string> deletes)
         {
-            var key = BuildAgentKey(userId, handle);
+            var key = BuildAgentKey(userHandle, handle);
             var proxy = _clusterClient.GetGrain<IAgentGrain>(key);
             await proxy.MergeCustomStateAsync(changes, deletes);
         }
