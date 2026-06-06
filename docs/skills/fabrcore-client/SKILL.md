@@ -369,6 +369,8 @@ Endpoints:
 
 `entityKey` is a route catch-all on the Host, so slash-delimited keys such as `"projects/123/settings"` are allowed through the SDK client. Missing reads return `default`; deletes return `true` only when an entity existed.
 
+When `UpsertStorageEntityAsync<T>` receives a non-success HTTP status, the SDK exception includes the status code, reason phrase, and response body. Surface that exception text in logs because Host validation details for `400 Bad Request` live in the response body.
+
 `FabrCoreHostApiClient` also implements `IFabrCoreStorageProvider`:
 
 ```csharp

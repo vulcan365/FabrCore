@@ -35,6 +35,18 @@ public class TestFabrCoreAgentHost : IFabrCoreAgentHost
         _handle = handle;
     }
 
+    /// <summary>Seeds a custom state key for tests that exercise state migration or malformed persisted state.</summary>
+    public void SetCustomState(string key, JsonElement value)
+    {
+        _customState[key] = value;
+    }
+
+    /// <summary>Removes all custom state keys from the in-memory host.</summary>
+    public void ClearCustomState()
+    {
+        _customState.Clear();
+    }
+
     public string GetHandle() => _handle;
 
     public (string UserHandle, string AgentHandle) GetParsedHandle()

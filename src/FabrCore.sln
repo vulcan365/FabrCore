@@ -10,6 +10,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FabrCore.Core", "FabrCore.C
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FabrCore.Client", "FabrCore.Client\FabrCore.Client.csproj", "{A39247FB-4CC3-4DFA-9D8C-8DBFD6B59706}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FabrCore.Sdk.Tests", "FabrCore.Sdk.Tests\FabrCore.Sdk.Tests.csproj", "{0E71EF40-2656-40D7-893C-414464739279}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -32,6 +34,10 @@ Global
 		{A39247FB-4CC3-4DFA-9D8C-8DBFD6B59706}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A39247FB-4CC3-4DFA-9D8C-8DBFD6B59706}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A39247FB-4CC3-4DFA-9D8C-8DBFD6B59706}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0E71EF40-2656-40D7-893C-414464739279}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0E71EF40-2656-40D7-893C-414464739279}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0E71EF40-2656-40D7-893C-414464739279}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0E71EF40-2656-40D7-893C-414464739279}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

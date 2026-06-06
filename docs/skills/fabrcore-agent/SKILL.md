@@ -5,7 +5,7 @@ description: >
   manage custom state, configure compaction, timers, reminders, and health monitoring.
   Triggers on: "FabrCoreAgentProxy", "AgentAlias", "OnInitialize", "OnMessage", "OnMessageBusy", "OnEvent", "OnCompaction",
   "ResolveConfiguredToolsAsync", "CreateChatClientAgent", "SetStatusMessage", "agent state", "GetStateAsync",
-  "SetState", "FlushStateAsync", "compaction", "agent timer", "RegisterTimer", "agent reminder", "RegisterReminder",
+  "TryGetStateAsync", "StateReadResult", "SetState", "FlushStateAsync", "compaction", "agent timer", "RegisterTimer", "agent reminder", "RegisterReminder",
   "OnReminder", "agent health", "GetHealth", "AgentHealthStatus", "build agent", "create agent",
   "FabrCoreCapabilities", "FabrCoreNote", "agent capabilities", "agent notes", "busy message", "concurrent message",
   "AlwaysInterleave", "busy routing", "agent busy", "IFabrCoreStorageProvider", "typed storage".
@@ -360,8 +360,21 @@ FabrCore ships `OpenTelemetry.Api` only â€” no exporter. See **fabrcore-server â
 Persist arbitrary state that survives grain deactivation:
 
 ```csharp
-// Read state (returns default if not found)
+// Read state (returns default if not found, null, or undefined)
 var stats = await GetStateAsync<ConversationStats>("stats");
+
+// Safe read for migration-prone or resettable state
+var stateRead = await TryGetStateAsync<ConversationStats>("stats");
+if (!stateRead.Succeeded)
+{
+    logger.LogWarning(
+        stateRead.Error,
+        "Resetting unreadable state key {Key}; stored kind was {ValueKind}",
+        stateRead.Key,
+        stateRead.ValueKind);
+    RemoveState(stateRead.Key);
+    stats = new ConversationStats();
+}
 
 // Read or create with factory
 var prefs = await GetStateOrCreateAsync("preferences", () => new UserPreferences
@@ -384,7 +397,9 @@ await FlushStateAsync();
 var hasPrefs = await HasStateAsync("preferences");
 ```
 
-State is stored as `JsonElement` in the grain's persistent state. It is automatically flushed after `OnMessage` completes and on normal grain deactivation. During hard eviction, pending state/chat buffers are intentionally not flushed because the persisted grain state is being deleted. Call `FlushStateAsync()` explicitly if you need durability mid-operation.
+State is stored as `JsonElement` in the grain's persistent state. `GetStateAsync<T>` treats missing, `null`, and `JsonValueKind.Undefined` values as `default`; malformed or incompatible JSON throws an `InvalidOperationException` that includes the state key, agent handle, agent type, target type, and stored value kind. Use `TryGetStateAsync<T>` when an agent can migrate, reset, or ignore unreadable state; inspect `StateReadResult<T>.Key`, `.ValueKind`, and `.Error`.
+
+State is automatically flushed after `OnMessage` completes and on normal grain deactivation. During hard eviction, pending state/chat buffers are intentionally not flushed because the persisted grain state is being deleted. Call `FlushStateAsync()` explicitly if you need durability mid-operation.
 
 ### Agent state vs typed entity storage
 
@@ -401,7 +416,7 @@ public interface IFabrCoreStorageProvider
 }
 ```
 
-Important pitfall for agents: when resolving `IFabrCoreStorageProvider` directly inside the Host DI container, the user-handle-free methods use the system partition. That is appropriate for system/shared data, not per-user data. For per-agent or per-user data, prefer `GetStateAsync`/`SetState` or call an user-handle-aware Host/API path that explicitly supplies the user handle from `fabrcoreAgentHost.GetUserHandle()`.
+Important pitfall for agents: when resolving `IFabrCoreStorageProvider` directly inside the Host DI container, the user-handle-free methods use the system partition. That is appropriate for system/shared data, not per-user data. For per-agent or per-user data, prefer `GetStateAsync`/`TryGetStateAsync`/`SetState` or call a user-handle-aware Host/API path that explicitly supplies the user handle from `fabrcoreAgentHost.GetUserHandle()`.
 
 Do not reference Orleans storage APIs (`IGrainStorage`, `GrainId`, `IGrainState<T>`) from agent code. FabrCore keeps those Host-internal so agents and SDK consumers do not depend on Orleans storage internals.
 
