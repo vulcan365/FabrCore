@@ -826,27 +826,97 @@ namespace FabrCore.Sdk
         /// <returns>The deserialized value, or default if not found.</returns>
         protected async Task<T?> GetStateAsync<T>(string key)
         {
+            var result = await TryGetStateAsync<T>(key);
+            if (result.Succeeded)
+            {
+                return result.Value;
+            }
+
+            throw CreateStateReadException<T>(result);
+        }
+
+        /// <summary>
+        /// Attempts to get a strongly-typed state value by key without throwing for unreadable state.
+        /// </summary>
+        /// <typeparam name="T">The type to deserialize the state to.</typeparam>
+        /// <param name="key">The state key.</param>
+        /// <returns>A state read result with the value or deserialization diagnostics.</returns>
+        protected async Task<StateReadResult<T>> TryGetStateAsync<T>(string key)
+        {
             await EnsureStateLoadedAsync();
 
             // Check pending changes first
             if (_pendingStateChanges.TryGetValue(key, out var pendingElement))
             {
-                return pendingElement.Deserialize<T>();
+                return DeserializeStateElement<T>(key, pendingElement);
             }
 
             // Check if deleted
             if (_pendingStateDeletes.Contains(key))
             {
-                return default;
+                return StateReadSuccess<T>(key, valueKind: null, value: default);
             }
 
             // Check cache
             if (_customStateCache != null && _customStateCache.TryGetValue(key, out var element))
             {
-                return element.Deserialize<T>();
+                return DeserializeStateElement<T>(key, element);
             }
 
-            return default;
+            return StateReadSuccess<T>(key, valueKind: null, value: default);
+        }
+
+        private StateReadResult<T> DeserializeStateElement<T>(string key, JsonElement element)
+        {
+            if (element.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
+            {
+                return StateReadSuccess<T>(key, element.ValueKind, default);
+            }
+
+            try
+            {
+                return StateReadSuccess(key, element.ValueKind, element.Deserialize<T>());
+            }
+            catch (Exception ex) when (ex is JsonException or NotSupportedException or InvalidOperationException)
+            {
+                logger.LogWarning(
+                    ex,
+                    "Failed to deserialize custom state key '{Key}' for agent '{Handle}' of type '{AgentType}' as {TargetType}. Stored value kind: {ValueKind}",
+                    key,
+                    config.Handle,
+                    config.AgentType,
+                    typeof(T).FullName,
+                    element.ValueKind);
+
+                return new StateReadResult<T>
+                {
+                    Succeeded = false,
+                    Key = key,
+                    ValueKind = element.ValueKind,
+                    Error = ex
+                };
+            }
+        }
+
+        private static StateReadResult<T> StateReadSuccess<T>(string key, JsonValueKind? valueKind, T? value)
+        {
+            return new StateReadResult<T>
+            {
+                Succeeded = true,
+                Value = value,
+                Key = key,
+                ValueKind = valueKind
+            };
+        }
+
+        private InvalidOperationException CreateStateReadException<T>(StateReadResult<T> result)
+        {
+            var message =
+                $"Failed to deserialize custom state key '{result.Key}' for agent '{config.Handle}' " +
+                $"of type '{config.AgentType}' as {typeof(T).FullName}. " +
+                $"Stored value kind: {result.ValueKind?.ToString() ?? "Missing"}.";
+
+            return new InvalidOperationException(message, result.Error);
         }
 
         /// <summary>

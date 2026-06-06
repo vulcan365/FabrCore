@@ -1178,7 +1178,15 @@ namespace FabrCore.Sdk
                 request.Content = JsonContent.Create(value, options: JsonOptions);
 
                 var response = await _httpClient.SendAsync(request, cancellationToken);
-                response.EnsureSuccessStatusCode();
+                if (!response.IsSuccessStatusCode)
+                {
+                    var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                    throw new HttpRequestException(
+                        $"Failed to upsert storage entity {container}/{entityKey} for user handle {userHandle}. " +
+                        $"Status: {(int)response.StatusCode} {response.ReasonPhrase}. Response: {responseBody}",
+                        null,
+                        response.StatusCode);
+                }
 
                 RecordSuccess(activity, startTime, "UpsertStorageEntity");
             }
