@@ -78,6 +78,83 @@ namespace FabrCore.Host.Services
             return results;
         }
 
+        public async Task<List<AgentHealthStatus>> EnsureAgentsAsync(string userHandle, List<AgentConfiguration> configs, HealthDetailLevel detailLevel = HealthDetailLevel.Basic)
+        {
+            if (string.IsNullOrWhiteSpace(userHandle))
+                throw new ArgumentException("User handle is required.", nameof(userHandle));
+            if (configs == null)
+                throw new ArgumentNullException(nameof(configs));
+
+            var normalizedConfigs = configs
+                .Select((config, index) => NormalizeBlueprintConfig(userHandle, config, index))
+                .ToList();
+            var clientGrain = _clusterClient.GetGrain<IClientGrain>(userHandle);
+            var results = new List<AgentHealthStatus>(normalizedConfigs.Count);
+
+            foreach (var config in normalizedConfigs)
+            {
+                var agentHandle = config.Handle!;
+                try
+                {
+                    var health = await clientGrain.CreateAgent(config);
+
+                    if (detailLevel != HealthDetailLevel.Basic)
+                    {
+                        health = await GetHealthAsync(userHandle, agentHandle, detailLevel);
+                    }
+
+                    results.Add(health);
+                }
+                catch (Exception ex)
+                {
+                    var key = BuildAgentKey(userHandle, agentHandle);
+                    _logger.LogError(ex, "Error ensuring blueprint agent for user {userHandle} with handle {Handle}", userHandle, key);
+
+                    results.Add(new AgentHealthStatus
+                    {
+                        Handle = key,
+                        State = HealthState.Unhealthy,
+                        Timestamp = DateTime.UtcNow,
+                        IsConfigured = false,
+                        Message = $"Failed to ensure agent: {ex.Message}"
+                    });
+                }
+            }
+
+            return results;
+        }
+
+        private static AgentConfiguration NormalizeBlueprintConfig(string userHandle, AgentConfiguration? config, int index)
+        {
+            if (config == null)
+                throw new ArgumentException($"agents[{index}] is null.", nameof(config));
+            if (string.IsNullOrWhiteSpace(config.Handle))
+                throw new ArgumentException($"agents[{index}].Handle is required.", nameof(config));
+
+            var (handleUser, agentHandle) = HandleUtilities.ParseHandle(config.Handle);
+            if (!string.IsNullOrEmpty(handleUser) && !string.Equals(handleUser, userHandle, StringComparison.Ordinal))
+            {
+                throw new ArgumentException(
+                    $"agents[{index}].Handle targets user '{handleUser}', but x-user-handle is '{userHandle}'. Cross-user blueprint handles are not allowed.",
+                    nameof(config));
+            }
+
+            return new AgentConfiguration
+            {
+                Handle = agentHandle,
+                AgentType = config.AgentType,
+                Models = config.Models,
+                Streams = config.Streams,
+                SystemPrompt = config.SystemPrompt,
+                Description = config.Description,
+                Args = config.Args,
+                Plugins = config.Plugins,
+                Tools = config.Tools,
+                McpServers = config.McpServers,
+                ForceReconfigure = false
+            };
+        }
+
         public async Task SendMessageAsync(string userHandle, string handle, string message)
         {
             var key = BuildAgentKey(userHandle, handle);

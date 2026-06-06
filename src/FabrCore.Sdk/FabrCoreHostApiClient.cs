@@ -181,6 +181,29 @@ namespace FabrCore.Sdk
     }
 
     /// <summary>
+    /// Request for ensuring a blueprint-defined set of agents exists for a user.
+    /// </summary>
+    public class AgentBlueprintRequest
+    {
+        public string? Name { get; set; }
+        public string? Version { get; set; }
+        public List<AgentConfiguration> Agents { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Response from blueprint agent ensure processing.
+    /// </summary>
+    public class AgentBlueprintResponse
+    {
+        public string? Name { get; set; }
+        public string? Version { get; set; }
+        public int TotalRequested { get; set; }
+        public int SuccessCount { get; set; }
+        public int FailureCount { get; set; }
+        public List<AgentHealthStatus> Results { get; set; } = new();
+    }
+
+    /// <summary>
     /// A single method exposed by a plugin or tool, as returned by the Discovery API.
     /// Mirrors the server-side <c>RegistryMethodEntry</c>.
     /// </summary>
@@ -294,6 +317,19 @@ namespace FabrCore.Sdk
         /// <returns>Response containing health status for each created agent.</returns>
         Task<CreateAgentsResponse> CreateAgentsAsync(
             List<AgentConfiguration> configs,
+            HealthDetailLevel detailLevel = HealthDetailLevel.Basic,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Ensures the agents listed in a blueprint exist for the specified user without reconfiguring already configured agents.
+        /// </summary>
+        /// <param name="userHandle">The target user handle sent as the <c>x-user-handle</c> header.</param>
+        /// <param name="blueprint">Blueprint object containing the agent configurations to ensure.</param>
+        /// <param name="detailLevel">The health detail level to return.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        Task<AgentBlueprintResponse> EnsureBlueprintAgentsAsync(
+            string userHandle,
+            AgentBlueprintRequest blueprint,
             HealthDetailLevel detailLevel = HealthDetailLevel.Basic,
             CancellationToken cancellationToken = default);
 
@@ -545,6 +581,55 @@ namespace FabrCore.Sdk
             {
                 RecordError(activity, startTime, "CreateAgents", ex);
                 _logger.LogError(ex, "Failed to create agents for user handle {userHandle}", batchUserHandle);
+                throw;
+            }
+        }
+
+        public async Task<AgentBlueprintResponse> EnsureBlueprintAgentsAsync(
+            string userHandle,
+            AgentBlueprintRequest blueprint,
+            HealthDetailLevel detailLevel = HealthDetailLevel.Basic,
+            CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(userHandle))
+                throw new ArgumentException("User handle is required.", nameof(userHandle));
+            if (blueprint == null)
+                throw new ArgumentNullException(nameof(blueprint));
+            if (blueprint.Agents == null || blueprint.Agents.Count == 0)
+                throw new ArgumentException("Blueprint must contain at least one agent.", nameof(blueprint));
+
+            using var activity = ActivitySource.StartActivity("EnsureBlueprintAgents", ActivityKind.Client);
+            activity?.SetTag("user.id", userHandle);
+            activity?.SetTag("blueprint.name", blueprint.Name);
+            activity?.SetTag("blueprint.version", blueprint.Version);
+            activity?.SetTag("agents.count", blueprint.Agents.Count);
+            activity?.SetTag("detail.level", detailLevel.ToString());
+
+            var url = $"{_baseUrl}/fabrcoreapi/Agent/blueprint?detailLevel={detailLevel}";
+            var startTime = Stopwatch.GetTimestamp();
+
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Post, url);
+                request.Headers.Add("x-user-handle", userHandle);
+                request.Content = JsonContent.Create(blueprint, options: JsonOptions);
+
+                var response = await _httpClient.SendAsync(request, cancellationToken);
+                response.EnsureSuccessStatusCode();
+
+                var result = await response.Content.ReadFromJsonAsync<AgentBlueprintResponse>(JsonOptions, cancellationToken)
+                    ?? throw new InvalidOperationException("Failed to deserialize blueprint agents response");
+
+                RecordSuccess(activity, startTime, "EnsureBlueprintAgents");
+                _logger.LogInformation("Ensured {Success}/{Total} blueprint agents for user handle {userHandle}",
+                    result.SuccessCount, result.TotalRequested, userHandle);
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                RecordError(activity, startTime, "EnsureBlueprintAgents", ex);
+                _logger.LogError(ex, "Failed to ensure blueprint agents for user handle {userHandle}", userHandle);
                 throw;
             }
         }

@@ -20,6 +20,29 @@ namespace FabrCore.Host.Api.Controllers
         public List<AgentHealthStatus> Results { get; set; } = new();
     }
 
+    /// <summary>
+    /// Request for ensuring a blueprint-defined set of agents exists for a user.
+    /// </summary>
+    public class AgentBlueprintRequest
+    {
+        public string? Name { get; set; }
+        public string? Version { get; set; }
+        public List<AgentConfiguration> Agents { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Response for blueprint agent ensure processing.
+    /// </summary>
+    public class AgentBlueprintResponse
+    {
+        public string? Name { get; set; }
+        public string? Version { get; set; }
+        public int TotalRequested { get; set; }
+        public int SuccessCount { get; set; }
+        public int FailureCount { get; set; }
+        public List<AgentHealthStatus> Results { get; set; } = new();
+    }
+
     [ApiController]
     [Route("fabrcoreapi/[controller]")]
     public class AgentController : Controller
@@ -55,6 +78,44 @@ namespace FabrCore.Host.Api.Controllers
             };
 
             return Ok(response);
+        }
+
+        [HttpPost("blueprint")]
+        public async Task<IActionResult> PostBlueprint(
+            [FromHeader(Name = "x-user-handle")] string userHandle,
+            [FromBody] AgentBlueprintRequest request,
+            [FromQuery] HealthDetailLevel detailLevel = HealthDetailLevel.Basic)
+        {
+            if (string.IsNullOrWhiteSpace(userHandle))
+            {
+                return BadRequest("x-user-handle header is required.");
+            }
+
+            if (request == null || request.Agents == null || !request.Agents.Any())
+            {
+                return BadRequest("Request body must contain an agents list.");
+            }
+
+            try
+            {
+                var results = await _agentService.EnsureAgentsAsync(userHandle, request.Agents, detailLevel);
+
+                var response = new AgentBlueprintResponse
+                {
+                    Name = request.Name,
+                    Version = request.Version,
+                    TotalRequested = request.Agents.Count,
+                    SuccessCount = results.Count(r => r.State == HealthState.Healthy),
+                    FailureCount = results.Count(r => r.State != HealthState.Healthy),
+                    Results = results
+                };
+
+                return Ok(response);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
         }
 
         [HttpGet("health/{handle}")]
