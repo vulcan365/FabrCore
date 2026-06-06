@@ -12,7 +12,8 @@ description: >
   "RelevanceEvaluator", "CoherenceEvaluator", "FluencyEvaluator", "GroundednessEvaluator",
   "CompositeEvaluator", "EvaluationResult", "ScenarioRun", "ReportingConfiguration",
   "quality eval", "safety eval", "BLEU", "agent evaluation", "eval metrics",
-  "IFabrCoreStorageProvider", "typed storage", "storage test".
+  "IFabrCoreStorageProvider", "typed storage", "storage test", "TryGetStateAsync",
+  "custom state test", "malformed state", "undefined JsonElement".
   Do NOT use for: agent development — use fabrcore-agent.
   Do NOT use for: server/client setup — use fabrcore-server or fabrcore-client.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
@@ -317,6 +318,31 @@ Verify these scenarios against a running Host:
 - Deleting while `OnMessage` is actively processing returns `409 Conflict`; retry after the agent is idle.
 - Deleting the same agent twice is idempotent and returns success with `Existed = false` if no traces remain.
 
+## Testing Custom State Resilience
+
+Use an in-memory `IFabrCoreAgentHost` to seed custom state before agent initialization or message handling. Cover private state keys that may survive restarts, package updates, or schema changes:
+
+- Missing, `JsonValueKind.Null`, and `JsonValueKind.Undefined` values should read as `default` through `GetStateAsync<T>`.
+- Malformed or incompatible JSON should be tested through `TryGetStateAsync<T>` when the agent is expected to self-heal, migrate, or reset its own private state.
+- If the agent intentionally calls `GetStateAsync<T>` on unreadable state, assert the thrown `InvalidOperationException` includes the state key, agent handle/type, target type, and stored value kind.
+- Built-in agents that own private state should remove only their own bad key, initialize fresh state, and continue unless required runtime configuration is invalid.
+
+When the test needs to call protected state APIs directly, expose a tiny test subclass:
+
+```csharp
+private sealed class TestAgentProxy : MyAgent
+{
+    public TestAgentProxy(
+        AgentConfiguration config,
+        IServiceProvider services,
+        IFabrCoreAgentHost host)
+        : base(config, services, host) { }
+
+    public Task<StateReadResult<T>> TryRead<T>(string key) => TryGetStateAsync<T>(key);
+    public Task<T?> Read<T>(string key) => GetStateAsync<T>(key);
+}
+```
+
 ## Testing Typed Entity Storage
 
 Typed entity storage should be tested at two levels:
@@ -363,6 +389,7 @@ Verify these behaviors against a running Host when storage is part of the featur
 - POCOs, primitives, dictionaries, and arrays round-trip through `UpsertStorageEntityAsync<T>` and `GetStorageEntityAsync<T>`.
 - Missing reads return `default`/`null`.
 - Deletes return `true` only when a value existed.
+- Non-success upserts surface the response body in the SDK exception message; assert this when testing client diagnostics for validation failures.
 - The same `container/entityKey` is isolated across different user handles (`x-user-handle` values).
 - The behavior follows the configured Orleans storage provider: localhost memory is non-persistent, SQL/Azure/custom providers persist according to their configuration.
 - No public SDK or client API exposes Orleans storage types such as `IGrainStorage`, `GrainId`, or `IGrainState<T>`.

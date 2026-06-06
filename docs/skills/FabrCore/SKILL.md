@@ -25,7 +25,7 @@ Build distributed AI agent systems with FabrCore — an open-source .NET 10 fram
 
 | Concept | Type | Key Class/Interface | Skill |
 |---------|------|-------------------|-------|
-| Agent | Business logic actor | `FabrCoreAgentProxy` | fabrcore-agent |
+| Agent | Business logic actor | `FabrCoreAgentProxy`, `TryGetStateAsync` | fabrcore-agent |
 | Agent Eviction | Hard-delete an agent instance | `AgentEvictionResult`, `DELETE /fabrcoreapi/Agent/{handle}` | fabrcore-server, fabrcore-orleans |
 | Agent Framework | LLM agent runtime | `AIAgent`, `AgentSession` | fabrcore-agentframework |
 | Plugin | Stateful tool collection | `IFabrCorePlugin` | fabrcore-plugins-tools |
@@ -97,7 +97,7 @@ Create `fabrcore.json` in the server project root with your LLM provider configu
 ```csharp
 using FabrCore.Core;          // AgentMessage, AgentConfiguration, MessageKind
 using FabrCore.Core.Acl;      // IAclProvider, AclRule, AclPermission
-using FabrCore.Sdk;           // FabrCoreAgentProxy, IFabrCoreAgentHost, IFabrCorePlugin, IFabrCoreStorageProvider, IFabrCoreHostApiClient
+using FabrCore.Sdk;           // FabrCoreAgentProxy, StateReadResult, IFabrCoreAgentHost, IFabrCorePlugin, IFabrCoreStorageProvider, IFabrCoreHostApiClient
 using FabrCore.Client;        // IClientContextFactory, IClientContext
 using FabrCore.Host;          // AddFabrCoreServer, UseFabrCoreServer, FabrCoreServerOptions
 using Microsoft.Agents.AI;    // AIAgent, AgentSession, ChatClientAgent
@@ -123,7 +123,7 @@ Storage is backed by the configured Orleans provider named `FabrCoreOrleansConst
 
 User handle partitioning is part of the Host API: `x-user-handle` is the user handle partition, `container` is the logical bucket, and `entityKey` is the key inside that userHandle/container. The same `container/entityKey` can exist independently for different user handles.
 
-Prefer agent custom state (`GetStateAsync`, `SetState`, `FlushStateAsync`) for private state private to a single agent. Prefer typed entity storage when clients, host services, plugins, or multiple agents need to share app data by userHandle/container/entityKey.
+Prefer agent custom state (`GetStateAsync`, `TryGetStateAsync`, `SetState`, `FlushStateAsync`) for state private to a single agent. `GetStateAsync<T>` returns `default` for missing, null, or undefined values; use `TryGetStateAsync<T>` when unreadable persisted JSON should be migrated, reset, or ignored instead of failing initialization. Prefer typed entity storage when clients, host services, plugins, or multiple agents need to share app data by userHandle/container/entityKey.
 
 ## Project Templates
 

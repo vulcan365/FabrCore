@@ -431,6 +431,8 @@ Addressing:
 
 **Response** `204 No Content`.
 
+If a PUT returns a non-success status, SDK callers receive an `HttpRequestException` whose message includes the status code, reason phrase, and response body. Log the exception message when diagnosing `400 Bad Request`; validation details are expected to be in the response body.
+
 #### DELETE `/storage/{container}/{entityKey}` — Delete an entity
 
 | Parameter | Source | Type | Required |

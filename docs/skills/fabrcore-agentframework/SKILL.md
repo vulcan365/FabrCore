@@ -389,6 +389,8 @@ if (session.StateBag.TryGetValue<string>("tempKey", out var value))
     session.StateBag.TryRemoveValue("tempKey");
 ```
 
+`AgentSession.StateBag` is session-scoped Microsoft Agent Framework state. For FabrCore agent private persisted state that survives grain deactivation and supports safe reads of missing/null/undefined or malformed JSON, use the `fabrcore-agent` skill's `GetStateAsync<T>` / `TryGetStateAsync<T>` guidance instead.
+
 ### Session Serialization
 
 Persist and restore sessions across restarts:
