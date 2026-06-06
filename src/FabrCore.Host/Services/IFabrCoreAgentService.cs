@@ -30,6 +30,12 @@ namespace FabrCore.Host.Services
         Task<List<AgentHealthStatus>> ConfigureAgentsAsync(string userHandle, List<AgentConfiguration> configs, HealthDetailLevel detailLevel = HealthDetailLevel.Basic);
 
         /// <summary>
+        /// Ensures multiple agents exist for a user without reconfiguring already configured agents.
+        /// Agents are created through the user's client grain so they are tracked for that user.
+        /// </summary>
+        Task<List<AgentHealthStatus>> EnsureAgentsAsync(string userHandle, List<AgentConfiguration> configs, HealthDetailLevel detailLevel = HealthDetailLevel.Basic);
+
+        /// <summary>
         /// Sends a fire-and-forget message to an agent via the chat stream.
         /// The agent's OnMessage handler is invoked asynchronously.
         /// </summary>
