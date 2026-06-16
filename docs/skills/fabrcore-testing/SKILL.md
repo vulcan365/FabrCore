@@ -318,6 +318,23 @@ Verify these scenarios against a running Host:
 - Deleting while `OnMessage` is actively processing returns `409 Conflict`; retry after the agent is idle.
 - Deleting the same agent twice is idempotent and returns success with `Existed = false` if no traces remain.
 
+## Testing Blueprint Agent Ensure
+
+Blueprint processing is also a Host/Orleans lifecycle feature. Cover it with integration-style tests or manual Host API verification against `POST /fabrcoreapi/Agent/blueprint` rather than only `FabrCoreTestHarness` unit tests.
+
+Verify these scenarios against a running Host:
+
+- Missing or empty `x-user-handle` returns `400 Bad Request`.
+- Missing or empty `agents` returns `400 Bad Request`.
+- Bare blueprint handles are scoped to the `x-user-handle` user.
+- Fully-qualified handles are accepted only when their user prefix matches `x-user-handle`.
+- Cross-user fully-qualified handles return `400 Bad Request`.
+- Existing tracked and configured agents return health without reconfiguration.
+- Tracked but `NotConfigured` agents are configured from the blueprint.
+- New agents are configured and added to the user's tracked-agent list.
+- Incoming `ForceReconfigure = true` in a blueprint config is ignored; use `/fabrcoreapi/Agent/create` for intentional reconfiguration.
+- A failing agent config produces an unhealthy per-agent result while the rest of the blueprint continues.
+
 ## Testing Custom State Resilience
 
 Use an in-memory `IFabrCoreAgentHost` to seed custom state before agent initialization or message handling. Cover private state keys that may survive restarts, package updates, or schema changes:

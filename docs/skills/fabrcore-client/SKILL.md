@@ -301,6 +301,22 @@ var created = await ApiClient.CreateAgentsAsync(new List<AgentConfiguration>
     new() { Handle = "user1:assistant", AgentType = "ChatAgent", Models = "gpt-4o-mini" },
     new() { Handle = "user1:summarizer", AgentType = "ChatAgent", Models = "gpt-4o-mini" }
 });
+
+// Blueprint ensure — use for admin-authored startup/tenant blueprints.
+// The target user is passed explicitly because blueprint agent handles may be bare.
+// Existing configured agents are health-checked, not reconfigured.
+var ensured = await ApiClient.EnsureBlueprintAgentsAsync(
+    "user1",
+    new AgentBlueprintRequest
+    {
+        Name = "workspace-defaults",
+        Version = "2026-06-06",
+        Agents =
+        [
+            new() { Handle = "assistant", AgentType = "ChatAgent", Models = "gpt-4o-mini" },
+            new() { Handle = "summarizer", AgentType = "ChatAgent", Models = "gpt-4o-mini" }
+        ]
+    });
 ```
 
 Under the hood, for `GetAgentHealthAsync("user1:my-agent")` the client issues `GET {FabrCoreHostUrl}/fabrcoreapi/Agent/health/my-agent` with header `x-user-handle: user1`. You never have to split the handle yourself.

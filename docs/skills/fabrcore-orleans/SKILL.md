@@ -2,13 +2,13 @@
 name: fabrcore-orleans
 description: >
   Configure Orleans for FabrCore — clustering modes, advanced Orleans configuration with UseOrleans,
-  required providers (FabrCoreOrleansConstants), persistence, streaming, reminders, multi-silo deployment,
+  required providers (FabrCoreOrleansConstants), persistence, streaming, reminders, TimeProvider, multi-silo deployment,
   and connection resilience.
   Triggers on: "Orleans", "clustering", "silo", "grain", "UseOrleans", "AddFabrCore",
   "FabrCoreOrleansConstants", "ClusteringMode", "SqlServer clustering", "AzureStorage clustering",
   "Orleans configuration", "multi-silo", "Orleans persistence", "Orleans streaming",
   "AddFabrCoreServices", "StorageProviderName", "PubSubStoreName", "StreamProviderName",
-  "OrleansClusterOptions", "ConnectionRetryCount", "GatewayListRefreshPeriod",
+  "OrleansClusterOptions", "TimeProvider", "UseTimeProvider", "ConnectionRetryCount", "GatewayListRefreshPeriod",
   "IFabrCoreStorageProvider", "typed entity storage".
   Do NOT use for: FabrCore server setup (AddFabrCoreServer, REST API) — use fabrcore-server.
   Do NOT use for: general Orleans unrelated to FabrCore.
@@ -31,6 +31,24 @@ builder.AddFabrCoreServer(new FabrCoreServerOptions
 ```
 
 Orleans settings are read from the `"Orleans"` section in `appsettings.json`.
+
+### Custom TimeProvider
+
+`AddFabrCoreServer()` can register a custom `System.TimeProvider` for Orleans scheduling, timers, and reminders:
+
+```csharp
+var demoClock = new DemoTimeProvider();
+
+builder.AddFabrCoreServer(new FabrCoreServerOptions
+{
+    AdditionalAssemblies = [typeof(MyAgent).Assembly]
+}
+.UseTimeProvider(demoClock));
+```
+
+Use this for demo/test clocks that need to fast-forward Orleans reminders. `UseTimeProvider(...)` overrides prior `TimeProvider` registrations. Without it, FabrCore preserves an app-registered `TimeProvider`; if none exists, it registers `TimeProvider.System`.
+
+The custom provider is for Orleans runtime scheduling only. FabrCore.Host timestamps, health timestamps, file TTLs, diagnostics timestamps, and cleanup services continue to use real UTC time.
 
 ## Clustering Modes
 
@@ -139,6 +157,9 @@ builder.AddFabrCoreServices(new FabrCoreServerOptions
     AdditionalAssemblies = [typeof(MyAgent).Assembly]
 });
 
+// Optional: register a custom clock before UseOrleans.
+builder.Services.AddSingleton<TimeProvider>(new DemoTimeProvider());
+
 // 2. Configure Orleans with full control
 builder.UseOrleans(siloBuilder =>
 {
@@ -194,6 +215,7 @@ When using the advanced path, you must register these providers:
 | Clustering | Localhost, SqlServer, AzureStorage | Any Orleans provider |
 | Storage | Memory, ADO.NET, Azure | Any Orleans provider |
 | Streams | Memory provider | Any Orleans provider |
+| TimeProvider | `UseTimeProvider(...)`, app DI registration, or `TimeProvider.System` | Register `TimeProvider` in DI before Orleans starts |
 | Use when | Standard modes are sufficient | Event Hubs, Cosmos DB, Redis, custom dashboards, etc. |
 
 **Do not combine both paths.** `UseOrleans()` can only be called once per host.

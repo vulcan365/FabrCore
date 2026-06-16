@@ -23,6 +23,8 @@ namespace FabrCore.Host
     {
         public List<Assembly> AdditionalAssemblies { get; set; } = new();
 
+        internal TimeProviderRegistration TimeProviderRegistrationOptions { get; private set; } = TimeProviderRegistration.None;
+
         /// <summary>
         /// The implementation type for <see cref="IAgentManagementProvider"/>.
         /// Defaults to <see cref="OrleansAgentManagementProvider"/> which delegates to
@@ -72,6 +74,30 @@ namespace FabrCore.Host
         }
 
         /// <summary>
+        /// Configures the <see cref="TimeProvider"/> used by Orleans for silo scheduling,
+        /// timers, and reminders.
+        /// </summary>
+        /// <param name="provider">The time provider instance to register as a singleton.</param>
+        public FabrCoreServerOptions UseTimeProvider(TimeProvider provider)
+        {
+            ArgumentNullException.ThrowIfNull(provider);
+
+            TimeProviderRegistrationOptions = TimeProviderRegistration.ForInstance(provider);
+            return this;
+        }
+
+        /// <summary>
+        /// Configures the <see cref="TimeProvider"/> implementation used by Orleans for
+        /// silo scheduling, timers, and reminders.
+        /// </summary>
+        /// <typeparam name="TTimeProvider">The singleton time provider implementation type.</typeparam>
+        public FabrCoreServerOptions UseTimeProvider<TTimeProvider>() where TTimeProvider : TimeProvider
+        {
+            TimeProviderRegistrationOptions = TimeProviderRegistration.ForType(typeof(TTimeProvider));
+            return this;
+        }
+
+        /// <summary>
         /// Configures a custom <see cref="IAgentMessageMonitor"/> implementation for
         /// agent message monitoring.
         /// </summary>
@@ -98,6 +124,27 @@ namespace FabrCore.Host
             AgentMessageMonitorType = typeof(InMemoryAgentMessageMonitor);
             configureLlmCapture?.Invoke(LlmCaptureOptions);
             return this;
+        }
+
+        internal sealed class TimeProviderRegistration
+        {
+            public static TimeProviderRegistration None { get; } = new(null, null);
+
+            private TimeProviderRegistration(TimeProvider? instance, Type? implementationType)
+            {
+                Instance = instance;
+                ImplementationType = implementationType;
+            }
+
+            public TimeProvider? Instance { get; }
+            public Type? ImplementationType { get; }
+            public bool IsConfigured => Instance is not null || ImplementationType is not null;
+
+            public static TimeProviderRegistration ForInstance(TimeProvider instance)
+                => new(instance, null);
+
+            public static TimeProviderRegistration ForType(Type implementationType)
+                => new(null, implementationType);
         }
     }
 
@@ -237,6 +284,9 @@ namespace FabrCore.Host
                 builder.Services.AddHttpContextAccessor();
                 logger.LogDebug("HttpContextAccessor added");
 
+                ConfigureTimeProvider(builder.Services, options.TimeProviderRegistrationOptions);
+                logger.LogDebug("TimeProvider configured for Orleans");
+
                 builder.Services.AddControllers()
                     .AddApplicationPart(typeof(FabrCoreServerOptions).Assembly);
                 logger.LogDebug("FabrCore API controllers registered");
@@ -346,6 +396,36 @@ namespace FabrCore.Host
                 ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "services_add_failed"));
                 throw;
             }
+        }
+
+        internal static void ConfigureTimeProvider(IServiceCollection services, FabrCoreServerOptions.TimeProviderRegistration registration)
+        {
+            if (registration.Instance is not null)
+            {
+                services.RemoveAll<TimeProvider>();
+
+                var provider = registration.Instance;
+                var providerType = provider.GetType();
+                if (providerType != typeof(TimeProvider))
+                {
+                    services.RemoveAll(providerType);
+                    services.AddSingleton(providerType, provider);
+                }
+
+                services.AddSingleton<TimeProvider>(provider);
+                return;
+            }
+
+            if (registration.ImplementationType is not null)
+            {
+                services.RemoveAll<TimeProvider>();
+                services.RemoveAll(registration.ImplementationType);
+                services.AddSingleton(registration.ImplementationType);
+                services.AddSingleton(typeof(TimeProvider), sp => sp.GetRequiredService(registration.ImplementationType));
+                return;
+            }
+
+            services.TryAddSingleton(TimeProvider.System);
         }
 
         /// <summary>
