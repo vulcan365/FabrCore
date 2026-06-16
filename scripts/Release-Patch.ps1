@@ -42,3 +42,6 @@ git push origin $newTag
 Write-Host "Tag $newTag pushed - GitHub Actions is building and publishing all FabrCore packages." -ForegroundColor Green
 Write-Host 'Create the release notes at:' -ForegroundColor Cyan
 Write-Host "  https://github.com/vulcan365/OpenCaddis/releases/new?tag=$newTag" -ForegroundColor Cyan
+
+Write-Host 'Returning to develop branch...' -ForegroundColor Cyan
+git checkout develop

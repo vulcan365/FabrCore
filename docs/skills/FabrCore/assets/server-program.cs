@@ -13,6 +13,7 @@ builder.AddFabrCoreServer(new FabrCoreServerOptions
 // Optional: custom providers (defaults work for most cases)
 // .UseAgentManagementProvider<SqlAgentManagementProvider>()
 // .UseAclProvider<SqlAclProvider>()
+// .UseTimeProvider(new DemoTimeProvider()) // Orleans scheduling/timers/reminders only
 );
 
 // ── Advanced path: full Orleans control ──
@@ -25,6 +26,8 @@ builder.AddFabrCoreServer(new FabrCoreServerOptions
 // {
 //     AdditionalAssemblies = [typeof(MyAgent).Assembly]
 // });
+//
+// builder.Services.AddSingleton<TimeProvider>(new DemoTimeProvider());
 //
 // builder.UseOrleans(siloBuilder =>
 // {

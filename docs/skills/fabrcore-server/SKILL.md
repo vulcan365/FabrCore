@@ -1,10 +1,10 @@
 ---
 name: fabrcore-server
 description: >
-  Set up and configure FabrCore servers — AddFabrCoreServer, FabrCoreServerOptions, fabrcore.json LLM provider
+  Set up and configure FabrCore servers — AddFabrCoreServer, FabrCoreServerOptions, TimeProvider, fabrcore.json LLM provider
   configuration, REST API endpoints, WebSocket, system agents, custom providers, and deployment.
   Triggers on: "FabrCore server", "AddFabrCoreServer", "AddFabrCoreServices", "UseFabrCoreServer",
-  "FabrCoreServerOptions", "fabrcore.json", "ModelConfigurations", "ApiKeys", "REST API", "/fabrcoreapi",
+  "FabrCoreServerOptions", "TimeProvider", "UseTimeProvider", "fabrcore.json", "ModelConfigurations", "ApiKeys", "REST API", "/fabrcoreapi",
   "deploy FabrCore", "system agent", "ConfigureSystemAgentAsync", "IFabrCoreAgentService",
   "AgentManagementProvider", "UseAgentManagementProvider", "IAgentManagementProvider",
   "AdditionalAssemblies", "WebSocket", "server setup", "LLM provider", "Storage API",
@@ -80,9 +80,40 @@ builder.AddFabrCoreServer(new FabrCoreServerOptions
 .UseAclProvider<SqlAclProvider>());
 ```
 
+### Custom TimeProvider for Orleans
+
+Use `FabrCoreServerOptions.UseTimeProvider(...)` when a host needs Orleans scheduling, timers, and reminders to run against a custom clock. This is useful for demos and tests that need to fast-forward reminder due times.
+
+```csharp
+var demoClock = new DemoTimeProvider();
+
+builder.AddFabrCoreServer(new FabrCoreServerOptions
+{
+    AdditionalAssemblies = [typeof(MyAgent).Assembly]
+}
+.UseTimeProvider(demoClock));
+```
+
+You can also let DI create the provider:
+
+```csharp
+builder.AddFabrCoreServer(new FabrCoreServerOptions
+{
+    AdditionalAssemblies = [typeof(MyAgent).Assembly]
+}
+.UseTimeProvider<DemoTimeProvider>());
+```
+
+Registration precedence:
+- `UseTimeProvider(...)` wins over any existing `TimeProvider` registration.
+- If no option is supplied, an app-level `TimeProvider` already registered in `builder.Services` is preserved.
+- If neither exists, FabrCore registers `TimeProvider.System`.
+
+For instance-based registration, FabrCore registers both `TimeProvider` and the concrete provider type, so a demo API can resolve `DemoTimeProvider` directly. The custom provider is intended for Orleans runtime scheduling only; FabrCore.Host timestamps, file TTLs, health timestamps, diagnostics timestamps, and registry cleanup still use real UTC time.
+
 ## What AddFabrCoreServer Configures
 
-1. **Orleans Silo** — Clustering, persistence, reminders, streaming based on `OrleansClusterOptions`
+1. **Orleans Silo** — Clustering, persistence, reminders, streaming, and registered `TimeProvider` based on `OrleansClusterOptions`
 2. **Services** — `FabrCoreChatClientService`, `FabrCoreToolRegistry`, `FabrCoreRegistry`, `FabrCoreAgentService`, `IAgentManagementProvider`, `IAclProvider`
 3. **Typed Entity Storage** — `IFabrCoreStorageProvider` backed by the configured Orleans storage provider
 4. **Background Services** — `AgentRegistryCleanupService`, `FileCleanupService`
@@ -270,13 +301,13 @@ The agent grain key becomes `"system:{config.Handle}"`. Any user can message it 
 
 Base path: `/fabrcoreapi/`. All agent-scoped endpoints require the `x-user-handle` header to identify the caller.
 
-> **Typed C# client:** `IFabrCoreHostApiClient` in `FabrCore.Sdk` wraps the common endpoint groups below (Agent, Storage, Discovery, Embeddings, File, ModelConfig, Diagnostics). Agent-scoped methods take a fully-qualified `"userHandle:agentHandle"` handle and the client extracts the user handle into the `x-user-handle` header automatically. Storage methods take an explicit user handle. If a newly added endpoint is not yet surfaced by the typed client, call its REST route directly. Older `FabrCore.Client` Host API client types are obsolete. See the **FabrCoreHostApiClient** section in the `fabrcore-client` skill for usage.
+> **Typed C# client:** `IFabrCoreHostApiClient` in `FabrCore.Sdk` wraps the common endpoint groups below (Agent, Storage, Discovery, Embeddings, File, ModelConfig, Diagnostics). Most agent-scoped methods take a fully-qualified `"userHandle:agentHandle"` handle and the client extracts the user handle into the `x-user-handle` header automatically. Blueprint ensure and storage methods take an explicit user handle. If a newly added endpoint is not yet surfaced by the typed client, call its REST route directly. Older `FabrCore.Client` Host API client types are obsolete. See the **FabrCoreHostApiClient** section in the `fabrcore-client` skill for usage.
 
 ---
 
 ### Agent API (`/fabrcoreapi/agent`)
 
-Create agents, send messages, check health, and hard-evict agent instances. This is the primary API for programmatic agent interaction.
+Create agents, ensure blueprint agents, send messages, check health, and hard-evict agent instances. This is the primary API for programmatic agent interaction.
 
 #### POST `/agent/create` — Create/configure agents (batch)
 
@@ -293,6 +324,52 @@ Creates one or more agents for a user. If the agent already exists it is reconfi
 {
   "TotalRequested": 2,
   "SuccessCount": 2,
+  "FailureCount": 0,
+  "Results": [ /* AgentHealthStatus[] */ ]
+}
+```
+
+#### POST `/agent/blueprint` — Ensure blueprint agents
+
+Ensures the agents listed in an admin-authored blueprint exist for the target user from `x-user-handle`. This endpoint is idempotent for already configured agents: it uses the user's host-side `ClientGrain.CreateAgent` path, checks health first for tracked agents, and does not reconfigure healthy/degraded/unhealthy configured agents. Missing or not-configured agents are configured from the blueprint and added to that user's tracked-agent list.
+
+Blueprint processing ignores incoming `ForceReconfigure = true`; use `/agent/create` when an intentional reconfigure is required.
+
+| Parameter | Source | Type | Required | Description |
+|-----------|--------|------|----------|-------------|
+| `x-user-handle` | Header | string | Yes | Target user whose agents should be ensured |
+| body | Body | `AgentBlueprintRequest` | Yes | Blueprint wrapper with `agents` list |
+| `detailLevel` | Query | `HealthDetailLevel` | No | `Basic` (default), `Detailed`, or `Full` |
+
+Bare handles are scoped to `x-user-handle`. Fully-qualified handles are accepted only when their user prefix matches `x-user-handle`; cross-user blueprint handles return `400 Bad Request`.
+
+**Request**:
+```json
+{
+  "name": "support-workspace",
+  "version": "2026-06-06",
+  "agents": [
+    {
+      "handle": "assistant",
+      "agentType": "chat-agent",
+      "models": "default",
+      "systemPrompt": "You help the user triage support work.",
+      "plugins": [ "Tickets" ],
+      "args": {
+        "Tickets:Queue": "support"
+      }
+    }
+  ]
+}
+```
+
+**Response** `200 OK`:
+```json
+{
+  "Name": "support-workspace",
+  "Version": "2026-06-06",
+  "TotalRequested": 1,
+  "SuccessCount": 1,
   "FailureCount": 0,
   "Results": [ /* AgentHealthStatus[] */ ]
 }
@@ -672,6 +749,25 @@ Removes old deactivated entries from the diagnostics/management registry only. I
 
 ### Response Models
 
+**`AgentBlueprintRequest`** — posted to `/agent/blueprint`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Name` | string? | Optional blueprint name for caller traceability |
+| `Version` | string? | Optional blueprint version |
+| `Agents` | List\<AgentConfiguration\> | Agent configurations to ensure for `x-user-handle` |
+
+**`AgentBlueprintResponse`** — returned by `/agent/blueprint`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Name` | string? | Echoed blueprint name |
+| `Version` | string? | Echoed blueprint version |
+| `TotalRequested` | int | Number of blueprint agents requested |
+| `SuccessCount` | int | Number of healthy results |
+| `FailureCount` | int | Number of non-healthy results |
+| `Results` | List\<AgentHealthStatus\> | Health result for each requested agent |
+
 **`AgentHealthStatus`** — returned by create and health endpoints:
 
 | Field | Type | Level | Description |
@@ -817,6 +913,11 @@ public static WebApplicationBuilder AddFabrCoreServer(
 // Server middleware
 public static WebApplication UseFabrCoreServer(
     this WebApplication app, FabrCoreServerOptions? options = null)
+
+// Server options
+public FabrCoreServerOptions UseTimeProvider(TimeProvider provider)
+public FabrCoreServerOptions UseTimeProvider<TTimeProvider>()
+    where TTimeProvider : TimeProvider
 ```
 
 ## Deployment Considerations
