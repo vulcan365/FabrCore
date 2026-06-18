@@ -68,10 +68,9 @@ namespace FabrCore.Host.Services
         Task<AgentEvictionResult> EvictAgentAsync(string userHandle, string handle);
 
         /// <summary>
-        /// Sends a fire-and-forget event via the agent's event stream.
-        /// When streamName is provided, publishes to that named stream instead.
+        /// Sends a fire-and-forget event via the event stream identified by the event Namespace and Channel.
         /// </summary>
-        Task SendEventAsync(string userHandle, string handle, EventMessage message, string? streamName = null);
+        Task SendEventAsync(string userHandle, string handle, EventMessage message);
 
         // ── Agent Management (registration / lifecycle) ──
 

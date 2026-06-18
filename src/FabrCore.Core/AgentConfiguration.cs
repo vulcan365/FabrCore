@@ -7,7 +7,7 @@ namespace FabrCore.Core
         public string? Handle { get; set; }
         public string? AgentType { get; set; }
         public string? Models { get; set; }
-        public List<string> Streams { get; set; } = new();
+        public List<EventStreamSubscription> Streams { get; set; } = new();
         public string? SystemPrompt { get; set; }
         public string? Description { get; set; }
         public Dictionary<string, string> Args { get; set; } = new();
@@ -30,7 +30,7 @@ namespace FabrCore.Core
         [Id(2)]
         public string? Models { get; set; }
         [Id(3)]
-        public List<string> Streams { get; set; } = new();
+        public List<EventStreamSubscription> Streams { get; set; } = new();
         [Id(4)]
         public string? SystemPrompt { get; set; }
         [Id(9)]

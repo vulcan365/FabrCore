@@ -151,7 +151,7 @@ public sealed class FabrCoreAgentProxyStateTests
                 IsConfigured = true
             });
 
-        public Task SendEvent(EventMessage request, string? streamName = null) => Task.CompletedTask;
+        public Task SendEvent(EventMessage request) => Task.CompletedTask;
 
         public void RegisterTimer(string timerName, string messageType, string? message, TimeSpan dueTime, TimeSpan period)
         {

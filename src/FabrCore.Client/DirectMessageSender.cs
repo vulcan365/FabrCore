@@ -96,48 +96,37 @@ namespace FabrCore.Client
         }
 
         /// <inheritdoc />
-        public async Task SendEventAsync(EventMessage message, string? streamName = null)
+        public async Task SendEventAsync(EventMessage message)
         {
             if (message == null)
                 throw new ArgumentNullException(nameof(message));
 
-            if (streamName == null && string.IsNullOrEmpty(message.Channel))
-                throw new ArgumentException("Channel must be set on the event (unless using streamName)", nameof(message));
+            if (string.IsNullOrEmpty(message.Channel))
+                throw new ArgumentException("Channel must be set on the event.", nameof(message));
 
-            if (streamName == null && !message.Channel!.Contains(':'))
+            if (string.IsNullOrWhiteSpace(message.Namespace) && !message.Channel!.Contains(':'))
                 throw new ArgumentException(
                     $"DirectMessageSender requires fully-qualified handles (userHandle:agentHandle). Got '{message.Channel}'. " +
                     "Use ClientContext.SendEvent for automatic handle resolution.", nameof(message));
 
             using var activity = ActivitySource.StartActivity("SendDirectEvent", ActivityKind.Producer);
             activity?.SetTag("event.source", message.Source);
+            activity?.SetTag("event.namespace", message.Namespace);
             activity?.SetTag("event.channel", message.Channel);
-            activity?.SetTag("stream.namespace", StreamConstants.AgentEventNamespace);
 
             try
             {
-                if (streamName != null)
-                {
-                    activity?.SetTag("stream.name", streamName);
+                var streamName = EventStreamSubscription.ToStreamName(message);
+                activity?.SetTag("stream.name", streamName.ToString());
+                activity?.SetTag("stream.namespace", streamName.Namespace);
 
-                    _logger.LogDebug("Sending direct event to named stream {StreamName} from {Source}",
-                        streamName, message.Source);
+                _logger.LogDebug("Sending direct event to stream {StreamName} from {Source}",
+                    streamName, message.Source);
 
-                    var stream = GetAgentEventStream(streamName);
-                    await stream.OnNextAsync(message);
+                var stream = GetEventStream(streamName);
+                await stream.OnNextAsync(message);
 
-                    _logger.LogDebug("Direct event sent successfully to named stream {StreamName}", streamName);
-                }
-                else
-                {
-                    _logger.LogDebug("Sending direct event to {Channel} from {Source}",
-                        message.Channel, message.Source);
-
-                    var stream = GetAgentEventStream(message.Channel!);
-                    await stream.OnNextAsync(message);
-
-                    _logger.LogDebug("Direct event sent successfully to {Channel}", message.Channel);
-                }
+                _logger.LogDebug("Direct event sent successfully to stream {StreamName}", streamName);
 
                 EventsSentCounter.Add(1,
                     new KeyValuePair<string, object?>("event.channel", message.Channel),
@@ -147,8 +136,8 @@ namespace FabrCore.Client
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error sending direct event to {Channel}, StreamName: {StreamName}",
-                    message.Channel, streamName);
+                _logger.LogError(ex, "Error sending direct event to namespace {Namespace}, channel {Channel}",
+                    message.Namespace, message.Channel);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
 
@@ -168,9 +157,8 @@ namespace FabrCore.Client
             return provider.GetStream<AgentMessage>(streamId);
         }
 
-        private IAsyncStream<EventMessage> GetAgentEventStream(string handle)
+        private IAsyncStream<EventMessage> GetEventStream(StreamName streamName)
         {
-            var streamName = StreamName.ForAgentEvent(handle);
             var provider = _clusterClient.GetStreamProvider(streamName.Provider);
             var streamId = StreamId.Create(streamName.Namespace, streamName.Handle);
             return provider.GetStream<EventMessage>(streamId);

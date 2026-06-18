@@ -172,13 +172,13 @@ namespace FabrCore.Client
         }
 
         /// <summary>
-        /// Sends a fire-and-forget event to an agent's AgentEvent stream.
+        /// Sends a fire-and-forget event to the stream identified by the event Namespace and Channel.
         /// Events are delivered to the agent's OnEvent handler, not OnMessage.
-        /// If streamName is provided, publishes to the named event stream.
+        /// Leave Namespace empty to send to the default AgentEvent stream for the target Channel.
         /// </summary>
-        protected Task SendEventAsync(EventMessage message, string? streamName = null)
+        protected Task SendEventAsync(EventMessage message)
         {
-            return ClientContext.SendEvent(message, streamName);
+            return ClientContext.SendEvent(message);
         }
 
         /// <summary>

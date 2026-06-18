@@ -92,7 +92,12 @@ Where the AgentConfiguration JSON structure is:
   "AgentType": "Demo.Server.DemoAgent1",
   "Models": "openai:gpt-4",
   "SystemPrompt": "You are a helpful assistant.",
-  "Streams": [],
+  "Streams": [
+    {
+      "Namespace": "velo-itinerary",
+      "Channel": "itinerary-event-agent"
+    }
+  ],
   "Args": {
     "key": "value"
   }

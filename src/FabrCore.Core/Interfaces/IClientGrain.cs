@@ -11,11 +11,11 @@ namespace FabrCore.Core.Interfaces
         Task SendMessage(AgentMessage request);
 
         /// <summary>
-        /// Sends an event to an agent's AgentEvent stream (fire-and-forget).
-        /// If streamName is provided, publishes to the named event stream instead of the agent's default stream.
+        /// Sends an event to the stream identified by the event Namespace and Channel (fire-and-forget).
+        /// Leave Namespace empty to send to the default AgentEvent stream for the target Channel.
         /// </summary>
         [AlwaysInterleave]
-        Task SendEvent(EventMessage request, string? streamName = null);
+        Task SendEvent(EventMessage request);
 
         /// <summary>
         /// Creates a new agent with the specified configuration.

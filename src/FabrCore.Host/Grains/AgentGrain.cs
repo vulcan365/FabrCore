@@ -152,7 +152,7 @@ namespace FabrCore.Host.Grains
                         await fabrcoreAgentProxy.InternalInitialize();
                         _configuredAt = DateTime.UtcNow;
 
-                        await CreateStreams(persistedConfig.Streams ?? new List<string>());
+                        await CreateStreams(persistedConfig.Streams ?? new List<EventStreamSubscription>());
                         await RegisterWithManagement();
 
                         logger.LogInformation("Agent restored successfully from persisted state: {Handle}", persistedConfig.Handle);
@@ -289,6 +289,8 @@ namespace FabrCore.Host.Grains
 
             try
             {
+                ValidateEventStreamSubscriptions(config.Streams ?? new List<EventStreamSubscription>());
+
                 agentConfiguration = config;
 
                 var agentType = CreateAgent(config.AgentType ?? throw new ArgumentException("AgentType cannot be null", nameof(config)));
@@ -309,7 +311,7 @@ namespace FabrCore.Host.Grains
                 _configuredAt = DateTime.UtcNow;
                 logger.LogDebug("Agent proxy initialized for: {Handle}", config.Handle);
 
-                await CreateStreams(config.Streams ?? new List<string>());
+                await CreateStreams(config.Streams ?? new List<EventStreamSubscription>());
 
                 // Register with management grain after successful initialization
                 await RegisterWithManagement();
@@ -377,7 +379,7 @@ namespace FabrCore.Host.Grains
                     MessagesProcessed = _messagesProcessed,
                     ActiveTimerCount = _timers.Count,
                     ActiveReminderCount = _reminderMessages.Count,
-                    StreamCount = agentConfiguration.Streams?.Count ?? 0,
+                    StreamCount = GetConfiguredStreamNames().Count,
                     Configuration = agentConfiguration,
                     BusyMessagesRouted = Interlocked.Read(ref _busyMessagesRouted),
                     LatencySampleCount = _latencyReservoir.Count,
@@ -395,11 +397,11 @@ namespace FabrCore.Host.Grains
                 status = status with
                 {
                     ProxyHealth = proxyHealth,
-                    ActiveStreams = agentConfiguration!.Streams,
+                    ActiveStreams = GetConfiguredStreamNames().Select(stream => stream.ToString()).ToList(),
                     Diagnostics = new Dictionary<string, string>
                     {
                         ["GrainId"] = this.GetGrainId().ToString(),
-                        ["Models"] = agentConfiguration.Models ?? "not set"
+                        ["Models"] = agentConfiguration!.Models ?? "not set"
                     },
                     State = CombineHealthStates(status.State, proxyHealth.State)
                 };
@@ -650,9 +652,9 @@ namespace FabrCore.Host.Grains
 
             foreach (var streamName in GetConfiguredStreamNames())
             {
-                removed += streamName.IsAgentEvent
-                    ? await UnsubscribeFromEventStreamAsync(streamName)
-                    : await UnsubscribeFromChatStreamAsync(streamName);
+                removed += streamName.IsAgentChat
+                    ? await UnsubscribeFromChatStreamAsync(streamName)
+                    : await UnsubscribeFromEventStreamAsync(streamName);
             }
 
             return removed;
@@ -669,26 +671,51 @@ namespace FabrCore.Host.Grains
 
             var configuredStreams = agentConfiguration?.Streams
                 ?? _messageState.State.Configuration?.Streams
-                ?? new List<string>();
+                ?? new List<EventStreamSubscription>();
 
-            foreach (var streamConfig in configuredStreams)
+            for (var i = 0; i < configuredStreams.Count; i++)
             {
-                try
+                var streamName = ToStreamName(configuredStreams[i], i);
+                if (!streamNames.Contains(streamName))
                 {
-                    var parsedStream = StreamName.ParseConfigEntry(streamConfig);
-                    if (!streamNames.Contains(parsedStream))
-                    {
-                        streamNames.Add(parsedStream);
-                    }
-                }
-                catch (Exception ex) when (ex is FormatException or ArgumentException)
-                {
-                    logger.LogWarning("Invalid stream config during eviction: {StreamConfig} - {Error}",
-                        streamConfig, ex.Message);
+                    streamNames.Add(streamName);
                 }
             }
 
             return streamNames;
+        }
+
+        private static StreamName ToStreamName(EventStreamSubscription? subscription, int index)
+        {
+            if (subscription is null)
+            {
+                throw new ArgumentException(
+                    $"AgentConfiguration.Streams[{index}] cannot be null. Use EventStreamSubscription.For(event.Namespace, event.Channel).",
+                    "Streams");
+            }
+
+            try
+            {
+                return subscription.ToStreamName();
+            }
+            catch (ArgumentException ex)
+            {
+                throw new ArgumentException(
+                    $"AgentConfiguration.Streams[{index}] is invalid: {ex.Message} " +
+                    "Namespace and Channel must match EventMessage.Namespace and EventMessage.Channel. " +
+                    "Dots are not allowed inside provider, namespace, or channel values. " +
+                    "Example: EventStreamSubscription.For(\"velo-itinerary\", \"squad-velo-travel-desk-itinerary-event\").",
+                    "Streams",
+                    ex);
+            }
+        }
+
+        private static void ValidateEventStreamSubscriptions(IReadOnlyList<EventStreamSubscription> subscriptions)
+        {
+            for (var i = 0; i < subscriptions.Count; i++)
+            {
+                _ = ToStreamName(subscriptions[i], i);
+            }
         }
 
         private async Task<int> UnsubscribeFromChatStreamAsync(StreamName streamName)
@@ -1348,7 +1375,7 @@ namespace FabrCore.Host.Grains
             }
         }
 
-        public async Task SendEvent(EventMessage request, string? streamName = null)
+        public async Task SendEvent(EventMessage request)
         {
             // Ensure Source is set to this agent's handle if not provided
             if (string.IsNullOrEmpty(request.Source))
@@ -1361,42 +1388,34 @@ namespace FabrCore.Host.Grains
             activity?.SetTag("event.type", request.Type);
             activity?.SetTag("from.type", "Agent");  // Sending agent
             activity?.SetTag("stream.provider", StreamConstants.ProviderName);
-            activity?.SetTag("stream.namespace", StreamConstants.AgentEventNamespace);
 
             try
             {
-                if (streamName != null)
+                if (string.IsNullOrWhiteSpace(request.Namespace))
                 {
-                    // Named event stream — publish directly
-                    activity?.SetTag("stream.name", streamName);
-
-                    logger.LogDebug("SendEvent to named stream AgentEvent/{StreamName}: Type={EventType}, Source={Source}",
-                        streamName, request.Type, request.Source);
-
-                    var stream = clusterClient.GetAgentEventStream(streamName);
-                    await stream.OnNextAsync(request);
+                    request.Channel = ResolveTargetHandle(request.Channel);
                 }
-                else
-                {
-                    // Default agent event stream — resolve handle from Channel
-                    var targetHandle = ResolveTargetHandle(request.Channel);
-                    activity?.SetTag("event.channel", targetHandle);
 
-                    logger.LogDebug("SendEvent to stream AgentEvent/{Channel}: Type={EventType}, Source={Source}",
-                        targetHandle, request.Type, request.Source);
+                var streamName = EventStreamSubscription.ToStreamName(request);
+                activity?.SetTag("event.namespace", request.Namespace);
+                activity?.SetTag("event.channel", request.Channel);
+                activity?.SetTag("stream.name", streamName.ToString());
+                activity?.SetTag("stream.namespace", streamName.Namespace);
 
-                    var stream = clusterClient.GetAgentEventStream(targetHandle);
-                    await stream.OnNextAsync(request);
+                logger.LogDebug("SendEvent to stream {StreamName}: Type={EventType}, Source={Source}",
+                    streamName, request.Type, request.Source);
 
-                    logger.LogTrace("Event sent to stream for: {Channel}", targetHandle);
-                }
+                var stream = clusterClient.GetStream<EventMessage>(streamName);
+                await stream.OnNextAsync(request);
+
+                logger.LogTrace("Event sent to stream: {StreamName}", streamName);
 
                 activity?.SetStatus(ActivityStatusCode.Ok);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error sending event to stream - Source: {Source}, Channel: {Channel}, StreamName: {StreamName}",
-                    request.Source, request.Channel, streamName);
+                logger.LogError(ex, "Error sending event to stream - Source: {Source}, Namespace: {Namespace}, Channel: {Channel}",
+                    request.Source, request.Namespace, request.Channel);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
                 ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "stream_event_send_failed"),
@@ -1688,7 +1707,7 @@ namespace FabrCore.Host.Grains
 
         // End Interfaces
 
-        private async Task CreateStreams(List<string> configuredStreams)
+        private async Task CreateStreams(List<EventStreamSubscription> configuredStreams)
         {
             using var activity = ActivitySource.StartActivity("CreateStreams", ActivityKind.Internal);
             var handle = this.GetPrimaryKeyString();
@@ -1703,20 +1722,12 @@ namespace FabrCore.Host.Grains
                 StreamName.ForAgentEvent(handle)
             };
 
-            // Parse and add any configured streams (accepts "Namespace.Channel" or "Provider.Namespace.Channel")
-            foreach (var streamConfig in configuredStreams)
+            for (var i = 0; i < configuredStreams.Count; i++)
             {
-                try
+                var streamName = ToStreamName(configuredStreams[i], i);
+                if (!streamNames.Contains(streamName))
                 {
-                    var parsedStream = StreamName.ParseConfigEntry(streamConfig);
-                    if (!streamNames.Contains(parsedStream))
-                    {
-                        streamNames.Add(parsedStream);
-                    }
-                }
-                catch (Exception ex) when (ex is FormatException or ArgumentException)
-                {
-                    logger.LogWarning("Invalid stream config format: {StreamConfig} - {Error}", streamConfig, ex.Message);
+                    streamNames.Add(streamName);
                 }
             }
 
@@ -1751,13 +1762,13 @@ namespace FabrCore.Host.Grains
 
             logger.LogTrace("Processing stream: {StreamName}", streamName);
 
-            if (streamName.IsAgentEvent)
+            if (streamName.IsAgentChat)
             {
-                await SubscribeToEventStream(streamName);
+                await SubscribeToChatStream(streamName);
             }
             else
             {
-                await SubscribeToChatStream(streamName);
+                await SubscribeToEventStream(streamName);
             }
 
             logger.LogInformation("Subscribed to stream: {StreamName}", streamName);

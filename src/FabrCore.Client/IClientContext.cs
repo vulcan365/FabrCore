@@ -48,14 +48,13 @@ namespace FabrCore.Client
         Task SendMessage(AgentMessage request);
 
         /// <summary>
-        /// Sends an event to an agent's AgentEvent stream (fire-and-forget).
+        /// Sends an event to the stream identified by the event Namespace and Channel (fire-and-forget).
         /// Events are delivered to the agent's OnEvent handler, not OnMessage.
-        /// If streamName is provided, publishes to the named event stream instead of the agent's default stream.
+        /// Leave Namespace empty to send to the default AgentEvent stream for the target Channel.
         /// </summary>
         /// <param name="request">The event message to send.</param>
-        /// <param name="streamName">Optional named event stream to publish to.</param>
         /// <exception cref="ObjectDisposedException">Thrown if the context has been disposed.</exception>
-        Task SendEvent(EventMessage request, string? streamName = null);
+        Task SendEvent(EventMessage request);
 
         /// <summary>
         /// Creates a new agent with the specified configuration.
