@@ -533,15 +533,7 @@ namespace FabrCore.Host.WebSocket
 
             try
             {
-                // Extract optional stream name from Args
-                string? streamName = null;
-                if (message.Args != null && message.Args.TryGetValue("streamName", out var sn) && !string.IsNullOrEmpty(sn))
-                {
-                    streamName = sn;
-                    activity?.SetTag("stream.name", streamName);
-                }
-
-                await clientGrain.SendEvent(message, streamName);
+                await clientGrain.SendEvent(message);
 
                 activity?.SetStatus(ActivityStatusCode.Ok);
             }

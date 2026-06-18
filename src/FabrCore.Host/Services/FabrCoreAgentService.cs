@@ -239,21 +239,17 @@ namespace FabrCore.Host.Services
             };
         }
 
-        public async Task SendEventAsync(string userHandle, string handle, EventMessage message, string? streamName = null)
+        public async Task SendEventAsync(string userHandle, string handle, EventMessage message)
         {
-            if (streamName != null)
+            if (string.IsNullOrWhiteSpace(message.Namespace))
             {
-                var stream = _clusterClient.GetAgentEventStream(streamName);
-                await stream.OnNextAsync(message);
-                _logger.LogDebug("Event published to named stream {StreamName} for user {userHandle}", streamName, userHandle);
+                message.Channel = BuildAgentKey(userHandle, handle);
             }
-            else
-            {
-                var key = BuildAgentKey(userHandle, handle);
-                var stream = _clusterClient.GetAgentEventStream(key);
-                await stream.OnNextAsync(message);
-                _logger.LogDebug("Event published to agent {Handle} for user {userHandle}", handle, userHandle);
-            }
+
+            var streamName = EventStreamSubscription.ToStreamName(message);
+            var stream = _clusterClient.GetStream<EventMessage>(streamName);
+            await stream.OnNextAsync(message);
+            _logger.LogDebug("Event published to stream {StreamName} for user {userHandle}", streamName, userHandle);
         }
 
         // ── Agent Management (registration / lifecycle) ──

@@ -80,7 +80,7 @@ public class TestFabrCoreAgentHost : IFabrCoreAgentHost
         return Task.CompletedTask;
     }
 
-    public Task SendEvent(EventMessage request, string? streamName = null)
+    public Task SendEvent(EventMessage request)
     {
         SentEvents.Add(request);
         return Task.CompletedTask;

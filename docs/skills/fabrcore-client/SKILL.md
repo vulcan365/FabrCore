@@ -189,6 +189,7 @@ var response = await _context.SendAndReceiveMessage(new AgentMessage
 // SendEvent
 await _context.SendEvent(new EventMessage
 {
+    Namespace = "user-session",
     Channel = "my-agent",
     Type = "status-update",
     Data = "User logged in"
@@ -236,7 +237,7 @@ public interface IClientContext
 
     Task<AgentMessage> SendAndReceiveMessage(AgentMessage request);
     Task SendMessage(AgentMessage request);
-    Task SendEvent(EventMessage request, string? streamName = null);
+    Task SendEvent(EventMessage request);
     Task<AgentHealthStatus> CreateAgent(AgentConfiguration agentConfiguration);
     Task<AgentHealthStatus> GetAgentHealth(string handle, HealthDetailLevel detailLevel = HealthDetailLevel.Basic);
     Task<List<TrackedAgentInfo>> GetTrackedAgents(bool activate = false);
@@ -291,6 +292,7 @@ await ApiClient.SendEventAsync("user1:my-agent", new EventMessage
 {
     Type = "order.created",
     Source = "user1:orders",
+    Namespace = "orders",
     Channel = "user1:my-agent"
 });
 

@@ -233,7 +233,7 @@ namespace FabrCore.Client
         }
 
         /// <inheritdoc/>
-        public async Task SendEvent(EventMessage request, string? streamName = null)
+        public async Task SendEvent(EventMessage request)
         {
             ThrowIfDisposed();
 
@@ -246,17 +246,17 @@ namespace FabrCore.Client
             activity?.SetTag("event.source", request.Source);
             activity?.SetTag("event.channel", request.Channel);
 
-            _logger.LogTrace("Sending event - Source: {Source}, Channel: {Channel}, StreamName: {StreamName}",
-                request.Source, request.Channel, streamName);
+            _logger.LogTrace("Sending event - Source: {Source}, Namespace: {Namespace}, Channel: {Channel}",
+                request.Source, request.Namespace, request.Channel);
 
             try
             {
                 await RefreshObserverIfNeeded();
 
-                await _clientGrain.SendEvent(request, streamName);
+                await _clientGrain.SendEvent(request);
 
-                _logger.LogTrace("Event sent successfully - Channel: {Channel}, StreamName: {StreamName}",
-                    request.Channel, streamName);
+                _logger.LogTrace("Event sent successfully - Namespace: {Namespace}, Channel: {Channel}",
+                    request.Namespace, request.Channel);
                 activity?.SetStatus(ActivityStatusCode.Ok);
             }
             catch (Exception ex)

@@ -289,7 +289,7 @@ namespace FabrCore.Host.Grains
             }
         }
 
-        public async Task SendEvent(EventMessage request, string? streamName = null)
+        public async Task SendEvent(EventMessage request)
         {
             using var activity = ActivitySource.StartActivity("SendEvent", ActivityKind.Producer);
             var clientId = this.GetPrimaryKeyString();
@@ -298,24 +298,10 @@ namespace FabrCore.Host.Grains
             activity?.SetTag("event.source", request.Source);
             activity?.SetTag("event.type", request.Type);
             activity?.SetTag("stream.provider", StreamConstants.ProviderName);
-            activity?.SetTag("stream.namespace", StreamConstants.AgentEventNamespace);
 
             try
             {
-                if (streamName != null)
-                {
-                    // Named event stream — publish directly, no handle normalization
-                    activity?.SetTag("stream.name", streamName);
-
-                    logger.LogTrace("Client sending event to named stream - Source: {Source}, StreamName: {StreamName}",
-                        request.Source, streamName);
-
-                    var stream = clusterClient.GetAgentEventStream(streamName);
-                    await stream.OnNextAsync(request);
-
-                    logger.LogTrace("Client event sent to named stream: {StreamName}", streamName);
-                }
-                else
+                if (string.IsNullOrWhiteSpace(request.Namespace))
                 {
                     // Default agent event stream — resolve handle from Channel
                     var resolvedChannel = ResolveAgentHandle(request.Channel, clientId);
@@ -324,17 +310,21 @@ namespace FabrCore.Host.Grains
                     await AuthorizeOrThrow(resolvedChannel, AclPermission.Message);
 
                     request.Channel = resolvedChannel;
-
-                    activity?.SetTag("event.channel", resolvedChannel);
-
-                    logger.LogTrace("Client sending event to stream - Source: {Source}, Channel: {Channel}",
-                        request.Source, resolvedChannel);
-
-                    var stream = clusterClient.GetAgentEventStream(resolvedChannel);
-                    await stream.OnNextAsync(request);
-
-                    logger.LogTrace("Client event sent to stream for: {Channel}", resolvedChannel);
                 }
+
+                var streamName = EventStreamSubscription.ToStreamName(request);
+                activity?.SetTag("event.namespace", request.Namespace);
+                activity?.SetTag("event.channel", request.Channel);
+                activity?.SetTag("stream.name", streamName.ToString());
+                activity?.SetTag("stream.namespace", streamName.Namespace);
+
+                logger.LogTrace("Client sending event to stream - Source: {Source}, StreamName: {StreamName}",
+                    request.Source, streamName);
+
+                var stream = clusterClient.GetStream<EventMessage>(streamName);
+                await stream.OnNextAsync(request);
+
+                logger.LogTrace("Client event sent to stream: {StreamName}", streamName);
 
                 activity?.SetStatus(ActivityStatusCode.Ok);
             }

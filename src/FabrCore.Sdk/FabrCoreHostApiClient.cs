@@ -354,14 +354,13 @@ namespace FabrCore.Sdk
         Task<AgentMessage> ChatAsync(string handle, string message, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// Sends a fire-and-forget event to an agent's AgentEvent stream.
-        /// If streamName is provided, publishes to the named event stream.
+        /// Sends a fire-and-forget event to the stream identified by the event Namespace and Channel.
+        /// Leave Namespace empty to send to the default AgentEvent stream for the target handle.
         /// </summary>
         /// <param name="handle">Fully-qualified handle in the form <c>"userHandle:agentHandle"</c>.</param>
         /// <param name="message">The event to publish.</param>
-        /// <param name="streamName">Optional named stream override.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
-        Task SendEventAsync(string handle, EventMessage message, string? streamName = null, CancellationToken cancellationToken = default);
+        Task SendEventAsync(string handle, EventMessage message, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Gets the model configuration by name.
@@ -709,7 +708,7 @@ namespace FabrCore.Sdk
             }
         }
 
-        public async Task SendEventAsync(string handle, EventMessage message, string? streamName = null, CancellationToken cancellationToken = default)
+        public async Task SendEventAsync(string handle, EventMessage message, CancellationToken cancellationToken = default)
         {
             var (userHandle, agentHandle) = SplitHandle(handle, nameof(handle));
 
@@ -717,9 +716,7 @@ namespace FabrCore.Sdk
             activity?.SetTag("user.id", userHandle);
             activity?.SetTag("agent.handle", handle);
 
-            var url = streamName != null
-                ? $"{_baseUrl}/fabrcoreapi/Agent/event/{agentHandle}?streamName={Uri.EscapeDataString(streamName)}"
-                : $"{_baseUrl}/fabrcoreapi/Agent/event/{agentHandle}";
+            var url = $"{_baseUrl}/fabrcoreapi/Agent/event/{agentHandle}";
             var startTime = Stopwatch.GetTimestamp();
 
             try

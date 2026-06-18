@@ -19,13 +19,12 @@ namespace FabrCore.Sdk
         Task<AgentHealthStatus> GetAgentHealth(string? handle = null, HealthDetailLevel detailLevel = HealthDetailLevel.Detailed);
 
         /// <summary>
-        /// Sends an event message to another agent on the AgentEvent stream.
+        /// Sends an event message to the stream identified by the event Namespace and Channel.
         /// Events are fire-and-forget notifications that don't expect a response.
-        /// If streamName is provided, publishes to the named event stream instead of the agent's default stream.
+        /// Leave Namespace empty to send to the default AgentEvent stream for the target Channel.
         /// </summary>
         /// <param name="request">The event message to send</param>
-        /// <param name="streamName">Optional named event stream to publish to (bypasses handle normalization)</param>
-        Task SendEvent(EventMessage request, string? streamName = null);
+        Task SendEvent(EventMessage request);
 
         /// <summary>
         /// Registers a timer that will send a message to the agent at specified intervals.

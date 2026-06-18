@@ -417,7 +417,6 @@ Simple request/response chat. Blocks until the agent responds.
 | `x-user-handle` | Header | string | Yes |
 | `handle` | Route | string | Yes |
 | body | Body | `EventMessage` | Yes |
-| `streamName` | Query | string | No |
 
 **Response** `202 Accepted`.
 

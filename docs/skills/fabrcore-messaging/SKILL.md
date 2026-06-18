@@ -192,10 +192,30 @@ var reply = await fabrcoreAgentHost.SendAndReceiveMessage(crossUserHandleRequest
 var eventMsg = new EventMessage
 {
     Type = "status-changed",
+    Namespace = "agent-status",
     Channel = "listener-agent",
     Data = "Agent status updated"
 };
 await fabrcoreAgentHost.SendEvent(eventMsg);
+```
+
+Agents subscribe to custom event streams with the same namespace/channel pair:
+
+```csharp
+var ns = "agent-status";
+var channel = "listener-agent";
+
+var config = new AgentConfiguration
+{
+    Streams = [EventStreamSubscription.For(ns, channel)]
+};
+
+await fabrcoreAgentHost.SendEvent(new EventMessage
+{
+    Namespace = ns,
+    Channel = channel,
+    Type = "status-changed"
+});
 ```
 
 ## Orchestration Patterns

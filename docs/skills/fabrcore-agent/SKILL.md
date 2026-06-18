@@ -585,6 +585,10 @@ var agentConfig = new AgentConfiguration
     AgentType = "my-agent",         // Must match [AgentAlias]
     Models = "default",             // Model name from fabrcore.json (single string)
     SystemPrompt = "You are a helpful assistant.",
+    Streams =
+    [
+        EventStreamSubscription.For("velo-itinerary", "itinerary-event-agent")
+    ],
     Plugins = ["weather"],          // Must match [PluginAlias] values
     Tools = ["calculate"],          // Must match [ToolAlias] values
     McpServers = [

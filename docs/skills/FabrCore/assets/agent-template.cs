@@ -85,6 +85,9 @@ public class {{AGENT_NAME}} : FabrCoreAgentProxy
 //   "AgentType": "{{AGENT_ALIAS}}",
 //   "Models": "default",
 //   "SystemPrompt": "{{AGENT_DESCRIPTION}}",
+//   "Streams": [
+//     { "Namespace": "events", "Channel": "{{AGENT_ALIAS}}" }
+//   ],
 //   "Plugins": [],
 //   "Tools": [],
 //   "Args": {}
