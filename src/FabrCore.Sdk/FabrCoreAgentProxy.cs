@@ -218,7 +218,8 @@ namespace FabrCore.Sdk
         {
             var client = await chatClientService.GetChatClient(name, networkTimeoutSeconds);
             var monitor = serviceProvider.GetService<FabrCore.Core.Monitoring.IAgentMessageMonitor>();
-            return new TokenTrackingChatClient(client, fabrcoreAgentHost.GetHandle(), monitor, logger);
+            var verifiableExecution = serviceProvider.GetService<FabrCore.Core.VerifiableExecution.IVerifiableExecutionContext>();
+            return new TokenTrackingChatClient(client, fabrcoreAgentHost.GetHandle(), monitor, verifiableExecution, logger);
         }
 
 #pragma warning disable MEAI001 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.

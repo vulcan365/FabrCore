@@ -1,5 +1,7 @@
 using Orleans;
 
+using FabrCore.Core.VerifiableExecution;
+
 namespace FabrCore.Core
 {
     /// <summary>
@@ -44,6 +46,15 @@ namespace FabrCore.Core
 
         /// <summary>Trace/correlation identifier for distributed tracing.</summary>
         public string? TraceId { get; set; } = Guid.NewGuid().ToString();
+
+        /// <summary>W3C span id (16-char lowercase hex) of the span that published this event.</summary>
+        public string? SpanId { get; set; }
+
+        /// <summary>W3C span id (16-char lowercase hex) of the publisher span's parent.</summary>
+        public string? ParentSpanId { get; set; }
+
+        /// <summary>Compact verifiable execution pointer/lineage carried across event hops.</summary>
+        public VerifiableExecutionEnvelope? VerifiableExecution { get; set; }
     }
 
     [GenerateSerializer]
@@ -86,6 +97,15 @@ namespace FabrCore.Core
 
         [Id(11)]
         public string? TraceId { get; set; } = Guid.NewGuid().ToString();
+
+        [Id(12)]
+        public string? SpanId { get; set; }
+
+        [Id(13)]
+        public string? ParentSpanId { get; set; }
+
+        [Id(14)]
+        public VerifiableExecutionEnvelope? VerifiableExecution { get; set; }
     }
 
     [RegisterConverter]
@@ -106,7 +126,10 @@ namespace FabrCore.Core
                 DataContentType = surrogate.DataContentType,
                 BinaryData = surrogate.BinaryData,
                 Args = surrogate.Args,
-                TraceId = surrogate.TraceId
+                TraceId = surrogate.TraceId,
+                SpanId = surrogate.SpanId,
+                ParentSpanId = surrogate.ParentSpanId,
+                VerifiableExecution = surrogate.VerifiableExecution
             };
         }
 
@@ -125,7 +148,10 @@ namespace FabrCore.Core
                 DataContentType = value.DataContentType,
                 BinaryData = value.BinaryData,
                 Args = value.Args,
-                TraceId = value.TraceId
+                TraceId = value.TraceId,
+                SpanId = value.SpanId,
+                ParentSpanId = value.ParentSpanId,
+                VerifiableExecution = value.VerifiableExecution
             };
         }
     }

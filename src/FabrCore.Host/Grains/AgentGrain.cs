@@ -2,6 +2,7 @@ using FabrCore.Core;
 using FabrCore.Core.Interfaces;
 using FabrCore.Core.Monitoring;
 using FabrCore.Core.Streaming;
+using FabrCore.Core.VerifiableExecution;
 using FabrCore.Host.Configuration;
 using FabrCore.Host.Services;
 using FabrCore.Host.Streaming;
@@ -83,6 +84,7 @@ namespace FabrCore.Host.Grains
         private readonly IFabrCoreRegistry _registry;
         private readonly IFabrCoreAgentService _agentService;
         private readonly IAgentMessageMonitor _messageMonitor;
+        private readonly VerifiableExecutionRecorder _verifiableExecution;
 
         // Message persistence state
         private readonly IPersistentState<AgentGrainState> _messageState;
@@ -109,6 +111,7 @@ namespace FabrCore.Host.Grains
             IFabrCoreRegistry registry,
             IFabrCoreAgentService agentService,
             IAgentMessageMonitor messageMonitor,
+            VerifiableExecutionRecorder verifiableExecution,
             Microsoft.Extensions.Options.IOptions<AgentGrainOptions> grainOptions,
             [PersistentState("agentMessages", FabrCoreOrleansConstants.StorageProviderName)]
             IPersistentState<AgentGrainState> messageState)
@@ -120,6 +123,7 @@ namespace FabrCore.Host.Grains
             _registry = registry;
             _agentService = agentService;
             _messageMonitor = messageMonitor;
+            _verifiableExecution = verifiableExecution;
             _messageState = messageState;
             _grainOptions = grainOptions.Value;
             _latencyReservoir = new LatencyReservoir(_grainOptions.LatencyReservoirCapacity);
@@ -808,6 +812,11 @@ namespace FabrCore.Host.Grains
             {
                 // Record inbound request to the message monitor immediately
                 var handle = this.GetPrimaryKeyString();
+                request.VerifiableExecution = await RecordMessageEvidenceAsync(
+                    ExecutionRecordKind.MessageInbound,
+                    handle,
+                    request,
+                    "agent.message.inbound");
                 _messageMonitor.RecordMessageAsync(new MonitoredMessage
                 {
                     AgentHandle = handle,
@@ -824,7 +833,10 @@ namespace FabrCore.Host.Grains
                     State = request.State,
                     Args = request.Args,
                     Direction = MessageDirection.Inbound,
-                    TraceId = request.TraceId
+                    TraceId = request.TraceId,
+                    VerifiableExecutionId = request.VerifiableExecution?.RecordId,
+                    SignatureDigest = request.VerifiableExecution?.CurrentSignatureDigest,
+                    VerificationStatus = request.VerifiableExecution?.SignerIdentityKind == VerifiableExecutionSignerIdentityKind.None ? "Unsigned" : "Signed"
                 }).TrackRecording(logger, ErrorCounter, "RecordMessage.Inbound", handle);
 
                 var agentProxy = fabrcoreAgentProxy
@@ -865,6 +877,12 @@ namespace FabrCore.Host.Grains
                 // Record outbound response to the message monitor
                 if (response != null)
                 {
+                    response.StampFromActivity(activity);
+                    response.VerifiableExecution = await RecordMessageEvidenceAsync(
+                        ExecutionRecordKind.MessageOutbound,
+                        handle,
+                        response,
+                        "agent.message.outbound");
                     _messageMonitor.RecordMessageAsync(new MonitoredMessage
                     {
                         AgentHandle = handle,
@@ -882,7 +900,10 @@ namespace FabrCore.Host.Grains
                         Args = response.Args,
                         Direction = MessageDirection.Outbound,
                         TraceId = response.TraceId,
-                        LlmUsage = LlmUsageInfo.FromArgs(response.Args)
+                        LlmUsage = LlmUsageInfo.FromArgs(response.Args),
+                        VerifiableExecutionId = response.VerifiableExecution?.RecordId,
+                        SignatureDigest = response.VerifiableExecution?.CurrentSignatureDigest,
+                        VerificationStatus = response.VerifiableExecution?.SignerIdentityKind == VerifiableExecutionSignerIdentityKind.None ? "Unsigned" : "Signed"
                     }).TrackRecording(logger, ErrorCounter, "RecordMessage.Outbound", handle);
                 }
 
@@ -1299,6 +1320,12 @@ namespace FabrCore.Host.Grains
             activity?.SetTag("message.to", request.ToHandle);
             activity?.SetTag("from.type", "Agent");  // Agent-to-agent communication
             activity?.SetTag("to.type", "Agent");
+            request.StampFromActivity(activity);
+            request.VerifiableExecution = await RecordMessageEvidenceAsync(
+                ExecutionRecordKind.AgentDispatch,
+                this.GetPrimaryKeyString(),
+                request,
+                "agent.message.request_response.dispatch");
 
             logger.LogDebug("SendAndReceiveMessage: {AgentMessage}", SerializeForLog(request));
 
@@ -1310,6 +1337,11 @@ namespace FabrCore.Host.Grains
                 var agentProxy = clusterClient.GetGrain<IAgentGrain>(request.ToHandle);
                 var response = await agentProxy.OnMessage(request);
                 LlmUsageScope.Current?.MergeFromArgs(response.Args);
+                response.VerifiableExecution = await RecordMessageEvidenceAsync(
+                    ExecutionRecordKind.AgentResponse,
+                    this.GetPrimaryKeyString(),
+                    response,
+                    "agent.message.request_response.response");
                 logger.LogDebug("SendAndReceiveMessage completed - Response received from: {ToHandle}",
                     request.ToHandle);
 
@@ -1354,6 +1386,12 @@ namespace FabrCore.Host.Grains
             activity?.SetTag("from.type", "Agent");  // Sending agent
             activity?.SetTag("stream.provider", StreamConstants.ProviderName);
             activity?.SetTag("stream.namespace", StreamConstants.AgentChatNamespace);
+            request.StampFromActivity(activity);
+            request.VerifiableExecution = await RecordMessageEvidenceAsync(
+                ExecutionRecordKind.AgentDispatch,
+                this.GetPrimaryKeyString(),
+                request,
+                "agent.message.dispatch");
 
             logger.LogDebug("SendMessage to stream AgentChat/{ToHandle}: {AgentMessage}", request.ToHandle, SerializeForLog(request));
 
@@ -1401,6 +1439,12 @@ namespace FabrCore.Host.Grains
                 activity?.SetTag("event.channel", request.Channel);
                 activity?.SetTag("stream.name", streamName.ToString());
                 activity?.SetTag("stream.namespace", streamName.Namespace);
+                request.StampFromActivity(activity);
+                request.VerifiableExecution = await RecordEventEvidenceAsync(
+                    ExecutionRecordKind.EventPublished,
+                    this.GetPrimaryKeyString(),
+                    request,
+                    "agent.event.published");
 
                 logger.LogDebug("SendEvent to stream {StreamName}: Type={EventType}, Source={Source}",
                     streamName, request.Type, request.Source);
@@ -1923,6 +1967,112 @@ namespace FabrCore.Host.Grains
             }
         }
 
+        private Task<VerifiableExecutionEnvelope?> RecordMessageEvidenceAsync(
+            ExecutionRecordKind kind,
+            string agentHandle,
+            AgentMessage message,
+            string subject)
+        {
+            var record = new VerifiableExecutionRecord
+            {
+                Kind = kind,
+                TraceId = message.TraceId,
+                SpanId = message.SpanId,
+                ParentSpanId = message.ParentSpanId,
+                UserHandle = ExtractUserHandle(agentHandle),
+                AgentHandle = agentHandle,
+                AgentType = agentConfiguration?.AgentType,
+                Subject = subject,
+                PayloadHash = VerifiableExecutionCanonicalizer.DigestText(JsonSerializer.Serialize(new
+                {
+                    message.Message,
+                    message.DataType,
+                    DataHash = VerifiableExecutionCanonicalizer.DigestBytes(message.Data),
+                    message.Files
+                })),
+                Metadata = new Dictionary<string, string?>(StringComparer.Ordinal)
+                {
+                    ["message.id"] = message.Id,
+                    ["message.from"] = message.FromHandle,
+                    ["message.to"] = message.ToHandle,
+                    ["message.on_behalf_of"] = message.OnBehalfOfHandle,
+                    ["message.deliver_to"] = message.DeliverToHandle,
+                    ["message.channel"] = message.Channel,
+                    ["message.type"] = message.MessageType,
+                    ["message.kind"] = message.Kind.ToString()
+                },
+                Runtime = new RuntimeProvenance
+                {
+                    AgentAssembly = fabrcoreAgentProxy?.GetType().Assembly.GetName().Name,
+                    AgentAssemblyVersion = fabrcoreAgentProxy?.GetType().Assembly.GetName().Version?.ToString(),
+                    AgentConfigHash = agentConfiguration is null
+                        ? null
+                        : VerifiableExecutionCanonicalizer.DigestText(JsonSerializer.Serialize(agentConfiguration)),
+                    SystemPromptHash = VerifiableExecutionCanonicalizer.DigestText(agentConfiguration?.SystemPrompt),
+                    ModelConfigHash = VerifiableExecutionCanonicalizer.DigestText(agentConfiguration?.Models)
+                }
+            };
+
+            return _verifiableExecution.RecordAsync(record);
+        }
+
+        private Task<VerifiableExecutionEnvelope?> RecordEventEvidenceAsync(
+            ExecutionRecordKind kind,
+            string agentHandle,
+            EventMessage message,
+            string subject)
+        {
+            var record = new VerifiableExecutionRecord
+            {
+                Kind = kind,
+                TraceId = message.TraceId,
+                SpanId = message.SpanId,
+                ParentSpanId = message.ParentSpanId,
+                UserHandle = ExtractUserHandle(agentHandle),
+                AgentHandle = agentHandle,
+                AgentType = agentConfiguration?.AgentType,
+                Subject = subject,
+                PayloadHash = VerifiableExecutionCanonicalizer.DigestText(JsonSerializer.Serialize(new
+                {
+                    message.Data,
+                    message.DataContentType,
+                    BinaryHash = VerifiableExecutionCanonicalizer.DigestBytes(message.BinaryData)
+                })),
+                Metadata = new Dictionary<string, string?>(StringComparer.Ordinal)
+                {
+                    ["event.id"] = message.Id,
+                    ["event.type"] = message.Type,
+                    ["event.source"] = message.Source,
+                    ["event.subject"] = message.Subject,
+                    ["event.namespace"] = message.Namespace,
+                    ["event.channel"] = message.Channel
+                },
+                Runtime = new RuntimeProvenance
+                {
+                    AgentAssembly = fabrcoreAgentProxy?.GetType().Assembly.GetName().Name,
+                    AgentAssemblyVersion = fabrcoreAgentProxy?.GetType().Assembly.GetName().Version?.ToString(),
+                    AgentConfigHash = agentConfiguration is null
+                        ? null
+                        : VerifiableExecutionCanonicalizer.DigestText(JsonSerializer.Serialize(agentConfiguration)),
+                    SystemPromptHash = VerifiableExecutionCanonicalizer.DigestText(agentConfiguration?.SystemPrompt),
+                    ModelConfigHash = VerifiableExecutionCanonicalizer.DigestText(agentConfiguration?.Models)
+                }
+            };
+
+            return _verifiableExecution.RecordAsync(record);
+        }
+
+        private static string? ExtractUserHandle(string? handle)
+        {
+            if (string.IsNullOrWhiteSpace(handle))
+            {
+                return null;
+            }
+
+            var separator = handle.IndexOf(':');
+            return separator > 0 ? handle[..separator] : null;
+        }
+
         private async Task ReceivedEventMessage(EventMessage request, StreamSequenceToken? token = null)
         {
             if (_isEvicting)
@@ -1932,7 +2082,7 @@ namespace FabrCore.Host.Grains
                 return;
             }
 
-            using var activity = ActivitySource.StartActivity("ReceivedEventMessage", ActivityKind.Consumer);
+            using var activity = request.StartIngressActivity(ActivitySource, "ReceivedEventMessage", ActivityKind.Consumer);
             activity?.SetTag("event.source", request.Source);
             activity?.SetTag("event.type", request.Type);
             activity?.SetTag("event.namespace", request.Namespace);
@@ -1955,6 +2105,11 @@ namespace FabrCore.Host.Grains
             try
             {
                 var handle = this.GetPrimaryKeyString();
+                request.VerifiableExecution = await RecordEventEvidenceAsync(
+                    ExecutionRecordKind.EventDelivered,
+                    handle,
+                    request,
+                    "agent.event.delivered");
                 _messageMonitor.RecordEventAsync(new MonitoredEvent
                 {
                     AgentHandle = handle,
@@ -1968,6 +2123,11 @@ namespace FabrCore.Host.Grains
                     Args = request.Args,
                     EventTime = request.Time,
                     TraceId = request.TraceId,
+                    SpanId = request.SpanId,
+                    ParentSpanId = request.ParentSpanId,
+                    VerifiableExecutionId = request.VerifiableExecution?.RecordId,
+                    SignatureDigest = request.VerifiableExecution?.CurrentSignatureDigest,
+                    VerificationStatus = request.VerifiableExecution?.SignerIdentityKind == VerifiableExecutionSignerIdentityKind.None ? "Unsigned" : "Signed",
                     Direction = MessageDirection.Inbound
                 }).TrackRecording(logger, ErrorCounter, "RecordEvent.Inbound", handle);
 
@@ -1982,6 +2142,12 @@ namespace FabrCore.Host.Grains
                     {
                         await fabrcoreAgentProxy.InternalOnEvent(request);
                     }
+
+                    await RecordEventEvidenceAsync(
+                        ExecutionRecordKind.EventHandled,
+                        handle,
+                        request,
+                        "agent.event.handled");
                 }
                 else
                 {
@@ -1993,6 +2159,11 @@ namespace FabrCore.Host.Grains
             catch (Exception ex)
             {
                 logger.LogError(ex, "Error processing event message from: {Source}", request.Source);
+                await RecordEventEvidenceAsync(
+                    ExecutionRecordKind.Error,
+                    this.GetPrimaryKeyString(),
+                    request,
+                    $"agent.event.error:{ex.GetType().Name}");
 
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);

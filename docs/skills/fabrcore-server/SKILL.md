@@ -8,7 +8,8 @@ description: >
   "deploy FabrCore", "system agent", "ConfigureSystemAgentAsync", "IFabrCoreAgentService",
   "AgentManagementProvider", "UseAgentManagementProvider", "IAgentManagementProvider",
   "AdditionalAssemblies", "WebSocket", "server setup", "LLM provider", "Storage API",
-  "typed entity storage", "IFabrCoreStorageProvider".
+  "typed entity storage", "IFabrCoreStorageProvider", "UseVerifiableExecution",
+  "IVerifiableExecutionStore", "IVerifiableExecutionSigner", "signed execution", "evidence bundle".
   Do NOT use for: Orleans clustering/configuration — use fabrcore-orleans.
   Do NOT use for: client setup — use fabrcore-client.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
@@ -80,6 +81,38 @@ builder.AddFabrCoreServer(new FabrCoreServerOptions
 .UseAclProvider<SqlAclProvider>());
 ```
 
+### Verifiable Execution Providers
+
+Verifiable execution is off by default. Enable it when a host needs signed/tamper-evident evidence for messages, events, LLM calls, and plugin/tool side effects. SPIFFE is optional; the core feature is provider-neutral signing and evidence storage.
+
+```csharp
+builder.AddFabrCoreServer(new FabrCoreServerOptions
+{
+    AdditionalAssemblies = [typeof(MyAgent).Assembly]
+}
+.UseVerifiableExecution()
+.UseLocalCertificateVerifiableExecutionSigner());
+```
+
+Production hosts should usually add a durable store and customer-managed signer:
+
+```csharp
+builder.AddFabrCoreServer(new FabrCoreServerOptions
+{
+    AdditionalAssemblies = [typeof(MyAgent).Assembly]
+}
+.UseVerifiableExecution(v =>
+{
+    v.RequireSignerForTrustedExecution = true;
+    v.CapturePayloadBytes = false;
+    v.FailOnVerificationError = true;
+})
+.UseVerifiableExecutionStore<SqlVerifiableExecutionStore>()
+.UseVerifiableExecutionSigner<MyKmsOrCertificateSigner>());
+```
+
+For full model, setup, SPIFFE/SVID, cross-cluster trust, SQL schema, and pitfalls, use the `fabrcore-spiffe` skill.
+
 ### Custom TimeProvider for Orleans
 
 Use `FabrCoreServerOptions.UseTimeProvider(...)` when a host needs Orleans scheduling, timers, and reminders to run against a custom clock. This is useful for demos and tests that need to fast-forward reminder due times.
@@ -116,9 +149,10 @@ For instance-based registration, FabrCore registers both `TimeProvider` and the 
 1. **Orleans Silo** — Clustering, persistence, reminders, streaming, and registered `TimeProvider` based on `OrleansClusterOptions`
 2. **Services** — `FabrCoreChatClientService`, `FabrCoreToolRegistry`, `FabrCoreRegistry`, `FabrCoreAgentService`, `IAgentManagementProvider`, `IAclProvider`
 3. **Typed Entity Storage** — `IFabrCoreStorageProvider` backed by the configured Orleans storage provider
-4. **Background Services** — `AgentRegistryCleanupService`, `FileCleanupService`
-5. **Assembly Discovery** — Scans `AdditionalAssemblies` for agent, plugin, and tool types
-6. **ACL Configuration** — Loads `Acl` section from `fabrcore.json`, registers `IAclProvider`
+4. **Verifiable Execution Services** — `IVerifiableExecutionStore`, `IVerifiableExecutionSigner`, `IVerifiableExecutionVerifier`, `IVerifiableExecutionContext` (disabled/no-op unless enabled)
+5. **Background Services** — `AgentRegistryCleanupService`, `FileCleanupService`
+6. **Assembly Discovery** — Scans `AdditionalAssemblies` for agent, plugin, and tool types
+7. **ACL Configuration** — Loads `Acl` section from `fabrcore.json`, registers `IAclProvider`
 
 ## What UseFabrCoreServer Configures
 
@@ -743,6 +777,21 @@ Removes old deactivated entries from the diagnostics/management registry only. I
 | `olderThanHours` | Query | int | No | Hours threshold (default 24) |
 
 **Response** `200 OK`: `{ "PurgedCount": 3, "Message": "Purged 3 agents deactivated more than 24 hours ago" }`
+
+---
+
+### Verifiable Execution API (`/fabrcoreapi/monitor/verifiable-execution`)
+
+Export and verify signed execution evidence when verifiable execution is enabled.
+
+| Method | Route | Purpose |
+|--------|-------|---------|
+| `GET` | `/monitor/verifiable-execution/operations/{traceId}` | Return the evidence bundle for an operation |
+| `GET` | `/monitor/verifiable-execution/operations/{traceId}/bundle` | Alias for bundle export |
+| `GET` | `/monitor/verifiable-execution/operations/{traceId}/verify` | Verify the stored bundle server-side |
+| `POST` | `/monitor/verifiable-execution/operations/{traceId}/verify` | Verify the stored bundle server-side |
+
+External systems should prefer bundle export plus local verification against their own trust roots. Use `fabrcore-spiffe` for signer/store/trust-bundle details.
 
 ---
 

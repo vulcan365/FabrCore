@@ -289,6 +289,7 @@ public class CompactionService
             await _chatClientService.GetChatClient(modelConfigName),
             agentHandle: LlmUsageScope.Current?.AgentHandle,
             monitor: _monitor,
+            verifiableExecution: null,
             logger: _logger);
 
         // Tag the compaction LLM call with a "Compaction" origin so it can be distinguished

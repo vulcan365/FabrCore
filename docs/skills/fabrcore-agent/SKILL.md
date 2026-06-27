@@ -8,7 +8,8 @@ description: >
   "TryGetStateAsync", "StateReadResult", "SetState", "FlushStateAsync", "compaction", "agent timer", "RegisterTimer", "agent reminder", "RegisterReminder",
   "OnReminder", "agent health", "GetHealth", "AgentHealthStatus", "build agent", "create agent",
   "FabrCoreCapabilities", "FabrCoreNote", "agent capabilities", "agent notes", "busy message", "concurrent message",
-  "AlwaysInterleave", "busy routing", "agent busy", "IFabrCoreStorageProvider", "typed storage".
+  "AlwaysInterleave", "busy routing", "agent busy", "IFabrCoreStorageProvider", "typed storage",
+  "verifiable execution", "VerifiableExecutionEnvelope", "signed evidence", "IVerifiableExecutionContext".
   Do NOT use for: Microsoft Agent Framework internals (AIAgent, AgentSession) — use fabrcore-agentframework.
   Do NOT use for: plugins, tools, MCP — use fabrcore-plugins-tools or fabrcore-mcp.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
@@ -309,13 +310,16 @@ public override Task OnEvent(EventMessage eventMessage)
 }
 ```
 
+When verifiable execution is enabled, `AgentGrain` records event publish/delivery/handled evidence around `OnEvent`. Agent code normally does not sign records manually. If an agent performs an important external side effect directly, inject/use `IVerifiableExecutionContext` or a plugin/helper that records `ExternalDbEffect`, `ExternalHttpCall`, or `ExternalStorageEffect`. See `fabrcore-spiffe`.
+
 ## Telemetry (OpenTelemetry / W3C TraceContext)
 
-Every `AgentMessage` carries W3C `TraceId` / `SpanId` / `ParentSpanId`. Your agent's lifecycle methods run **inside** an Activity started by `AgentGrain` at source `FabrCore.Host.AgentGrain` (parented on the inbound message's trace context via `StartIngressActivity`). That means:
+Every `AgentMessage` and `EventMessage` carries W3C `TraceId` / `SpanId` / `ParentSpanId`. Your agent's lifecycle methods run **inside** an Activity started by `AgentGrain` at source `FabrCore.Host.AgentGrain` (parented on the inbound message/event trace context via `StartIngressActivity`). That means:
 
 - `Activity.Current` is non-null inside `OnMessage` / `OnMessageBusy` / `OnEvent` — use it.
 - Any child span you start from your own `ActivitySource` auto-parents on the grain span; no context plumbing needed.
 - Outbound responses returned from `OnMessage` are auto-stamped by the grain before delivery (see `src/FabrCore.Host/Grains/AgentGrain.cs:673,795`) — you only need to stamp when you build a response in a method that returns the `AgentMessage` directly *and* want to be safe (e.g. `OnMessageBusy`).
+- When verifiable execution is enabled, the host also attaches `VerifiableExecutionEnvelope` to messages/events and records signed evidence; do not overwrite this envelope in agent code.
 
 ### Creating child spans in your agent
 

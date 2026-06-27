@@ -48,6 +48,12 @@ namespace FabrCore.Core.Monitoring
         /// <summary>Trace/correlation identifier for distributed tracing.</summary>
         public string? TraceId { get; set; }
 
+        public string? SpanId { get; set; }
+        public string? ParentSpanId { get; set; }
+        public string? VerifiableExecutionId { get; set; }
+        public string? SignatureDigest { get; set; }
+        public string? VerificationStatus { get; set; }
+
         /// <summary>Direction relative to the recording agent. Always <see cref="MessageDirection.Inbound"/> today.</summary>
         public MessageDirection Direction { get; set; } = MessageDirection.Inbound;
     }

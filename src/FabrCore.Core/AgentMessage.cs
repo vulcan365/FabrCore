@@ -1,5 +1,7 @@
 ﻿using Orleans;
 
+using FabrCore.Core.VerifiableExecution;
+
 namespace FabrCore.Core
 {
     /// <summary>
@@ -82,6 +84,9 @@ namespace FabrCore.Core
         /// <summary>W3C span id (16-char lowercase hex) of the publisher span's parent.</summary>
         public string? ParentSpanId { get; set; }
 
+        /// <summary>Compact verifiable execution pointer/lineage carried across message hops.</summary>
+        public VerifiableExecutionEnvelope? VerifiableExecution { get; set; }
+
         /// <summary>True when this message uses a reserved FabrCore system message type.</summary>
         public bool IsSystemMessage => SystemMessageTypes.IsSystemMessage(MessageType);
 
@@ -95,7 +100,8 @@ namespace FabrCore.Core
                 Channel = Channel,
                 Kind = MessageKind.Response,
                 State = State != null ? new Dictionary<string, string>(State) : new Dictionary<string, string>(),
-                TraceId = TraceId
+                TraceId = TraceId,
+                VerifiableExecution = VerifiableExecution
             };
 
             if (Kind == MessageKind.Response && !string.IsNullOrEmpty(DeliverToHandle))
@@ -171,6 +177,9 @@ namespace FabrCore.Core
         [Id(16)]
         public string? ParentSpanId { get; set; }
 
+        [Id(17)]
+        public VerifiableExecutionEnvelope? VerifiableExecution { get; set; }
+
     }
 
     [RegisterConverter]
@@ -200,7 +209,8 @@ namespace FabrCore.Core
                 Args = surrogate.Args,
                 TraceId = surrogate.TraceId,
                 SpanId = surrogate.SpanId,
-                ParentSpanId = surrogate.ParentSpanId
+                ParentSpanId = surrogate.ParentSpanId,
+                VerifiableExecution = surrogate.VerifiableExecution
             };
         }
 
@@ -224,7 +234,8 @@ namespace FabrCore.Core
                 Args = value.Args,
                 TraceId = value.TraceId,
                 SpanId = value.SpanId,
-                ParentSpanId = value.ParentSpanId
+                ParentSpanId = value.ParentSpanId,
+                VerifiableExecution = value.VerifiableExecution
             };
         }
     }
