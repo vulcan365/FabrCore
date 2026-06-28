@@ -60,6 +60,10 @@ namespace FabrCore.Core.Monitoring
         public List<LlmMessageSnapshot>? ResponseMessages { get; set; }
         public string? ResponseText { get; set; }
         public List<LlmToolCallSnapshot>? ToolCalls { get; set; }
+
+        public string? VerifiableExecutionId { get; set; }
+        public string? SignatureDigest { get; set; }
+        public string? VerificationStatus { get; set; }
     }
 
     /// <summary>Snapshot of a single chat message sent to or returned from the LLM.</summary>

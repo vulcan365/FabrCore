@@ -8,7 +8,8 @@ description: >
   "monitor messages", "monitor events", "OnEvent", "event stream monitor", "track tokens", "agent token usage",
   "message traffic", "monitor provider", "OnMessageRecorded", "OnEventRecorded", "OnLlmCallRecorded",
   "MonitoredMessage", "MonitoredEvent", "MonitoredLlmCall", "LlmCaptureOptions", "LlmCallContext",
-  "monitor LLM calls", "capture LLM prompts", "capture LLM responses", "AgentTokenSummary", "message observation".
+  "monitor LLM calls", "capture LLM prompts", "capture LLM responses", "AgentTokenSummary", "message observation",
+  "VerifiableExecutionId", "SignatureDigest", "VerificationStatus", "signed evidence".
   Do NOT use for: agent lifecycle — use fabrcore-agent.
   Do NOT use for: OpenTelemetry metrics — use fabrcore-server.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
@@ -27,10 +28,13 @@ The Agent Message Monitor provides a pluggable provider for observing message, e
 - **Every internal LLM request/response call** an agent makes through Microsoft Agent Framework (`IChatClient.GetResponseAsync` / streaming), whether from `OnMessage`, `OnEvent`, timers, reminders, compaction, or background work
 - LLM token usage per response (input, output, reasoning, cached tokens, model, duration)
 - Accumulated token totals per agent
+- Optional links to verifiable execution evidence (`VerifiableExecutionId`, `SignatureDigest`, `VerificationStatus`) when signed execution is enabled
 
 Response-level LLM usage is first written to `AgentMessage.Args` using underscore-prefixed keys such as `_tokens_input`, `_tokens_output`, and `_llm_calls`. Agent Monitor is optional for UI clients that only need usage on the response; the monitor projects those args into `MonitoredMessage.LlmUsage` for historical/debug views.
 
 Messages, events, and LLM calls live in **three separate buffers** with **separate query methods and notification events**, so a client output viewer can toggle any combination — messages only, events only, LLM calls only, or any merge — with independent FIFO eviction so a chatty stream in one track cannot evict entries from another.
+
+Agent Monitor is not the trust source for verifiable execution. It is an operational view that can point to signed evidence records. Use `fabrcore-spiffe` when implementing verification, evidence bundles, signer/store providers, or attested external effects.
 
 > **See also:** [references/llm-call-capture.md](references/llm-call-capture.md) for a deep dive on the LLM call track — attribution rules, payload redaction, streaming aggregation, and the `LlmCallContext` / `LlmUsageScope` precedence model.
 
@@ -52,6 +56,7 @@ Messages, events, and LLM calls live in **three separate buffers** with **separa
 | `LlmUsageScope` | `FabrCore.Sdk` | AsyncLocal scope set by `OnMessage` carrying agent handle, parent message id, trace id, and origin |
 | `LlmCallContext` | `FabrCore.Sdk` | AsyncLocal context used to tag LLM calls that happen outside an `OnMessage` scope (timers, `OnEvent`, background) |
 | `TokenTrackingChatClient` | `FabrCore.Sdk` | `DelegatingChatClient` that records each LLM call to the monitor and accumulates usage into the active scope |
+| `VerifiableExecutionId` / `SignatureDigest` / `VerificationStatus` | Monitor records | Optional correlation fields to signed evidence records |
 
 ## Enabling Monitoring
 

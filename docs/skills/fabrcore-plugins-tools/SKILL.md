@@ -7,7 +7,10 @@ description: >
   "tool calling", "AIFunctionFactory", "add tools to agent", "[Description]", "plugin settings",
   "GetPluginSetting", "plugin DI", "tool description", "tool method",
   "FabrCoreCapabilities", "FabrCoreNote", "plugin capabilities", "tool capabilities",
-  "IFabrCoreStorageProvider", "typed storage", "entity storage".
+  "IFabrCoreStorageProvider", "typed storage", "entity storage", "IVerifiableExecutionContext",
+  "attested external effect", "ExternalDbEffect", "ExternalHttpCall", "ExternalStorageEffect",
+  "ExternalLibraryCall", "RecordDbEffectAsync", "RecordHttpCallAsync", "RecordStorageEffectAsync",
+  "RecordLibraryCallAsync", "VerifiableExecutionHash".
   Do NOT use for: MCP integration — use fabrcore-mcp.
   Do NOT use for: agent lifecycle — use fabrcore-agent.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
@@ -142,6 +145,7 @@ var allSettings = config.GetPluginSettings("my-plugin");
 The `IServiceProvider` in `InitializeAsync` includes:
 - `IFabrCoreAgentHost` — For inter-agent communication, handle access, and status messages
 - `IFabrCoreStorageProvider` — For Host-backed typed entity storage when registered by FabrCore.Host
+- `IVerifiableExecutionContext` — Optional; use `FabrCore.Sdk.VerifiableExecution` helpers to record DB/API/storage/library side effects under the current operation when verifiable execution is enabled
 - `IEmbeddings` — For generating vector embeddings (see below)
 - All services registered in the server's DI container
 - `ILogger<T>` — For structured logging
@@ -164,6 +168,42 @@ public Task InitializeAsync(AgentConfiguration config, IServiceProvider serviceP
     return Task.CompletedTask;
 }
 ```
+
+### Attested External Effects
+
+Plugins and tools often call external APIs or update databases. SPIFFE/signing does not observe those side effects automatically. To make an external effect part of verifiable execution, use the `FabrCore.Sdk.VerifiableExecution` helper extensions around the actual DB/API/storage/library call.
+
+```csharp
+using FabrCore.Core.VerifiableExecution;
+using FabrCore.Sdk.VerifiableExecution;
+
+private IVerifiableExecutionContext? _evidence;
+
+public Task InitializeAsync(AgentConfiguration config, IServiceProvider serviceProvider)
+{
+    _evidence = serviceProvider.GetService<IVerifiableExecutionContext>();
+    return Task.CompletedTask;
+}
+
+public async Task<string> UpdateOrder(string orderId, string status)
+{
+    var result = await _evidence.RecordDbEffectAsync(
+        operation: "UpdateOrder",
+        target: "Orders",
+        subject: orderId,
+        effect: () => UpdateDatabase(orderId, status),
+        metadata: new Dictionary<string, string?>
+        {
+            ["db.system"] = "sqlserver",
+            ["row_key_hash"] = VerifiableExecutionHash.HashText(orderId),
+            ["status_hash"] = VerifiableExecutionHash.HashText(status)
+        });
+
+    return $"Updated {result.Value} row(s).";
+}
+```
+
+The helper records success/failure metadata, duration, safe hashes, and rethrows business exceptions. Evidence recording itself is fail-open. Record hashes/redacted metadata, not secrets or raw customer values. For DB writes that must be audit-grade, prefer a transaction/outbox pattern so the business update and evidence marker commit together. See `fabrcore-spiffe -> external-effects.md`.
 
 ### Plugin with Inter-Agent Communication
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "FabrCore SPIFFE"
+  short_description: "Verifiable execution and optional SPIFFE signing for FabrCore."
+  default_prompt: "Use this skill when implementing or troubleshooting FabrCore verifiable execution, signer providers, evidence stores, SPIFFE/SVID identity, trust bundles, or attested agent/plugin/tool side effects."

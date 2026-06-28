@@ -1,4 +1,6 @@
 using FabrCore.Core;
+using FabrCore.Core.VerifiableExecution;
+using FabrCore.Sdk.VerifiableExecution;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -44,7 +46,7 @@ namespace FabrCore.Sdk
             {
                 foreach (var alias in toolAliases)
                 {
-                    var resolved = ResolveStandaloneTool(alias);
+                    var resolved = ResolveStandaloneTool(alias, serviceProvider);
                     if (resolved != null)
                     {
                         tools.Add(resolved);
@@ -107,6 +109,18 @@ namespace FabrCore.Sdk
                 try
                 {
                     var tool = AIFunctionFactory.Create(method, instance);
+                    var verifiableExecution = pluginServiceProvider.GetService<IVerifiableExecutionContext>();
+                    if (tool is AIFunction function)
+                    {
+                        tool = new VerifiableExecutionAIFunction(
+                            function,
+                            verifiableExecution,
+                            ExecutionRecordKind.PluginCall,
+                            alias,
+                            method.Name,
+                            _logger);
+                    }
+
                     tools.Add(tool);
                     toolNames.Add(method.Name);
                 }
@@ -120,7 +134,7 @@ namespace FabrCore.Sdk
             return (tools, toolNames);
         }
 
-        private AITool? ResolveStandaloneTool(string alias)
+        private AITool? ResolveStandaloneTool(string alias, IServiceProvider serviceProvider)
         {
             if (!_toolMethods.Value.TryGetValue(alias, out var method))
             {
@@ -130,7 +144,17 @@ namespace FabrCore.Sdk
 
             try
             {
-                return AIFunctionFactory.Create(method, target: null);
+                var tool = AIFunctionFactory.Create(method, target: null);
+                var verifiableExecution = serviceProvider.GetService<IVerifiableExecutionContext>();
+                return tool is AIFunction function
+                    ? new VerifiableExecutionAIFunction(
+                        function,
+                        verifiableExecution,
+                        ExecutionRecordKind.ToolCall,
+                        alias,
+                        method.Name,
+                        _logger)
+                    : tool;
             }
             catch (Exception ex)
             {

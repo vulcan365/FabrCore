@@ -44,6 +44,19 @@ namespace FabrCore.Core
         }
 
         /// <summary>
+        /// Copies TraceId/SpanId/ParentSpanId from a live <see cref="Activity"/> onto the event.
+        /// No-op if the activity is null.
+        /// </summary>
+        public static void StampFromActivity(this EventMessage message, Activity? activity)
+        {
+            if (activity is null) return;
+
+            message.TraceId = activity.TraceId.ToHexString();
+            message.SpanId = activity.SpanId.ToHexString();
+            message.ParentSpanId = activity.ParentSpanId == default ? null : activity.ParentSpanId.ToHexString();
+        }
+
+        /// <summary>
         /// Starts an ingress <see cref="Activity"/> for a message that just crossed into a new component.
         /// Parent context precedence: (1) the message's own TraceId/SpanId, (2) <paramref name="outerParent"/>
         /// (e.g. extracted from a traceparent header), (3) none (new root).
@@ -74,6 +87,40 @@ namespace FabrCore.Core
                 message.StampFromActivity(activity);
             }
 
+            return activity;
+        }
+
+        /// <summary>
+        /// Starts an ingress <see cref="Activity"/> for an event that just crossed into a new component.
+        /// </summary>
+        public static Activity? StartIngressActivity(
+            this EventMessage message,
+            ActivitySource source,
+            string name,
+            ActivityKind kind,
+            ActivityContext outerParent = default)
+        {
+            ActivityContext parent = default;
+            if (!string.IsNullOrEmpty(message.TraceId) && !string.IsNullOrEmpty(message.SpanId))
+            {
+                try
+                {
+                    parent = new ActivityContext(
+                        ActivityTraceId.CreateFromString(message.TraceId.AsSpan()),
+                        ActivitySpanId.CreateFromString(message.SpanId.AsSpan()),
+                        ActivityTraceFlags.Recorded,
+                        isRemote: true);
+                }
+                catch (ArgumentOutOfRangeException) { parent = default; }
+                catch (FormatException) { parent = default; }
+            }
+            else if (outerParent != default)
+            {
+                parent = outerParent;
+            }
+
+            var activity = source.StartActivity(name, kind, parent);
+            message.StampFromActivity(activity);
             return activity;
         }
     }

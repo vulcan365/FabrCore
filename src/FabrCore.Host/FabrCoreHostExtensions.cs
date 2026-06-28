@@ -1,6 +1,7 @@
 using FabrCore.Core;
 using FabrCore.Core.Acl;
 using FabrCore.Core.Monitoring;
+using FabrCore.Core.VerifiableExecution;
 using FabrCore.Host.Configuration;
 using FabrCore.Host.Services;
 using FabrCore.Sdk;
@@ -44,6 +45,10 @@ namespace FabrCore.Host
         /// or <see cref="UseInMemoryAgentMessageMonitor"/> to enable.
         /// </summary>
         internal Type? AgentMessageMonitorType { get; private set; }
+
+        internal Type VerifiableExecutionStoreType { get; private set; } = typeof(InMemoryVerifiableExecutionStore);
+        internal Type VerifiableExecutionSignerType { get; private set; } = typeof(NullVerifiableExecutionSigner);
+        internal VerifiableExecutionOptions VerifiableExecutionOptions { get; } = new();
 
         /// <summary>
         /// Options controlling LLM call capture behavior. Registered as a singleton and consumed
@@ -123,6 +128,31 @@ namespace FabrCore.Host
         {
             AgentMessageMonitorType = typeof(InMemoryAgentMessageMonitor);
             configureLlmCapture?.Invoke(LlmCaptureOptions);
+            return this;
+        }
+
+        public FabrCoreServerOptions UseVerifiableExecution(Action<VerifiableExecutionOptions>? configure = null)
+        {
+            VerifiableExecutionOptions.Enabled = true;
+            configure?.Invoke(VerifiableExecutionOptions);
+            return this;
+        }
+
+        public FabrCoreServerOptions UseVerifiableExecutionStore<T>() where T : class, IVerifiableExecutionStore
+        {
+            VerifiableExecutionStoreType = typeof(T);
+            return this;
+        }
+
+        public FabrCoreServerOptions UseVerifiableExecutionSigner<T>() where T : class, IVerifiableExecutionSigner
+        {
+            VerifiableExecutionSignerType = typeof(T);
+            return this;
+        }
+
+        public FabrCoreServerOptions UseLocalCertificateVerifiableExecutionSigner()
+        {
+            VerifiableExecutionSignerType = typeof(LocalCertificateVerifiableExecutionSigner);
             return this;
         }
 
@@ -355,6 +385,7 @@ namespace FabrCore.Host
                 // Register LlmCaptureOptions as a singleton so the monitor and
                 // TokenTrackingChatClient can pick it up via DI.
                 builder.Services.AddSingleton(options.LlmCaptureOptions);
+                builder.Services.AddSingleton(Microsoft.Extensions.Options.Options.Create(options.VerifiableExecutionOptions));
 
                 if (options.AgentMessageMonitorType is not null)
                 {
@@ -366,6 +397,18 @@ namespace FabrCore.Host
                     builder.Services.AddSingleton<IAgentMessageMonitor, NullAgentMessageMonitor>();
                     logger.LogDebug("AgentMessageMonitor not configured — monitoring disabled");
                 }
+
+                builder.Services.AddSingleton(typeof(IVerifiableExecutionStore), options.VerifiableExecutionStoreType);
+                builder.Services.AddSingleton(typeof(IVerifiableExecutionSigner), options.VerifiableExecutionSignerType);
+                builder.Services.AddSingleton<IVerifiableExecutionVerifier, VerifiableExecutionVerifier>();
+                builder.Services.AddSingleton<VerifiableExecutionRecorder>();
+                builder.Services.AddSingleton<IVerifiableExecutionContext>(sp =>
+                    sp.GetRequiredService<VerifiableExecutionRecorder>());
+                logger.LogInformation(
+                    "Verifiable execution {State} (Store={StoreType}, Signer={SignerType})",
+                    options.VerifiableExecutionOptions.Enabled ? "enabled" : "disabled",
+                    options.VerifiableExecutionStoreType.Name,
+                    options.VerifiableExecutionSignerType.Name);
 
                 // Configure Agent Service
                 builder.Services.AddSingleton<IFabrCoreAgentService, FabrCoreAgentService>();
