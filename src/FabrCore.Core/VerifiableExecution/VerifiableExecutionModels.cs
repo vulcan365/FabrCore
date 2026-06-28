@@ -18,7 +18,8 @@ public enum ExecutionRecordKind
     ExternalDbEffect = 11,
     ExternalStorageEffect = 12,
     Error = 13,
-    Terminal = 14
+    Terminal = 14,
+    ExternalLibraryCall = 15
 }
 
 public enum ExecutionPropagationScope

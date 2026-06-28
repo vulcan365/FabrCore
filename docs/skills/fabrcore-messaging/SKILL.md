@@ -9,7 +9,8 @@ description: >
   "ACL", "shared agent", "access control", "MessageKind", "cross-user", "fan-out", "pipeline",
   "supervisor", "delegator", "AclRule", "AclPermission", "IAclProvider", "SystemMessageTypes",
   "FromHandle", "ToHandle", "OnBehalfOfHandle", "TraceId", "message routing", "storage user handle",
-  "VerifiableExecutionEnvelope", "signed evidence", "EventPublished", "EventDelivered", "EventHandled".
+  "VerifiableExecutionEnvelope", "signed evidence", "EventPublished", "EventDelivered", "EventHandled",
+  "RecordDbEffectAsync", "RecordHttpCallAsync", "RecordStorageEffectAsync", "RecordLibraryCallAsync".
   Do NOT use for: agent lifecycle — use fabrcore-agent.
   Do NOT use for: ChatDock — use fabrcore-chatdock.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
@@ -348,7 +349,7 @@ Current host capture points:
 - agent inbound/outbound messages (`MessageInbound`, `MessageOutbound`, `AgentResponse`)
 - event publish/delivery/handler completion (`EventPublished`, `EventDelivered`, `EventHandled`)
 - LLM calls (`LlmCall`)
-- plugin/tool external effects when manually recorded through `IVerifiableExecutionContext`
+- plugin/tool invocations automatically, plus DB/API/storage/library side effects when recorded with `FabrCore.Sdk.VerifiableExecution` helpers
 
 Use the `fabrcore-spiffe` skill for the full trust model, setup, cross-cluster flow, and pitfalls.
 

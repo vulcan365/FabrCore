@@ -149,7 +149,7 @@ For instance-based registration, FabrCore registers both `TimeProvider` and the 
 1. **Orleans Silo** — Clustering, persistence, reminders, streaming, and registered `TimeProvider` based on `OrleansClusterOptions`
 2. **Services** — `FabrCoreChatClientService`, `FabrCoreToolRegistry`, `FabrCoreRegistry`, `FabrCoreAgentService`, `IAgentManagementProvider`, `IAclProvider`
 3. **Typed Entity Storage** — `IFabrCoreStorageProvider` backed by the configured Orleans storage provider
-4. **Verifiable Execution Services** — `IVerifiableExecutionStore`, `IVerifiableExecutionSigner`, `IVerifiableExecutionVerifier`, `IVerifiableExecutionContext` (disabled/no-op unless enabled)
+4. **Verifiable Execution Services** — `IVerifiableExecutionStore`, `IVerifiableExecutionSigner`, `IVerifiableExecutionVerifier`, `IVerifiableExecutionContext`, and SDK helper support for external effects (disabled/no-op unless enabled)
 5. **Background Services** — `AgentRegistryCleanupService`, `FileCleanupService`
 6. **Assembly Discovery** — Scans `AdditionalAssemblies` for agent, plugin, and tool types
 7. **ACL Configuration** — Loads `Acl` section from `fabrcore.json`, registers `IAclProvider`

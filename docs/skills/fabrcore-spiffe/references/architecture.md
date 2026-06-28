@@ -58,6 +58,7 @@ Use these kinds consistently:
 | `ExternalHttpCall` | Attested outbound HTTP effect |
 | `ExternalDbEffect` | Attested DB command/update effect |
 | `ExternalStorageEffect` | Attested storage write/delete effect |
+| `ExternalLibraryCall` | Attested local library/business-method call |
 | `Error` | Failed handler/effect evidence |
 | `Terminal` | Explicit terminal state for an operation/segment |
 

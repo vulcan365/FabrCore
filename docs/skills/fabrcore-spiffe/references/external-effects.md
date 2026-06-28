@@ -14,9 +14,12 @@ unless the plugin/tool records external effects through an attested wrapper, man
 
 ## Plugin/Tool Responsibilities
 
-Plugin/tool authors do not implement SPIFFE. They may use `IVerifiableExecutionContext` to record important side effects:
+Plugin/tool authors do not implement SPIFFE. They use `IVerifiableExecutionContext` with the `FabrCore.Sdk.VerifiableExecution` helper extensions to record important side effects:
 
 ```csharp
+using FabrCore.Core.VerifiableExecution;
+using FabrCore.Sdk.VerifiableExecution;
+
 private IVerifiableExecutionContext? _evidence;
 
 public Task InitializeAsync(AgentConfiguration config, IServiceProvider serviceProvider)
@@ -26,26 +29,29 @@ public Task InitializeAsync(AgentConfiguration config, IServiceProvider serviceP
 }
 ```
 
-Record external effects after the effect is known:
+Wrap external effects so success, failure, duration, and safe hashes are recorded:
 
 ```csharp
-await _evidence!.RecordExternalEffectAsync(
-    ExecutionRecordKind.ExternalDbEffect,
-    "orders:update-status",
-    new Dictionary<string, string?>
+var result = await _evidence.RecordDbEffectAsync(
+    operation: "UpdateOrderStatus",
+    target: "Orders",
+    subject: orderId,
+    effect: () => ExecuteUpdateAsync(orderId, status),
+    metadata: new Dictionary<string, string?>
     {
         ["db.system"] = "sqlserver",
         ["db.name"] = "orders",
-        ["db.table"] = "Orders",
-        ["operation"] = "UPDATE",
-        ["row_key_hash"] = Hash(orderId),
-        ["command_hash"] = Hash(commandText),
-        ["parameter_hash"] = Hash(redactedParametersJson),
-        ["affected_rows"] = affectedRows.ToString(),
+        ["row_key_hash"] = VerifiableExecutionHash.HashText(orderId),
+        ["command_hash"] = VerifiableExecutionHash.HashText(commandText),
+        ["parameter_hash"] = VerifiableExecutionHash.HashText(redactedParametersJson),
         ["transaction_id"] = txId,
         ["rowversion"] = rowVersion
     });
+
+var affectedRows = result.Value;
 ```
+
+Helper recording is fail-open: the business call still succeeds if the evidence sink fails. If the business call throws, the helper records failure metadata and rethrows the original exception.
 
 ## DB Effects
 
@@ -97,6 +103,14 @@ Recommended metadata:
 
 Do not store authorization headers or raw bodies unless explicitly safe and redacted.
 
+```csharp
+var response = await _evidence.RecordHttpCallAsync(
+    operation: "FetchInvoice",
+    method: "GET",
+    url: invoiceUri,
+    call: () => _httpClient.GetAsync(invoiceUri));
+```
+
 ## Storage Effects
 
 Recommended metadata:
@@ -110,9 +124,23 @@ Recommended metadata:
 - `version_id`
 - `size_bytes`
 
+Use `RecordStorageEffectAsync` for object/blob/file effects and include content hashes rather than raw content.
+
+## Library Calls
+
+Use `RecordLibraryCallAsync` when a plugin calls important local business logic that should appear in the signed operation timeline:
+
+```csharp
+var score = await _evidence.RecordLibraryCallAsync(
+    operation: "CalculateRiskScore",
+    componentName: "RiskScoringEngine",
+    method: "ScoreAsync",
+    call: () => _riskEngine.ScoreAsync(input));
+```
+
 ## Unreported Effects
 
-If a plugin/tool performs direct DB/API/storage work outside an attested wrapper and does not call `IVerifiableExecutionContext`, mark the tool/plugin call as signed but `ExternalEffectsUnverified` in UI/reporting. Do not overclaim.
+If a plugin/tool performs direct DB/API/storage/library work outside an SDK helper, manual evidence API, or external audit/outbox integration, mark the tool/plugin call as signed but `ExternalEffectsUnverified` in UI/reporting. Do not overclaim.
 
 ## Testing
 

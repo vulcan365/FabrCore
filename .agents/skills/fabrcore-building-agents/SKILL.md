@@ -44,6 +44,8 @@ Each FabrCore agent is an Orleans grain — a distributed actor with isolated st
 | `FabrCoreAgentProxy` | FabrCore.Sdk | Agent base class — extend this |
 | `IFabrCorePlugin` | FabrCore.Sdk | Plugin interface — implement this |
 | `IFabrCoreAgentHost` | FabrCore.Sdk | Host services (messaging, timers, state) |
+| `IVerifiableExecutionContext` | FabrCore.Core | Optional evidence recorder for DB/API/storage/library effects |
+| `VerifiableExecutionSdkExtensions` | FabrCore.Sdk | Helper extensions for recording verifiable external effects |
 | `AgentConfiguration` | FabrCore.Core | Agent config (Handle, AgentType, Models, SystemPrompt, Plugins, Tools, McpServers, Args) |
 | `AgentMessage` | FabrCore.Core | Message contract (Id, ToHandle, FromHandle, OnBehalfOfHandle, DeliverToHandle, Channel, MessageType, Message, Kind, DataType, Data, Files, State, Args, TraceId) |
 | `ChatClientAgentResult` | FabrCore.Sdk | Result record: `(AIAgent Agent, AgentSession Session, FabrCoreChatHistoryProvider? ChatHistoryProvider)` |
@@ -259,7 +261,9 @@ Generate a single file `<PluginName>.cs`:
 
 ```csharp
 using FabrCore.Core;
+using FabrCore.Core.VerifiableExecution;
 using FabrCore.Sdk;
+using FabrCore.Sdk.VerifiableExecution;
 using System.ComponentModel;
 
 namespace <DetectNamespaceFromProject>;
@@ -272,6 +276,7 @@ namespace <DetectNamespaceFromProject>;
 public class <PluginName> : IFabrCorePlugin
 {
     private readonly IFabrCoreAgentHost _agentHost;
+    private IVerifiableExecutionContext? _verifiableExecution;
     private AgentConfiguration? _config;
 
     public <PluginName>(IFabrCoreAgentHost agentHost)
@@ -282,6 +287,7 @@ public class <PluginName> : IFabrCorePlugin
     public async Task InitializeAsync(AgentConfiguration config, IServiceProvider serviceProvider)
     {
         _config = config;
+        _verifiableExecution = serviceProvider.GetService<IVerifiableExecutionContext>();
 
         // Access plugin-specific settings from AgentConfiguration.Args
         // Convention: "PluginAlias:SettingName" (e.g., "GitHub:ApiToken")
@@ -300,8 +306,13 @@ public class <PluginName> : IFabrCorePlugin
     public async Task<string> ExampleToolMethod(
         [Description("Describe this parameter")] string input)
     {
-        // Implement tool logic here
-        return $"Result for: {input}";
+        var result = await _verifiableExecution.RecordLibraryCallAsync(
+            operation: "ExampleToolMethod",
+            componentName: "<PluginName>",
+            method: nameof(ExampleToolMethod),
+            call: () => Task.FromResult($"Result for: {input}"));
+
+        return result.Value ?? $"Result for: {input}";
     }
 
     [Description("Another tool provided by this plugin.")]
@@ -362,6 +373,42 @@ public class CoordinatorPlugin : IFabrCorePlugin
     }
 }
 ```
+
+### Plugin with Verifiable External Effects
+
+Plugins that update databases, call APIs, write storage, or invoke important local libraries should use the SDK helper extensions. Plugin/tool authors do not implement SPIFFE directly; the host signer decides whether records are unsigned, local/cert/KMS/HSM signed, or SPIFFE-signed.
+
+```csharp
+using FabrCore.Core.VerifiableExecution;
+using FabrCore.Sdk.VerifiableExecution;
+
+private IVerifiableExecutionContext? _verifiableExecution;
+
+public Task InitializeAsync(AgentConfiguration config, IServiceProvider serviceProvider)
+{
+    _verifiableExecution = serviceProvider.GetService<IVerifiableExecutionContext>();
+    return Task.CompletedTask;
+}
+
+[Description("Updates an order status in the database.")]
+public async Task<string> UpdateOrderStatus(string orderId, string status)
+{
+    var result = await _verifiableExecution.RecordDbEffectAsync(
+        operation: "UpdateOrderStatus",
+        target: "Orders",
+        subject: orderId,
+        effect: () => _db.UpdateOrderStatus(orderId, status),
+        metadata: new Dictionary<string, string?>
+        {
+            ["row_key_hash"] = VerifiableExecutionHash.HashText(orderId),
+            ["status_hash"] = VerifiableExecutionHash.HashText(status)
+        });
+
+    return $"Updated {result.Value} row(s).";
+}
+```
+
+Recording helpers are fail-open: business work continues if evidence recording fails. If the business call fails, the helper records failure metadata and rethrows the original exception.
 
 ### Plugin with Disposable Resources
 

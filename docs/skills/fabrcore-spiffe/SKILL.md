@@ -7,7 +7,8 @@ description: >
   "verified execution", "SPIFFE", "SVID", "trust bundle", "signed execution", "evidence bundle",
   "IVerifiableExecutionStore", "IVerifiableExecutionSigner", "IVerifiableExecutionContext",
   "UseVerifiableExecution", "LocalCertificateVerifiableExecutionSigner", "ExternalDbEffect",
-  "attested side effect", "tamper evidence", "execution provenance".
+  "ExternalLibraryCall", "RecordDbEffectAsync", "RecordHttpCallAsync", "RecordStorageEffectAsync",
+  "RecordLibraryCallAsync", "attested side effect", "tamper evidence", "execution provenance".
 ---
 
 # FabrCore Verifiable Execution and SPIFFE
@@ -36,6 +37,7 @@ Do not collapse levels 2-4 into "turn on SPIFFE." SPIFFE is the advanced trust b
 ## Current Implementation Surface
 
 - Core contracts: `src/FabrCore.Core/VerifiableExecution/*`
+- SDK helpers: `FabrCore.Sdk.VerifiableExecution` (`RecordDbEffectAsync`, `RecordHttpCallAsync`, `RecordStorageEffectAsync`, `RecordLibraryCallAsync`, `VerifiableExecutionHash`)
 - Message/event envelopes: `AgentMessage.VerifiableExecution`, `EventMessage.VerifiableExecution`
 - Event tracing: `EventMessage.TraceId`, `SpanId`, `ParentSpanId`
 - Host configuration: `FabrCoreServerOptions.UseVerifiableExecution(...)`, `UseVerifiableExecutionStore<T>()`, `UseVerifiableExecutionSigner<T>()`, `UseLocalCertificateVerifiableExecutionSigner()`
@@ -49,7 +51,7 @@ Read only the references needed for the task:
 
 - `references/architecture.md` — use for explaining the model, record kinds, chain semantics, runtime provenance, what SPIFFE does and does not do.
 - `references/setup.md` — use for server configuration, signer/store provider registration, local/cert/KMS/SPIFFE deployment shapes, API routes.
-- `references/external-effects.md` — use for plugin/tool DB/API/storage side effects and how to record `ExternalDbEffect`, `ExternalHttpCall`, `ExternalStorageEffect`.
+- `references/external-effects.md` — use for plugin/tool DB/API/storage/library side effects and SDK helpers such as `RecordDbEffectAsync`, `RecordHttpCallAsync`, `RecordStorageEffectAsync`, and `RecordLibraryCallAsync`.
 - `references/cross-cluster-trust.md` — use for cross-cluster `AgentMessage` flows, evidence envelopes, trust bundles, and authorization policy.
 - `references/pitfalls.md` — use before implementing security-sensitive changes or debugging verification failures.
 
@@ -60,7 +62,7 @@ Copy or adapt assets when implementing examples:
 - `assets/appsettings-verifiable-execution.json` — config shape for local/cert/SPIFFE style deployments.
 - `assets/sql-evidence-store-schema.sql` — starter schema for a SQL append-only evidence store provider.
 - `assets/custom-signer-template.cs` — template for an `IVerifiableExecutionSigner`.
-- `assets/external-effect-plugin-template.cs` — plugin pattern for recording DB/API effects through `IVerifiableExecutionContext`.
+- `assets/external-effect-plugin-template.cs` — plugin pattern for recording DB/API effects through the SDK helper extensions on `IVerifiableExecutionContext`.
 
 ## Implementation Rules
 

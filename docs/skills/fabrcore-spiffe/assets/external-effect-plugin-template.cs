@@ -1,10 +1,9 @@
 using FabrCore.Core;
 using FabrCore.Core.VerifiableExecution;
 using FabrCore.Sdk;
+using FabrCore.Sdk.VerifiableExecution;
 using Microsoft.Extensions.DependencyInjection;
 using System.ComponentModel;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 
 [PluginAlias("orders")]
@@ -26,30 +25,21 @@ public sealed class OrdersPlugin : IFabrCorePlugin
         var commandText = "UPDATE Orders SET Status = @status WHERE OrderId = @orderId";
         var parameters = JsonSerializer.Serialize(new { orderId = Hash(orderId), status });
 
-        var affectedRows = await ExecuteUpdateAsync(orderId, status);
+        var result = await _evidence.RecordDbEffectAsync(
+            operation: "UpdateOrderStatus",
+            target: "Orders",
+            subject: orderId,
+            effect: () => ExecuteUpdateAsync(orderId, status),
+            metadata: new Dictionary<string, string?>
+            {
+                ["db.system"] = "sqlserver",
+                ["row_key_hash"] = VerifiableExecutionHash.HashText(orderId),
+                ["command_hash"] = VerifiableExecutionHash.HashText(commandText),
+                ["parameter_hash"] = VerifiableExecutionHash.HashText(parameters)
+            });
 
-        if (_evidence is not null)
-        {
-            await _evidence.RecordExternalEffectAsync(
-                ExecutionRecordKind.ExternalDbEffect,
-                "orders:update-status",
-                new Dictionary<string, string?>
-                {
-                    ["db.system"] = "sqlserver",
-                    ["db.table"] = "Orders",
-                    ["operation"] = "UPDATE",
-                    ["row_key_hash"] = Hash(orderId),
-                    ["command_hash"] = Hash(commandText),
-                    ["parameter_hash"] = Hash(parameters),
-                    ["affected_rows"] = affectedRows.ToString()
-                });
-        }
-
-        return $"Updated {affectedRows} row(s).";
+        return $"Updated {result.Value} row(s).";
     }
-
-    private static string Hash(string value)
-        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
 
     private static Task<int> ExecuteUpdateAsync(string orderId, string status)
         => throw new NotImplementedException();
