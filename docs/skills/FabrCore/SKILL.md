@@ -9,7 +9,8 @@ description: >
   fabrcore-plugins-tools (plugins/tools), fabrcore-server (server setup),
   fabrcore-orleans (Orleans configuration), fabrcore-client (Blazor client),
   fabrcore-chatdock (ChatDock component), fabrcore-messaging (messaging/ACL),
-  fabrcore-mcp (MCP integration).
+  fabrcore-mcp (MCP integration), fabrcore-spiffe (verifiable execution, signed evidence,
+  optional SPIFFE/SVID signing, trust bundles, evidence stores, attested external effects).
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
 metadata:
   author: FabrCore
@@ -42,6 +43,7 @@ Build distributed AI agent systems with FabrCore — an open-source .NET 10 fram
 | MCP | External tool protocol | `McpServerConfig` | fabrcore-mcp |
 | Configuration | Agent definition | `AgentConfiguration` | fabrcore-server |
 | Telemetry | W3C TraceContext on every message | `AgentMessageTelemetry`, `StampFromActivity`, `StartIngressActivity` | fabrcore-messaging (surface), fabrcore-server (exporter setup) |
+| Verifiable Execution | Signed/tamper-evident agent/event evidence | `IVerifiableExecutionStore`, `IVerifiableExecutionSigner`, `VerifiableExecutionEnvelope` | fabrcore-spiffe |
 
 ## Architecture Overview
 
@@ -63,9 +65,9 @@ FabrCore layers on top of Orleans (distributed actor model) and Microsoft.Extens
 └─────────────────────────────────────────────┘
 ```
 
-- **FabrCore.Core** — Interfaces (`IAgentGrain`, `IClientGrain`), models (`AgentConfiguration`, `AgentMessage`, `AgentHealthStatus`, `AgentEvictionResult`), Orleans surrogates
-- **FabrCore.Sdk** — Agent base class (`FabrCoreAgentProxy`), plugin system, tool registry, chat client factory, MCP integration, compaction, state persistence, Host API client, typed entity storage contracts, blueprint ensure client types
-- **FabrCore.Host** — Orleans grains (`AgentGrain`, `ClientGrain`), REST API controllers, streaming, WebSocket, agent service
+- **FabrCore.Core** — Interfaces (`IAgentGrain`, `IClientGrain`), models (`AgentConfiguration`, `AgentMessage`, `EventMessage`, `AgentHealthStatus`, `AgentEvictionResult`), verifiable execution contracts, Orleans surrogates
+- **FabrCore.Sdk** — Agent base class (`FabrCoreAgentProxy`), plugin system, tool registry, chat client factory, MCP integration, compaction, state persistence, Host API client, typed entity storage contracts, blueprint ensure client types, LLM evidence integration
+- **FabrCore.Host** — Orleans grains (`AgentGrain`, `ClientGrain`), REST API controllers, streaming, WebSocket, agent service, verifiable execution recording/signing/verification
 - **FabrCore.Client** — Blazor components (`ChatDock`), `ClientContext`/`ClientContextFactory`, Orleans client configuration
 
 ## Prerequisites

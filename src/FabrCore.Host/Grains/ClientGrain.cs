@@ -4,6 +4,7 @@ using FabrCore.Core.Acl;
 using FabrCore.Core.Interfaces;
 using FabrCore.Core.Monitoring;
 using FabrCore.Core.Streaming;
+using FabrCore.Core.VerifiableExecution;
 using FabrCore.Host.Configuration;
 using FabrCore.Host.Services;
 using FabrCore.Host.Streaming;
@@ -20,6 +21,7 @@ using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -77,6 +79,7 @@ namespace FabrCore.Host.Grains
         private readonly IFabrCoreAgentService _agentService;
         private readonly IAclProvider _aclProvider;
         private readonly IAgentMessageMonitor _messageMonitor;
+        private readonly VerifiableExecutionRecorder _verifiableExecution;
         private readonly ObserverManager<IClientGrainObserver> observerManager;
         private readonly Queue<AgentMessage> pendingMessages = new();
         private readonly Dictionary<string, TrackedAgentInfo> _trackedAgents = new();
@@ -89,6 +92,7 @@ namespace FabrCore.Host.Grains
             IFabrCoreAgentService agentService,
             IAclProvider aclProvider,
             IAgentMessageMonitor messageMonitor,
+            VerifiableExecutionRecorder verifiableExecution,
             Microsoft.Extensions.Options.IOptions<ClientGrainOptions> grainOptions,
             [PersistentState("clientState", FabrCoreOrleansConstants.StorageProviderName)]
             IPersistentState<ClientGrainState> state)
@@ -99,6 +103,7 @@ namespace FabrCore.Host.Grains
             _agentService = agentService;
             _aclProvider = aclProvider;
             _messageMonitor = messageMonitor;
+            _verifiableExecution = verifiableExecution;
             this.observerManager = new ObserverManager<IClientGrainObserver>(TimeSpan.FromMinutes(5), logger);
             _state = state;
         }
@@ -205,6 +210,12 @@ namespace FabrCore.Host.Grains
 
             // Update the request with the resolved handle
             request.ToHandle = resolvedToHandle;
+            request.StampFromActivity(activity);
+            request.VerifiableExecution = await RecordMessageEvidenceAsync(
+                ExecutionRecordKind.AgentDispatch,
+                clientId,
+                request,
+                "client.message.request_response.dispatch");
 
             logger.LogDebug("Client sending message - From: {FromHandle}, To: {ToHandle}",
                 request.FromHandle, resolvedToHandle);
@@ -265,6 +276,12 @@ namespace FabrCore.Host.Grains
 
             // Update the request with the resolved handle
             request.ToHandle = resolvedToHandle;
+            request.StampFromActivity(activity);
+            request.VerifiableExecution = await RecordMessageEvidenceAsync(
+                ExecutionRecordKind.AgentDispatch,
+                clientId,
+                request,
+                "client.message.dispatch");
 
             logger.LogTrace("Client sending message to stream - From: {FromHandle}, To: {ToHandle}",
                 request.FromHandle, resolvedToHandle);
@@ -317,6 +334,12 @@ namespace FabrCore.Host.Grains
                 activity?.SetTag("event.channel", request.Channel);
                 activity?.SetTag("stream.name", streamName.ToString());
                 activity?.SetTag("stream.namespace", streamName.Namespace);
+                request.StampFromActivity(activity);
+                request.VerifiableExecution = await RecordEventEvidenceAsync(
+                    ExecutionRecordKind.EventPublished,
+                    clientId,
+                    request,
+                    "client.event.published");
 
                 logger.LogTrace("Client sending event to stream - Source: {Source}, StreamName: {StreamName}",
                     request.Source, streamName);
@@ -513,6 +536,83 @@ namespace FabrCore.Host.Grains
             }
         }
 
+        private Task<VerifiableExecutionEnvelope?> RecordMessageEvidenceAsync(
+            ExecutionRecordKind kind,
+            string clientHandle,
+            AgentMessage message,
+            string subject)
+        {
+            var record = new VerifiableExecutionRecord
+            {
+                Kind = kind,
+                TraceId = message.TraceId,
+                SpanId = message.SpanId,
+                ParentSpanId = message.ParentSpanId,
+                UserHandle = clientHandle,
+                AgentHandle = clientHandle,
+                Subject = subject,
+                PayloadHash = DigestText(JsonSerializer.Serialize(new
+                {
+                    message.Message,
+                    message.DataType,
+                    DataHash = DigestBytes(message.Data),
+                    message.Files
+                })),
+                Metadata = new Dictionary<string, string?>(StringComparer.Ordinal)
+                {
+                    ["message.id"] = message.Id,
+                    ["message.from"] = message.FromHandle,
+                    ["message.to"] = message.ToHandle,
+                    ["message.channel"] = message.Channel,
+                    ["message.type"] = message.MessageType,
+                    ["message.kind"] = message.Kind.ToString()
+                }
+            };
+
+            return _verifiableExecution.RecordAsync(record);
+        }
+
+        private Task<VerifiableExecutionEnvelope?> RecordEventEvidenceAsync(
+            ExecutionRecordKind kind,
+            string clientHandle,
+            EventMessage message,
+            string subject)
+        {
+            var record = new VerifiableExecutionRecord
+            {
+                Kind = kind,
+                TraceId = message.TraceId,
+                SpanId = message.SpanId,
+                ParentSpanId = message.ParentSpanId,
+                UserHandle = clientHandle,
+                AgentHandle = clientHandle,
+                Subject = subject,
+                PayloadHash = DigestText(JsonSerializer.Serialize(new
+                {
+                    message.Data,
+                    message.DataContentType,
+                    BinaryHash = DigestBytes(message.BinaryData)
+                })),
+                Metadata = new Dictionary<string, string?>(StringComparer.Ordinal)
+                {
+                    ["event.id"] = message.Id,
+                    ["event.type"] = message.Type,
+                    ["event.source"] = message.Source,
+                    ["event.subject"] = message.Subject,
+                    ["event.namespace"] = message.Namespace,
+                    ["event.channel"] = message.Channel
+                }
+            };
+
+            return _verifiableExecution.RecordAsync(record);
+        }
+
+        private static string DigestText(string? text)
+            => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(text ?? string.Empty))).ToLowerInvariant();
+
+        private static string DigestBytes(byte[]? bytes)
+            => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes ?? Array.Empty<byte>())).ToLowerInvariant();
+
         private Task ReceivedStreamingMessage(AgentMessage request, StreamSequenceToken? token = null)
         {
             using var activity = ActivitySource.StartActivity("ReceivedStreamingMessage", ActivityKind.Consumer);
@@ -551,7 +651,10 @@ namespace FabrCore.Host.Grains
                 Args = request.Args,
                 Direction = MessageDirection.Inbound,
                 TraceId = request.TraceId,
-                LlmUsage = LlmUsageInfo.FromArgs(request.Args)
+                LlmUsage = LlmUsageInfo.FromArgs(request.Args),
+                VerifiableExecutionId = request.VerifiableExecution?.RecordId,
+                SignatureDigest = request.VerifiableExecution?.CurrentSignatureDigest,
+                VerificationStatus = request.VerifiableExecution?.SignerIdentityKind == VerifiableExecutionSignerIdentityKind.None ? "Unsigned" : "Signed"
             }).TrackRecording(logger, ErrorCounter, "RecordMessage.ClientInbound", clientId);
 
             try

@@ -31,5 +31,9 @@ namespace FabrCore.Core.Monitoring
 
         /// <summary>True if this message was routed through the busy handler because the agent was already processing.</summary>
         public bool BusyRouted { get; set; }
+
+        public string? VerifiableExecutionId { get; set; }
+        public string? SignatureDigest { get; set; }
+        public string? VerificationStatus { get; set; }
     }
 }

@@ -1,8 +1,10 @@
 using FabrCore.Core.Monitoring;
+using FabrCore.Core.VerifiableExecution;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
@@ -21,6 +23,7 @@ namespace FabrCore.Sdk
     {
         private readonly string? _agentHandle;
         private readonly IAgentMessageMonitor? _monitor;
+        private readonly IVerifiableExecutionContext? _verifiableExecution;
         private readonly LlmCaptureOptions? _capture;
         private readonly ILogger? _logger;
 
@@ -36,10 +39,12 @@ namespace FabrCore.Sdk
             IChatClient innerClient,
             string? agentHandle,
             IAgentMessageMonitor? monitor,
+            IVerifiableExecutionContext? verifiableExecution = null,
             ILogger? logger = null) : base(innerClient)
         {
             _agentHandle = agentHandle;
             _monitor = monitor;
+            _verifiableExecution = verifiableExecution;
             _capture = monitor?.LlmCaptureOptions;
             _logger = logger;
         }
@@ -81,7 +86,7 @@ namespace FabrCore.Sdk
                     }
                 }
 
-                TryRecordLlmCall(materialized, response, sw.ElapsedMilliseconds, streaming: false, error, callInfo);
+                await TryRecordLlmCallAsync(materialized, response, sw.ElapsedMilliseconds, streaming: false, error, callInfo);
             }
         }
 
@@ -148,7 +153,7 @@ namespace FabrCore.Sdk
                 if (!ShouldBypassRunSafety())
                     ChatRunSafetyScope.Current?.RecordCompletedCall(inputTokens, callInfo.ActualPromptInputTokens);
 
-                TryRecordLlmCall(materialized, aggregated, sw.ElapsedMilliseconds, streaming: true, error: null, callInfo);
+                await TryRecordLlmCallAsync(materialized, aggregated, sw.ElapsedMilliseconds, streaming: true, error: null, callInfo);
             }
         }
 
@@ -179,7 +184,7 @@ namespace FabrCore.Sdk
                 || string.Equals(LlmCallContext.Current?.OriginContext, "Compaction", StringComparison.OrdinalIgnoreCase);
         }
 
-        private void TryRecordLlmCall(
+        private async Task TryRecordLlmCallAsync(
             IReadOnlyList<ChatMessage>? requestMessages,
             ChatResponse? response,
             long elapsedMs,
@@ -187,7 +192,7 @@ namespace FabrCore.Sdk
             Exception? error,
             ChatRunSafetyCallInfo callInfo)
         {
-            if (_monitor is null || _capture is null || !_capture.Enabled)
+            if ((_monitor is null || _capture is null || !_capture.Enabled) && _verifiableExecution is null)
             {
                 return;
             }
@@ -227,7 +232,7 @@ namespace FabrCore.Sdk
                 MaxPromptInputTokensPerCall = ChatRunSafetyScope.Current?.MaxPromptInputTokensPerCall ?? callInfo.MaxPromptInputTokensPerCall,
             };
 
-            if (_capture.CapturePayloads)
+            if (_capture?.CapturePayloads == true)
             {
                 call.RequestMessages = SnapshotMessages(requestMessages, _capture);
                 call.ResponseMessages = SnapshotMessages(response?.Messages, _capture);
@@ -235,18 +240,66 @@ namespace FabrCore.Sdk
                 call.ToolCalls = SnapshotToolCalls(response?.Messages, _capture);
             }
 
-            // Fire-and-forget so LLM latency is never gated on monitor IO.
-            try
+            if (_verifiableExecution is not null)
             {
-                _ = _monitor.RecordLlmCallAsync(call).ContinueWith(
-                    t => _logger?.LogWarning(t.Exception, "RecordLlmCallAsync failed"),
-                    TaskContinuationOptions.OnlyOnFaulted);
+                try
+                {
+                    var envelope = await _verifiableExecution.RecordAsync(new VerifiableExecutionRecord
+                    {
+                        Kind = ExecutionRecordKind.LlmCall,
+                        TraceId = traceId,
+                        AgentHandle = handle,
+                        Subject = origin,
+                        PayloadHash = DigestText(JsonSerializer.Serialize(new
+                        {
+                            request = SnapshotMessages(requestMessages, _capture ?? new LlmCaptureOptions()),
+                            responseText = response?.Text,
+                            error = error?.Message
+                        })),
+                        Metadata = new Dictionary<string, string?>(StringComparer.Ordinal)
+                        {
+                            ["origin"] = origin,
+                            ["parent_message_id"] = parentId,
+                            ["model"] = call.Model,
+                            ["streaming"] = streaming.ToString(),
+                            ["finish_reason"] = call.FinishReason,
+                            ["duration_ms"] = elapsedMs.ToString(),
+                            ["input_tokens"] = call.InputTokens.ToString(),
+                            ["output_tokens"] = call.OutputTokens.ToString(),
+                            ["reasoning_tokens"] = call.ReasoningTokens.ToString(),
+                            ["cached_input_tokens"] = call.CachedInputTokens.ToString(),
+                            ["error"] = error?.GetType().Name
+                        }
+                    });
+
+                    call.VerifiableExecutionId = envelope?.RecordId;
+                    call.SignatureDigest = envelope?.CurrentSignatureDigest;
+                    call.VerificationStatus = envelope?.SignerIdentityKind == VerifiableExecutionSignerIdentityKind.None ? "Unsigned" : "Signed";
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Failed to record LLM verifiable execution evidence");
+                }
             }
-            catch (Exception ex)
+
+            // Fire-and-forget so LLM latency is never gated on monitor IO.
+            if (_monitor is not null)
             {
-                _logger?.LogWarning(ex, "Failed to dispatch RecordLlmCallAsync");
+                try
+                {
+                    _ = _monitor.RecordLlmCallAsync(call).ContinueWith(
+                        t => _logger?.LogWarning(t.Exception, "RecordLlmCallAsync failed"),
+                        TaskContinuationOptions.OnlyOnFaulted);
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Failed to dispatch RecordLlmCallAsync");
+                }
             }
         }
+
+        private static string DigestText(string? text)
+            => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text ?? string.Empty))).ToLowerInvariant();
 
         private static List<LlmMessageSnapshot>? SnapshotMessages(
             IEnumerable<ChatMessage>? messages,

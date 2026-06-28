@@ -191,6 +191,13 @@ namespace FabrCore.Sdk
         /// <summary>The chat client configuration name used for compaction LLM calls.</summary>
         protected string? CompactionChatClientConfigName => _chatClientConfigName;
 
+        /// <summary>Optional verifiable execution recorder for agent, plugin, and external-effect evidence.</summary>
+        protected FabrCore.Core.VerifiableExecution.IVerifiableExecutionContext? VerifiableExecution =>
+            serviceProvider.GetService<FabrCore.Core.VerifiableExecution.IVerifiableExecutionContext>();
+
+        /// <summary>True when a verifiable execution context is available from the host.</summary>
+        protected bool IsVerifiableExecutionEnabled => VerifiableExecution is not null;
+
         // Custom state persistence
         private Dictionary<string, JsonElement>? _customStateCache;
         private readonly Dictionary<string, JsonElement> _pendingStateChanges = new();
@@ -218,7 +225,8 @@ namespace FabrCore.Sdk
         {
             var client = await chatClientService.GetChatClient(name, networkTimeoutSeconds);
             var monitor = serviceProvider.GetService<FabrCore.Core.Monitoring.IAgentMessageMonitor>();
-            return new TokenTrackingChatClient(client, fabrcoreAgentHost.GetHandle(), monitor, logger);
+            var verifiableExecution = serviceProvider.GetService<FabrCore.Core.VerifiableExecution.IVerifiableExecutionContext>();
+            return new TokenTrackingChatClient(client, fabrcoreAgentHost.GetHandle(), monitor, verifiableExecution, logger);
         }
 
 #pragma warning disable MEAI001 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.

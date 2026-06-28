@@ -8,7 +8,9 @@ description: >
   "SendAndReceiveMessage", "SendEvent", "inter-agent", "agent-to-agent", "multi-agent", "orchestration",
   "ACL", "shared agent", "access control", "MessageKind", "cross-user", "fan-out", "pipeline",
   "supervisor", "delegator", "AclRule", "AclPermission", "IAclProvider", "SystemMessageTypes",
-  "FromHandle", "ToHandle", "OnBehalfOfHandle", "TraceId", "message routing", "storage user handle".
+  "FromHandle", "ToHandle", "OnBehalfOfHandle", "TraceId", "message routing", "storage user handle",
+  "VerifiableExecutionEnvelope", "signed evidence", "EventPublished", "EventDelivered", "EventHandled",
+  "RecordDbEffectAsync", "RecordHttpCallAsync", "RecordStorageEffectAsync", "RecordLibraryCallAsync".
   Do NOT use for: agent lifecycle — use fabrcore-agent.
   Do NOT use for: ChatDock — use fabrcore-chatdock.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
@@ -52,6 +54,9 @@ public class AgentMessage
     public string? SpanId { get; set; }         // 16-char lowercase hex — publisher span
     public string? ParentSpanId { get; set; }   // 16-char lowercase hex — publisher's parent
 
+    // Compact verifiable execution pointer/lineage. Full bundles live in the evidence store/API.
+    public VerifiableExecutionEnvelope? VerifiableExecution { get; set; }
+
     // Create response with routing pre-filled. Copies TraceId but NOT SpanId/ParentSpanId —
     // the response is a new span; stamp it from its own Activity before returning.
     public AgentMessage Response();
@@ -90,6 +95,9 @@ public class EventMessage
     // Extensions
     public Dictionary<string, string>? Args { get; set; }
     public string? TraceId { get; set; } = Guid.NewGuid().ToString();
+    public string? SpanId { get; set; }
+    public string? ParentSpanId { get; set; }
+    public VerifiableExecutionEnvelope? VerifiableExecution { get; set; }
 }
 ```
 
@@ -321,7 +329,7 @@ var message = new AgentMessage
 
 ## Correlation and Tracing (OpenTelemetry / W3C TraceContext)
 
-`AgentMessage` carries three W3C TraceContext fields so every hop (client → grain → downstream agent → response) stays in one trace:
+`AgentMessage` and `EventMessage` carry W3C TraceContext fields so every hop (client → grain → downstream agent/event handler → response) stays in one trace:
 
 | Field | Format | Meaning |
 |---|---|---|
@@ -330,6 +338,20 @@ var message = new AgentMessage
 | `ParentSpanId` | 16-char lowercase hex | The publisher span's parent (null if root) |
 
 All three are null until a boundary stamps them. Do not hand-roll GUIDs into these fields — the helpers in `FabrCore.Core.AgentMessageTelemetry` do the right thing and keep the values W3C-valid.
+
+## Verifiable Execution Envelope
+
+`AgentMessage.VerifiableExecution` and `EventMessage.VerifiableExecution` carry compact evidence pointers, not full audit history. The full signed bundle is stored through `IVerifiableExecutionStore` and exported through `/fabrcoreapi/monitor/verifiable-execution`.
+
+Current host capture points:
+
+- client/agent dispatch (`AgentDispatch`)
+- agent inbound/outbound messages (`MessageInbound`, `MessageOutbound`, `AgentResponse`)
+- event publish/delivery/handler completion (`EventPublished`, `EventDelivered`, `EventHandled`)
+- LLM calls (`LlmCall`)
+- plugin/tool invocations automatically, plus DB/API/storage/library side effects when recorded with `FabrCore.Sdk.VerifiableExecution` helpers
+
+Use the `fabrcore-spiffe` skill for the full trust model, setup, cross-cluster flow, and pitfalls.
 
 ### Helpers (`AgentMessageTelemetry`)
 
