@@ -329,7 +329,7 @@ public class MyStartupService : IHostedService
 }
 ```
 
-The agent grain key becomes `"system:{config.Handle}"`. Any user can message it (ACL permitting) using the full handle `"system:automation_agent-123"`.
+The agent grain key becomes `"system:{config.Handle}"`, and the system client grain tracks it under the `"system"` user handle. Any user can message it (ACL permitting) using the full handle `"system:automation_agent-123"`.
 
 ## REST API Endpoints
 
@@ -345,7 +345,7 @@ Create agents, ensure blueprint agents, send messages, check health, and hard-ev
 
 #### POST `/agent/create` — Create/configure agents (batch)
 
-Creates one or more agents for a user. If the agent already exists it is reconfigured.
+Creates one or more agents for a user through that user's client grain, so successful agents are added to the user's tracked-agent list. If the agent already exists it is reconfigured.
 
 | Parameter | Source | Type | Required | Description |
 |-----------|--------|------|----------|-------------|

@@ -13,7 +13,8 @@ namespace FabrCore.Host.Services
         // ── Agent Communication ──
 
         /// <summary>
-        /// Configures a single agent and returns its health status.
+        /// Configures a single agent for the specified user and returns its health status.
+        /// Agents are created through the user's client grain so they are tracked for that user.
         /// </summary>
         Task<AgentHealthStatus> ConfigureAgentAsync(string userHandle, AgentConfiguration config, HealthDetailLevel detailLevel = HealthDetailLevel.Basic);
 
@@ -21,11 +22,13 @@ namespace FabrCore.Host.Services
         /// Configures a system user agent (user handle = "system"). Use this for shared agents
         /// that multiple users can access via ACL rules.
         /// The agent grain key will be <c>"system:{config.Handle}"</c>.
+        /// The system client grain tracks the created agent under the <c>"system"</c> user handle.
         /// </summary>
         Task<AgentHealthStatus> ConfigureSystemAgentAsync(AgentConfiguration config, HealthDetailLevel detailLevel = HealthDetailLevel.Basic);
 
         /// <summary>
         /// Configures multiple agents in batch. Failed configs get an Unhealthy entry.
+        /// Successful agents are created through the user's client grain so they are tracked for that user.
         /// </summary>
         Task<List<AgentHealthStatus>> ConfigureAgentsAsync(string userHandle, List<AgentConfiguration> configs, HealthDetailLevel detailLevel = HealthDetailLevel.Basic);
 
