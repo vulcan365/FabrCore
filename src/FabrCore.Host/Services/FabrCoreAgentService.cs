@@ -38,9 +38,18 @@ namespace FabrCore.Host.Services
 
         public async Task<AgentHealthStatus> ConfigureAgentAsync(string userHandle, AgentConfiguration config, HealthDetailLevel detailLevel = HealthDetailLevel.Basic)
         {
-            var key = BuildAgentKey(userHandle, config.Handle!);
-            var proxy = _clusterClient.GetGrain<IAgentGrain>(key);
-            return await proxy.ConfigureAgent(config, config.ForceReconfigure, detailLevel);
+            var normalizedConfig = NormalizeServiceConfig(userHandle, config, nameof(config));
+            var agentHandle = normalizedConfig.Handle!;
+
+            var clientGrain = _clusterClient.GetGrain<IClientGrain>(userHandle);
+            var health = await clientGrain.CreateAgent(normalizedConfig);
+
+            if (detailLevel != HealthDetailLevel.Basic)
+            {
+                health = await GetHealthAsync(userHandle, agentHandle, detailLevel);
+            }
+
+            return health;
         }
 
         public Task<AgentHealthStatus> ConfigureSystemAgentAsync(AgentConfiguration config, HealthDetailLevel detailLevel = HealthDetailLevel.Basic)
@@ -61,7 +70,7 @@ namespace FabrCore.Host.Services
                 }
                 catch (Exception ex)
                 {
-                    var key = BuildAgentKey(userHandle, config.Handle!);
+                    var key = BuildFailureKey(userHandle, config);
                     _logger.LogError(ex, "Error creating agent for user {userHandle} with handle {Handle}", userHandle, key);
 
                     results.Add(new AgentHealthStatus
@@ -153,6 +162,64 @@ namespace FabrCore.Host.Services
                 McpServers = config.McpServers,
                 ForceReconfigure = false
             };
+        }
+
+        private static AgentConfiguration NormalizeServiceConfig(string userHandle, AgentConfiguration? config, string paramName)
+        {
+            if (string.IsNullOrWhiteSpace(userHandle))
+                throw new ArgumentException("User handle is required.", nameof(userHandle));
+            if (config == null)
+                throw new ArgumentNullException(paramName);
+            if (string.IsNullOrWhiteSpace(config.Handle))
+                throw new ArgumentException("Agent handle is required.", paramName);
+
+            var (handleUser, agentHandle) = HandleUtilities.ParseHandle(config.Handle);
+            if (string.IsNullOrWhiteSpace(agentHandle))
+                throw new ArgumentException("Agent handle is required.", paramName);
+
+            if (!string.IsNullOrEmpty(handleUser) && !string.Equals(handleUser, userHandle, StringComparison.Ordinal))
+            {
+                throw new ArgumentException(
+                    $"Agent handle targets user '{handleUser}', but userHandle is '{userHandle}'. Cross-user agent configuration is not allowed.",
+                    paramName);
+            }
+
+            return CloneAgentConfiguration(config, agentHandle, config.ForceReconfigure);
+        }
+
+        private static AgentConfiguration CloneAgentConfiguration(
+            AgentConfiguration config,
+            string handle,
+            bool forceReconfigure)
+        {
+            return new AgentConfiguration
+            {
+                Handle = handle,
+                AgentType = config.AgentType,
+                Models = config.Models,
+                Streams = config.Streams?.ToList() ?? new List<EventStreamSubscription>(),
+                SystemPrompt = config.SystemPrompt,
+                Description = config.Description,
+                Args = config.Args != null
+                    ? new Dictionary<string, string>(config.Args, StringComparer.Ordinal)
+                    : new Dictionary<string, string>(StringComparer.Ordinal),
+                Plugins = config.Plugins?.ToList() ?? new List<string>(),
+                Tools = config.Tools?.ToList() ?? new List<string>(),
+                McpServers = config.McpServers?.ToList() ?? new List<McpServerConfig>(),
+                ForceReconfigure = forceReconfigure
+            };
+        }
+
+        private static string BuildFailureKey(string? userHandle, AgentConfiguration? config)
+        {
+            var handle = config?.Handle;
+            if (string.IsNullOrWhiteSpace(handle))
+                return string.IsNullOrWhiteSpace(userHandle) ? "<unknown>" : BuildAgentKey(userHandle, "<unknown>");
+
+            if (handle.Contains(':') || string.IsNullOrWhiteSpace(userHandle))
+                return handle;
+
+            return BuildAgentKey(userHandle, handle);
         }
 
         public async Task SendMessageAsync(string userHandle, string handle, string message)
