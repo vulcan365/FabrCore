@@ -88,4 +88,4 @@ SPIFFE matters most here because it gives the remote verifier a standard workloa
 spiffe://trust-domain/ns/prod/app/fabrcore-host
 ```
 
-It still does not identify dynamic FabrCore agents. The signed record must bind the workload identity to the FabrCore `userHandle:agentHandle` claim.
+It still does not identify dynamic FabrCore agents. The signed record must bind the workload identity to the FabrCore `principalHandle:agentHandle` claim.

@@ -24,7 +24,6 @@ FabrCore provides the building blocks for creating, hosting, and connecting to A
 - **MCP Integration** -- Model Context Protocol servers via Stdio and HTTP transports
 - **Inter-Agent Messaging** -- Fan-out, pipeline, supervisor patterns with ACL-based access control
 - **Real-Time Monitoring** -- Agent message traffic, events, LLM request/response capture, and token tracking
-- **ChatDock UI** -- Floating chat panel component for Blazor Server with multi-instance support
 - **Audio Transcription** -- Azure OpenAI gpt-4o transcription model support
 - **Testing Harness** -- In-memory agent testing with mock and live LLM modes
 
@@ -34,10 +33,10 @@ FabrCore provides the building blocks for creating, hosting, and connecting to A
 +---------------------------------------------------+
 |                Your Application                    |
 +-------------------+-------------------------------+
-|  FabrCore.Client  |        FabrCore.Host          |
-|  ClientContext     |  AgentGrain (Orleans 10)      |
-|  ChatDock (UI)    |  API / Chat Completions       |
-|  Health Monitor   |  WebSocket Middleware          |
+|  HTTP/WebSocket   |        FabrCore.Host          |
+|  API Clients      |  AgentGrain (Orleans 10)      |
+|  Applications     |  PrincipalGrain               |
+|                   |  API / Chat Completions       |
 +-------------------+-------------------------------+
 |                  FabrCore.Sdk                      |
 |  FabrCoreAgentProxy  *  ChatClientAgent            |
@@ -55,7 +54,6 @@ FabrCore provides the building blocks for creating, hosting, and connecting to A
 | **[FabrCore.Core](https://www.nuget.org/packages/FabrCore.Core)** | Core interfaces, data models, and grain abstractions |
 | **[FabrCore.Sdk](https://www.nuget.org/packages/FabrCore.Sdk)** | Agent SDK -- `FabrCoreAgentProxy`, plugins, tools, MCP, monitoring |
 | **[FabrCore.Host](https://www.nuget.org/packages/FabrCore.Host)** | Server host -- Orleans silo, REST API, chat completions, WebSocket |
-| **[FabrCore.Client](https://www.nuget.org/packages/FabrCore.Client)** | Client library -- `ClientContext`, `ChatDock` Blazor component, health monitoring |
 
 ## Quick Start
 
@@ -65,7 +63,7 @@ FabrCore provides the building blocks for creating, hosting, and connecting to A
 dotnet add package FabrCore.Host
 ```
 
-`FabrCore.Host` pulls in `FabrCore.Sdk` and `FabrCore.Core` transitively. For client applications, add `FabrCore.Client` instead.
+`FabrCore.Host` pulls in `FabrCore.Sdk` and `FabrCore.Core` transitively. Client applications should connect through the Host HTTP/WebSocket API.
 
 ### 2. Create an agent
 
@@ -137,8 +135,6 @@ Full documentation is available in the [`docs/skills`](docs/skills/) directory:
 | [Agent Development](docs/skills/fabrcore-agent/SKILL.md) | Building agents with lifecycle methods, state, timers, and reminders |
 | [Microsoft Agent Framework](docs/skills/fabrcore-agentframework/SKILL.md) | `ChatClientAgent`, sessions, thread patterns, and `Microsoft.Extensions.AI` |
 | [Server Setup](docs/skills/fabrcore-server/SKILL.md) | Orleans silo, REST API, WebSocket, LLM providers, and system agents |
-| [Client Setup](docs/skills/fabrcore-client/SKILL.md) | Blazor Server clients, Orleans connectivity, and agent messaging |
-| [ChatDock Component](docs/skills/fabrcore-chatdock/SKILL.md) | Floating chat panel UI with customizable positions and multi-instance |
 | [Plugins and Tools](docs/skills/fabrcore-plugins-tools/SKILL.md) | Stateful plugins, stateless tools, and DI integration |
 | [MCP Integration](docs/skills/fabrcore-mcp/SKILL.md) | Model Context Protocol servers via Stdio and HTTP transports |
 | [Messaging and Access Control](docs/skills/fabrcore-messaging/SKILL.md) | Inter-agent communication patterns, routing, and ACL rules |
@@ -155,7 +151,6 @@ Full documentation is available in the [`docs/skills`](docs/skills/) directory:
 - **Orleans 10.0** -- Distributed actor framework for grain-based agents
 - **Microsoft.Agents.AI 1.0** -- Microsoft Agent Framework for AI agent patterns
 - **Microsoft.Extensions.AI** -- Unified AI abstractions for multi-provider LLM support
-- **Blazor Server** -- Real-time web UI for agent interaction
 
 ## Building from Source
 

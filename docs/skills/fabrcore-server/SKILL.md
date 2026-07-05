@@ -11,7 +11,6 @@ description: >
   "typed entity storage", "IFabrCoreStorageProvider", "UseVerifiableExecution",
   "IVerifiableExecutionStore", "IVerifiableExecutionSigner", "signed execution", "evidence bundle".
   Do NOT use for: Orleans clustering/configuration — use fabrcore-orleans.
-  Do NOT use for: client setup — use fabrcore-client.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
 ---
 
@@ -302,7 +301,7 @@ Supported providers for embeddings: `OpenAI`, `Azure`, `OpenRouter`, `Gemini`. G
 
 ## System Agents
 
-System agents are shared agents under user handle `"system"` that multiple users can access. Create them server-side using `IFabrCoreAgentService`:
+System agents are shared agents under principal handle `"system"` that multiple authenticated identities can access. Create them server-side using `IFabrCoreAgentService`:
 
 ```csharp
 public class MyStartupService : IHostedService
@@ -329,13 +328,13 @@ public class MyStartupService : IHostedService
 }
 ```
 
-The agent grain key becomes `"system:{config.Handle}"`, and the system client grain tracks it under the `"system"` user handle. Any user can message it (ACL permitting) using the full handle `"system:automation_agent-123"`.
+The agent grain key becomes `"system:{config.Handle}"`, and the system principal grain tracks it under the `"system"` principal handle. Any allowed caller can message it (ACL permitting) using the full handle `"system:automation_agent-123"`.
 
 ## REST API Endpoints
 
 Base path: `/fabrcoreapi/`. All agent-scoped endpoints require the `x-user-handle` header to identify the caller.
 
-> **Typed C# client:** `IFabrCoreHostApiClient` in `FabrCore.Sdk` wraps the common endpoint groups below (Agent, Storage, Discovery, Embeddings, File, ModelConfig, Diagnostics). Most agent-scoped methods take a fully-qualified `"userHandle:agentHandle"` handle and the client extracts the user handle into the `x-user-handle` header automatically. Blueprint ensure and storage methods take an explicit user handle. If a newly added endpoint is not yet surfaced by the typed client, call its REST route directly. Older `FabrCore.Client` Host API client types are obsolete. See the **FabrCoreHostApiClient** section in the `fabrcore-client` skill for usage.
+> **Typed C# client:** `IFabrCoreHostApiClient` in `FabrCore.Sdk` wraps the common endpoint groups below (Agent, Storage, Discovery, Embeddings, File, ModelConfig, Diagnostics). Most agent-scoped methods take a fully-qualified `"principalHandle:agentHandle"` handle and the client extracts the principal handle into the `x-user-handle` header automatically. Blueprint ensure and storage methods take an explicit principal handle. If a newly added endpoint is not yet surfaced by the typed client, call its REST route directly.
 
 ---
 
@@ -345,11 +344,11 @@ Create agents, ensure blueprint agents, send messages, check health, and hard-ev
 
 #### POST `/agent/create` — Create/configure agents (batch)
 
-Creates one or more agents for a user through that user's client grain, so successful agents are added to the user's tracked-agent list. If the agent already exists it is reconfigured.
+Creates one or more agents for a principal through that principal's `PrincipalGrain`, so successful agents are added to the principal's tracked-agent list. If the agent already exists it is reconfigured.
 
 | Parameter | Source | Type | Required | Description |
 |-----------|--------|------|----------|-------------|
-| `x-user-handle` | Header | string | Yes | User handle |
+| `x-user-handle` | Header | string | Yes | Principal handle |
 | body | Body | `List<AgentConfiguration>` | Yes | Agent configs to create |
 | `detailLevel` | Query | `HealthDetailLevel` | No | `Basic` (default), `Detailed`, or `Full` |
 
@@ -365,17 +364,17 @@ Creates one or more agents for a user through that user's client grain, so succe
 
 #### POST `/agent/blueprint` — Ensure blueprint agents
 
-Ensures the agents listed in an admin-authored blueprint exist for the target user from `x-user-handle`. This endpoint is idempotent for already configured agents: it uses the user's host-side `ClientGrain.CreateAgent` path, checks health first for tracked agents, and does not reconfigure healthy/degraded/unhealthy configured agents. Missing or not-configured agents are configured from the blueprint and added to that user's tracked-agent list.
+Ensures the agents listed in an admin-authored blueprint exist for the target principal from `x-user-handle`. This endpoint is idempotent for already configured agents: it uses the principal's host-side `PrincipalGrain.CreateAgent` path, checks health first for tracked agents, and does not reconfigure healthy/degraded/unhealthy configured agents. Missing or not-configured agents are configured from the blueprint and added to that principal's tracked-agent list.
 
 Blueprint processing ignores incoming `ForceReconfigure = true`; use `/agent/create` when an intentional reconfigure is required.
 
 | Parameter | Source | Type | Required | Description |
 |-----------|--------|------|----------|-------------|
-| `x-user-handle` | Header | string | Yes | Target user whose agents should be ensured |
+| `x-user-handle` | Header | string | Yes | Target principal whose agents should be ensured |
 | body | Body | `AgentBlueprintRequest` | Yes | Blueprint wrapper with `agents` list |
 | `detailLevel` | Query | `HealthDetailLevel` | No | `Basic` (default), `Detailed`, or `Full` |
 
-Bare handles are scoped to `x-user-handle`. Fully-qualified handles are accepted only when their user prefix matches `x-user-handle`; cross-user blueprint handles return `400 Bad Request`.
+Bare handles are scoped to `x-user-handle`. Fully-qualified handles are accepted only when their principal prefix matches `x-user-handle`; cross-principal blueprint handles return `400 Bad Request`.
 
 **Request**:
 ```json
@@ -421,7 +420,7 @@ Bare handles are scoped to `x-user-handle`. Fully-qualified handles are accepted
 
 #### DELETE `/agent/{handle}` — Evict/delete an agent
 
-Permanently removes an agent instance for the user handle. This is a hard-delete operation, not a reset: it unregisters timers and reminders, removes stream subscriptions, clears the `AgentGrain` persisted Orleans state, removes management registry and client tracking entries, and deactivates the grain.
+Permanently removes an agent instance for the principal handle. This is a hard-delete operation, not a reset: it unregisters timers and reminders, removes stream subscriptions, clears the `AgentGrain` persisted Orleans state, removes management registry and principal tracking entries, and deactivates the grain.
 
 | Parameter | Source | Type | Required |
 |-----------|--------|------|----------|
@@ -500,7 +499,7 @@ Deletes a temporary file before its TTL expires.
 
 ### Storage API (`/fabrcoreapi/storage`)
 
-Typed user-handle-scoped entity storage for application data. Values are sent and returned as JSON over HTTP, but consumers use generic .NET values through `FabrCore.Sdk.IFabrCoreHostApiClient` or `IFabrCoreStorageProvider`.
+Typed principal-handle-scoped entity storage for application data. Values are sent and returned as JSON over HTTP, but consumers use generic .NET values through `FabrCore.Sdk.IFabrCoreHostApiClient` or `IFabrCoreStorageProvider`.
 
 The Host stores each value internally in an envelope:
 
@@ -514,9 +513,9 @@ The Host stores each value internally in an envelope:
 Storage uses the configured Orleans grain storage provider named `FabrCoreOrleansConstants.StorageProviderName` (`"fabrcoreStorage"`). With the simple `AddFabrCoreServer` path, `ClusteringMode: Localhost` uses Orleans memory grain storage, so typed storage entities and grain state are lost when the process exits. Use `SqlServer`, `AzureStorage`, or custom Orleans storage for restart-safe persistence.
 
 Addressing:
-- `x-user-handle` is the user handle partition and ACL boundary.
+- `x-user-handle` is the principal handle partition and ACL boundary.
 - `container` is the logical bucket, mapped to the Orleans state name.
-- `entityKey` is the key within the userHandle/container. The route is a catch-all, so slash-delimited keys are allowed.
+- `entityKey` is the key within the `principalHandle/container` partition. The route is a catch-all, so slash-delimited keys are allowed.
 
 #### GET `/storage/{container}/{entityKey}` — Read an entity
 
@@ -560,7 +559,7 @@ Pitfalls:
 - Upserts are last-writer-wins.
 - `ValueType` is informational; reads deserialize into the caller-requested type.
 - Do not resolve Orleans `IGrainStorage` directly from application code. Use the FabrCore SDK or Host services so Orleans does not leak into clients.
-- Host-internal `IFabrCoreStorageProvider` calls are user-handle-free and use the system partition. For user data, go through the user-handle-scoped API/client or a Host service that explicitly supplies the user handle.
+- Host-internal `IFabrCoreStorageProvider` calls are principal-handle-free and use the system partition. For principal-scoped data, go through the principal-handle-scoped API/client or a Host service that explicitly supplies the principal handle.
 
 ---
 
@@ -568,7 +567,7 @@ Pitfalls:
 
 Introspect available agent types, plugins, and tools registered via `AdditionalAssemblies`. Returns full registry metadata including capabilities, notes, and method descriptions.
 
-Discovery is type-level, not instance-level. Evicting an agent removes that created agent from diagnostics/client tracking, but it does not remove the agent class/alias from `/discovery` unless the assembly/type is removed from the host.
+Discovery is type-level, not instance-level. Evicting an agent removes that created agent from diagnostics/principal tracking, but it does not remove the agent class/alias from `/discovery` unless the assembly/type is removed from the host.
 
 #### GET `/discovery` — List all registered types
 
@@ -712,7 +711,7 @@ Send a chat completion request to the configured LLM. Uses `IFabrCoreChatClientS
 }
 ```
 
-**Client fallback pattern** — on a client host (`AddFabrCoreClient`), use `IFabrCoreHostApiClient.GetChatCompletionAsync()` which POSTs to this endpoint on the server host. On a server host (`AddFabrCoreServer`), resolve `IFabrCoreChatClientService` directly from DI.
+**HTTP fallback pattern** — external applications can use `IFabrCoreHostApiClient.GetChatCompletionAsync()` which POSTs to this endpoint on the server host. On a server host (`AddFabrCoreServer`), resolve `IFabrCoreChatClientService` directly from DI.
 
 ---
 
@@ -840,7 +839,7 @@ External systems should prefer bundle export plus local verification against the
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `Handle` | string | Full agent grain key (`userHandle:agentHandle`) |
+| `Handle` | string | Full agent grain key (`principalHandle:agentHandle`) |
 | `Success` | bool | Whether eviction completed |
 | `Existed` | bool | Whether any agent state/registry/tracking evidence existed |
 | `Message` | string? | Human-readable result |
@@ -849,7 +848,7 @@ External systems should prefer bundle export plus local verification against the
 | `StreamSubscriptionsRemoved` | int | Stream subscription handles unsubscribed |
 | `StateCleared` | bool | Whether `AgentGrain` persisted state was cleared |
 | `RegistryRemoved` | bool | Whether diagnostics/management registry entry was removed |
-| `ClientTrackingRemoved` | bool | Whether owning client tracked-agent entry was removed |
+| `PrincipalTrackingRemoved` | bool | Whether owning principal tracked-agent entry was removed |
 | `Timestamp` | DateTime | When eviction completed (UTC) |
 
 **`AgentInfo`** — returned by diagnostics endpoints:
@@ -863,7 +862,7 @@ External systems should prefer bundle export plus local verification against the
 | `ActivatedAt` | DateTime | When activated |
 | `DeactivatedAt` | DateTime? | When deactivated (if applicable) |
 | `DeactivationReason` | string? | Reason for deactivation |
-| `EntityType` | `EntityType` | `Agent` or `Client` |
+| `EntityType` | `EntityType` | `Agent` or `Principal` |
 
 **`FileMetadata`** — returned by file info endpoint:
 
@@ -879,7 +878,7 @@ External systems should prefer bundle export plus local verification against the
 
 ## WebSocket
 
-Connect at `/ws` for real-time bidirectional communication. Requires user handle via `x-fabrcore-userhandle` header or `userhandle` query parameter.
+Connect at `/ws` for real-time bidirectional communication. Requires principal handle via `x-fabrcore-userhandle` header or `userhandle` query parameter.
 
 The WebSocket ingress honors the W3C `traceparent` header — if a client sets it, the resulting `AgentMessage` ingress span parents on the caller's trace via `AgentMessageTelemetry.StartIngressActivity` (see `src/FabrCore.Host/WebSocket/WebSocketSession.cs:314`). Error responses are stamped from `Activity.Current` at lines 384, 413, 700.
 
@@ -888,7 +887,7 @@ The WebSocket ingress honors the W3C `traceparent` header — if a client sets i
 FabrCore depends only on **`OpenTelemetry.Api` v1.15.1** — no exporter is bundled. `UseFabrCoreServer` registers a process-wide `ActivityListener` for every `FabrCore.*` `ActivitySource` (see `src/FabrCore.Host/FabrCoreHostExtensions.cs:123-132`), so `Activity` instances materialize even without a full TracerProvider. To actually **see** spans, register your own exporter:
 
 ```csharp
-// In your Program.cs, after AddFabrCoreServer / AddFabrCoreClient:
+// In your Program.cs, after AddFabrCoreServer:
 builder.Services.AddOpenTelemetry()
     .WithTracing(tracing => tracing
         .AddSource("FabrCore.*")              // pick up every FabrCore ActivitySource
@@ -899,7 +898,7 @@ builder.Services.AddOpenTelemetry()
             o.Endpoint = new Uri("http://localhost:4317");
         }))
     .WithMetrics(metrics => metrics
-        .AddMeter("FabrCore.*")               // FabrCore meters (Host.Extensions, Client.ClientContext, ...)
+        .AddMeter("FabrCore.*")               // FabrCore meters (Host.Extensions, Host grains, SDK, ...)
         .AddOtlpExporter());
 ```
 
@@ -914,16 +913,13 @@ NuGet packages to add to your host project: `OpenTelemetry.Extensions.Hosting`, 
 | `FabrCore.Host.WebSocketSession` | `WebSocketSession` | Every WebSocket frame ingress; honors `traceparent` |
 | `FabrCore.Host.WebSocketMiddleware` | WebSocket middleware | Connection accept/reject |
 | `FabrCore.Sdk.AgentProxy` | `FabrCoreAgentProxy.InternalOnMessage` | Inside every agent's lifecycle method |
-| `FabrCore.Client.ClientContext` | `ClientContext.SendAndReceiveMessage` / `SendMessage` | Client-side sends (see fabrcore-client) |
-| `FabrCore.Client.ClientContextFactory` | `ClientContextFactory` | Client lookup/creation |
-| `FabrCore.Client.DirectMessageSender` | `DirectMessageSender` | Direct grain calls without ClientContext |
 
 Filter by prefix (`AddSource("FabrCore.*")`) to pick all of them up in one line.
 
 ### Meters emitted by FabrCore
 
 - `FabrCore.Host.Extensions` — `fabrcore.host.server.configured`, `fabrcore.host.errors`
-- `FabrCore.Client.ClientContext` — `MessageProcessingDuration` (histogram), `MessagesProcessedCounter` (counter), error counters
+- `FabrCore.Host.PrincipalGrain` — principal-scoped message, stream, observer, tracked-agent, and error counters
 
 ### Correlating with the in-process monitor
 
@@ -931,15 +927,15 @@ Filter by prefix (`AddSource("FabrCore.*")`) to pick all of them up in one line.
 
 ## IAgentManagementProvider
 
-Pluggable provider for agent/client registration and lifecycle tracking:
+Pluggable provider for agent/principal registration and lifecycle tracking:
 
 ```csharp
 public interface IAgentManagementProvider
 {
     Task RegisterAgentAsync(string key, string agentType, string handle);
     Task DeactivateAgentAsync(string key, string reason);
-    Task RegisterClientAsync(string clientId);
-    Task DeactivateClientAsync(string clientId, string reason);
+    Task RegisterPrincipalAsync(string principalHandle);
+    Task DeactivatePrincipalAsync(string principalHandle, string reason);
     Task<List<AgentInfo>> GetAllAsync();
     Task<List<AgentInfo>> GetByStatusAsync(AgentStatus status);
     Task<AgentInfo?> GetByKeyAsync(string key);

@@ -8,7 +8,7 @@ description: >
   Triggers on: "AIAgent", "AgentSession", "ChatClientAgent", "ChatClientAgentOptions", "ChatClientAgentResult",
   "RunStreamingAsync", "RunAsync", "AgentResponse", "AgentResponseUpdate", "AgentRunOptions",
   "ChatMessage", "ChatRole", "Microsoft Agent Framework", "IChatClient", "AIFunctionFactory",
-  "AITool", "thread pattern", "per-user session", "per-message session",
+  "AITool", "thread pattern", "per-principal session", "per-message session",
   "Microsoft.Extensions.AI", "Microsoft.Agents.AI", "AsAIAgent", "AsAIFunction",
   "AIAgentBuilder", "agent middleware", "session serialization", "ChatHistoryProvider",
   "AgentSessionStateBag", "CreateSessionAsync".
@@ -442,19 +442,19 @@ public override async Task<AgentMessage> OnMessage(AgentMessage message)
 Separate conversation history per user. Use different `threadId` values:
 
 ```csharp
-private readonly Dictionary<string, (AIAgent Agent, AgentSession Session)> _userSessions = new();
+private readonly Dictionary<string, (AIAgent Agent, AgentSession Session)> _principalSessions = new();
 
 public override async Task<AgentMessage> OnMessage(AgentMessage message)
 {
-    var userHandle = message.FromHandle ?? "anonymous";
-    if (!_userSessions.TryGetValue(userHandle, out var session))
+    var principalHandle = message.FromHandle ?? "anonymous";
+    if (!_principalSessions.TryGetValue(principalHandle, out var session))
     {
         var result = await CreateChatClientAgent(
             config.Models ?? "default",
-            threadId: $"{config.Handle}-{userHandle}",
+            threadId: $"{config.Handle}-{principalHandle}",
             tools: await ResolveConfiguredToolsAsync());
         session = (result.Agent, result.Session);
-        _userSessions[userHandle] = session;
+        _principalSessions[principalHandle] = session;
     }
 
     var response = message.Response();

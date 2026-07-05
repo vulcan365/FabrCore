@@ -38,6 +38,15 @@ namespace FabrCore.Sdk
     }
 
     /// <summary>
+    /// Response from principals list endpoint.
+    /// </summary>
+    public class PrincipalsListResponse
+    {
+        public int Count { get; set; }
+        public List<AgentInfo> Principals { get; set; } = new();
+    }
+
+    /// <summary>
     /// Response from agent statistics endpoint.
     /// </summary>
     public class AgentStatisticsResponse : Dictionary<string, int>
@@ -376,6 +385,11 @@ namespace FabrCore.Sdk
         /// Gets all agents, optionally filtered by status.
         /// </summary>
         Task<AgentsListResponse> GetAgentsAsync(string? status = null, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Gets all principals, optionally filtered by status.
+        /// </summary>
+        Task<PrincipalsListResponse> GetPrincipalsAsync(string? status = null, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Gets a specific agent by key.
@@ -824,6 +838,37 @@ namespace FabrCore.Sdk
             {
                 RecordError(activity, startTime, "GetAgents", ex);
                 _logger.LogError(ex, "Failed to get agents with status: {Status}", status);
+                throw;
+            }
+        }
+
+        public async Task<PrincipalsListResponse> GetPrincipalsAsync(string? status = null, CancellationToken cancellationToken = default)
+        {
+            using var activity = ActivitySource.StartActivity("GetPrincipals", ActivityKind.Client);
+            activity?.SetTag("status.filter", status ?? "all");
+
+            var url = string.IsNullOrEmpty(status)
+                ? $"{_baseUrl}/fabrcoreapi/Diagnostics/principals"
+                : $"{_baseUrl}/fabrcoreapi/Diagnostics/principals?status={status}";
+            var startTime = Stopwatch.GetTimestamp();
+
+            try
+            {
+                var response = await _httpClient.GetAsync(url, cancellationToken);
+                response.EnsureSuccessStatusCode();
+
+                var result = await response.Content.ReadFromJsonAsync<PrincipalsListResponse>(JsonOptions, cancellationToken)
+                    ?? throw new InvalidOperationException("Failed to deserialize principals list");
+
+                RecordSuccess(activity, startTime, "GetPrincipals");
+                _logger.LogDebug("Retrieved {Count} principals with status filter: {Status}", result.Count, status ?? "all");
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                RecordError(activity, startTime, "GetPrincipals", ex);
+                _logger.LogError(ex, "Failed to get principals with status: {Status}", status);
                 throw;
             }
         }

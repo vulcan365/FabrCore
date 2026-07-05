@@ -40,31 +40,31 @@ namespace FabrCore.Host.Grains
             await _state.WriteStateAsync();
         }
 
-        public async Task RegisterClient(string clientId)
+        public async Task RegisterPrincipal(string principalHandle)
         {
-            _logger.LogInformation("Registering client: {ClientId}", clientId);
+            _logger.LogInformation("Registering principal: {PrincipalHandle}", principalHandle);
 
-            _state.State[clientId] = new AgentInfo(
-                Key: clientId,
-                AgentType: "Client",
-                Handle: clientId,
+            _state.State[principalHandle] = new AgentInfo(
+                Key: principalHandle,
+                AgentType: "Principal",
+                Handle: principalHandle,
                 Status: AgentStatus.Active,
                 ActivatedAt: DateTime.UtcNow,
                 DeactivatedAt: null,
                 DeactivationReason: null,
-                EntityType: EntityType.Client
+                EntityType: EntityType.Principal
             );
 
             await _state.WriteStateAsync();
         }
 
-        public async Task DeactivateClient(string clientId, string reason)
+        public async Task DeactivatePrincipal(string principalHandle, string reason)
         {
-            if (_state.State.TryGetValue(clientId, out var existingClient))
+            if (_state.State.TryGetValue(principalHandle, out var existingPrincipal))
             {
-                _logger.LogInformation("Deactivating client: {ClientId}, Reason: {Reason}", clientId, reason);
+                _logger.LogInformation("Deactivating principal: {PrincipalHandle}, Reason: {Reason}", principalHandle, reason);
 
-                _state.State[clientId] = existingClient with
+                _state.State[principalHandle] = existingPrincipal with
                 {
                     Status = AgentStatus.Deactivated,
                     DeactivatedAt = DateTime.UtcNow,
@@ -75,7 +75,7 @@ namespace FabrCore.Host.Grains
             }
             else
             {
-                _logger.LogWarning("Attempted to deactivate unknown client: {ClientId}", clientId);
+                _logger.LogWarning("Attempted to deactivate unknown principal: {PrincipalHandle}", principalHandle);
             }
         }
 
@@ -162,6 +162,7 @@ namespace FabrCore.Host.Grains
             var cutoffTime = DateTime.UtcNow - age;
             var toRemove = _state.State
                 .Where(kvp => kvp.Value.Status == AgentStatus.Deactivated
+                           && kvp.Value.EntityType == EntityType.Agent
                            && kvp.Value.DeactivatedAt.HasValue
                            && kvp.Value.DeactivatedAt.Value < cutoffTime)
                 .Select(kvp => kvp.Key)
@@ -188,7 +189,13 @@ namespace FabrCore.Host.Grains
             {
                 ["Total"] = _state.State.Count,
                 ["Active"] = _state.State.Values.Count(a => a.Status == AgentStatus.Active),
-                ["Deactivated"] = _state.State.Values.Count(a => a.Status == AgentStatus.Deactivated)
+                ["Deactivated"] = _state.State.Values.Count(a => a.Status == AgentStatus.Deactivated),
+                ["AgentTotal"] = _state.State.Values.Count(a => a.EntityType == EntityType.Agent),
+                ["AgentActive"] = _state.State.Values.Count(a => a.EntityType == EntityType.Agent && a.Status == AgentStatus.Active),
+                ["AgentDeactivated"] = _state.State.Values.Count(a => a.EntityType == EntityType.Agent && a.Status == AgentStatus.Deactivated),
+                ["PrincipalTotal"] = _state.State.Values.Count(a => a.EntityType == EntityType.Principal),
+                ["PrincipalActive"] = _state.State.Values.Count(a => a.EntityType == EntityType.Principal && a.Status == AgentStatus.Active),
+                ["PrincipalDeactivated"] = _state.State.Values.Count(a => a.EntityType == EntityType.Principal && a.Status == AgentStatus.Deactivated)
             };
 
             // Group by agent type

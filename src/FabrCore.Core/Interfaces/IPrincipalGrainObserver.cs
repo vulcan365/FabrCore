@@ -2,7 +2,7 @@ using Orleans;
 
 namespace FabrCore.Core.Interfaces
 {
-    public interface IClientGrainObserver : IGrainObserver
+    public interface IPrincipalGrainObserver : IGrainObserver
     {
         void OnMessageReceived(AgentMessage message);
     }

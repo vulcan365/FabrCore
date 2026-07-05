@@ -66,6 +66,52 @@ namespace FabrCore.Host.Api.Controllers
             }
         }
 
+        [HttpGet("principals")]
+        public async Task<IActionResult> GetAllPrincipals([FromQuery] string? status = null)
+        {
+            try
+            {
+                var principals = await _agentService.GetPrincipalsAsync(status);
+
+                _logger.LogInformation("Retrieved {Count} principals with status filter: {Status}",
+                    principals.Count, status ?? "all");
+
+                return Ok(new
+                {
+                    Count = principals.Count,
+                    Principals = principals
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving principals with status: {Status}", status);
+                return StatusCode(500, new { Error = "Failed to retrieve principals", Message = ex.Message });
+            }
+        }
+
+        [HttpGet("principals/{handle}")]
+        public async Task<IActionResult> GetPrincipal(string handle)
+        {
+            try
+            {
+                var principal = await _agentService.GetPrincipalInfoAsync(handle);
+
+                if (principal == null)
+                {
+                    _logger.LogWarning("Principal not found in registry: {Handle}", handle);
+                    return NotFound(new { Message = $"Principal '{handle}' not found in registry" });
+                }
+
+                _logger.LogInformation("Retrieved principal info for: {Handle}", handle);
+                return Ok(principal);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving principal: {Handle}", handle);
+                return StatusCode(500, new { Error = "Failed to retrieve principal", Message = ex.Message });
+            }
+        }
+
         [HttpGet("agents/statistics")]
         public async Task<IActionResult> GetStatistics()
         {

@@ -3,12 +3,12 @@ using Orleans;
 namespace FabrCore.Core
 {
     /// <summary>
-    /// Persistent state for ClientGrain containing tracked agents and pending messages.
+    /// Persistent state for PrincipalGrain containing tracked agents and pending messages.
     /// </summary>
-    public class ClientGrainState
+    public class PrincipalGrainState
     {
         /// <summary>
-        /// Agents created and tracked by this client, keyed by agent handle.
+        /// Agents created and tracked by this principal, keyed by agent handle.
         /// </summary>
         public Dictionary<string, TrackedAgentInfo> TrackedAgents { get; set; } = new();
 
@@ -29,9 +29,9 @@ namespace FabrCore.Core
     }
 
     [GenerateSerializer]
-    internal struct ClientGrainStateSurrogate
+    internal struct PrincipalGrainStateSurrogate
     {
-        public ClientGrainStateSurrogate()
+        public PrincipalGrainStateSurrogate()
         {
         }
 
@@ -49,15 +49,15 @@ namespace FabrCore.Core
     }
 
     [RegisterConverter]
-    internal sealed class ClientGrainStateSurrogateConverter : IConverter<ClientGrainState, ClientGrainStateSurrogate>
+    internal sealed class PrincipalGrainStateSurrogateConverter : IConverter<PrincipalGrainState, PrincipalGrainStateSurrogate>
     {
-        public ClientGrainStateSurrogateConverter()
+        public PrincipalGrainStateSurrogateConverter()
         {
         }
 
-        public ClientGrainState ConvertFromSurrogate(in ClientGrainStateSurrogate surrogate)
+        public PrincipalGrainState ConvertFromSurrogate(in PrincipalGrainStateSurrogate surrogate)
         {
-            return new ClientGrainState
+            return new PrincipalGrainState
             {
                 TrackedAgents = surrogate.TrackedAgents ?? new(),
                 PendingMessages = surrogate.PendingMessages ?? new(),
@@ -66,9 +66,9 @@ namespace FabrCore.Core
             };
         }
 
-        public ClientGrainStateSurrogate ConvertToSurrogate(in ClientGrainState value)
+        public PrincipalGrainStateSurrogate ConvertToSurrogate(in PrincipalGrainState value)
         {
-            return new ClientGrainStateSurrogate
+            return new PrincipalGrainStateSurrogate
             {
                 TrackedAgents = value.TrackedAgents,
                 PendingMessages = value.PendingMessages,

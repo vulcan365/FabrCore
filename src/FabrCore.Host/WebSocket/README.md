@@ -1,10 +1,10 @@
 # FabrCore WebSocket Interface
 
-This WebSocket interface provides a way for clients that cannot use the ClientContext (e.g., web browsers, non-.NET clients) to interact with the FabrCore system via WebSocket connections.
+This WebSocket interface provides a way for web browsers and non-.NET clients to interact with the FabrCore system via WebSocket connections.
 
 ## Overview
 
-The WebSocket session wraps the `ClientGrain` in the same way that `ClientContext` does, providing:
+The WebSocket session wraps the `PrincipalGrain`, providing:
 - Automatic client handle initialization from HTTP header
 - Command handling for system operations (createagent, unsubscribe, etc.)
 - Message routing to/from agents
@@ -27,7 +27,7 @@ The client handle is determined by the `x-fabrcore-userhandle` header sent durin
 x-fabrcore-userhandle: user123
 ```
 
-The session will automatically initialize and subscribe to the ClientGrain using this user handle upon connection.
+The session will automatically initialize and subscribe to the PrincipalGrain using this user handle upon connection.
 
 ## Message Format
 
@@ -119,9 +119,9 @@ Where the AgentConfiguration JSON structure is:
 
 ## Session Lifecycle
 
-The WebSocket session automatically manages the ClientGrain subscription:
+The WebSocket session automatically manages the PrincipalGrain subscription:
 
-- **On Connect**: Automatically subscribes to ClientGrain using the user handle
+- **On Connect**: Automatically subscribes to PrincipalGrain using the user handle
 - **On Disconnect**: Automatically unsubscribes and cleans up resources
 
 You don't need to manually manage subscriptions or unsubscriptions.
@@ -193,7 +193,7 @@ For general errors:
    Header: x-fabrcore-userhandle: user123
    ```
 
-   The session automatically initializes and subscribes to the ClientGrain.
+   The session automatically initializes and subscribes to the PrincipalGrain.
 
 2. **Create Agent**
    ```json
@@ -333,9 +333,9 @@ The WebSocket implementation consists of:
    - Manages connection lifecycle
 
 2. **WebSocketSession** (`WebSocketSession.cs`)
-   - Wraps ClientGrain similar to ClientContext
+   - Wraps PrincipalGrain for WebSocket clients
    - Automatically subscribes on connection and unsubscribes on disposal
-   - Implements IClientGrainObserver to receive messages
+   - Implements IPrincipalGrainObserver to receive messages
    - Processes commands and routes messages
    - Serializes/deserializes JSON messages
 

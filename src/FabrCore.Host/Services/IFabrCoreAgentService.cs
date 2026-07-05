@@ -86,11 +86,11 @@ namespace FabrCore.Host.Services
         /// <summary>Removes an agent completely from the management provider.</summary>
         Task<bool> RemoveAgentAsync(string key);
 
-        /// <summary>Registers a client as active in the management provider.</summary>
-        Task RegisterClientAsync(string clientId);
+        /// <summary>Registers a principal as active in the management provider.</summary>
+        Task RegisterPrincipalAsync(string principalHandle);
 
-        /// <summary>Marks a client as deactivated in the management provider.</summary>
-        Task DeactivateClientAsync(string clientId, string reason);
+        /// <summary>Marks a principal as deactivated in the management provider.</summary>
+        Task DeactivatePrincipalAsync(string principalHandle, string reason);
 
         // ── Diagnostics ──
 
@@ -103,6 +103,16 @@ namespace FabrCore.Host.Services
         /// Gets info for a specific agent by its full key.
         /// </summary>
         Task<AgentInfo?> GetAgentInfoAsync(string key);
+
+        /// <summary>
+        /// Gets all principals, optionally filtered by status ("active" or "deactivated").
+        /// </summary>
+        Task<List<AgentInfo>> GetPrincipalsAsync(string? status = null);
+
+        /// <summary>
+        /// Gets info for a specific principal grain by handle.
+        /// </summary>
+        Task<AgentInfo?> GetPrincipalInfoAsync(string handle);
 
         /// <summary>
         /// Gets agent statistics (total, active, deactivated counts).
