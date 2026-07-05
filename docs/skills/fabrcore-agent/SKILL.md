@@ -104,31 +104,31 @@ protected readonly IFabrCoreChatClientService chatClientService;
 `IFabrCoreAgentHost` provides methods to access the agent's handle and its components:
 
 ```csharp
-// Full handle (e.g., "user123:assistant")
+// Full handle (e.g., "principal123:assistant")
 var full = fabrcoreAgentHost.GetHandle();
 
-// User handle portion (e.g., "user123") — empty string if no user handle
-var userHandle = fabrcoreAgentHost.GetUserHandle();
+// Principal handle portion (e.g., "principal123") — empty string if no principal handle
+var principalHandle = fabrcoreAgentHost.GetUserHandle();
 
-// Agent handle portion without user handle prefix (e.g., "assistant")
+// Agent handle portion without principal handle prefix (e.g., "assistant")
 var agent = fabrcoreAgentHost.GetAgentHandle();
 
 // Decompose into both parts at once
-var (userHandle, agentHandle) = fabrcoreAgentHost.GetParsedHandle();
+var (principalHandle, agentHandle) = fabrcoreAgentHost.GetParsedHandle();
 
-// Check if this agent has an user handle
+// Check if this agent has a principal handle
 if (fabrcoreAgentHost.HasUserHandle())
 {
-    // User-handle-scoped logic
+    // Principal-handle-scoped logic
 }
 ```
 
-| Method | Returns | Example (`"user123:assistant"`) | Example (`"assistant"`) |
+| Method | Returns | Example (`"principal123:assistant"`) | Example (`"assistant"`) |
 |--------|---------|-------------------------------|------------------------|
-| `GetHandle()` | Full handle string | `"user123:assistant"` | `"assistant"` |
-| `GetUserHandle()` | User handle portion | `"user123"` | `""` |
+| `GetHandle()` | Full handle string | `"principal123:assistant"` | `"assistant"` |
+| `GetUserHandle()` | Principal handle portion | `"principal123"` | `""` |
 | `GetAgentHandle()` | Agent handle portion | `"assistant"` | `"assistant"` |
-| `GetParsedHandle()` | `(UserHandle, AgentHandle)` tuple | `("user123", "assistant")` | `("", "assistant")` |
+| `GetParsedHandle()` | `(UserHandle, AgentHandle)` tuple | `("principal123", "assistant")` | `("", "assistant")` |
 | `HasUserHandle()` | `bool` | `true` | `false` |
 
 These methods are available in both agents and plugins (via `IFabrCoreAgentHost`).
@@ -150,7 +150,7 @@ These methods are available in both agents and plugins (via `IFabrCoreAgentHost`
 
 `ResetAgent` is a soft lifecycle operation: it calls the agent reset hook, clears chat/custom state, and reconfigures the same agent.
 
-Eviction is a hard delete initiated through the Host API: `DELETE /fabrcoreapi/Agent/{handle}` with `x-user-handle`. It is handled by `AgentGrain`, not agent code. Eviction unregisters timers and reminders, removes stream subscriptions, clears persisted Orleans state, removes diagnostics/client tracking entries, and deactivates the grain. If the agent is actively processing a message, the API returns `409 Conflict` and the caller should retry later.
+Eviction is a hard delete initiated through the Host API: `DELETE /fabrcoreapi/Agent/{handle}` with `x-user-handle`. It is handled by `AgentGrain`, not agent code. Eviction unregisters timers and reminders, removes stream subscriptions, clears persisted Orleans state, removes diagnostics/principal tracking entries, and deactivates the grain. If the agent is actively processing a message, the API returns `409 Conflict` and the caller should retry later.
 
 ### OnInitialize()
 
@@ -410,7 +410,7 @@ State is automatically flushed after `OnMessage` completes and on normal grain d
 
 Use the built-in state API above for private state private to the current agent, such as conversation counters, local preferences, or per-agent caches. It is single-agent state and participates in the grain lifecycle.
 
-Use typed entity storage when the data is application-level and should be addressable by `userHandle/container/entityKey`, especially when clients, host services, plugins, or multiple agents need to share the same record. The public abstraction is in `FabrCore.Sdk`:
+Use typed entity storage when the data is application-level and should be addressable by `principalHandle/container/entityKey`, especially when API clients, host services, plugins, or multiple agents need to share the same record. The public abstraction is in `FabrCore.Sdk`:
 
 ```csharp
 public interface IFabrCoreStorageProvider
@@ -421,7 +421,7 @@ public interface IFabrCoreStorageProvider
 }
 ```
 
-Important pitfall for agents: when resolving `IFabrCoreStorageProvider` directly inside the Host DI container, the user-handle-free methods use the system partition. That is appropriate for system/shared data, not per-user data. For per-agent or per-user data, prefer `GetStateAsync`/`TryGetStateAsync`/`SetState` or call a user-handle-aware Host/API path that explicitly supplies the user handle from `fabrcoreAgentHost.GetUserHandle()`.
+Important pitfall for agents: when resolving `IFabrCoreStorageProvider` directly inside the Host DI container, the principal-handle-free methods use the system partition. That is appropriate for system/shared data, not per-principal data. For per-agent or per-principal data, prefer `GetStateAsync`/`TryGetStateAsync`/`SetState` or call a principal-handle-aware Host/API path that explicitly supplies the principal handle from `fabrcoreAgentHost.GetUserHandle()`.
 
 Do not reference Orleans storage APIs (`IGrainStorage`, `GrainId`, `IGrainState<T>`) from agent code. FabrCore keeps those Host-internal so agents and SDK consumers do not depend on Orleans storage internals.
 

@@ -15,7 +15,7 @@ description: >
   "IFabrCoreStorageProvider", "typed storage", "storage test", "TryGetStateAsync",
   "custom state test", "malformed state", "undefined JsonElement".
   Do NOT use for: agent development — use fabrcore-agent.
-  Do NOT use for: server/client setup — use fabrcore-server or fabrcore-client.
+  Do NOT use for: server setup — use fabrcore-server.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
 ---
 
@@ -271,7 +271,7 @@ For end-to-end `SpanId`/`ParentSpanId` propagation checks you need the grain ing
 `TestFabrCoreAgentHost` implements all handle methods from `IFabrCoreAgentHost`:
 
 ```csharp
-// Default handle is "test-agent" (no user handle)
+// Default handle is "test-agent" (no principal handle)
 var harness = new FabrCoreTestHarness();
 var host = harness.AgentHost;
 host.GetHandle();        // "test-agent"
@@ -279,10 +279,10 @@ host.GetUserHandle();   // ""
 host.GetAgentHandle();   // "test-agent"
 host.HasUserHandle();         // false
 
-// With user-handle-scoped handle
-var harness2 = new FabrCoreTestHarness(new() { Handle = "user1:my-agent" });
+// With principal-handle-scoped handle
+var harness2 = new FabrCoreTestHarness(new() { Handle = "principal1:my-agent" });
 var host2 = harness2.AgentHost;
-host2.GetUserHandle();  // "user1"
+host2.GetUserHandle();  // "principal1"
 host2.GetAgentHandle();  // "my-agent"
 host2.HasUserHandle();        // true
 ```
@@ -326,12 +326,12 @@ Verify these scenarios against a running Host:
 
 - Missing or empty `x-user-handle` returns `400 Bad Request`.
 - Missing or empty `agents` returns `400 Bad Request`.
-- Bare blueprint handles are scoped to the `x-user-handle` user.
-- Fully-qualified handles are accepted only when their user prefix matches `x-user-handle`.
-- Cross-user fully-qualified handles return `400 Bad Request`.
+- Bare blueprint handles are scoped to the `x-user-handle` principal.
+- Fully-qualified handles are accepted only when their principal prefix matches `x-user-handle`.
+- Cross-principal fully-qualified handles return `400 Bad Request`.
 - Existing tracked and configured agents return health without reconfiguration.
 - Tracked but `NotConfigured` agents are configured from the blueprint.
-- New agents are configured and added to the user's tracked-agent list.
+- New agents are configured and added to the principal's tracked-agent list.
 - Incoming `ForceReconfigure = true` in a blueprint config is ignored; use `/fabrcoreapi/Agent/create` for intentional reconfiguration.
 - A failing agent config produces an unhealthy per-agent result while the rest of the blueprint continues.
 
@@ -365,7 +365,7 @@ private sealed class TestAgentProxy : MyAgent
 Typed entity storage should be tested at two levels:
 
 1. Unit-test consumers against an in-memory fake `IFabrCoreStorageProvider`.
-2. Integration-test the Host API when you need to verify user handle partitioning and the configured Orleans provider.
+2. Integration-test the Host API when you need to verify principal handle partitioning and the configured Orleans provider.
 
 ### In-memory fake provider
 
@@ -407,7 +407,7 @@ Verify these behaviors against a running Host when storage is part of the featur
 - Missing reads return `default`/`null`.
 - Deletes return `true` only when a value existed.
 - Non-success upserts surface the response body in the SDK exception message; assert this when testing client diagnostics for validation failures.
-- The same `container/entityKey` is isolated across different user handles (`x-user-handle` values).
+- The same `container/entityKey` is isolated across different principal handles (`x-user-handle` values).
 - The behavior follows the configured Orleans storage provider: localhost memory is non-persistent, SQL/Azure/custom providers persist according to their configuration.
 - No public SDK or client API exposes Orleans storage types such as `IGrainStorage`, `GrainId`, or `IGrainState<T>`.
 

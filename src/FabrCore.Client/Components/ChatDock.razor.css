@@ -1,9 +1,0 @@
-/* ============================================================
-   Chat Dock Scoped Styles
-   ============================================================
-
-   NOTE: All ChatDock styles are in wwwroot/chatDock.css (non-scoped)
-   because the chat panel is moved to document.body via JavaScript,
-   which breaks CSS isolation. This file is intentionally empty.
-
-   ============================================================ */

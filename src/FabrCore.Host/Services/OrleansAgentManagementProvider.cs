@@ -32,11 +32,11 @@ namespace FabrCore.Host.Services
         public Task<bool> RemoveAgentAsync(string key)
             => GetGrain().RemoveAgent(key);
 
-        public Task RegisterClientAsync(string clientId)
-            => GetGrain().RegisterClient(clientId);
+        public Task RegisterPrincipalAsync(string principalHandle)
+            => GetGrain().RegisterPrincipal(principalHandle);
 
-        public Task DeactivateClientAsync(string clientId, string reason)
-            => GetGrain().DeactivateClient(clientId, reason);
+        public Task DeactivatePrincipalAsync(string principalHandle, string reason)
+            => GetGrain().DeactivatePrincipal(principalHandle, reason);
 
         // ── Queries ──
 

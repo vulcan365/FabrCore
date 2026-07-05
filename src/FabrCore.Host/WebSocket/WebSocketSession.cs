@@ -14,10 +14,10 @@ using System.Threading.Channels;
 namespace FabrCore.Host.WebSocket
 {
     /// <summary>
-    /// WebSocket session that wraps ClientGrain similar to how ClientContext works.
+    /// WebSocket session that wraps PrincipalGrain for external WebSocket clients.
     /// Handles commands via AgentMessage with MessageType="command".
     /// </summary>
-    public class WebSocketSession : IClientGrainObserver, IAsyncDisposable
+    public class WebSocketSession : IPrincipalGrainObserver, IAsyncDisposable
     {
         private static readonly ActivitySource ActivitySource = new("FabrCore.Host.WebSocketSession");
         private static readonly Meter Meter = new("FabrCore.Host.WebSocketSession");
@@ -58,8 +58,8 @@ namespace FabrCore.Host.WebSocket
         private readonly System.Net.WebSockets.WebSocket webSocket;
         private readonly IClusterClient clusterClient;
         private readonly ILogger<WebSocketSession> logger;
-        private IClientGrain? clientGrain;
-        private IClientGrainObserver? observerRef;
+        private IPrincipalGrain? principalGrain;
+        private IPrincipalGrainObserver? observerRef;
         private readonly string handle;
         private bool disposed;
         private readonly CancellationTokenSource cancellationTokenSource;
@@ -116,7 +116,7 @@ namespace FabrCore.Host.WebSocket
             try
             {
                 // Initialize the client grain connection
-                await InitializeClientGrainAsync();
+                await InitializePrincipalGrainAsync();
 
                 using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
                     cancellationToken,
@@ -146,33 +146,33 @@ namespace FabrCore.Host.WebSocket
         }
 
         /// <summary>
-        /// Initialize the ClientGrain connection and subscribe to the observer.
+        /// Initialize the PrincipalGrain connection and subscribe to the observer.
         /// </summary>
-        private async Task InitializeClientGrainAsync()
+        private async Task InitializePrincipalGrainAsync()
         {
-            using var activity = ActivitySource.StartActivity("InitializeClientGrain", ActivityKind.Internal);
+            using var activity = ActivitySource.StartActivity("InitializePrincipalGrain", ActivityKind.Internal);
             activity?.SetTag("user.id", handle);
 
-            logger.LogInformation("Initializing ClientGrain for user: {userHandle}", handle);
+            logger.LogInformation("Initializing PrincipalGrain for user: {userHandle}", handle);
 
             try
             {
                 // Get the grain with the handle as primary key
-                clientGrain = clusterClient.GetGrain<IClientGrain>(handle);
+                principalGrain = clusterClient.GetGrain<IPrincipalGrain>(handle);
                 logger.LogDebug("Client grain obtained for user: {userHandle}", handle);
 
                 // Create observer reference and subscribe to the grain
-                observerRef = clusterClient.CreateObjectReference<IClientGrainObserver>(this);
+                observerRef = clusterClient.CreateObjectReference<IPrincipalGrainObserver>(this);
                 logger.LogDebug("Observer reference created for user: {userHandle}", handle);
 
-                await clientGrain.Subscribe(observerRef);
+                await principalGrain.Subscribe(observerRef);
 
-                logger.LogInformation("WebSocket session subscribed to ClientGrain for user: {userHandle}", handle);
+                logger.LogInformation("WebSocket session subscribed to PrincipalGrain for user: {userHandle}", handle);
                 activity?.SetStatus(ActivityStatusCode.Ok);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to initialize ClientGrain for user: {userHandle}", handle);
+                logger.LogError(ex, "Failed to initialize PrincipalGrain for user: {userHandle}", handle);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
                 ErrorCounter.Add(1,
@@ -420,7 +420,7 @@ namespace FabrCore.Host.WebSocket
         {
             using var activity = ActivitySource.StartActivity("HandleCreateAgent", ActivityKind.Internal);
 
-            if (clientGrain == null)
+            if (principalGrain == null)
             {
                 throw new InvalidOperationException("Client not initialized.");
             }
@@ -471,7 +471,7 @@ namespace FabrCore.Host.WebSocket
             logger.LogInformation("Creating agent - Type: {AgentType}, Handle: {AgentHandle}",
                 agentConfig.AgentType, agentConfig.Handle);
 
-            await clientGrain.CreateAgent(agentConfig);
+            await principalGrain.CreateAgent(agentConfig);
 
             logger.LogInformation("Agent created successfully: {AgentHandle}", agentConfig.Handle);
             activity?.SetStatus(ActivityStatusCode.Ok);
@@ -483,7 +483,7 @@ namespace FabrCore.Host.WebSocket
             activity?.SetTag("message.from", message.FromHandle);
             activity?.SetTag("message.to", message.ToHandle);
 
-            if (clientGrain == null)
+            if (principalGrain == null)
             {
                 throw new InvalidOperationException("Client not initialized.");
             }
@@ -497,13 +497,13 @@ namespace FabrCore.Host.WebSocket
                 // If the message expects a response (Kind == Request), use SendAndReceiveMessage
                 if (message.Kind == MessageKind.Request)
                 {
-                    var response = await clientGrain.SendAndReceiveMessage(message);
+                    var response = await principalGrain.SendAndReceiveMessage(message);
                     await SendMessageAsync(response, cancellationToken);
                 }
                 else
                 {
                     // Fire and forget (OneWay or Response)
-                    await clientGrain.SendMessage(message);
+                    await principalGrain.SendMessage(message);
                 }
 
                 activity?.SetStatus(ActivityStatusCode.Ok);
@@ -523,7 +523,7 @@ namespace FabrCore.Host.WebSocket
             activity?.SetTag("event.source", message.Source);
             activity?.SetTag("event.channel", message.Channel);
 
-            if (clientGrain == null)
+            if (principalGrain == null)
             {
                 throw new InvalidOperationException("Client not initialized.");
             }
@@ -533,7 +533,7 @@ namespace FabrCore.Host.WebSocket
 
             try
             {
-                await clientGrain.SendEvent(message);
+                await principalGrain.SendEvent(message);
 
                 activity?.SetStatus(ActivityStatusCode.Ok);
             }
@@ -546,7 +546,7 @@ namespace FabrCore.Host.WebSocket
             }
         }
 
-        // IClientGrainObserver implementation.
+        // IPrincipalGrainObserver implementation.
         // Must NEVER throw — Orleans observer callbacks that throw can destabilize the
         // ObserverManager on the grain side. We enqueue to a bounded channel and return
         // immediately; the outbound pump serializes writes to the socket.
@@ -734,11 +734,11 @@ namespace FabrCore.Host.WebSocket
                 }
 
                 // Unsubscribe if we have an active subscription
-                if (clientGrain != null && observerRef != null)
+                if (principalGrain != null && observerRef != null)
                 {
                     try
                     {
-                        await clientGrain.Unsubscribe(observerRef);
+                        await principalGrain.Unsubscribe(observerRef);
                     }
                     catch (Exception ex)
                     {

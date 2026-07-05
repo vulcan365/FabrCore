@@ -9,15 +9,15 @@ namespace FabrCore.Sdk.Tests;
 public sealed class FabrCoreHostApiClientTests
 {
     [TestMethod]
-    public async Task GetUsersAsync_CallsUsersEndpointWithStatusFilter()
+    public async Task GetPrincipalsAsync_CallsPrincipalsEndpointWithStatusFilter()
     {
         var handler = new RecordingHandler("""
             {
               "count": 1,
-              "users": [
+              "principals": [
                 {
                   "key": "user1",
-                  "agentType": "Client",
+                  "agentType": "Principal",
                   "handle": "user1",
                   "status": 0,
                   "activatedAt": "2026-07-05T00:00:00Z",
@@ -40,11 +40,11 @@ public sealed class FabrCoreHostApiClientTests
             configuration,
             NullLogger<FabrCoreHostApiClient>.Instance);
 
-        var response = await apiClient.GetUsersAsync("active");
+        var response = await apiClient.GetPrincipalsAsync("active");
 
-        Assert.AreEqual("https://fabrcore.test/fabrcoreapi/Diagnostics/users?status=active", handler.RequestUri?.ToString());
+        Assert.AreEqual("https://fabrcore.test/fabrcoreapi/Diagnostics/principals?status=active", handler.RequestUri?.ToString());
         Assert.AreEqual(1, response.Count);
-        Assert.AreEqual("user1", response.Users.Single().Handle);
+        Assert.AreEqual("user1", response.Principals.Single().Handle);
     }
 
     private sealed class RecordingHandler : HttpMessageHandler

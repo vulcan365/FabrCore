@@ -1,7 +1,7 @@
 namespace FabrCore.Core
 {
     /// <summary>
-    /// Pluggable provider for agent and client registration, tracking, and lifecycle management.
+    /// Pluggable provider for agent and principal registration, tracking, and lifecycle management.
     /// The default implementation (<c>OrleansAgentManagementProvider</c>) delegates to
     /// <c>IAgentManagementGrain</c>. Swap with a custom implementation (MSSQL, Azure Table Storage, etc.)
     /// via <c>FabrCoreServerOptions.UseAgentManagementProvider&lt;T&gt;()</c>.
@@ -19,24 +19,24 @@ namespace FabrCore.Core
         /// <summary>Removes an agent entry completely from the management registry.</summary>
         Task<bool> RemoveAgentAsync(string key);
 
-        /// <summary>Registers a client as active.</summary>
-        Task RegisterClientAsync(string clientId);
+        /// <summary>Registers a principal as active.</summary>
+        Task RegisterPrincipalAsync(string principalHandle);
 
-        /// <summary>Marks a client as deactivated with a reason.</summary>
-        Task DeactivateClientAsync(string clientId, string reason);
+        /// <summary>Marks a principal as deactivated with a reason.</summary>
+        Task DeactivatePrincipalAsync(string principalHandle, string reason);
 
         // ── Queries ──
 
-        /// <summary>Gets all registered agents and clients.</summary>
+        /// <summary>Gets all registered agents and principals.</summary>
         Task<List<AgentInfo>> GetAllAsync();
 
-        /// <summary>Gets agents/clients filtered by status.</summary>
+        /// <summary>Gets agents/principals filtered by status.</summary>
         Task<List<AgentInfo>> GetByStatusAsync(AgentStatus status);
 
-        /// <summary>Gets a single agent/client by its key.</summary>
+        /// <summary>Gets a single agent/principal by its key.</summary>
         Task<AgentInfo?> GetByKeyAsync(string key);
 
-        /// <summary>Gets agents/clients filtered by entity type and optional status.</summary>
+        /// <summary>Gets agents/principals filtered by entity type and optional status.</summary>
         Task<List<AgentInfo>> GetByEntityTypeAsync(EntityType entityType, AgentStatus? status = null);
 
         // ── Maintenance ──

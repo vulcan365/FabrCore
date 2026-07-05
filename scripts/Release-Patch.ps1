@@ -19,7 +19,7 @@ $newTag  = "v$([int]$parts[0]).$([int]$parts[1]).$([int]$parts[2] + 1)"
 
 Write-Host "Current: $lastTag"
 Write-Host "New:     $newTag"
-Write-Host "Packages: FabrCore.Core, FabrCore.Sdk, FabrCore.Host, FabrCore.Client"
+Write-Host "Packages: FabrCore.Core, FabrCore.Sdk, FabrCore.Host"
 
 if ($DryRun) {
     Write-Host "[DryRun] Would create and push tag $newTag and generate GitHub release notes for all FabrCore packages." -ForegroundColor Yellow

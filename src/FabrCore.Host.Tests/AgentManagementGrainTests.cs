@@ -16,8 +16,8 @@ public sealed class AgentManagementGrainTests
         {
             ["user1:old-agent"] = NewInfo("user1:old-agent", "test-agent", AgentStatus.Deactivated, EntityType.Agent, oldDeactivatedAt),
             ["user2:active-agent"] = NewInfo("user2:active-agent", "test-agent", AgentStatus.Active, EntityType.Agent, null),
-            ["user1"] = NewInfo("user1", "Client", AgentStatus.Deactivated, EntityType.Client, oldDeactivatedAt),
-            ["user2"] = NewInfo("user2", "Client", AgentStatus.Active, EntityType.Client, null)
+            ["user1"] = NewInfo("user1", "Principal", AgentStatus.Deactivated, EntityType.Principal, oldDeactivatedAt),
+            ["user2"] = NewInfo("user2", "Principal", AgentStatus.Active, EntityType.Principal, null)
         });
         var grain = new AgentManagementGrain(state, NullLogger<AgentManagementGrain>.Instance);
 

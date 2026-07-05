@@ -8,7 +8,7 @@ namespace FabrCore.Host.Configuration
     public static class FabrCoreOrleansConstants
     {
         /// <summary>
-        /// Grain storage provider name used by all FabrCore grains (AgentGrain, ClientGrain, AgentManagementGrain).
+        /// Grain storage provider name used by all FabrCore grains (AgentGrain, PrincipalGrain, AgentManagementGrain).
         /// </summary>
         public const string StorageProviderName = "fabrcoreStorage";
 

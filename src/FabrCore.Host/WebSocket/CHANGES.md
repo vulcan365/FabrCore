@@ -21,7 +21,7 @@ Updated the FabrCore WebSocket implementation to use the `x-fabrcore-userhandle`
 **Modified:** Constructor and Initialization
 - Added `userHandle` parameter to constructor
 - Changed `handle` from nullable to required field
-- Automatically initializes ClientGrain on session start
+- Automatically initializes PrincipalGrain on session start
 - Removed manual handle setter
 
 **Modified:** Command Processing
@@ -33,15 +33,15 @@ Updated the FabrCore WebSocket implementation to use the `x-fabrcore-userhandle`
 - Commands now only support: `createagent`
 - Unsubscription happens automatically on session disposal/disconnect
 
-**Added:** InitializeClientGrainAsync Method
+**Added:** InitializePrincipalGrainAsync Method
 - New method called automatically in StartAsync
-- Subscribes to ClientGrain using user handle from header/query
+- Subscribes to PrincipalGrain using user handle from header/query
 - Includes comprehensive logging and error handling
 
 **Code Locations:**
 - Constructor: Lines 58-72
 - StartAsync: Lines 77-112
-- InitializeClientGrainAsync: Lines 117-149
+- InitializePrincipalGrainAsync: Lines 117-149
 - ProcessCommandAsync: Lines 260-331 (sethandle and unsubscribe removed)
 - HandleUnsubscribeCommandAsync: Removed (automatic in DisposeAsync)
 

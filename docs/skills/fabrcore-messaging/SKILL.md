@@ -3,16 +3,15 @@ name: fabrcore-messaging
 description: >
   FabrCore messaging, handle routing, inter-agent communication, orchestration patterns, and access control (ACL).
   Covers AgentMessage, EventMessage, HandleUtilities, SendMessage vs SendAndReceiveMessage vs SendEvent,
-  fan-out/gather, pipeline, supervisor patterns, ACL rules, shared agents, and cross-user routing.
+  fan-out/gather, pipeline, supervisor patterns, ACL rules, shared agents, and cross-principal routing.
   Triggers on: "AgentMessage", "EventMessage", "handle routing", "HandleUtilities", "SendMessage",
   "SendAndReceiveMessage", "SendEvent", "inter-agent", "agent-to-agent", "multi-agent", "orchestration",
-  "ACL", "shared agent", "access control", "MessageKind", "cross-user", "fan-out", "pipeline",
+  "ACL", "shared agent", "access control", "MessageKind", "cross-principal", "fan-out", "pipeline",
   "supervisor", "delegator", "AclRule", "AclPermission", "IAclProvider", "SystemMessageTypes",
-  "FromHandle", "ToHandle", "OnBehalfOfHandle", "TraceId", "message routing", "storage user handle",
+  "FromHandle", "ToHandle", "OnBehalfOfHandle", "TraceId", "message routing", "storage principal handle",
   "VerifiableExecutionEnvelope", "signed evidence", "EventPublished", "EventDelivered", "EventHandled",
   "RecordDbEffectAsync", "RecordHttpCallAsync", "RecordStorageEffectAsync", "RecordLibraryCallAsync".
   Do NOT use for: agent lifecycle — use fabrcore-agent.
-  Do NOT use for: ChatDock — use fabrcore-chatdock.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
 ---
 
@@ -27,8 +26,8 @@ public class AgentMessage
 {
     // Routing
     public string Id { get; set; } = Guid.NewGuid().ToString();
-    public string? ToHandle { get; set; }           // Target handle (bare agent handle or "userHandle:agentHandle")
-    public string? FromHandle { get; set; }         // Sender (auto-filled by AgentGrain/ClientContext)
+    public string? ToHandle { get; set; }           // Target handle (bare agent handle or "principalHandle:agentHandle")
+    public string? FromHandle { get; set; }         // Sender (auto-filled by AgentGrain/PrincipalGrain ingress)
     public string? OnBehalfOfHandle { get; set; }   // Original requester (for delegation)
     public string? DeliverToHandle { get; set; }    // Final delivery target
     public string? Channel { get; set; }            // Optional channel identifier
@@ -121,7 +120,7 @@ public static class SystemMessageTypes
 - `AgentGrain` sends `_status` heartbeats every 3 seconds during processing
 - Agents and tools should use `_thinking` for progress updates intended for users
 - On exception, sends `_error` to original sender then rethrows
-- `ChatDock` shows `_status` and `_thinking` as thinking/progress indicators, `_error` as an error message
+- WebSocket clients can show `_status` and `_thinking` as thinking/progress indicators, `_error` as an error message
 - Agent chat stream delivery ignores underscore-prefixed system messages before `OnMessage`/`OnMessageBusy`
 - System messages are NOT stored in chat history
 - Do not use non-prefixed message types such as `thinking` for FabrCore system/control traffic
@@ -129,16 +128,16 @@ public static class SystemMessageTypes
 
 ## Handle Routing
 
-Handles use the format `"userHandle:agentHandle"` (e.g., `"user1:assistant"`).
+Handles use the format `"principalHandle:agentHandle"` (e.g., `"principal1:assistant"`).
 
 ### HandleUtilities API
 
 ```csharp
-HandleUtilities.BuildPrefix("user1");                    // "user1:"
-HandleUtilities.EnsurePrefix("assistant", "user1:");     // "user1:assistant"
-HandleUtilities.EnsurePrefix("user2:assistant", "user1:"); // "user2:assistant" (unchanged)
-HandleUtilities.StripPrefix("user1:assistant", "user1:"); // "assistant"
-HandleUtilities.ParseHandle("user1:assistant");           // ("user1", "assistant")
+HandleUtilities.BuildPrefix("principal1");                         // "principal1:"
+HandleUtilities.EnsurePrefix("assistant", "principal1:");          // "principal1:assistant"
+HandleUtilities.EnsurePrefix("principal2:assistant", "principal1:"); // "principal2:assistant" (unchanged)
+HandleUtilities.StripPrefix("principal1:assistant", "principal1:"); // "assistant"
+HandleUtilities.ParseHandle("principal1:assistant");                // ("principal1", "assistant")
 HandleUtilities.ParseHandle("assistant");                 // ("", "assistant")
 ```
 
@@ -147,27 +146,26 @@ HandleUtilities.ParseHandle("assistant");                 // ("", "assistant")
 Agents and plugins can access their own handle components directly:
 
 ```csharp
-var full   = fabrcoreAgentHost.GetHandle();        // "user1:assistant"
-var userHandle  = fabrcoreAgentHost.GetUserHandle();   // "user1"
+var full   = fabrcoreAgentHost.GetHandle();             // "principal1:assistant"
+var principalHandle = fabrcoreAgentHost.GetUserHandle(); // "principal1"
 var agent  = fabrcoreAgentHost.GetAgentHandle();   // "assistant"
-var (o, a) = fabrcoreAgentHost.GetParsedHandle();  // ("user1", "assistant")
+var (principalHandle, agentHandle) = fabrcoreAgentHost.GetParsedHandle(); // ("principal1", "assistant")
 if (fabrcoreAgentHost.HasUserHandle()) { /* ... */ }
 ```
 
 ### Routing Rules
 
-- **Bare agent handle** (no colon, e.g., `"assistant"`) — auto-prefixed with caller's user handle
-- **Fully-qualified handle** (contains colon, e.g., `"user2:assistant"`) — used as-is for cross-user routing
+- **Bare agent handle** (no colon, e.g., `"assistant"`) — auto-prefixed with caller's principal handle
+- **Fully-qualified handle** (contains colon, e.g., `"principal2:assistant"`) — used as-is for cross-principal routing
 
 ### Where Resolution Happens
 
 - **AgentGrain** — `ResolveTargetHandle()` normalizes `ToHandle` in all messaging methods
-- **ChatDock** — Uses `HandleUtilities.EnsurePrefix` to build expected `FromHandle`
-- **DirectMessageSender** — Requires fully-qualified handles (throws on bare agent handle)
+- **Host HTTP/WebSocket ingress** — Uses `HandleUtilities.EnsurePrefix` to build expected `FromHandle`
 
 ## Messaging Patterns
 
-Two messaging methods available on both `IClientContext` and `IFabrCoreAgentHost`:
+Two messaging methods are available through `IFabrCoreAgentHost` and host ingress paths:
 
 | Method | Behavior | Preferred For |
 |--------|----------|---------------|
@@ -189,9 +187,9 @@ context.AgentMessageReceived += (sender, response) => { /* process */ };
 ```csharp
 var request = new AgentMessage { ToHandle = "analyst", Message = "Analyze this data" };
 var reply = await fabrcoreAgentHost.SendAndReceiveMessage(request);
-// Cross-user:
-var crossUserHandleRequest = new AgentMessage { ToHandle = "user2:analyst", Message = "Analyze this data" };
-var reply = await fabrcoreAgentHost.SendAndReceiveMessage(crossUserHandleRequest);
+// Cross-principal:
+var crossPrincipalHandleRequest = new AgentMessage { ToHandle = "principal2:analyst", Message = "Analyze this data" };
+var reply = await fabrcoreAgentHost.SendAndReceiveMessage(crossPrincipalHandleRequest);
 ```
 
 ### Events
@@ -395,7 +393,6 @@ return response;
 | `FabrCoreAgentProxy.InternalOnMessage` (your agent) | `FabrCore.Sdk.AgentProxy` | Runs inside the grain's Activity; your `ActivitySource.StartActivity(...)` auto-parents |
 | `WebSocketSession` | `FabrCore.Host.WebSocketSession` | Accepts upstream `traceparent` header, passes as `outerParent`, stamps responses |
 | `FabrCoreAgentService` (host-side fire-and-forget) | `FabrCore.Host.*` | Stamps outbound messages before `stream.OnNextAsync` |
-| `ClientContext.SendAndReceiveMessage` / `SendMessage` | `FabrCore.Client.ClientContext` | Wraps the call in an Activity (tags + metrics). **Does NOT auto-stamp the outbound `AgentMessage`** — if you need the receiving grain to parent its Activity on your client span via the message, call `message.StampFromActivity(Activity.Current)` yourself before sending. |
 
 ### Viewing spans (exporter setup)
 
@@ -407,11 +404,11 @@ For message-level observability (who sent what to whom, without needing an exter
 
 ### Overview
 
-The ACL system controls which clients can access agents under other user handles. By default, agents are scoped to their user handle.
+The ACL system controls which API clients and authenticated callers can access agents under other principal handles. By default, agents are scoped to their principal handle.
 
 ### Implicit Rules
 
-- **Same-user agent access is always allowed** — zero-overhead short-circuit
+- **Same-principal agent access is always allowed** — zero-overhead short-circuit
 - **Default seed rule:** If no rules configured, `system:* -> * -> Message,Read` is seeded
 
 ### ACL Rule Structure
@@ -419,7 +416,7 @@ The ACL system controls which clients can access agents under other user handles
 ```csharp
 public class AclRule
 {
-    public string UserHandlePattern { get; set; }   // Target agent's user handle
+    public string UserHandlePattern { get; set; }   // Target agent's principal handle
     public string AgentPattern { get; set; }   // Target agent's alias
     public string CallerPattern { get; set; }  // Who is allowed
     public AclPermission Permission { get; set; }
@@ -430,7 +427,7 @@ public class AclRule
 
 | Pattern | Matches | Example |
 |---------|---------|---------|
-| `"*"` | Anything | All user handles/agents/callers |
+| `"*"` | Anything | All principal handles/agents/callers |
 | `"prefix*"` | Starts-with | `"automation_*"` matches `"automation_agent-123"` |
 | `"group:name"` | Group members (CallerPattern only) | `"group:admins"` |
 | `"exact"` | Case-insensitive literal | `"system"` |
@@ -479,7 +476,7 @@ public enum AclPermission
 
 ### Evaluation Order
 
-1. **Same-user agent check** — caller == target user handle → allow with `All` permissions
+1. **Same-principal agent check** — caller == target principal handle → allow with `All` permissions
 2. **Rule scan** — first match wins
 3. **No match** → deny
 
@@ -487,20 +484,20 @@ public enum AclPermission
 
 | Method | Permission Required | Notes |
 |--------|-------------------|-------|
-| `SendAndReceiveMessage` | `Message` | Checked in ClientGrain |
-| `SendMessage` | `Message` | Checked in ClientGrain |
-| `CreateAgent` | `Configure` | Cross-user only |
+| `SendAndReceiveMessage` | `Message` | Checked in PrincipalGrain |
+| `SendMessage` | `Message` | Checked in PrincipalGrain |
+| `CreateAgent` | `Configure` | Cross-principal only |
 
 Agent-to-agent communication within the cluster is **trusted** and bypasses ACL.
 
-### Storage user handle partitioning
+### Storage principal handle partitioning
 
-Typed entity storage is not message routing, but it uses the same user handle discipline. The Storage API requires `x-user-handle`; that value is the user handle partition for `container/entityKey`. Treat it as an ACL boundary:
+Typed entity storage is not message routing, but it uses the same principal handle discipline. The Storage API requires `x-user-handle`; that value is the principal handle partition for `container/entityKey`. Treat it as an ACL boundary:
 
-- User data should use the user handle as `x-user-handle`.
-- Agent-associated shared data should use the owning agent/user partition deliberately.
-- The same `container/entityKey` can exist independently under different user handles.
-- Do not use user-handle-free Host `IFabrCoreStorageProvider` calls for user data; those are system-scoped.
+- Principal data should use the principal handle as `x-user-handle`.
+- Agent-associated shared data should deliberately use the owning agent or principal partition.
+- The same `container/entityKey` can exist independently under different principal handles.
+- Do not use principal-handle-free Host `IFabrCoreStorageProvider` calls for principal-scoped data; those are system-scoped.
 
 ### Custom ACL Provider
 
@@ -508,7 +505,7 @@ Typed entity storage is not message routing, but it uses the same user handle di
 public interface IAclProvider
 {
     Task<AclEvaluationResult> EvaluateAsync(
-        string callerUserHandle, string targetUserHandle, string agentHandle, AclPermission required);
+        string callerPrincipalHandle, string targetPrincipalHandle, string agentHandle, AclPermission required);
     Task<List<AclRule>> GetRulesAsync();
     Task AddRuleAsync(AclRule rule);
     Task RemoveRuleAsync(AclRule rule);

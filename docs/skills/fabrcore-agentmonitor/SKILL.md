@@ -630,7 +630,7 @@ builder.AddFabrCoreServer(options =>
 | Client receives a stream message | `MonitoredMessage` | Inbound | If present | Responses flowing back to clients |
 | Plugin sends via `IFabrCoreAgentHost` | `MonitoredMessage` | — | — | Captured at the receiving agent's `OnMessage` |
 | Agent-to-agent via `SendAndReceiveMessage` | `MonitoredMessage` | — | — | Captured at the target agent's `OnMessage` |
-| Agent receives an event (via `AgentGrain.ReceivedEventMessage` → `OnEvent`) | `MonitoredEvent` | Inbound | No | Captured inbound-only; events do not flow through `ClientGrain` |
+| Agent receives an event (via `AgentGrain.ReceivedEventMessage` → `OnEvent`) | `MonitoredEvent` | Inbound | No | Captured inbound-only; events do not flow through `PrincipalGrain` |
 | Agent `IChatClient.GetResponseAsync` call (from `OnMessage`) | `MonitoredLlmCall` | — | Yes | `OriginContext = OnMessage:<id>`; `ParentMessageId` correlates to the outbound `MonitoredMessage` |
 | Agent `IChatClient` call from `OnEvent` | `MonitoredLlmCall` | — | Yes | `OriginContext = OnEvent:<type>`; no `ParentMessageId` |
 | Agent `IChatClient` call from a timer / reminder tick | `MonitoredLlmCall` | — | Yes | `OriginContext = Timer:<name>` or `Reminder:<name>` (the harness also sends a synthetic `AgentMessage` via `OnMessage`, so calls land inside that scope) |

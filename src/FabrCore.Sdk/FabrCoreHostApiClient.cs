@@ -38,12 +38,12 @@ namespace FabrCore.Sdk
     }
 
     /// <summary>
-    /// Response from users list endpoint.
+    /// Response from principals list endpoint.
     /// </summary>
-    public class UsersListResponse
+    public class PrincipalsListResponse
     {
         public int Count { get; set; }
-        public List<AgentInfo> Users { get; set; } = new();
+        public List<AgentInfo> Principals { get; set; } = new();
     }
 
     /// <summary>
@@ -387,9 +387,9 @@ namespace FabrCore.Sdk
         Task<AgentsListResponse> GetAgentsAsync(string? status = null, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// Gets all users/client grains, optionally filtered by status.
+        /// Gets all principals, optionally filtered by status.
         /// </summary>
-        Task<UsersListResponse> GetUsersAsync(string? status = null, CancellationToken cancellationToken = default);
+        Task<PrincipalsListResponse> GetPrincipalsAsync(string? status = null, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Gets a specific agent by key.
@@ -842,14 +842,14 @@ namespace FabrCore.Sdk
             }
         }
 
-        public async Task<UsersListResponse> GetUsersAsync(string? status = null, CancellationToken cancellationToken = default)
+        public async Task<PrincipalsListResponse> GetPrincipalsAsync(string? status = null, CancellationToken cancellationToken = default)
         {
-            using var activity = ActivitySource.StartActivity("GetUsers", ActivityKind.Client);
+            using var activity = ActivitySource.StartActivity("GetPrincipals", ActivityKind.Client);
             activity?.SetTag("status.filter", status ?? "all");
 
             var url = string.IsNullOrEmpty(status)
-                ? $"{_baseUrl}/fabrcoreapi/Diagnostics/users"
-                : $"{_baseUrl}/fabrcoreapi/Diagnostics/users?status={status}";
+                ? $"{_baseUrl}/fabrcoreapi/Diagnostics/principals"
+                : $"{_baseUrl}/fabrcoreapi/Diagnostics/principals?status={status}";
             var startTime = Stopwatch.GetTimestamp();
 
             try
@@ -857,18 +857,18 @@ namespace FabrCore.Sdk
                 var response = await _httpClient.GetAsync(url, cancellationToken);
                 response.EnsureSuccessStatusCode();
 
-                var result = await response.Content.ReadFromJsonAsync<UsersListResponse>(JsonOptions, cancellationToken)
-                    ?? throw new InvalidOperationException("Failed to deserialize users list");
+                var result = await response.Content.ReadFromJsonAsync<PrincipalsListResponse>(JsonOptions, cancellationToken)
+                    ?? throw new InvalidOperationException("Failed to deserialize principals list");
 
-                RecordSuccess(activity, startTime, "GetUsers");
-                _logger.LogDebug("Retrieved {Count} users with status filter: {Status}", result.Count, status ?? "all");
+                RecordSuccess(activity, startTime, "GetPrincipals");
+                _logger.LogDebug("Retrieved {Count} principals with status filter: {Status}", result.Count, status ?? "all");
 
                 return result;
             }
             catch (Exception ex)
             {
-                RecordError(activity, startTime, "GetUsers", ex);
-                _logger.LogError(ex, "Failed to get users with status: {Status}", status);
+                RecordError(activity, startTime, "GetPrincipals", ex);
+                _logger.LogError(ex, "Failed to get principals with status: {Status}", status);
                 throw;
             }
         }

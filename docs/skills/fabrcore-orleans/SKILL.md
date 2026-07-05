@@ -229,13 +229,13 @@ When using the advanced path, you must register these providers:
 - **Streams** — Pub/sub messaging between grains. Used for chat and event delivery.
 - **Reminders** — Persistent timers surviving grain deactivation and silo restarts.
 - **Timers** — Non-persistent timers for periodic tasks within an active grain.
-- **Agent eviction** — FabrCore's hard-delete path unregisters timers/reminders, removes stream subscriptions, clears `AgentGrain` persistent state, removes registry/client-tracking entries, and calls `DeactivateOnIdle()`.
+- **Agent eviction** — FabrCore's hard-delete path unregisters timers/reminders, removes stream subscriptions, clears `AgentGrain` persistent state, removes registry/principal-tracking entries, and calls `DeactivateOnIdle()`.
 
 ### Deactivation vs Eviction
 
 Normal Orleans deactivation only removes an activation from memory. FabrCore still flushes pending chat/custom state and marks the agent deactivated in management so the virtual actor can be restored from persisted configuration later.
 
-Eviction is different: `IAgentGrain.EvictAgent()` is a destructive host operation exposed by `DELETE /fabrcoreapi/Agent/{handle}`. It uses `IPersistentState<AgentGrainState>.ClearStateAsync()`, unregisters all reminders via `GetReminders()`, unsubscribes stream handles created by the grain, skips normal deactivation flushes, removes management and client-tracking records, then deactivates the activation. If `OnMessage` is currently active, v1 returns `409 Conflict` rather than deleting under active execution.
+Eviction is different: `IAgentGrain.EvictAgent()` is a destructive host operation exposed by `DELETE /fabrcoreapi/Agent/{handle}`. It uses `IPersistentState<AgentGrainState>.ClearStateAsync()`, unregisters all reminders via `GetReminders()`, unsubscribes stream handles created by the grain, skips normal deactivation flushes, removes management and principal-tracking records, then deactivates the activation. If `OnMessage` is currently active, v1 returns `409 Conflict` rather than deleting under active execution.
 
 ## Typed Entity Storage and Orleans
 
@@ -246,7 +246,7 @@ Internal mapping:
 | FabrCore concept | Orleans storage mapping |
 |------------------|-------------------------|
 | Provider | Named provider `FabrCoreOrleansConstants.StorageProviderName` (`"fabrcoreStorage"`) |
-| User handle | First segment of the internal grain key |
+| Principal handle | First segment of the internal grain key |
 | Container | Orleans state name |
 | Entity key | Second segment of the internal grain key |
 | Value | FabrCore envelope containing `ValueJson`, `ValueType`, `CreatedUtc`, `UpdatedUtc` |
@@ -263,14 +263,14 @@ Persistence follows whatever Orleans storage is configured to do:
 When using the advanced Orleans path, make sure `FabrCoreOrleansConstants.StorageProviderName` is registered. Entity storage, agent state, client state, and management state all depend on this provider existing.
 
 Pitfalls:
-- Do not inject keyed `IGrainStorage` into SDK, client, agent, or plugin consumers. That leaks Orleans and bypasses FabrCore's userHandle/container/entityKey abstraction.
+- Do not inject keyed `IGrainStorage` into SDK, client, agent, or plugin consumers. That leaks Orleans and bypasses FabrCore's principalHandle/container/entityKey abstraction.
 - Orleans storage providers may enforce ETags, but FabrCore entity storage v1 is last-writer-wins and does not expose ETags.
-- The storage API is not Azure Table Storage. It has similar userHandle/container/entityKey semantics but no table query surface in v1.
+- The storage API is not Azure Table Storage. It has similar principalHandle/container/entityKey semantics but no table query surface in v1.
 - `container` becomes the Orleans state name, so keep it stable and use simple names such as `"preferences"`, `"workflow-checkpoints"`, or `"integration-cursors"`.
 
 ## Connection Resilience
 
-FabrCore.Client includes automatic retry with exponential backoff:
+External applications should connect through the Host HTTP/WebSocket APIs. Orleans gateway retry settings apply to server-side Orleans client usage:
 
 ```json
 {
@@ -284,21 +284,20 @@ FabrCore.Client includes automatic retry with exponential backoff:
 
 ## Data Flow
 
-### Message Flow (Client to Agent)
+### Message Flow (HTTP/WebSocket to Agent)
 
 ```
-Client (Blazor)
-  └─> ClientContext.SendMessage()
-        └─> ClientGrain (Orleans)
+External application
+  └─> Host HTTP/WebSocket endpoint
+        └─> PrincipalGrain (Orleans)
               └─> AgentGrain.ReceivedChatMessage()
                     └─> underscore-prefixed system messages are recorded and ignored
               └─> AgentGrain.OnMessage()
                     └─> FabrCoreAgentProxy.OnMessage()
                           └─> ChatClientAgent → LLM API Call
                           └─> AgentMessage.Response()
-              └─> Return to ClientGrain
-        └─> Observer callback to client
-  └─> UI Update
+              └─> Return to PrincipalGrain
+        └─> Observer/WebSocket callback when applicable
 ```
 
 ### Agent-to-Agent Communication

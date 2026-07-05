@@ -8,9 +8,9 @@ The feature proves integrity and provenance of execution evidence. It does not p
 
 ## Separation of Concerns
 
-| Concern | Owner |
+| Concern | Authority |
 |---|---|
-| Agent routing identity | FabrCore handles: `userHandle:agentHandle` |
+| Agent routing identity | FabrCore handles: `principalHandle:agentHandle` |
 | Agent type identity | `AgentConfiguration.AgentType` / `[AgentAlias]` |
 | Workload signer identity | `IVerifiableExecutionSigner` (`LocalCertificate`, `Certificate`, `Kms`, `Spiffe`, `Custom`) |
 | Authorization | FabrCore ACL/provider policy |

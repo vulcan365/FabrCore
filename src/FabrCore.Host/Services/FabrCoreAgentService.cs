@@ -41,8 +41,8 @@ namespace FabrCore.Host.Services
             var normalizedConfig = NormalizeServiceConfig(userHandle, config, nameof(config));
             var agentHandle = normalizedConfig.Handle!;
 
-            var clientGrain = _clusterClient.GetGrain<IClientGrain>(userHandle);
-            var health = await clientGrain.CreateAgent(normalizedConfig);
+            var principalGrain = _clusterClient.GetGrain<IPrincipalGrain>(userHandle);
+            var health = await principalGrain.CreateAgent(normalizedConfig);
 
             if (detailLevel != HealthDetailLevel.Basic)
             {
@@ -97,7 +97,7 @@ namespace FabrCore.Host.Services
             var normalizedConfigs = configs
                 .Select((config, index) => NormalizeBlueprintConfig(userHandle, config, index))
                 .ToList();
-            var clientGrain = _clusterClient.GetGrain<IClientGrain>(userHandle);
+            var principalGrain = _clusterClient.GetGrain<IPrincipalGrain>(userHandle);
             var results = new List<AgentHealthStatus>(normalizedConfigs.Count);
 
             foreach (var config in normalizedConfigs)
@@ -105,7 +105,7 @@ namespace FabrCore.Host.Services
                 var agentHandle = config.Handle!;
                 try
                 {
-                    var health = await clientGrain.CreateAgent(config);
+                    var health = await principalGrain.CreateAgent(config);
 
                     if (detailLevel != HealthDetailLevel.Basic)
                     {
@@ -286,23 +286,23 @@ namespace FabrCore.Host.Services
             var proxy = _clusterClient.GetGrain<IAgentGrain>(key);
             var result = await proxy.EvictAgent();
 
-            var clientTrackingRemoved = false;
+            var principalTrackingRemoved = false;
             try
             {
-                var clientGrain = _clusterClient.GetGrain<IClientGrain>(userHandle);
-                clientTrackingRemoved = await clientGrain.UntrackAgent(handle);
+                var principalGrain = _clusterClient.GetGrain<IPrincipalGrain>(userHandle);
+                principalTrackingRemoved = await principalGrain.UntrackAgent(handle);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Agent evicted but failed to remove client tracking for {UserHandle}:{Handle}",
+                _logger.LogError(ex, "Agent evicted but failed to remove principal tracking for {PrincipalHandle}:{Handle}",
                     userHandle, handle);
                 throw;
             }
 
             return result with
             {
-                ClientTrackingRemoved = clientTrackingRemoved,
-                Existed = result.Existed || clientTrackingRemoved
+                PrincipalTrackingRemoved = principalTrackingRemoved,
+                Existed = result.Existed || principalTrackingRemoved
             };
         }
 
@@ -330,11 +330,11 @@ namespace FabrCore.Host.Services
         public Task<bool> RemoveAgentAsync(string key)
             => _managementProvider.RemoveAgentAsync(key);
 
-        public Task RegisterClientAsync(string clientId)
-            => _managementProvider.RegisterClientAsync(clientId);
+        public Task RegisterPrincipalAsync(string principalHandle)
+            => _managementProvider.RegisterPrincipalAsync(principalHandle);
 
-        public Task DeactivateClientAsync(string clientId, string reason)
-            => _managementProvider.DeactivateClientAsync(clientId, reason);
+        public Task DeactivatePrincipalAsync(string principalHandle, string reason)
+            => _managementProvider.DeactivatePrincipalAsync(principalHandle, reason);
 
         // ── Diagnostics ──
 
@@ -347,13 +347,13 @@ namespace FabrCore.Host.Services
             return entry?.EntityType == EntityType.Agent ? entry : null;
         }
 
-        public Task<List<AgentInfo>> GetUsersAsync(string? status = null)
-            => _managementProvider.GetByEntityTypeAsync(EntityType.Client, ParseStatus(status));
+        public Task<List<AgentInfo>> GetPrincipalsAsync(string? status = null)
+            => _managementProvider.GetByEntityTypeAsync(EntityType.Principal, ParseStatus(status));
 
-        public async Task<AgentInfo?> GetUserInfoAsync(string handle)
+        public async Task<AgentInfo?> GetPrincipalInfoAsync(string handle)
         {
             var entry = await _managementProvider.GetByKeyAsync(handle);
-            return entry?.EntityType == EntityType.Client ? entry : null;
+            return entry?.EntityType == EntityType.Principal ? entry : null;
         }
 
         public Task<Dictionary<string, int>> GetAgentStatisticsAsync()

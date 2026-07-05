@@ -9,9 +9,9 @@ namespace FabrCore.Core.Interfaces
         Task DeactivateAgent(string key, string reason);
         Task<bool> RemoveAgent(string key);
 
-        // Client Registration
-        Task RegisterClient(string clientId);
-        Task DeactivateClient(string clientId, string reason);
+        // Principal Registration
+        Task RegisterPrincipal(string principalHandle);
+        Task DeactivatePrincipal(string principalHandle, string reason);
 
         // Queries
         Task<List<AgentInfo>> GetAllAgents();

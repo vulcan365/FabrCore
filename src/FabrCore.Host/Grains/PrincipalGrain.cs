@@ -27,99 +27,99 @@ using System.Threading.Tasks;
 
 namespace FabrCore.Host.Grains
 {
-    internal class ClientGrain : Grain, IClientGrain
+    internal class PrincipalGrain : Grain, IPrincipalGrain
     {
-        private static readonly ActivitySource ActivitySource = new("FabrCore.Host.ClientGrain");
-        private static readonly Meter Meter = new("FabrCore.Host.ClientGrain");
+        private static readonly ActivitySource ActivitySource = new("FabrCore.Host.PrincipalGrain");
+        private static readonly Meter Meter = new("FabrCore.Host.PrincipalGrain");
 
         // Metrics
-        private static readonly Counter<long> ClientActivatedCounter = Meter.CreateCounter<long>(
-            "fabrcore.client.activated",
-            description: "Number of clients activated");
+        private static readonly Counter<long> PrincipalActivatedCounter = Meter.CreateCounter<long>(
+            "fabrcore.principal.activated",
+            description: "Number of principals activated");
 
         private static readonly Counter<long> MessagesProcessedCounter = Meter.CreateCounter<long>(
-            "fabrcore.client.messages.processed",
-            description: "Number of messages processed by client");
+            "fabrcore.principal.messages.processed",
+            description: "Number of messages processed by principal");
 
         private static readonly Histogram<double> MessageProcessingDuration = Meter.CreateHistogram<double>(
-            "fabrcore.client.message.duration",
+            "fabrcore.principal.message.duration",
             unit: "ms",
-            description: "Duration of client message processing");
+            description: "Duration of principal message processing");
 
         private static readonly Counter<long> StreamMessagesCounter = Meter.CreateCounter<long>(
-            "fabrcore.client.stream.messages",
-            description: "Number of stream messages received by client");
+            "fabrcore.principal.stream.messages",
+            description: "Number of stream messages received by principal");
 
         private static readonly Counter<long> ObserverSubscriptionsCounter = Meter.CreateCounter<long>(
-            "fabrcore.client.observer.subscriptions",
+            "fabrcore.principal.observer.subscriptions",
             description: "Number of observer subscriptions");
 
         private static readonly Counter<long> ObserverNotificationsCounter = Meter.CreateCounter<long>(
-            "fabrcore.client.observer.notifications",
+            "fabrcore.principal.observer.notifications",
             description: "Number of observer notifications sent");
 
         private static readonly Counter<long> AgentsCreatedCounter = Meter.CreateCounter<long>(
-            "fabrcore.client.agents.created",
-            description: "Number of agents created by client");
+            "fabrcore.principal.agents.created",
+            description: "Number of agents created by principal");
 
         private static readonly Counter<long> ErrorCounter = Meter.CreateCounter<long>(
-            "fabrcore.client.errors",
-            description: "Number of errors encountered in client");
+            "fabrcore.principal.errors",
+            description: "Number of errors encountered in principal");
 
         private static readonly Counter<long> PendingMessagesQueuedCounter = Meter.CreateCounter<long>(
-            "fabrcore.client.pending.messages.queued",
+            "fabrcore.principal.pending.messages.queued",
             description: "Number of messages queued while waiting for observers");
 
         private static readonly Counter<long> PendingMessagesFlushedCounter = Meter.CreateCounter<long>(
-            "fabrcore.client.pending.messages.flushed",
+            "fabrcore.principal.pending.messages.flushed",
             description: "Number of pending messages flushed to observers");
 
         private readonly IClusterClient clusterClient;
-        private readonly ILogger<ClientGrain> logger;
+        private readonly ILogger<PrincipalGrain> logger;
         private readonly IFabrCoreAgentService _agentService;
         private readonly IAclProvider _aclProvider;
         private readonly IAgentMessageMonitor _messageMonitor;
         private readonly VerifiableExecutionRecorder _verifiableExecution;
-        private readonly ObserverManager<IClientGrainObserver> observerManager;
+        private readonly ObserverManager<IPrincipalGrainObserver> observerManager;
         private readonly Queue<AgentMessage> pendingMessages = new();
         private readonly Dictionary<string, TrackedAgentInfo> _trackedAgents = new();
-        private readonly IPersistentState<ClientGrainState> _state;
-        private readonly ClientGrainOptions _grainOptions;
+        private readonly IPersistentState<PrincipalGrainState> _state;
+        private readonly PrincipalGrainOptions _grainOptions;
 
-        public ClientGrain(
+        public PrincipalGrain(
             IClusterClient clusterClient,
             ILoggerFactory loggerFactory,
             IFabrCoreAgentService agentService,
             IAclProvider aclProvider,
             IAgentMessageMonitor messageMonitor,
             VerifiableExecutionRecorder verifiableExecution,
-            Microsoft.Extensions.Options.IOptions<ClientGrainOptions> grainOptions,
-            [PersistentState("clientState", FabrCoreOrleansConstants.StorageProviderName)]
-            IPersistentState<ClientGrainState> state)
+            Microsoft.Extensions.Options.IOptions<PrincipalGrainOptions> grainOptions,
+            [PersistentState("principalState", FabrCoreOrleansConstants.StorageProviderName)]
+            IPersistentState<PrincipalGrainState> state)
         {
             this.clusterClient = clusterClient;
-            this.logger = loggerFactory.CreateLogger<ClientGrain>();
+            this.logger = loggerFactory.CreateLogger<PrincipalGrain>();
             this._grainOptions = grainOptions.Value;
             _agentService = agentService;
             _aclProvider = aclProvider;
             _messageMonitor = messageMonitor;
             _verifiableExecution = verifiableExecution;
-            this.observerManager = new ObserverManager<IClientGrainObserver>(TimeSpan.FromMinutes(5), logger);
+            this.observerManager = new ObserverManager<IPrincipalGrainObserver>(TimeSpan.FromMinutes(5), logger);
             _state = state;
         }
 
-        public Task Subscribe(IClientGrainObserver observer)
+        public Task Subscribe(IPrincipalGrainObserver observer)
         {
             using var activity = ActivitySource.StartActivity("Subscribe", ActivityKind.Internal);
-            var clientId = this.GetPrimaryKeyString();
-            activity?.SetTag("client.id", clientId);
+            var principalHandle = this.GetPrimaryKeyString();
+            activity?.SetTag("principal.handle", principalHandle);
 
-            logger.LogInformation("Observer subscribing to client: {ClientId}", clientId);
+            logger.LogInformation("Observer subscribing to principal: {PrincipalHandle}", principalHandle);
 
             try
             {
                 observerManager.Subscribe(observer, observer);
-                logger.LogInformation("Observer subscribed to client: {ClientId}", clientId);
+                logger.LogInformation("Observer subscribed to principal: {PrincipalHandle}", principalHandle);
 
                 ObserverSubscriptionsCounter.Add(1,
                     new KeyValuePair<string, object?>("action", "subscribe"));
@@ -128,8 +128,8 @@ namespace FabrCore.Host.Grains
                 if (pendingMessages.Count > 0)
                 {
                     var messageCount = pendingMessages.Count;
-                    logger.LogInformation("Flushing {MessageCount} pending messages to observers - ClientId: {ClientId}",
-                        messageCount, clientId);
+                    logger.LogInformation("Flushing {MessageCount} pending messages to observers - PrincipalHandle: {PrincipalHandle}",
+                        messageCount, principalHandle);
 
                     while (pendingMessages.TryDequeue(out var message))
                     {
@@ -140,14 +140,14 @@ namespace FabrCore.Host.Grains
 
                     PendingMessagesFlushedCounter.Add(messageCount);
 
-                    logger.LogInformation("Finished flushing pending messages - ClientId: {ClientId}", clientId);
+                    logger.LogInformation("Finished flushing pending messages - PrincipalHandle: {PrincipalHandle}", principalHandle);
                 }
 
                 activity?.SetStatus(ActivityStatusCode.Ok);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error subscribing observer to client: {ClientId}", clientId);
+                logger.LogError(ex, "Error subscribing observer to principal: {PrincipalHandle}", principalHandle);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
                 ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "subscribe_failed"));
@@ -157,18 +157,18 @@ namespace FabrCore.Host.Grains
             return Task.CompletedTask;
         }
 
-        public Task Unsubscribe(IClientGrainObserver observer)
+        public Task Unsubscribe(IPrincipalGrainObserver observer)
         {
             using var activity = ActivitySource.StartActivity("Unsubscribe", ActivityKind.Internal);
-            var clientId = this.GetPrimaryKeyString();
-            activity?.SetTag("client.id", clientId);
+            var principalHandle = this.GetPrimaryKeyString();
+            activity?.SetTag("principal.handle", principalHandle);
 
-            logger.LogInformation("Observer unsubscribing from client: {ClientId}", clientId);
+            logger.LogInformation("Observer unsubscribing from principal: {PrincipalHandle}", principalHandle);
 
             try
             {
                 observerManager.Unsubscribe(observer);
-                logger.LogInformation("Observer unsubscribed from client: {ClientId}", clientId);
+                logger.LogInformation("Observer unsubscribed from principal: {PrincipalHandle}", principalHandle);
 
                 ObserverSubscriptionsCounter.Add(1,
                     new KeyValuePair<string, object?>("action", "unsubscribe"));
@@ -177,7 +177,7 @@ namespace FabrCore.Host.Grains
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error unsubscribing observer from client: {ClientId}", clientId);
+                logger.LogError(ex, "Error unsubscribing observer from principal: {PrincipalHandle}", principalHandle);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
                 ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "unsubscribe_failed"));
@@ -190,22 +190,22 @@ namespace FabrCore.Host.Grains
         public async Task<AgentMessage> SendAndReceiveMessage(AgentMessage request)
         {
             using var activity = ActivitySource.StartActivity("SendAndReceiveMessage", ActivityKind.Client);
-            var clientId = this.GetPrimaryKeyString();
+            var principalHandle = this.GetPrimaryKeyString();
 
-            // Resolve the ToHandle - if it contains ':', use as-is; otherwise prefix with client ID
-            var resolvedToHandle = ResolveAgentHandle(request.ToHandle, clientId);
+            // Resolve the ToHandle - if it contains ':', use as-is; otherwise prefix with principal handle
+            var resolvedToHandle = ResolveAgentHandle(request.ToHandle, principalHandle);
 
-            // ACL check for cross-user access
+            // ACL check for cross-principal access
             await AuthorizeOrThrow(resolvedToHandle, AclPermission.Message);
 
             // Defense-in-depth: ensure FromHandle is set so the agent can route responses back
             if (string.IsNullOrEmpty(request.FromHandle))
-                request.FromHandle = clientId;
+                request.FromHandle = principalHandle;
 
             activity?.SetTag("message.from", request.FromHandle);
             activity?.SetTag("message.to", resolvedToHandle);
-            activity?.SetTag("client.id", clientId);
-            activity?.SetTag("from.type", "Client");  // Client sending to agent
+            activity?.SetTag("principal.handle", principalHandle);
+            activity?.SetTag("from.type", "Principal");
             activity?.SetTag("to.type", "Agent");
 
             // Update the request with the resolved handle
@@ -213,11 +213,11 @@ namespace FabrCore.Host.Grains
             request.StampFromActivity(activity);
             request.VerifiableExecution = await RecordMessageEvidenceAsync(
                 ExecutionRecordKind.AgentDispatch,
-                clientId,
+                principalHandle,
                 request,
-                "client.message.request_response.dispatch");
+                "principal.message.request_response.dispatch");
 
-            logger.LogDebug("Client sending message - From: {FromHandle}, To: {ToHandle}",
+            logger.LogDebug("Principal sending message - From: {FromHandle}, To: {ToHandle}",
                 request.FromHandle, resolvedToHandle);
 
             var startTime = Stopwatch.GetTimestamp();
@@ -228,21 +228,21 @@ namespace FabrCore.Host.Grains
                 var response = await agentProxy.OnMessage(request);
 
                 var elapsed = Stopwatch.GetElapsedTime(startTime).TotalMilliseconds;
-                // message.from/to/client.id dropped — all unbounded handles. Retained on activity span.
+                // message.from/to/principal.handle dropped — all unbounded handles. Retained on activity span.
                 MessageProcessingDuration.Record(elapsed,
                     new KeyValuePair<string, object?>("message.kind", request.Kind.ToString()));
 
                 MessagesProcessedCounter.Add(1,
                     new KeyValuePair<string, object?>("message.kind", request.Kind.ToString()));
 
-                logger.LogDebug("Client message completed - Response received from: {ToHandle}", resolvedToHandle);
+                logger.LogDebug("Principal message completed - Response received from: {ToHandle}", resolvedToHandle);
                 activity?.SetStatus(ActivityStatusCode.Ok);
 
                 return response;
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error sending message from client - From: {FromHandle}, To: {ToHandle}",
+                logger.LogError(ex, "Error sending message from principal - From: {FromHandle}, To: {ToHandle}",
                     request.FromHandle, resolvedToHandle);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
@@ -254,22 +254,22 @@ namespace FabrCore.Host.Grains
         public async Task SendMessage(AgentMessage request)
         {
             using var activity = ActivitySource.StartActivity("SendMessage", ActivityKind.Producer);
-            var clientId = this.GetPrimaryKeyString();
+            var principalHandle = this.GetPrimaryKeyString();
 
-            // Resolve the ToHandle - if it contains ':', use as-is; otherwise prefix with client ID
-            var resolvedToHandle = ResolveAgentHandle(request.ToHandle, clientId);
+            // Resolve the ToHandle - if it contains ':', use as-is; otherwise prefix with principal handle
+            var resolvedToHandle = ResolveAgentHandle(request.ToHandle, principalHandle);
 
-            // ACL check for cross-user access
+            // ACL check for cross-principal access
             await AuthorizeOrThrow(resolvedToHandle, AclPermission.Message);
 
             // Defense-in-depth: ensure FromHandle is set so the agent can route responses back
             if (string.IsNullOrEmpty(request.FromHandle))
-                request.FromHandle = clientId;
+                request.FromHandle = principalHandle;
 
             activity?.SetTag("message.from", request.FromHandle);
             activity?.SetTag("message.to", resolvedToHandle);
-            activity?.SetTag("client.id", clientId);
-            activity?.SetTag("from.type", "Client");  // Client sending to agent
+            activity?.SetTag("principal.handle", principalHandle);
+            activity?.SetTag("from.type", "Principal");
             activity?.SetTag("to.type", "Agent");
             activity?.SetTag("stream.provider", StreamConstants.ProviderName);
             activity?.SetTag("stream.namespace", StreamConstants.AgentChatNamespace);
@@ -279,11 +279,11 @@ namespace FabrCore.Host.Grains
             request.StampFromActivity(activity);
             request.VerifiableExecution = await RecordMessageEvidenceAsync(
                 ExecutionRecordKind.AgentDispatch,
-                clientId,
+                principalHandle,
                 request,
-                "client.message.dispatch");
+                "principal.message.dispatch");
 
-            logger.LogTrace("Client sending message to stream - From: {FromHandle}, To: {ToHandle}",
+            logger.LogTrace("Principal sending message to stream - From: {FromHandle}, To: {ToHandle}",
                 request.FromHandle, resolvedToHandle);
 
             try
@@ -293,12 +293,12 @@ namespace FabrCore.Host.Grains
                 var stream = clusterClient.GetAgentChatStream(resolvedToHandle);
                 await stream.OnNextAsync(request);
 
-                logger.LogTrace("Client message sent to stream for: {ToHandle}", resolvedToHandle);
+                logger.LogTrace("Principal message sent to stream for: {ToHandle}", resolvedToHandle);
                 activity?.SetStatus(ActivityStatusCode.Ok);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error sending message to stream from client for: {ToHandle}", resolvedToHandle);
+                logger.LogError(ex, "Error sending message to stream from principal for: {ToHandle}", resolvedToHandle);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
                 ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "stream_send_failed"));
@@ -309,9 +309,9 @@ namespace FabrCore.Host.Grains
         public async Task SendEvent(EventMessage request)
         {
             using var activity = ActivitySource.StartActivity("SendEvent", ActivityKind.Producer);
-            var clientId = this.GetPrimaryKeyString();
+            var principalHandle = this.GetPrimaryKeyString();
 
-            activity?.SetTag("client.id", clientId);
+            activity?.SetTag("principal.handle", principalHandle);
             activity?.SetTag("event.source", request.Source);
             activity?.SetTag("event.type", request.Type);
             activity?.SetTag("stream.provider", StreamConstants.ProviderName);
@@ -321,9 +321,9 @@ namespace FabrCore.Host.Grains
                 if (string.IsNullOrWhiteSpace(request.Namespace))
                 {
                     // Default agent event stream — resolve handle from Channel
-                    var resolvedChannel = ResolveAgentHandle(request.Channel, clientId);
+                    var resolvedChannel = ResolveAgentHandle(request.Channel, principalHandle);
 
-                    // ACL check for cross-user event delivery
+                    // ACL check for cross-principal event delivery
                     await AuthorizeOrThrow(resolvedChannel, AclPermission.Message);
 
                     request.Channel = resolvedChannel;
@@ -337,23 +337,23 @@ namespace FabrCore.Host.Grains
                 request.StampFromActivity(activity);
                 request.VerifiableExecution = await RecordEventEvidenceAsync(
                     ExecutionRecordKind.EventPublished,
-                    clientId,
+                    principalHandle,
                     request,
-                    "client.event.published");
+                    "principal.event.published");
 
-                logger.LogTrace("Client sending event to stream - Source: {Source}, StreamName: {StreamName}",
+                logger.LogTrace("Principal sending event to stream - Source: {Source}, StreamName: {StreamName}",
                     request.Source, streamName);
 
                 var stream = clusterClient.GetStream<EventMessage>(streamName);
                 await stream.OnNextAsync(request);
 
-                logger.LogTrace("Client event sent to stream: {StreamName}", streamName);
+                logger.LogTrace("Principal event sent to stream: {StreamName}", streamName);
 
                 activity?.SetStatus(ActivityStatusCode.Ok);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error sending event from client - ClientId: {ClientId}", clientId);
+                logger.LogError(ex, "Error sending event from principal - PrincipalHandle: {PrincipalHandle}", principalHandle);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
                 ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "stream_event_send_failed"));
@@ -364,10 +364,10 @@ namespace FabrCore.Host.Grains
         public override async Task OnActivateAsync(CancellationToken cancellationToken)
         {
             using var activity = ActivitySource.StartActivity("OnActivateAsync", ActivityKind.Internal);
-            var clientId = this.GetPrimaryKeyString();
-            activity?.SetTag("client.id", clientId);
+            var principalHandle = this.GetPrimaryKeyString();
+            activity?.SetTag("principal.handle", principalHandle);
 
-            logger.LogInformation("Client activating: {ClientId}", clientId);
+            logger.LogInformation("Principal activating: {PrincipalHandle}", principalHandle);
 
             try
             {
@@ -380,8 +380,8 @@ namespace FabrCore.Host.Grains
                     {
                         _trackedAgents[kvp.Key] = kvp.Value;
                     }
-                    logger.LogInformation("Restored {Count} tracked agents for client: {ClientId}",
-                        _trackedAgents.Count, clientId);
+                    logger.LogInformation("Restored {Count} tracked agents for principal: {PrincipalHandle}",
+                        _trackedAgents.Count, principalHandle);
                 }
 
                 // Restore pending messages with age-based expiry check
@@ -395,8 +395,8 @@ namespace FabrCore.Host.Grains
                         var age = DateTime.UtcNow - persistedAt.Value;
                         if (age > _grainOptions.PendingMessageMaxAge)
                         {
-                            logger.LogWarning("Discarding {Count} stale pending messages for client {ClientId} - age: {Age}",
-                                _state.State.PendingMessages.Count, clientId, age);
+                            logger.LogWarning("Discarding {Count} stale pending messages for principal {PrincipalHandle} - age: {Age}",
+                                _state.State.PendingMessages.Count, principalHandle, age);
                             _state.State.PendingMessages.Clear();
                             _state.State.PendingMessagesPersisted = null;
                             shouldRestore = false;
@@ -409,23 +409,23 @@ namespace FabrCore.Host.Grains
                         {
                             pendingMessages.Enqueue(msg);
                         }
-                        logger.LogInformation("Restored {Count} pending messages for client: {ClientId}",
-                            pendingMessages.Count, clientId);
+                        logger.LogInformation("Restored {Count} pending messages for principal: {PrincipalHandle}",
+                            pendingMessages.Count, principalHandle);
                     }
                 }
 
                 await CreateStreams();
                 await RegisterWithManagement();
 
-                logger.LogInformation("Client activated and streams created: {ClientId}", clientId);
+                logger.LogInformation("Principal activated and streams created: {PrincipalHandle}", principalHandle);
 
-                ClientActivatedCounter.Add(1);
+                PrincipalActivatedCounter.Add(1);
 
                 activity?.SetStatus(ActivityStatusCode.Ok);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error activating client: {ClientId}", clientId);
+                logger.LogError(ex, "Error activating principal: {PrincipalHandle}", principalHandle);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
                 ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "activation_failed"));
@@ -435,9 +435,9 @@ namespace FabrCore.Host.Grains
 
         public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
         {
-            var clientId = this.GetPrimaryKeyString();
-            logger.LogInformation("Client deactivating: {ClientId}, Reason: {Reason}",
-                clientId, reason.Description);
+            var principalHandle = this.GetPrimaryKeyString();
+            logger.LogInformation("Principal deactivating: {PrincipalHandle}, Reason: {Reason}",
+                principalHandle, reason.Description);
 
             // Persist all state before deactivation
             try
@@ -457,21 +457,21 @@ namespace FabrCore.Host.Grains
                 _state.State.LastModified = DateTime.UtcNow;
                 await _state.WriteStateAsync();
 
-                logger.LogInformation("Persisted state on deactivation - ClientId: {ClientId}, TrackedAgents: {AgentCount}, PendingMessages: {MessageCount}",
-                    clientId, _trackedAgents.Count, pendingMessages.Count);
+                logger.LogInformation("Persisted state on deactivation - PrincipalHandle: {PrincipalHandle}, TrackedAgents: {AgentCount}, PendingMessages: {MessageCount}",
+                    principalHandle, _trackedAgents.Count, pendingMessages.Count);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to persist client state on deactivation: {ClientId}", clientId);
+                logger.LogError(ex, "Failed to persist principal state on deactivation: {PrincipalHandle}", principalHandle);
             }
 
             try
             {
-                await _agentService.DeactivateClientAsync(clientId, reason.Description);
+                await _agentService.DeactivatePrincipalAsync(principalHandle, reason.Description);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to deactivate client in registry: {ClientId}", clientId);
+                logger.LogError(ex, "Failed to deactivate principal in registry: {PrincipalHandle}", principalHandle);
             }
 
             await base.OnDeactivateAsync(reason, cancellationToken);
@@ -479,29 +479,29 @@ namespace FabrCore.Host.Grains
 
         private async Task RegisterWithManagement()
         {
-            var clientId = this.GetPrimaryKeyString();
+            var principalHandle = this.GetPrimaryKeyString();
             try
             {
-                await _agentService.RegisterClientAsync(clientId);
+                await _agentService.RegisterPrincipalAsync(principalHandle);
 
-                logger.LogInformation("Registered client with management provider: {ClientId}", clientId);
+                logger.LogInformation("Registered principal with management provider: {PrincipalHandle}", principalHandle);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to register client with management provider: {ClientId}", clientId);
+                logger.LogError(ex, "Failed to register principal with management provider: {PrincipalHandle}", principalHandle);
             }
         }
 
         private async Task CreateStreams()
         {
             using var activity = ActivitySource.StartActivity("CreateStreams", ActivityKind.Internal);
-            var clientId = this.GetPrimaryKeyString();
-            var streamName = StreamName.ForAgentChat(clientId);
+            var principalHandle = this.GetPrimaryKeyString();
+            var streamName = StreamName.ForAgentChat(principalHandle);
 
-            activity?.SetTag("client.id", clientId);
+            activity?.SetTag("principal.handle", principalHandle);
             activity?.SetTag("stream.name", streamName.ToString());
 
-            logger.LogDebug("Creating streams for client: {ClientId}", clientId);
+            logger.LogDebug("Creating streams for principal: {PrincipalHandle}", principalHandle);
 
             try
             {
@@ -509,26 +509,26 @@ namespace FabrCore.Host.Grains
                 var streamId = StreamId.Create(streamName.Namespace, streamName.Handle);
 
                 var handles = await stream.GetAllSubscriptionHandles();
-                logger.LogTrace("Found {HandleCount} existing subscription handles for client stream: {ClientId}",
-                    handles.Count, clientId);
+                logger.LogTrace("Found {HandleCount} existing subscription handles for principal stream: {PrincipalHandle}",
+                    handles.Count, principalHandle);
 
                 foreach (var handle in handles)
                 {
                     if (handle.StreamId == streamId)
                     {
                         await handle.UnsubscribeAsync();
-                        logger.LogTrace("Unsubscribed from existing handle for client: {ClientId}", clientId);
+                        logger.LogTrace("Unsubscribed from existing handle for principal: {PrincipalHandle}", principalHandle);
                     }
                 }
 
                 StreamSubscriptionHandle<AgentMessage> subscription = await stream.SubscribeAsync(ReceivedStreamingMessage);
-                logger.LogInformation("Client subscribed to stream: {StreamName}", streamName);
+                logger.LogInformation("Principal subscribed to stream: {StreamName}", streamName);
 
                 activity?.SetStatus(ActivityStatusCode.Ok);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error creating streams for client: {ClientId}", clientId);
+                logger.LogError(ex, "Error creating streams for principal: {PrincipalHandle}", principalHandle);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
                 ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "stream_creation_failed"));
@@ -538,7 +538,7 @@ namespace FabrCore.Host.Grains
 
         private Task<VerifiableExecutionEnvelope?> RecordMessageEvidenceAsync(
             ExecutionRecordKind kind,
-            string clientHandle,
+            string principalHandle,
             AgentMessage message,
             string subject)
         {
@@ -548,8 +548,8 @@ namespace FabrCore.Host.Grains
                 TraceId = message.TraceId,
                 SpanId = message.SpanId,
                 ParentSpanId = message.ParentSpanId,
-                UserHandle = clientHandle,
-                AgentHandle = clientHandle,
+                UserHandle = principalHandle,
+                AgentHandle = principalHandle,
                 Subject = subject,
                 PayloadHash = DigestText(JsonSerializer.Serialize(new
                 {
@@ -574,7 +574,7 @@ namespace FabrCore.Host.Grains
 
         private Task<VerifiableExecutionEnvelope?> RecordEventEvidenceAsync(
             ExecutionRecordKind kind,
-            string clientHandle,
+            string principalHandle,
             EventMessage message,
             string subject)
         {
@@ -584,8 +584,8 @@ namespace FabrCore.Host.Grains
                 TraceId = message.TraceId,
                 SpanId = message.SpanId,
                 ParentSpanId = message.ParentSpanId,
-                UserHandle = clientHandle,
-                AgentHandle = clientHandle,
+                UserHandle = principalHandle,
+                AgentHandle = principalHandle,
                 Subject = subject,
                 PayloadHash = DigestText(JsonSerializer.Serialize(new
                 {
@@ -616,27 +616,27 @@ namespace FabrCore.Host.Grains
         private Task ReceivedStreamingMessage(AgentMessage request, StreamSequenceToken? token = null)
         {
             using var activity = ActivitySource.StartActivity("ReceivedStreamingMessage", ActivityKind.Consumer);
-            var clientId = this.GetPrimaryKeyString();
+            var principalHandle = this.GetPrimaryKeyString();
 
-            activity?.SetTag("client.id", clientId);
+            activity?.SetTag("principal.handle", principalHandle);
             activity?.SetTag("message.from", request.FromHandle);
             activity?.SetTag("message.to", request.ToHandle);
-            activity?.SetTag("from.type", "Agent");  // Agent sending to client
-            activity?.SetTag("to.type", "Client");
+            activity?.SetTag("from.type", "Agent");  // Agent sending to principal
+            activity?.SetTag("to.type", "Principal");
             if (token != null)
             {
                 activity?.SetTag("stream.sequence", token.SequenceNumber);
             }
 
-            logger.LogInformation("Client received message - ClientId: {ClientId}, From: {FromHandle}",
-                clientId, request.FromHandle);
+            logger.LogInformation("Principal received message - PrincipalHandle: {PrincipalHandle}, From: {FromHandle}",
+                principalHandle, request.FromHandle);
 
             StreamMessagesCounter.Add(1);
 
-            // Record inbound message to client in the message monitor
+            // Record inbound message to principal in the message monitor
             _messageMonitor.RecordMessageAsync(new MonitoredMessage
             {
-                AgentHandle = clientId,
+                AgentHandle = principalHandle,
                 FromHandle = request.FromHandle,
                 ToHandle = request.ToHandle,
                 OnBehalfOfHandle = request.OnBehalfOfHandle,
@@ -655,7 +655,7 @@ namespace FabrCore.Host.Grains
                 VerifiableExecutionId = request.VerifiableExecution?.RecordId,
                 SignatureDigest = request.VerifiableExecution?.CurrentSignatureDigest,
                 VerificationStatus = request.VerifiableExecution?.SignerIdentityKind == VerifiableExecutionSignerIdentityKind.None ? "Unsigned" : "Signed"
-            }).TrackRecording(logger, ErrorCounter, "RecordMessage.ClientInbound", clientId);
+            }).TrackRecording(logger, ErrorCounter, "RecordMessage.PrincipalInbound", principalHandle);
 
             try
             {
@@ -663,8 +663,8 @@ namespace FabrCore.Host.Grains
                 if (observerManager.Count == 0)
                 {
                     pendingMessages.Enqueue(request);
-                    logger.LogInformation("No observers subscribed, message queued - ClientId: {ClientId}, QueueLength: {QueueLength}",
-                        clientId, pendingMessages.Count);
+                    logger.LogInformation("No observers subscribed, message queued - PrincipalHandle: {PrincipalHandle}, QueueLength: {QueueLength}",
+                        principalHandle, pendingMessages.Count);
 
                     PendingMessagesQueuedCounter.Add(1);
 
@@ -677,13 +677,13 @@ namespace FabrCore.Host.Grains
 
                     ObserverNotificationsCounter.Add(1);
 
-                    logger.LogInformation("Client observers notified - ClientId: {ClientId}", clientId);
+                    logger.LogInformation("Principal observers notified - PrincipalHandle: {PrincipalHandle}", principalHandle);
                     activity?.SetStatus(ActivityStatusCode.Ok);
                 }
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error processing streaming message for client: {ClientId}", clientId);
+                logger.LogError(ex, "Error processing streaming message for principal: {PrincipalHandle}", principalHandle);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
                 ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "observer_notification_failed"));
@@ -696,24 +696,24 @@ namespace FabrCore.Host.Grains
         public async Task<AgentHealthStatus> CreateAgent(AgentConfiguration agentConfiguration)
         {
             using var activity = ActivitySource.StartActivity("CreateAgent", ActivityKind.Internal);
-            var clientId = this.GetPrimaryKeyString();
+            var principalHandle = this.GetPrimaryKeyString();
             var originalHandle = agentConfiguration.Handle;
 
-            // Normalize handle to prevent double-prefixing (e.g., if caller passes "userHandle:agentHandle")
-            var handlePrefix = HandleUtilities.BuildPrefix(clientId);
+            // Normalize handle to prevent double-prefixing (e.g., if caller passes "principalHandle:agentHandle")
+            var handlePrefix = HandleUtilities.BuildPrefix(principalHandle);
             agentConfiguration.Handle = HandleUtilities.EnsurePrefix(
                 agentConfiguration.Handle ?? throw new ArgumentException("Handle is required"),
                 handlePrefix);
 
-            // ACL check for cross-user agent creation
+            // ACL check for cross-principal agent creation
             await AuthorizeOrThrow(agentConfiguration.Handle, AclPermission.Configure);
 
-            activity?.SetTag("client.id", clientId);
+            activity?.SetTag("principal.handle", principalHandle);
             activity?.SetTag("agent.handle", agentConfiguration.Handle);
             activity?.SetTag("agent.type", agentConfiguration.AgentType);
 
-            logger.LogInformation("Client creating agent - ClientId: {ClientId}, AgentType: {AgentType}, Handle: {Handle}",
-                clientId, agentConfiguration.AgentType, agentConfiguration.Handle);
+            logger.LogInformation("Principal creating agent - PrincipalHandle: {PrincipalHandle}, AgentType: {AgentType}, Handle: {Handle}",
+                principalHandle, agentConfiguration.AgentType, agentConfiguration.Handle);
 
             try
             {
@@ -744,23 +744,23 @@ namespace FabrCore.Host.Grains
                     _state.State.LastModified = DateTime.UtcNow;
                     await _state.WriteStateAsync();
 
-                    logger.LogDebug("Persisted tracked agent - ClientId: {ClientId}, Handle: {Handle}",
-                        clientId, agentConfiguration.Handle);
+                    logger.LogDebug("Persisted tracked agent - PrincipalHandle: {PrincipalHandle}, Handle: {Handle}",
+                        principalHandle, agentConfiguration.Handle);
 
                     AgentsCreatedCounter.Add(1,
                         new KeyValuePair<string, object?>("agent.type", agentConfiguration.AgentType));
                 }
 
-                logger.LogInformation("Client agent ready - ClientId: {ClientId}, Handle: {Handle}, State: {State}",
-                    clientId, agentConfiguration.Handle, health.State);
+                logger.LogInformation("Principal agent ready - PrincipalHandle: {PrincipalHandle}, Handle: {Handle}, State: {State}",
+                    principalHandle, agentConfiguration.Handle, health.State);
 
                 activity?.SetStatus(ActivityStatusCode.Ok);
                 return health;
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error creating agent for client - ClientId: {ClientId}, AgentType: {AgentType}",
-                    clientId, agentConfiguration.AgentType);
+                logger.LogError(ex, "Error creating agent for principal - PrincipalHandle: {PrincipalHandle}, AgentType: {AgentType}",
+                    principalHandle, agentConfiguration.AgentType);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
                 ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "agent_creation_failed"));
@@ -771,34 +771,34 @@ namespace FabrCore.Host.Grains
         public async Task<AgentHealthStatus> ResetAgent(string handle)
         {
             using var activity = ActivitySource.StartActivity("ResetAgent", ActivityKind.Internal);
-            var clientId = this.GetPrimaryKeyString();
+            var principalHandle = this.GetPrimaryKeyString();
 
-            var resolvedHandle = ResolveAgentHandle(handle, clientId);
+            var resolvedHandle = ResolveAgentHandle(handle, principalHandle);
 
             // ACL check — reset requires Configure permission
             await AuthorizeOrThrow(resolvedHandle, AclPermission.Configure);
 
-            activity?.SetTag("client.id", clientId);
+            activity?.SetTag("principal.handle", principalHandle);
             activity?.SetTag("agent.handle", resolvedHandle);
 
-            logger.LogInformation("Client resetting agent - ClientId: {ClientId}, Handle: {Handle}",
-                clientId, resolvedHandle);
+            logger.LogInformation("Principal resetting agent - PrincipalHandle: {PrincipalHandle}, Handle: {Handle}",
+                principalHandle, resolvedHandle);
 
             try
             {
                 var agentGrain = clusterClient.GetGrain<IAgentGrain>(resolvedHandle);
                 var health = await agentGrain.ResetAgent();
 
-                logger.LogInformation("Agent reset completed - ClientId: {ClientId}, Handle: {Handle}, State: {State}",
-                    clientId, resolvedHandle, health.State);
+                logger.LogInformation("Agent reset completed - PrincipalHandle: {PrincipalHandle}, Handle: {Handle}, State: {State}",
+                    principalHandle, resolvedHandle, health.State);
                 activity?.SetStatus(ActivityStatusCode.Ok);
 
                 return health;
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to reset agent - ClientId: {ClientId}, Handle: {Handle}",
-                    clientId, resolvedHandle);
+                logger.LogError(ex, "Failed to reset agent - PrincipalHandle: {PrincipalHandle}, Handle: {Handle}",
+                    principalHandle, resolvedHandle);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
                 ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "reset_failed"));
@@ -808,8 +808,8 @@ namespace FabrCore.Host.Grains
 
         public async Task<bool> UntrackAgent(string handle)
         {
-            var clientId = this.GetPrimaryKeyString();
-            var resolvedHandle = ResolveAgentHandle(handle, clientId);
+            var principalHandle = this.GetPrimaryKeyString();
+            var resolvedHandle = ResolveAgentHandle(handle, principalHandle);
 
             await AuthorizeOrThrow(resolvedHandle, AclPermission.Configure);
 
@@ -821,13 +821,13 @@ namespace FabrCore.Host.Grains
                 _state.State.LastModified = DateTime.UtcNow;
                 await _state.WriteStateAsync();
 
-                logger.LogInformation("Removed tracked agent - ClientId: {ClientId}, Handle: {Handle}",
-                    clientId, resolvedHandle);
+                logger.LogInformation("Removed tracked agent - PrincipalHandle: {PrincipalHandle}, Handle: {Handle}",
+                    principalHandle, resolvedHandle);
             }
             else
             {
-                logger.LogInformation("Tracked agent not present during removal - ClientId: {ClientId}, Handle: {Handle}",
-                    clientId, resolvedHandle);
+                logger.LogInformation("Tracked agent not present during removal - PrincipalHandle: {PrincipalHandle}, Handle: {Handle}",
+                    principalHandle, resolvedHandle);
             }
 
             return removed || stateRemoved;
@@ -912,8 +912,8 @@ namespace FabrCore.Host.Grains
 
         public Task<bool> IsAgentTracked(string handle)
         {
-            var clientId = this.GetPrimaryKeyString();
-            var fullHandle = ResolveAgentHandle(handle, clientId);
+            var principalHandle = this.GetPrimaryKeyString();
+            var fullHandle = ResolveAgentHandle(handle, principalHandle);
 
             // O(1) dictionary lookup
             return Task.FromResult(_trackedAgents.ContainsKey(fullHandle));
@@ -921,19 +921,19 @@ namespace FabrCore.Host.Grains
 
         public async Task<List<AgentInfo>> GetAccessibleSharedAgents()
         {
-            var clientId = this.GetPrimaryKeyString();
+            var principalHandle = this.GetPrimaryKeyString();
             var allAgents = await _agentService.GetAgentsAsync("active");
             var accessible = new List<AgentInfo>();
 
             foreach (var agent in allAgents)
             {
-                var (targetUserHandle, agentHandle) = HandleUtilities.ParseHandle(agent.Key);
+                var (targetPrincipalHandle, agentHandle) = HandleUtilities.ParseHandle(agent.Key);
 
                 // Skip own agents (already tracked via GetTrackedAgents)
-                if (string.Equals(clientId, targetUserHandle, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(principalHandle, targetPrincipalHandle, StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                var result = await _aclProvider.EvaluateAsync(clientId, targetUserHandle, agentHandle, AclPermission.Message);
+                var result = await _aclProvider.EvaluateAsync(principalHandle, targetPrincipalHandle, agentHandle, AclPermission.Message);
                 if (result.Allowed)
                     accessible.Add(agent);
             }
@@ -942,40 +942,40 @@ namespace FabrCore.Host.Grains
         }
 
         /// <summary>
-        /// Checks ACL permissions for cross-user access. Own-agent access is always allowed.
+        /// Checks ACL permissions for cross-principal access. Own-agent access is always allowed.
         /// </summary>
         private async Task AuthorizeOrThrow(string targetHandle, AclPermission required)
         {
-            var clientId = this.GetPrimaryKeyString();
-            var (targetUserHandle, agentHandle) = HandleUtilities.ParseHandle(targetHandle);
+            var principalHandle = this.GetPrimaryKeyString();
+            var (targetPrincipalHandle, agentHandle) = HandleUtilities.ParseHandle(targetHandle);
 
             // Own agents always allowed — short-circuit with zero overhead
-            if (string.Equals(clientId, targetUserHandle, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(principalHandle, targetPrincipalHandle, StringComparison.OrdinalIgnoreCase))
                 return;
 
-            var result = await _aclProvider.EvaluateAsync(clientId, targetUserHandle, agentHandle, required);
+            var result = await _aclProvider.EvaluateAsync(principalHandle, targetPrincipalHandle, agentHandle, required);
             if (!result.Allowed)
             {
-                logger.LogWarning("ACL denied: '{ClientId}' cannot {Permission} on '{TargetHandle}'. {Reason}",
-                    clientId, required, targetHandle, result.DeniedReason);
+                logger.LogWarning("ACL denied: '{PrincipalHandle}' cannot {Permission} on '{TargetHandle}'. {Reason}",
+                    principalHandle, required, targetHandle, result.DeniedReason);
                 throw new UnauthorizedAccessException(
-                    $"Access denied: '{clientId}' cannot {required} on '{targetHandle}'. {result.DeniedReason}");
+                    $"Access denied: '{principalHandle}' cannot {required} on '{targetHandle}'. {result.DeniedReason}");
             }
 
-            logger.LogDebug("ACL granted: '{ClientId}' can {Permission} on '{TargetHandle}'",
-                clientId, required, targetHandle);
+            logger.LogDebug("ACL granted: '{PrincipalHandle}' can {Permission} on '{TargetHandle}'",
+                principalHandle, required, targetHandle);
         }
 
         /// <summary>
         /// Resolves an agent handle. If it contains ':', uses as-is (already qualified).
-        /// Otherwise, prefixes with the client ID.
+        /// Otherwise, prefixes with the principal handle.
         /// </summary>
-        private static string ResolveAgentHandle(string? handle, string clientId)
+        private static string ResolveAgentHandle(string? handle, string principalHandle)
         {
             if (string.IsNullOrEmpty(handle))
                 throw new ArgumentException("Handle cannot be null or empty", nameof(handle));
 
-            var prefix = HandleUtilities.BuildPrefix(clientId);
+            var prefix = HandleUtilities.BuildPrefix(principalHandle);
             return HandleUtilities.EnsurePrefix(handle, prefix);
         }
     }

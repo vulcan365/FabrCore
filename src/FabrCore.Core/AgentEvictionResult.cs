@@ -36,7 +36,7 @@ namespace FabrCore.Core
         public bool RegistryRemoved { get; init; }
 
         [Id(9)]
-        public bool ClientTrackingRemoved { get; init; }
+        public bool PrincipalTrackingRemoved { get; init; }
 
         [Id(10)]
         public required DateTime Timestamp { get; init; }

@@ -19,7 +19,7 @@ Use this skill when working on the verifiable execution feature in FabrCore. The
 
 - Verifiable execution records what happened and signs a chained timeline.
 - SPIFFE identifies the workload that signs evidence; it does not identify individual FabrCore agents and does not observe DB/API side effects by itself.
-- FabrCore agent identity remains `userHandle:agentHandle` plus `AgentConfiguration.AgentType` / `[AgentAlias]`.
+- FabrCore agent identity remains `principalHandle:agentHandle` plus `AgentConfiguration.AgentType` / `[AgentAlias]`.
 - The signed record binds FabrCore identity (`UserHandle`, `AgentHandle`, `AgentType`) to workload signer identity (`IVerifiableExecutionSigner.SignerIdentity`).
 - Default value path: unsigned/off -> local certificate signer -> customer cert/KMS/HSM -> SPIFFE/SVID for cross-cluster or zero-trust deployments.
 

@@ -17,7 +17,7 @@ Do not describe level 1 or level 2 as "SPIFFE setup." That makes the feature sou
 
 ## Do Not Confuse Identities
 
-- `userHandle:agentHandle` identifies a FabrCore agent.
+- `principalHandle:agentHandle` identifies a FabrCore agent.
 - `[AgentAlias]` / `AgentConfiguration.AgentType` identifies code/config type.
 - SPIFFE identifies a workload/process/pod/service.
 

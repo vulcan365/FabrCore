@@ -363,13 +363,13 @@ namespace FabrCore.Host
                 builder.Services.AddSingleton(typeof(IAclProvider), options.AclProviderType);
                 logger.LogDebug("AclProvider added: {ProviderType}", options.AclProviderType.Name);
 
-                // Bind tunable options (see FabrCoreHostOptions / AgentGrainOptions / ClientGrainOptions).
+                // Bind tunable options (see FabrCoreHostOptions / AgentGrainOptions / PrincipalGrainOptions).
                 builder.Services.Configure<Configuration.FabrCoreHostOptions>(
                     builder.Configuration.GetSection(Configuration.FabrCoreHostOptions.SectionName));
                 builder.Services.Configure<Configuration.AgentGrainOptions>(
                     builder.Configuration.GetSection(Configuration.AgentGrainOptions.SectionName));
-                builder.Services.Configure<Configuration.ClientGrainOptions>(
-                    builder.Configuration.GetSection(Configuration.ClientGrainOptions.SectionName));
+                builder.Services.Configure<Configuration.PrincipalGrainOptions>(
+                    builder.Configuration.GetSection(Configuration.PrincipalGrainOptions.SectionName));
 
                 // Pluggable WebSocket authenticator. Default preserves legacy header/query behavior;
                 // production apps override via AddFabrCoreServices().Services.AddSingleton<IWebSocketAuthenticator, MyAuthN>().

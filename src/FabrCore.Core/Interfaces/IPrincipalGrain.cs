@@ -3,10 +3,10 @@ using Orleans.Concurrency;
 
 namespace FabrCore.Core.Interfaces
 {
-    internal interface IClientGrain : IGrainWithStringKey
+    internal interface IPrincipalGrain : IGrainWithStringKey
     {
-        Task Subscribe(IClientGrainObserver observer);
-        Task Unsubscribe(IClientGrainObserver observer);
+        Task Subscribe(IPrincipalGrainObserver observer);
+        Task Unsubscribe(IPrincipalGrainObserver observer);
         Task<AgentMessage> SendAndReceiveMessage(AgentMessage request);
         Task SendMessage(AgentMessage request);
 
@@ -29,7 +29,7 @@ namespace FabrCore.Core.Interfaces
 
         /// <summary>
         /// Resets an agent's state and reconfigures it.
-        /// Requires Configure permission for cross-user agents.
+        /// Requires Configure permission for cross-principal agents.
         /// </summary>
         /// <param name="handle">The agent handle.</param>
         /// <returns>Health status after reset.</returns>
@@ -37,13 +37,13 @@ namespace FabrCore.Core.Interfaces
         Task<AgentHealthStatus> ResetAgent(string handle);
 
         /// <summary>
-        /// Removes an agent from this client's tracked-agent list.
+        /// Removes an agent from this principal's tracked-agent list.
         /// </summary>
         [AlwaysInterleave]
         Task<bool> UntrackAgent(string handle);
 
         /// <summary>
-        /// Gets the list of agents created by this client.
+        /// Gets the list of agents created by this principal.
         /// </summary>
         /// <param name="activate">When true, activates each tracked agent by querying health and includes the health result on each returned item.</param>
         /// <returns>List of tracked agents with handle and type.</returns>
@@ -51,17 +51,17 @@ namespace FabrCore.Core.Interfaces
         Task<List<TrackedAgentInfo>> GetTrackedAgents(bool activate = false);
 
         /// <summary>
-        /// Checks if an agent with the specified handle is tracked by this client.
+        /// Checks if an agent with the specified handle is tracked by this principal.
         /// More efficient than GetTrackedAgents() when only checking existence.
         /// </summary>
-        /// <param name="handle">The agent handle (without client prefix).</param>
+        /// <param name="handle">The agent handle (without principal prefix).</param>
         /// <returns>True if the agent is tracked, false otherwise.</returns>
         [AlwaysInterleave]
         Task<bool> IsAgentTracked(string handle);
 
         /// <summary>
-        /// Gets shared agents that this client has permission to access (via ACL).
-        /// Returns agents under other user handles where the caller has at least Message permission.
+        /// Gets shared agents that this principal has permission to access (via ACL).
+        /// Returns agents under other principal handles where the caller has at least Message permission.
         /// </summary>
         [AlwaysInterleave]
         Task<List<AgentInfo>> GetAccessibleSharedAgents();

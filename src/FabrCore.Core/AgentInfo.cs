@@ -11,7 +11,7 @@ namespace FabrCore.Core
     public enum EntityType
     {
         Agent,
-        Client
+        Principal
     }
 
     [GenerateSerializer]

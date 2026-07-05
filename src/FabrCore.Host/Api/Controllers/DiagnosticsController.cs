@@ -66,49 +66,49 @@ namespace FabrCore.Host.Api.Controllers
             }
         }
 
-        [HttpGet("users")]
-        public async Task<IActionResult> GetAllUsers([FromQuery] string? status = null)
+        [HttpGet("principals")]
+        public async Task<IActionResult> GetAllPrincipals([FromQuery] string? status = null)
         {
             try
             {
-                var users = await _agentService.GetUsersAsync(status);
+                var principals = await _agentService.GetPrincipalsAsync(status);
 
-                _logger.LogInformation("Retrieved {Count} users with status filter: {Status}",
-                    users.Count, status ?? "all");
+                _logger.LogInformation("Retrieved {Count} principals with status filter: {Status}",
+                    principals.Count, status ?? "all");
 
                 return Ok(new
                 {
-                    Count = users.Count,
-                    Users = users
+                    Count = principals.Count,
+                    Principals = principals
                 });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error retrieving users with status: {Status}", status);
-                return StatusCode(500, new { Error = "Failed to retrieve users", Message = ex.Message });
+                _logger.LogError(ex, "Error retrieving principals with status: {Status}", status);
+                return StatusCode(500, new { Error = "Failed to retrieve principals", Message = ex.Message });
             }
         }
 
-        [HttpGet("users/{handle}")]
-        public async Task<IActionResult> GetUser(string handle)
+        [HttpGet("principals/{handle}")]
+        public async Task<IActionResult> GetPrincipal(string handle)
         {
             try
             {
-                var user = await _agentService.GetUserInfoAsync(handle);
+                var principal = await _agentService.GetPrincipalInfoAsync(handle);
 
-                if (user == null)
+                if (principal == null)
                 {
-                    _logger.LogWarning("User not found in registry: {Handle}", handle);
-                    return NotFound(new { Message = $"User '{handle}' not found in registry" });
+                    _logger.LogWarning("Principal not found in registry: {Handle}", handle);
+                    return NotFound(new { Message = $"Principal '{handle}' not found in registry" });
                 }
 
-                _logger.LogInformation("Retrieved user info for: {Handle}", handle);
-                return Ok(user);
+                _logger.LogInformation("Retrieved principal info for: {Handle}", handle);
+                return Ok(principal);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error retrieving user: {Handle}", handle);
-                return StatusCode(500, new { Error = "Failed to retrieve user", Message = ex.Message });
+                _logger.LogError(ex, "Error retrieving principal: {Handle}", handle);
+                return StatusCode(500, new { Error = "Failed to retrieve principal", Message = ex.Message });
             }
         }
 

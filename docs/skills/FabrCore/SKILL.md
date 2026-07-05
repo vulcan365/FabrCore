@@ -7,8 +7,7 @@ description: >
   For specific topics use the specialized skills:
   fabrcore-agent (agent development), fabrcore-agentframework (Microsoft Agent Framework),
   fabrcore-plugins-tools (plugins/tools), fabrcore-server (server setup),
-  fabrcore-orleans (Orleans configuration), fabrcore-client (Blazor client),
-  fabrcore-chatdock (ChatDock component), fabrcore-messaging (messaging/ACL),
+  fabrcore-orleans (Orleans configuration), fabrcore-messaging (messaging/ACL),
   fabrcore-mcp (MCP integration), fabrcore-spiffe (verifiable execution, signed evidence,
   optional SPIFFE/SVID signing, trust bundles, evidence stores, attested external effects).
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
@@ -35,10 +34,9 @@ Build distributed AI agent systems with FabrCore — an open-source .NET 10 fram
 | Registry Metadata | Capabilities & notes | `[FabrCoreCapabilities]`, `[FabrCoreNote]` | fabrcore-agent, fabrcore-plugins-tools |
 | Server/Host | Orleans silo + REST API | `AddFabrCoreServer()`, `UseTimeProvider(...)` | fabrcore-server (includes full REST API docs with I/O models) |
 | Orleans | Distributed runtime | Clustering, Persistence, `TimeProvider` | fabrcore-orleans |
-| Client | Blazor UI + Orleans client | `AddFabrCoreClient()` | fabrcore-client |
-| Entity Storage | Typed key/value app data | `IFabrCoreStorageProvider`, `FabrCore.Sdk.IFabrCoreHostApiClient` | fabrcore-client, fabrcore-server, fabrcore-orleans |
-| ChatDock | Floating icon → chat overlay | `<ChatDock>` component | fabrcore-chatdock |
-| Handle Access | User handle/agent handle parsing | `IFabrCoreAgentHost.GetUserHandle()`, `GetAgentHandle()` | fabrcore-agent |
+| API Client | HTTP client access | `FabrCore.Sdk.IFabrCoreHostApiClient` | fabrcore-server |
+| Entity Storage | Typed key/value app data | `IFabrCoreStorageProvider`, `FabrCore.Sdk.IFabrCoreHostApiClient` | fabrcore-server, fabrcore-orleans |
+| Handle Access | Principal handle/agent handle parsing | `IFabrCoreAgentHost.GetUserHandle()`, `GetAgentHandle()` | fabrcore-agent |
 | Messaging | Agent communication | `AgentMessage`, `HandleUtilities` | fabrcore-messaging |
 | MCP | External tool protocol | `McpServerConfig` | fabrcore-mcp |
 | Configuration | Agent definition | `AgentConfiguration` | fabrcore-server |
@@ -51,11 +49,9 @@ FabrCore layers on top of Orleans (distributed actor model) and Microsoft.Extens
 
 ```
 ┌─────────────────────────────────────────────┐
-│  Client Layer (Blazor Server)               │
-│  ChatDock, ClientContext, DirectMessage      │
-├─────────────────────────────────────────────┤
 │  Host Layer (Orleans Silo + ASP.NET Core)   │
-│  AgentGrain, REST API, WebSocket, Streams   │
+│  AgentGrain, PrincipalGrain, REST API       │
+│  WebSocket, Streams                         │
 ├─────────────────────────────────────────────┤
 │  SDK Layer                                  │
 │  FabrCoreAgentProxy, Plugins, Tools, MCP    │
@@ -65,10 +61,9 @@ FabrCore layers on top of Orleans (distributed actor model) and Microsoft.Extens
 └─────────────────────────────────────────────┘
 ```
 
-- **FabrCore.Core** — Interfaces (`IAgentGrain`, `IClientGrain`), models (`AgentConfiguration`, `AgentMessage`, `EventMessage`, `AgentHealthStatus`, `AgentEvictionResult`), verifiable execution contracts, Orleans surrogates
+- **FabrCore.Core** — Interfaces (`IAgentGrain`, `IPrincipalGrain`), models (`AgentConfiguration`, `AgentMessage`, `EventMessage`, `AgentHealthStatus`, `AgentEvictionResult`), verifiable execution contracts, Orleans surrogates
 - **FabrCore.Sdk** — Agent base class (`FabrCoreAgentProxy`), plugin system, tool registry, chat client factory, MCP integration, compaction, state persistence, Host API client, typed entity storage contracts, blueprint ensure client types, LLM evidence integration
-- **FabrCore.Host** — Orleans grains (`AgentGrain`, `ClientGrain`), REST API controllers, streaming, WebSocket, agent service, verifiable execution recording/signing/verification
-- **FabrCore.Client** — Blazor components (`ChatDock`), `ClientContext`/`ClientContextFactory`, Orleans client configuration
+- **FabrCore.Host** — Orleans grains (`AgentGrain`, `PrincipalGrain`), REST API controllers, streaming, WebSocket, agent service, verifiable execution recording/signing/verification
 
 ## Prerequisites
 
@@ -81,11 +76,6 @@ FabrCore layers on top of Orleans (distributed actor model) and Microsoft.Extens
 For the server (Orleans silo):
 ```
 dotnet add package FabrCore.Host
-```
-
-For the client (Blazor UI):
-```
-dotnet add package FabrCore.Client
 ```
 
 For agents (class library):
@@ -101,7 +91,6 @@ Create `fabrcore.json` in the server project root with your LLM provider configu
 using FabrCore.Core;          // AgentMessage, AgentConfiguration, MessageKind
 using FabrCore.Core.Acl;      // IAclProvider, AclRule, AclPermission
 using FabrCore.Sdk;           // FabrCoreAgentProxy, StateReadResult, IFabrCoreAgentHost, IFabrCorePlugin, IFabrCoreStorageProvider, IFabrCoreHostApiClient
-using FabrCore.Client;        // IClientContextFactory, IClientContext
 using FabrCore.Host;          // AddFabrCoreServer, UseFabrCoreServer, FabrCoreServerOptions
 using Microsoft.Agents.AI;    // AIAgent, AgentSession, ChatClientAgent
 using Microsoft.Extensions.AI; // ChatMessage, ChatRole, IChatClient, AITool
@@ -124,9 +113,9 @@ Use it for application-level typed data such as preferences, cached lookup resul
 
 Storage is backed by the configured Orleans provider named `FabrCoreOrleansConstants.StorageProviderName` (`"fabrcoreStorage"`). Localhost uses whatever storage Orleans was configured with for localhost, and SQL/Azure/custom modes persist according to their provider.
 
-User handle partitioning is part of the Host API: `x-user-handle` is the user handle partition, `container` is the logical bucket, and `entityKey` is the key inside that userHandle/container. The same `container/entityKey` can exist independently for different user handles.
+Principal handle partitioning is part of the Host API: `x-user-handle` is the principal handle partition, `container` is the logical bucket, and `entityKey` is the key inside that `principalHandle/container`. The same `container/entityKey` can exist independently for different principal handles.
 
-Prefer agent custom state (`GetStateAsync`, `TryGetStateAsync`, `SetState`, `FlushStateAsync`) for state private to a single agent. `GetStateAsync<T>` returns `default` for missing, null, or undefined values; use `TryGetStateAsync<T>` when unreadable persisted JSON should be migrated, reset, or ignored instead of failing initialization. Prefer typed entity storage when clients, host services, plugins, or multiple agents need to share app data by userHandle/container/entityKey.
+Prefer agent custom state (`GetStateAsync`, `TryGetStateAsync`, `SetState`, `FlushStateAsync`) for state private to a single agent. `GetStateAsync<T>` returns `default` for missing, null, or undefined values; use `TryGetStateAsync<T>` when unreadable persisted JSON should be migrated, reset, or ignored instead of failing initialization. Prefer typed entity storage when API clients, host services, plugins, or multiple agents need to share app data by `principalHandle/container/entityKey`.
 
 ## Project Templates
 
@@ -135,41 +124,33 @@ Use the asset templates in `assets/` to quickly scaffold new components:
 - `assets/plugin-template.cs` — Plugin class template
 - `assets/tool-template.cs` — Standalone tool template
 - `assets/server-program.cs` — Server Program.cs
-- `assets/client-program.cs` — Client Program.cs
 - `assets/fabrcore-json-openai.json` — OpenAI provider config
 - `assets/fabrcore-json-azure.json` — Azure OpenAI provider config
 - `assets/appsettings-server.json` — Server appsettings
-- `assets/appsettings-client.json` — Client appsettings
 - `assets/server-csproj.xml` — Server .csproj
-- `assets/client-csproj.xml` — Client .csproj
 - `assets/agents-csproj.xml` — Agents library .csproj
-- `assets/chatdock-example.razor` — ChatDock usage example
-- `assets/agent-chat-example.razor` — Manual messaging example
 
 ## Scaffolding a Complete System
 
-To scaffold a full FabrCore solution (server + client + agents):
+To scaffold a full FabrCore solution (server + agents):
 
 1. Create solution and projects:
 ```powershell
 dotnet new sln -n MySystem
 dotnet new web -n MySystem.Server -o src/MySystem.Server
-dotnet new razorclasslib -n MySystem.Client -o src/MySystem.Client
 dotnet new classlib -n MySystem.Agents -o src/MySystem.Agents
-dotnet sln add src/MySystem.Server src/MySystem.Client src/MySystem.Agents
+dotnet sln add src/MySystem.Server src/MySystem.Agents
 ```
 
 2. Add NuGet packages:
 ```powershell
 dotnet add src/MySystem.Server package FabrCore.Host
-dotnet add src/MySystem.Client package FabrCore.Client
 dotnet add src/MySystem.Agents package FabrCore.Sdk
 ```
 
 3. Add project references:
 ```powershell
 dotnet add src/MySystem.Server reference src/MySystem.Agents
-dotnet add src/MySystem.Client reference src/MySystem.Agents
 ```
 
 4. Copy and customize the asset templates for each project.

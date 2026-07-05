@@ -10,8 +10,7 @@ $solutionDir = Join-Path $PSScriptRoot "..\src"
 $packages = @(
     "FabrCore.Core",
     "FabrCore.Sdk",
-    "FabrCore.Host",
-    "FabrCore.Client"
+    "FabrCore.Host"
 )
 
 # Use the latest git tag (across all branches) to determine the base version,
