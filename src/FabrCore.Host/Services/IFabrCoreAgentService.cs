@@ -105,6 +105,16 @@ namespace FabrCore.Host.Services
         Task<AgentInfo?> GetAgentInfoAsync(string key);
 
         /// <summary>
+        /// Gets all users/client grains, optionally filtered by status ("active" or "deactivated").
+        /// </summary>
+        Task<List<AgentInfo>> GetUsersAsync(string? status = null);
+
+        /// <summary>
+        /// Gets info for a specific user/client grain by handle.
+        /// </summary>
+        Task<AgentInfo?> GetUserInfoAsync(string handle);
+
+        /// <summary>
         /// Gets agent statistics (total, active, deactivated counts).
         /// </summary>
         Task<Dictionary<string, int>> GetAgentStatisticsAsync();

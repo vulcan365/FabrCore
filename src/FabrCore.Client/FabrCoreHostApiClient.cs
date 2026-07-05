@@ -38,6 +38,15 @@ namespace FabrCore.Client
     }
 
     /// <summary>
+    /// Response from users list endpoint.
+    /// </summary>
+    public class UsersListResponse
+    {
+        public int Count { get; set; }
+        public List<AgentInfo> Users { get; set; } = new();
+    }
+
+    /// <summary>
     /// Response from agent statistics endpoint.
     /// </summary>
     public class AgentStatisticsResponse : Dictionary<string, int>
@@ -318,6 +327,11 @@ namespace FabrCore.Client
         /// Gets all agents, optionally filtered by status.
         /// </summary>
         Task<AgentsListResponse> GetAgentsAsync(string? status = null, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Gets all users/client grains, optionally filtered by status.
+        /// </summary>
+        Task<UsersListResponse> GetUsersAsync(string? status = null, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Gets a specific agent by key.
@@ -698,6 +712,37 @@ namespace FabrCore.Client
             {
                 RecordError(activity, startTime, "GetAgents", ex);
                 _logger.LogError(ex, "Failed to get agents with status: {Status}", status);
+                throw;
+            }
+        }
+
+        public async Task<UsersListResponse> GetUsersAsync(string? status = null, CancellationToken cancellationToken = default)
+        {
+            using var activity = ActivitySource.StartActivity("GetUsers", ActivityKind.Client);
+            activity?.SetTag("status.filter", status ?? "all");
+
+            var url = string.IsNullOrEmpty(status)
+                ? $"{_baseUrl}/fabrcoreapi/Diagnostics/users"
+                : $"{_baseUrl}/fabrcoreapi/Diagnostics/users?status={status}";
+            var startTime = Stopwatch.GetTimestamp();
+
+            try
+            {
+                var response = await _httpClient.GetAsync(url, cancellationToken);
+                response.EnsureSuccessStatusCode();
+
+                var result = await response.Content.ReadFromJsonAsync<UsersListResponse>(JsonOptions, cancellationToken)
+                    ?? throw new InvalidOperationException("Failed to deserialize users list");
+
+                RecordSuccess(activity, startTime, "GetUsers");
+                _logger.LogDebug("Retrieved {Count} users with status filter: {Status}", result.Count, status ?? "all");
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                RecordError(activity, startTime, "GetUsers", ex);
+                _logger.LogError(ex, "Failed to get users with status: {Status}", status);
                 throw;
             }
         }

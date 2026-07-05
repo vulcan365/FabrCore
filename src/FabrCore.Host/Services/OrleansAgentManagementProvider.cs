@@ -58,8 +58,13 @@ namespace FabrCore.Host.Services
 
         public async Task<List<AgentInfo>> GetByEntityTypeAsync(EntityType entityType, AgentStatus? status = null)
         {
-            if (status.HasValue && status.Value == AgentStatus.Active)
-                return await GetGrain().GetActiveByEntityType(entityType);
+            if (status.HasValue)
+            {
+                var entries = await GetGrain().GetAllByEntityType(entityType);
+                return entries
+                    .Where(entry => entry.Status == status.Value)
+                    .ToList();
+            }
 
             return await GetGrain().GetAllByEntityType(entityType);
         }

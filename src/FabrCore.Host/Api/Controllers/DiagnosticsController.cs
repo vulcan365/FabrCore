@@ -66,6 +66,52 @@ namespace FabrCore.Host.Api.Controllers
             }
         }
 
+        [HttpGet("users")]
+        public async Task<IActionResult> GetAllUsers([FromQuery] string? status = null)
+        {
+            try
+            {
+                var users = await _agentService.GetUsersAsync(status);
+
+                _logger.LogInformation("Retrieved {Count} users with status filter: {Status}",
+                    users.Count, status ?? "all");
+
+                return Ok(new
+                {
+                    Count = users.Count,
+                    Users = users
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving users with status: {Status}", status);
+                return StatusCode(500, new { Error = "Failed to retrieve users", Message = ex.Message });
+            }
+        }
+
+        [HttpGet("users/{handle}")]
+        public async Task<IActionResult> GetUser(string handle)
+        {
+            try
+            {
+                var user = await _agentService.GetUserInfoAsync(handle);
+
+                if (user == null)
+                {
+                    _logger.LogWarning("User not found in registry: {Handle}", handle);
+                    return NotFound(new { Message = $"User '{handle}' not found in registry" });
+                }
+
+                _logger.LogInformation("Retrieved user info for: {Handle}", handle);
+                return Ok(user);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving user: {Handle}", handle);
+                return StatusCode(500, new { Error = "Failed to retrieve user", Message = ex.Message });
+            }
+        }
+
         [HttpGet("agents/statistics")]
         public async Task<IActionResult> GetStatistics()
         {

@@ -162,6 +162,7 @@ namespace FabrCore.Host.Grains
             var cutoffTime = DateTime.UtcNow - age;
             var toRemove = _state.State
                 .Where(kvp => kvp.Value.Status == AgentStatus.Deactivated
+                           && kvp.Value.EntityType == EntityType.Agent
                            && kvp.Value.DeactivatedAt.HasValue
                            && kvp.Value.DeactivatedAt.Value < cutoffTime)
                 .Select(kvp => kvp.Key)
@@ -188,7 +189,13 @@ namespace FabrCore.Host.Grains
             {
                 ["Total"] = _state.State.Count,
                 ["Active"] = _state.State.Values.Count(a => a.Status == AgentStatus.Active),
-                ["Deactivated"] = _state.State.Values.Count(a => a.Status == AgentStatus.Deactivated)
+                ["Deactivated"] = _state.State.Values.Count(a => a.Status == AgentStatus.Deactivated),
+                ["AgentTotal"] = _state.State.Values.Count(a => a.EntityType == EntityType.Agent),
+                ["AgentActive"] = _state.State.Values.Count(a => a.EntityType == EntityType.Agent && a.Status == AgentStatus.Active),
+                ["AgentDeactivated"] = _state.State.Values.Count(a => a.EntityType == EntityType.Agent && a.Status == AgentStatus.Deactivated),
+                ["UserTotal"] = _state.State.Values.Count(a => a.EntityType == EntityType.Client),
+                ["UserActive"] = _state.State.Values.Count(a => a.EntityType == EntityType.Client && a.Status == AgentStatus.Active),
+                ["UserDeactivated"] = _state.State.Values.Count(a => a.EntityType == EntityType.Client && a.Status == AgentStatus.Deactivated)
             };
 
             // Group by agent type

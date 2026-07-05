@@ -99,15 +99,89 @@ public sealed class FabrCoreAgentServiceTrackingTests
         Assert.AreEqual(0, clientGrain.CreatedConfigs.Count);
     }
 
+    [TestMethod]
+    public async Task GetAgentsAsync_ReturnsOnlyAgentEntries()
+    {
+        var service = CreateService(
+            new Dictionary<string, FakeClientGrain>(),
+            new FakeAgentManagementProvider(RegistryEntries()));
+
+        var agents = await service.GetAgentsAsync();
+        var activeAgents = await service.GetAgentsAsync("active");
+
+        CollectionAssert.AreEquivalent(
+            new[] { "user1:assistant", "user2:planner" },
+            agents.Select(a => a.Key).ToArray());
+        CollectionAssert.AreEquivalent(
+            new[] { "user1:assistant" },
+            activeAgents.Select(a => a.Key).ToArray());
+        Assert.IsTrue(agents.All(a => a.EntityType == EntityType.Agent));
+    }
+
+    [TestMethod]
+    public async Task GetUsersAsync_ReturnsOnlyClientEntries()
+    {
+        var service = CreateService(
+            new Dictionary<string, FakeClientGrain>(),
+            new FakeAgentManagementProvider(RegistryEntries()));
+
+        var users = await service.GetUsersAsync();
+        var deactivatedUsers = await service.GetUsersAsync("deactivated");
+
+        CollectionAssert.AreEquivalent(
+            new[] { "user1", "user2" },
+            users.Select(u => u.Key).ToArray());
+        CollectionAssert.AreEquivalent(
+            new[] { "user2" },
+            deactivatedUsers.Select(u => u.Key).ToArray());
+        Assert.IsTrue(users.All(u => u.EntityType == EntityType.Client));
+    }
+
+    [TestMethod]
+    public async Task EntitySpecificInfoMethods_DoNotCrossEntityTypes()
+    {
+        var service = CreateService(
+            new Dictionary<string, FakeClientGrain>(),
+            new FakeAgentManagementProvider(RegistryEntries()));
+
+        Assert.IsNotNull(await service.GetAgentInfoAsync("user1:assistant"));
+        Assert.IsNull(await service.GetAgentInfoAsync("user1"));
+        Assert.IsNotNull(await service.GetUserInfoAsync("user1"));
+        Assert.IsNull(await service.GetUserInfoAsync("user1:assistant"));
+    }
+
     private static FabrCoreAgentService CreateService(Dictionary<string, FakeClientGrain> clientGrains)
+        => CreateService(clientGrains, new FakeAgentManagementProvider());
+
+    private static FabrCoreAgentService CreateService(
+        Dictionary<string, FakeClientGrain> clientGrains,
+        IAgentManagementProvider managementProvider)
     {
         var clusterClient = FakeClusterClientProxy.Create(clientGrains);
         return new FabrCoreAgentService(
             clusterClient,
             new FabrCoreRegistry(NullLogger<FabrCoreRegistry>.Instance),
-            new FakeAgentManagementProvider(),
+            managementProvider,
             NullLogger<FabrCoreAgentService>.Instance);
     }
+
+    private static List<AgentInfo> RegistryEntries() =>
+    [
+        NewInfo("user1:assistant", "test-agent", AgentStatus.Active, EntityType.Agent),
+        NewInfo("user2:planner", "test-agent", AgentStatus.Deactivated, EntityType.Agent),
+        NewInfo("user1", "Client", AgentStatus.Active, EntityType.Client),
+        NewInfo("user2", "Client", AgentStatus.Deactivated, EntityType.Client)
+    ];
+
+    private static AgentInfo NewInfo(string key, string type, AgentStatus status, EntityType entityType) => new(
+        Key: key,
+        AgentType: type,
+        Handle: key,
+        Status: status,
+        ActivatedAt: DateTime.UtcNow,
+        DeactivatedAt: status == AgentStatus.Deactivated ? DateTime.UtcNow : null,
+        DeactivationReason: status == AgentStatus.Deactivated ? "test" : null,
+        EntityType: entityType);
 
     private static AgentConfiguration NewConfig(string handle) => new()
     {
@@ -212,24 +286,79 @@ public sealed class FabrCoreAgentServiceTrackingTests
 
     private sealed class FakeAgentManagementProvider : IAgentManagementProvider
     {
-        public Task RegisterAgentAsync(string key, string agentType, string handle) => Task.CompletedTask;
+        private readonly Dictionary<string, AgentInfo> _entries;
 
-        public Task DeactivateAgentAsync(string key, string reason) => Task.CompletedTask;
+        public FakeAgentManagementProvider(IEnumerable<AgentInfo>? entries = null)
+        {
+            _entries = entries?.ToDictionary(e => e.Key, StringComparer.Ordinal)
+                ?? new Dictionary<string, AgentInfo>(StringComparer.Ordinal);
+        }
 
-        public Task<bool> RemoveAgentAsync(string key) => Task.FromResult(false);
+        public Task RegisterAgentAsync(string key, string agentType, string handle)
+        {
+            _entries[key] = NewInfo(key, agentType, AgentStatus.Active, EntityType.Agent);
+            return Task.CompletedTask;
+        }
 
-        public Task RegisterClientAsync(string clientId) => Task.CompletedTask;
+        public Task DeactivateAgentAsync(string key, string reason)
+        {
+            if (_entries.TryGetValue(key, out var entry))
+            {
+                _entries[key] = entry with
+                {
+                    Status = AgentStatus.Deactivated,
+                    DeactivatedAt = DateTime.UtcNow,
+                    DeactivationReason = reason
+                };
+            }
 
-        public Task DeactivateClientAsync(string clientId, string reason) => Task.CompletedTask;
+            return Task.CompletedTask;
+        }
 
-        public Task<List<AgentInfo>> GetAllAsync() => Task.FromResult(new List<AgentInfo>());
+        public Task<bool> RemoveAgentAsync(string key) => Task.FromResult(_entries.Remove(key));
 
-        public Task<List<AgentInfo>> GetByStatusAsync(AgentStatus status) => Task.FromResult(new List<AgentInfo>());
+        public Task RegisterClientAsync(string clientId)
+        {
+            _entries[clientId] = NewInfo(clientId, "Client", AgentStatus.Active, EntityType.Client);
+            return Task.CompletedTask;
+        }
 
-        public Task<AgentInfo?> GetByKeyAsync(string key) => Task.FromResult<AgentInfo?>(null);
+        public Task DeactivateClientAsync(string clientId, string reason)
+        {
+            if (_entries.TryGetValue(clientId, out var entry))
+            {
+                _entries[clientId] = entry with
+                {
+                    Status = AgentStatus.Deactivated,
+                    DeactivatedAt = DateTime.UtcNow,
+                    DeactivationReason = reason
+                };
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public Task<List<AgentInfo>> GetAllAsync() => Task.FromResult(_entries.Values.ToList());
+
+        public Task<List<AgentInfo>> GetByStatusAsync(AgentStatus status)
+            => Task.FromResult(_entries.Values.Where(e => e.Status == status).ToList());
+
+        public Task<AgentInfo?> GetByKeyAsync(string key)
+        {
+            _entries.TryGetValue(key, out var entry);
+            return Task.FromResult(entry);
+        }
 
         public Task<List<AgentInfo>> GetByEntityTypeAsync(EntityType entityType, AgentStatus? status = null)
-            => Task.FromResult(new List<AgentInfo>());
+        {
+            var entries = _entries.Values.Where(e => e.EntityType == entityType);
+            if (status.HasValue)
+            {
+                entries = entries.Where(e => e.Status == status.Value);
+            }
+
+            return Task.FromResult(entries.ToList());
+        }
 
         public Task<int> PurgeDeactivatedAsync(TimeSpan olderThan) => Task.FromResult(0);
 

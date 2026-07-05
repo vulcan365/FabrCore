@@ -338,18 +338,23 @@ namespace FabrCore.Host.Services
 
         // ── Diagnostics ──
 
-        public async Task<List<AgentInfo>> GetAgentsAsync(string? status = null)
+        public Task<List<AgentInfo>> GetAgentsAsync(string? status = null)
+            => _managementProvider.GetByEntityTypeAsync(EntityType.Agent, ParseStatus(status));
+
+        public async Task<AgentInfo?> GetAgentInfoAsync(string key)
         {
-            return status?.ToLower() switch
-            {
-                "active" => await _managementProvider.GetByStatusAsync(AgentStatus.Active),
-                "deactivated" => await _managementProvider.GetByStatusAsync(AgentStatus.Deactivated),
-                _ => await _managementProvider.GetAllAsync()
-            };
+            var entry = await _managementProvider.GetByKeyAsync(key);
+            return entry?.EntityType == EntityType.Agent ? entry : null;
         }
 
-        public Task<AgentInfo?> GetAgentInfoAsync(string key)
-            => _managementProvider.GetByKeyAsync(key);
+        public Task<List<AgentInfo>> GetUsersAsync(string? status = null)
+            => _managementProvider.GetByEntityTypeAsync(EntityType.Client, ParseStatus(status));
+
+        public async Task<AgentInfo?> GetUserInfoAsync(string handle)
+        {
+            var entry = await _managementProvider.GetByKeyAsync(handle);
+            return entry?.EntityType == EntityType.Client ? entry : null;
+        }
 
         public Task<Dictionary<string, int>> GetAgentStatisticsAsync()
             => _managementProvider.GetStatisticsAsync();
@@ -359,6 +364,16 @@ namespace FabrCore.Host.Services
 
         public Task<List<AgentInfo>> GetAgentsByEntityTypeAsync(EntityType entityType)
             => _managementProvider.GetByEntityTypeAsync(entityType);
+
+        private static AgentStatus? ParseStatus(string? status)
+        {
+            return status?.ToLowerInvariant() switch
+            {
+                "active" => AgentStatus.Active,
+                "deactivated" => AgentStatus.Deactivated,
+                _ => null
+            };
+        }
 
         // ── Discovery ──
 
