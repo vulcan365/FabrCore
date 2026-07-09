@@ -9,6 +9,7 @@ description: >
   "OnReminder", "agent health", "GetHealth", "AgentHealthStatus", "build agent", "create agent",
   "FabrCoreCapabilities", "FabrCoreNote", "agent capabilities", "agent notes", "busy message", "concurrent message",
   "AlwaysInterleave", "busy routing", "agent busy", "IFabrCoreStorageProvider", "typed storage",
+  "AgentMessage.IsSystemMessage", "SystemMessageTypes", "_status", "_thinking", "_error",
   "verifiable execution", "VerifiableExecutionEnvelope", "signed evidence", "IVerifiableExecutionContext",
   "RecordDbEffectAsync", "RecordHttpCallAsync", "RecordStorageEffectAsync", "RecordLibraryCallAsync".
   Do NOT use for: Microsoft Agent Framework internals (AIAgent, AgentSession) — use fabrcore-agentframework.
@@ -243,6 +244,17 @@ public override async Task<AgentMessage> OnMessage(AgentMessage message)
 ```
 
 For explicit progress updates that are sent as messages, use `SystemMessageTypes.Thinking` (`"_thinking"`). All underscore-prefixed message types are reserved for FabrCore system/control traffic and are ignored by agent chat stream delivery before `OnMessage`/`OnMessageBusy`.
+
+When agent code is handed a full `AgentMessage` outside the normal grain chat-stream path (for example, direct tests, custom stream handlers, or utility methods that process captured messages), use `message.IsSystemMessage` to decide whether it is control/progress traffic:
+
+```csharp
+if (message.IsSystemMessage)
+{
+    return message.Response(); // or render/record it separately
+}
+```
+
+Inside normal `OnMessage`, you usually do not need this guard for chat stream messages because `AgentGrain` filters underscore-prefixed system messages before dispatch. Use `SystemMessageTypes.IsSystemMessage(messageType)` only when you have a raw `MessageType` string instead of an `AgentMessage`.
 
 ### OnMessageBusy(AgentMessage)
 

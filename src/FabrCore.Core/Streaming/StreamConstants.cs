@@ -21,6 +21,11 @@ namespace FabrCore.Core.Streaming
         public const string AgentEventNamespace = "AgentEvent";
 
         /// <summary>
+        /// Stream namespace for ACL change notifications (snapshot cache invalidation).
+        /// </summary>
+        public const string AclChangedNamespace = "AclChanged";
+
+        /// <summary>
         /// Delimiter used in fully-qualified stream names.
         /// </summary>
         public const char Delimiter = '.';

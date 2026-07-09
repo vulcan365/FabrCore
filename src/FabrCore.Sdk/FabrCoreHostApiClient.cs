@@ -310,7 +310,7 @@ namespace FabrCore.Sdk
     /// and sends it as the <c>x-user-handle</c> header — callers no longer need to pass the user handle separately.
     /// </para>
     /// </summary>
-    public interface IFabrCoreHostApiClient
+    public partial interface IFabrCoreHostApiClient
     {
         /// <summary>
         /// Creates agents with the specified configurations.
@@ -476,7 +476,7 @@ namespace FabrCore.Sdk
     /// <summary>
     /// HTTP client implementation for the FabrCore Host API.
     /// </summary>
-    public class FabrCoreHostApiClient : IFabrCoreHostApiClient, IFabrCoreStorageProvider
+    public partial class FabrCoreHostApiClient : IFabrCoreHostApiClient, IFabrCoreStorageProvider
     {
         private static readonly ActivitySource ActivitySource = new("FabrCore.Sdk.FabrCoreHostApiClient");
         private static readonly Meter Meter = new("FabrCore.Sdk.FabrCoreHostApiClient");

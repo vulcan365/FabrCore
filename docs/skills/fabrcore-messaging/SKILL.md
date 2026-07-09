@@ -1,17 +1,18 @@
 ---
 name: fabrcore-messaging
 description: >
-  FabrCore messaging, handle routing, inter-agent communication, orchestration patterns, and access control (ACL).
+  FabrCore messaging, handle routing, inter-agent communication, and orchestration patterns.
   Covers AgentMessage, EventMessage, HandleUtilities, SendMessage vs SendAndReceiveMessage vs SendEvent,
-  fan-out/gather, pipeline, supervisor patterns, ACL rules, shared agents, and cross-principal routing.
+  fan-out/gather, pipeline, supervisor patterns, shared agents, and cross-principal routing.
   Triggers on: "AgentMessage", "EventMessage", "handle routing", "HandleUtilities", "SendMessage",
   "SendAndReceiveMessage", "SendEvent", "inter-agent", "agent-to-agent", "multi-agent", "orchestration",
-  "ACL", "shared agent", "access control", "MessageKind", "cross-principal", "fan-out", "pipeline",
-  "supervisor", "delegator", "AclRule", "AclPermission", "IAclProvider", "SystemMessageTypes",
-  "FromHandle", "ToHandle", "OnBehalfOfHandle", "TraceId", "message routing", "storage principal handle",
+  "shared agent", "MessageKind", "fan-out", "pipeline",
+  "supervisor", "delegator", "SystemMessageTypes",
+  "AgentMessage.IsSystemMessage", "FromHandle", "ToHandle", "OnBehalfOfHandle", "TraceId", "message routing", "storage principal handle",
   "VerifiableExecutionEnvelope", "signed evidence", "EventPublished", "EventDelivered", "EventHandled",
   "RecordDbEffectAsync", "RecordHttpCallAsync", "RecordStorageEffectAsync", "RecordLibraryCallAsync".
-  Do NOT use for: agent lifecycle — use fabrcore-agent.
+  Do NOT use for: agent lifecycle — use fabrcore-agent; ACL rules, permission grants, roles/groups,
+  enforcement modes, security audit — use fabrcore-acl.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
 ---
 
@@ -55,6 +56,9 @@ public class AgentMessage
 
     // Compact verifiable execution pointer/lineage. Full bundles live in the evidence store/API.
     public VerifiableExecutionEnvelope? VerifiableExecution { get; set; }
+
+    // True when MessageType is a reserved FabrCore system/control message type.
+    public bool IsSystemMessage => SystemMessageTypes.IsSystemMessage(MessageType);
 
     // Create response with routing pre-filled. Copies TraceId but NOT SpanId/ParentSpanId —
     // the response is a new span; stamp it from its own Activity before returning.
@@ -115,6 +119,17 @@ public static class SystemMessageTypes
         => messageType != null && messageType.StartsWith('_');
 }
 ```
+
+Use `message.IsSystemMessage` when you have an `AgentMessage` instance. It is the canonical, intention-revealing check used by `AgentGrain` before normal chat delivery:
+
+```csharp
+if (message.IsSystemMessage)
+{
+    // Render as progress/control UI, record separately, or skip normal chat handling.
+}
+```
+
+Use `SystemMessageTypes.IsSystemMessage(messageType)` when you only have a `MessageType` string, such as from monitor snapshots, logs, database rows, or DTOs that are not `AgentMessage`.
 
 **Automatic behavior:**
 - `AgentGrain` sends `_status` heartbeats every 3 seconds during processing
@@ -305,6 +320,7 @@ public override async Task<AgentMessage> OnMessage(AgentMessage message)
     {
         ToHandle = message.FromHandle,
         Message = "Starting analysis...",
+        MessageType = SystemMessageTypes.Thinking,
         Kind = MessageKind.OneWay
     });
     // Do work...
@@ -402,93 +418,32 @@ For message-level observability (who sent what to whom, without needing an exter
 
 ## Access Control (ACL)
 
-### Overview
+Access control is documented in **fabrcore-acl** — principals, roles, groups, permission grants
+in 3-dot notation (`agent.message.allow` / `agent.create.deny`), enforcement modes
+(Disabled/AuditOnly/Enforce), the ACL management API, and the security audit provider. Summary
+of what matters for messaging:
 
-The ACL system controls which API clients and authenticated callers can access agents under other principal handles. By default, agents are scoped to their principal handle.
+- **Same-principal traffic is implicitly allowed**; cross-principal traffic is **denied by
+  default** until a `PermissionGrant` allows it (deny overrides allow).
+- **Principal-initiated sends** (`PrincipalGrain.SendAndReceiveMessage`/`SendMessage`/`SendEvent`)
+  require `agent.message.allow` on the target; `CreateAgent`/`ResetAgent`/`UntrackAgent` require
+  `agent.create`/`agent.reconfigure`/`agent.destroy`.
+- **Agent-to-agent hops within a principal are trusted; cross-principal a2a hops are
+  ACL-checked sender-side** (the acting principal derives from the sending grain's key, never
+  from the spoofable `FromHandle`). Unauthorized sends throw `AclDeniedException` in Enforce mode.
+- **Transitive fan-out is audited, not blocked**: the first cross-principal hop stamps
+  `AgentMessage.CrossPrincipalOrigin`/`CrossPrincipalHops`; chains that cross further principal
+  boundaries emit `BoundaryCrossing` audit events and log warnings.
+- `Kind == Response` and system messages (`_status`/`_error`) are exempt from the a2a check so
+  request/reply round-trips can't be broken.
 
-### Implicit Rules
-
-- **Same-principal agent access is always allowed** — zero-overhead short-circuit
-- **Default seed rule:** If no rules configured, `system:* -> * -> Message,Read` is seeded
-
-### ACL Rule Structure
-
-```csharp
-public class AclRule
-{
-    public string UserHandlePattern { get; set; }   // Target agent's principal handle
-    public string AgentPattern { get; set; }   // Target agent's alias
-    public string CallerPattern { get; set; }  // Who is allowed
-    public AclPermission Permission { get; set; }
-}
-```
-
-### Pattern Matching
-
-| Pattern | Matches | Example |
-|---------|---------|---------|
-| `"*"` | Anything | All principal handles/agents/callers |
-| `"prefix*"` | Starts-with | `"automation_*"` matches `"automation_agent-123"` |
-| `"group:name"` | Group members (CallerPattern only) | `"group:admins"` |
-| `"exact"` | Case-insensitive literal | `"system"` |
-
-### Permissions
-
-```csharp
-[Flags]
-public enum AclPermission
-{
-    None      = 0,
-    Message   = 1,   // Send messages
-    Configure = 2,   // Create/reconfigure
-    Read      = 4,   // Read threads, state, health
-    Admin     = 8,   // Modify ACL rules
-    All       = Message | Configure | Read | Admin
-}
-```
-
-### Configuration in fabrcore.json
+Grant shapes for cross-talk (see fabrcore-acl for the full model):
 
 ```json
-{
-  "Acl": {
-    "Rules": [
-      {
-        "UserHandlePattern": "system",
-        "AgentPattern": "*",
-        "CallerPattern": "*",
-        "Permission": "Message,Read"
-      },
-      {
-        "UserHandlePattern": "shared",
-        "AgentPattern": "analytics_*",
-        "CallerPattern": "group:premium",
-        "Permission": "Message,Read"
-      }
-    ],
-    "Groups": {
-      "admins": ["alice", "bob"],
-      "premium": ["alice", "charlie"]
-    }
-  }
-}
+{ "Subject": "agent:p1:agent1", "Permission": "agent.message.allow", "Resource": "p2:agent3" }
+{ "Subject": "principal:p1",    "Permission": "agent.message.allow", "Resource": "p2:*" }
+{ "Subject": "principal:p1",    "Permission": "agent.message.allow", "Resource": "*:agent5" }
 ```
-
-### Evaluation Order
-
-1. **Same-principal agent check** — caller == target principal handle → allow with `All` permissions
-2. **Rule scan** — first match wins
-3. **No match** → deny
-
-### Enforcement Points
-
-| Method | Permission Required | Notes |
-|--------|-------------------|-------|
-| `SendAndReceiveMessage` | `Message` | Checked in PrincipalGrain |
-| `SendMessage` | `Message` | Checked in PrincipalGrain |
-| `CreateAgent` | `Configure` | Cross-principal only |
-
-Agent-to-agent communication within the cluster is **trusted** and bypasses ACL.
 
 ### Storage principal handle partitioning
 
@@ -498,37 +453,3 @@ Typed entity storage is not message routing, but it uses the same principal hand
 - Agent-associated shared data should deliberately use the owning agent or principal partition.
 - The same `container/entityKey` can exist independently under different principal handles.
 - Do not use principal-handle-free Host `IFabrCoreStorageProvider` calls for principal-scoped data; those are system-scoped.
-
-### Custom ACL Provider
-
-```csharp
-public interface IAclProvider
-{
-    Task<AclEvaluationResult> EvaluateAsync(
-        string callerPrincipalHandle, string targetPrincipalHandle, string agentHandle, AclPermission required);
-    Task<List<AclRule>> GetRulesAsync();
-    Task AddRuleAsync(AclRule rule);
-    Task RemoveRuleAsync(AclRule rule);
-    Task<Dictionary<string, HashSet<string>>> GetGroupsAsync();
-    Task AddToGroupAsync(string groupName, string member);
-    Task RemoveFromGroupAsync(string groupName, string member);
-}
-```
-
-Register: `options.UseAclProvider<SqlAclProvider>()`
-
-### Runtime Rule Management
-
-```csharp
-var aclProvider = serviceProvider.GetRequiredService<IAclProvider>();
-await aclProvider.AddRuleAsync(new AclRule
-{
-    UserHandlePattern = "system",
-    AgentPattern = "premium_*",
-    CallerPattern = "group:premium",
-    Permission = AclPermission.Message | AclPermission.Read
-});
-await aclProvider.AddToGroupAsync("premium", "newuser123");
-```
-
-Note: Default `InMemoryAclProvider` does not persist runtime changes.

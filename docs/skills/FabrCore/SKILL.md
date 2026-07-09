@@ -7,7 +7,9 @@ description: >
   For specific topics use the specialized skills:
   fabrcore-agent (agent development), fabrcore-agentframework (Microsoft Agent Framework),
   fabrcore-plugins-tools (plugins/tools), fabrcore-server (server setup),
-  fabrcore-orleans (Orleans configuration), fabrcore-messaging (messaging/ACL),
+  fabrcore-orleans (Orleans configuration), fabrcore-messaging (messaging),
+  fabrcore-acl (access control: principals, roles, groups, permission grants, enforcement
+  modes, cross-principal agent-to-agent security, security audit),
   fabrcore-mcp (MCP integration), fabrcore-spiffe (verifiable execution, signed evidence,
   optional SPIFFE/SVID signing, trust bundles, evidence stores, attested external effects).
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
@@ -37,7 +39,9 @@ Build distributed AI agent systems with FabrCore — an open-source .NET 10 fram
 | API Client | HTTP client access | `FabrCore.Sdk.IFabrCoreHostApiClient` | fabrcore-server |
 | Entity Storage | Typed key/value app data | `IFabrCoreStorageProvider`, `FabrCore.Sdk.IFabrCoreHostApiClient` | fabrcore-server, fabrcore-orleans |
 | Handle Access | Principal handle/agent handle parsing | `IFabrCoreAgentHost.GetUserHandle()`, `GetAgentHandle()` | fabrcore-agent |
-| Messaging | Agent communication | `AgentMessage`, `HandleUtilities` | fabrcore-messaging |
+| Messaging | Agent communication | `AgentMessage`, `AgentMessage.IsSystemMessage`, `HandleUtilities` | fabrcore-messaging |
+| ACL | Principals, roles, groups, permission grants | `IAclEvaluator`, `PermissionGrant`, `AclController` | fabrcore-acl |
+| Security Audit | ACL decisions, boundary crossings | `IAuditProvider`, `AuditEvent` | fabrcore-acl |
 | MCP | External tool protocol | `McpServerConfig` | fabrcore-mcp |
 | Configuration | Agent definition | `AgentConfiguration` | fabrcore-server |
 | Telemetry | W3C TraceContext on every message | `AgentMessageTelemetry`, `StampFromActivity`, `StartIngressActivity` | fabrcore-messaging (surface), fabrcore-server (exporter setup) |
@@ -89,7 +93,7 @@ Create `fabrcore.json` in the server project root with your LLM provider configu
 
 ```csharp
 using FabrCore.Core;          // AgentMessage, AgentConfiguration, MessageKind
-using FabrCore.Core.Acl;      // IAclProvider, AclRule, AclPermission
+using FabrCore.Core.Acl;      // IAclEvaluator, PermissionGrant, AclPrincipal, FabrPermissions
 using FabrCore.Sdk;           // FabrCoreAgentProxy, StateReadResult, IFabrCoreAgentHost, IFabrCorePlugin, IFabrCoreStorageProvider, IFabrCoreHostApiClient
 using FabrCore.Host;          // AddFabrCoreServer, UseFabrCoreServer, FabrCoreServerOptions
 using Microsoft.Agents.AI;    // AIAgent, AgentSession, ChatClientAgent

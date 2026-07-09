@@ -12,7 +12,8 @@ builder.AddFabrCoreServer(new FabrCoreServerOptions
 }
 // Optional: custom providers (defaults work for most cases)
 // .UseAgentManagementProvider<SqlAgentManagementProvider>()
-// .UseAclProvider<SqlAclProvider>()
+// .UseAclEvaluator<MyAclEvaluator>()          // custom access-control decisions (see fabrcore-acl)
+// .UseAuditProvider<MySiemAuditProvider>()    // durable security audit sink (see fabrcore-acl)
 // .UseTimeProvider(new DemoTimeProvider()) // Orleans scheduling/timers/reminders only
 );
 

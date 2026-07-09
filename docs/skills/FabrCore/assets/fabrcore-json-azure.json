@@ -18,14 +18,8 @@
     }
   ],
   "Acl": {
-    "Rules": [
-      {
-        "UserHandlePattern": "system",
-        "AgentPattern": "*",
-        "CallerPattern": "*",
-        "Permission": "Message,Read"
-      }
-    ],
-    "Groups": {}
+    "SystemPrincipal": "system",
+    "Mode": "Enforce",
+    "SeedDefaultSystemAgentAccess": true
   }
 }
