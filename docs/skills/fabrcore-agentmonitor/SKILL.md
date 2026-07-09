@@ -8,6 +8,7 @@ description: >
   "monitor messages", "monitor events", "OnEvent", "event stream monitor", "track tokens", "agent token usage",
   "message traffic", "monitor provider", "OnMessageRecorded", "OnEventRecorded", "OnLlmCallRecorded",
   "MonitoredMessage", "MonitoredEvent", "MonitoredLlmCall", "LlmCaptureOptions", "LlmCallContext",
+  "AgentMessage.IsSystemMessage", "SystemMessageTypes",
   "monitor LLM calls", "capture LLM prompts", "capture LLM responses", "AgentTokenSummary", "message observation",
   "VerifiableExecutionId", "SignatureDigest", "VerificationStatus", "signed evidence".
   Do NOT use for: agent lifecycle — use fabrcore-agent.
@@ -638,7 +639,9 @@ builder.AddFabrCoreServer(options =>
 | `CompactionService` summarization LLM call | `MonitoredLlmCall` | — | Yes | `OriginContext = Compaction`; inherits parent `AgentHandle` / `TraceId` from the surrounding `OnMessage` scope when present |
 | Background LLM call wrapped in `LlmCallContext.Begin(...)` | `MonitoredLlmCall` | — | Yes | `OriginContext` is whatever the caller supplied; `AgentHandle` comes from the context or the chat client constructor fallback |
 
-System messages (`_status` heartbeats, `_thinking` progress updates, `_error` messages, and any other underscore-prefixed control messages) are captured like any other message. Agent chat stream delivery ignores these before `OnMessage`/`OnMessageBusy`, while clients may render them. Use `_thinking` for user-facing progress updates; do not use non-prefixed `thinking` for FabrCore system traffic. Filter by `MessageType` if needed:
+System messages (`_status` heartbeats, `_thinking` progress updates, `_error` messages, and any other underscore-prefixed control messages) are captured like any other message. Agent chat stream delivery ignores these before `OnMessage`/`OnMessageBusy`, while clients may render them. Use `_thinking` for user-facing progress updates; do not use non-prefixed `thinking` for FabrCore system traffic.
+
+When filtering live `AgentMessage` objects, use `message.IsSystemMessage`. Monitor queries return `MonitoredMessage` snapshots rather than `AgentMessage`, so filter those snapshots with the static helper:
 
 ```csharp
 var chatMessages = messages.Where(m => !SystemMessageTypes.IsSystemMessage(m.MessageType));

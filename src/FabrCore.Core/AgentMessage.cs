@@ -87,6 +87,16 @@ namespace FabrCore.Core
         /// <summary>Compact verifiable execution pointer/lineage carried across message hops.</summary>
         public VerifiableExecutionEnvelope? VerifiableExecution { get; set; }
 
+        /// <summary>
+        /// Principal handle that originated a message chain which crossed a principal boundary.
+        /// Stamped by the host at the first cross-principal send and never cleared — advisory
+        /// lineage used to audit/warn on subsequent hops, never to block.
+        /// </summary>
+        public string? CrossPrincipalOrigin { get; set; }
+
+        /// <summary>Number of principal-boundary crossings this message chain has made.</summary>
+        public int CrossPrincipalHops { get; set; }
+
         /// <summary>True when this message uses a reserved FabrCore system message type.</summary>
         public bool IsSystemMessage => SystemMessageTypes.IsSystemMessage(MessageType);
 
@@ -101,7 +111,9 @@ namespace FabrCore.Core
                 Kind = MessageKind.Response,
                 State = State != null ? new Dictionary<string, string>(State) : new Dictionary<string, string>(),
                 TraceId = TraceId,
-                VerifiableExecution = VerifiableExecution
+                VerifiableExecution = VerifiableExecution,
+                CrossPrincipalOrigin = CrossPrincipalOrigin,
+                CrossPrincipalHops = CrossPrincipalHops
             };
 
             if (Kind == MessageKind.Response && !string.IsNullOrEmpty(DeliverToHandle))
@@ -180,6 +192,13 @@ namespace FabrCore.Core
         [Id(17)]
         public VerifiableExecutionEnvelope? VerifiableExecution { get; set; }
 
+        // Ids 18/19 are additive for rolling-upgrade safety — never renumber or reuse.
+        [Id(18)]
+        public string? CrossPrincipalOrigin { get; set; }
+
+        [Id(19)]
+        public int CrossPrincipalHops { get; set; }
+
     }
 
     [RegisterConverter]
@@ -210,7 +229,9 @@ namespace FabrCore.Core
                 TraceId = surrogate.TraceId,
                 SpanId = surrogate.SpanId,
                 ParentSpanId = surrogate.ParentSpanId,
-                VerifiableExecution = surrogate.VerifiableExecution
+                VerifiableExecution = surrogate.VerifiableExecution,
+                CrossPrincipalOrigin = surrogate.CrossPrincipalOrigin,
+                CrossPrincipalHops = surrogate.CrossPrincipalHops
             };
         }
 
@@ -235,7 +256,9 @@ namespace FabrCore.Core
                 TraceId = value.TraceId,
                 SpanId = value.SpanId,
                 ParentSpanId = value.ParentSpanId,
-                VerifiableExecution = value.VerifiableExecution
+                VerifiableExecution = value.VerifiableExecution,
+                CrossPrincipalOrigin = value.CrossPrincipalOrigin,
+                CrossPrincipalHops = value.CrossPrincipalHops
             };
         }
     }

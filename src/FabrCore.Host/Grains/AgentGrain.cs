@@ -1,4 +1,5 @@
 using FabrCore.Core;
+using FabrCore.Core.Acl;
 using FabrCore.Core.Interfaces;
 using FabrCore.Core.Monitoring;
 using FabrCore.Core.Streaming;
@@ -102,6 +103,12 @@ namespace FabrCore.Host.Grains
         private long _busyMessagesRouted;
         private readonly LatencyReservoir _latencyReservoir;
         private readonly AgentGrainOptions _grainOptions;
+        private readonly AclEnforcer _acl;
+
+        // Cross-principal breadcrumb of the message currently being processed, so chains the
+        // agent composes itself (new AgentMessage objects) inherit the lineage host-side.
+        private string? _inboundCrossPrincipalOrigin;
+        private int _inboundCrossPrincipalHops;
 
         public AgentGrain(
             IClusterClient clusterClient,
@@ -112,6 +119,7 @@ namespace FabrCore.Host.Grains
             IFabrCoreAgentService agentService,
             IAgentMessageMonitor messageMonitor,
             VerifiableExecutionRecorder verifiableExecution,
+            AclEnforcer acl,
             Microsoft.Extensions.Options.IOptions<AgentGrainOptions> grainOptions,
             [PersistentState("agentMessages", FabrCoreOrleansConstants.StorageProviderName)]
             IPersistentState<AgentGrainState> messageState)
@@ -124,6 +132,7 @@ namespace FabrCore.Host.Grains
             _agentService = agentService;
             _messageMonitor = messageMonitor;
             _verifiableExecution = verifiableExecution;
+            _acl = acl;
             _messageState = messageState;
             _grainOptions = grainOptions.Value;
             _latencyReservoir = new LatencyReservoir(_grainOptions.LatencyReservoirCapacity);
@@ -804,6 +813,11 @@ namespace FabrCore.Host.Grains
 
             var startTime = Stopwatch.GetTimestamp();
 
+            // Stash the inbound cross-principal breadcrumb so messages the agent sends while
+            // processing (via SendMessage/SendAndReceiveMessage) inherit the lineage.
+            _inboundCrossPrincipalOrigin = request.CrossPrincipalOrigin;
+            _inboundCrossPrincipalHops = request.CrossPrincipalHops;
+
             // Start heartbeat: send _status every 3 seconds to original sender
             using var heartbeatCts = new CancellationTokenSource();
             var heartbeatTask = SendStatusHeartbeatAsync(request, heartbeatCts.Token);
@@ -956,6 +970,10 @@ namespace FabrCore.Host.Grains
                     logger.LogWarning(ex, "Heartbeat task faulted");
                     ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "heartbeat_failed"));
                 }
+
+                // Clear the inbound breadcrumb stash — the message is no longer being processed.
+                _inboundCrossPrincipalOrigin = null;
+                _inboundCrossPrincipalHops = 0;
 
                 // Auto-flush all tracked message stores after each message
                 await FlushAllChatHistoryProvidersAsync();
@@ -1300,6 +1318,61 @@ namespace FabrCore.Host.Grains
             return resolved;
         }
 
+        /// <summary>
+        /// Sender-side ACL enforcement for agent-to-agent traffic. The acting principal is
+        /// derived from this grain's key — <c>FromHandle</c> is spoofable routing metadata and
+        /// never trusted for authorization. Response and system messages (<c>_status</c>/<c>_error</c>)
+        /// are exempt: the reply leg of an already-authorized request must not be blocked.
+        /// Same-principal hops of a chain that previously crossed a principal boundary are
+        /// logged (advisory) but never blocked.
+        /// </summary>
+        private void EnforceCrossPrincipalAcl(AgentMessage request, string targetHandle)
+        {
+            // Inherit the inbound breadcrumb so chains this agent composes stay tagged.
+            if (_inboundCrossPrincipalOrigin is not null)
+            {
+                request.CrossPrincipalOrigin ??= _inboundCrossPrincipalOrigin;
+                if (request.CrossPrincipalHops < _inboundCrossPrincipalHops)
+                    request.CrossPrincipalHops = _inboundCrossPrincipalHops;
+            }
+
+            if (request.Kind == MessageKind.Response || request.IsSystemMessage)
+                return;
+
+            var myHandle = this.GetPrimaryKeyString();
+            var (myPrincipal, _) = HandleUtilities.ParseHandle(myHandle);
+            var (targetPrincipal, _) = HandleUtilities.ParseHandle(targetHandle);
+
+            if (string.Equals(myPrincipal, targetPrincipal, StringComparison.OrdinalIgnoreCase))
+            {
+                if (request.CrossPrincipalOrigin is not null)
+                    _acl.NoteTaggedSamePrincipalHop(request, myPrincipal, targetHandle);
+                return;
+            }
+
+            _acl.Authorize(new AclSubjectContext(myPrincipal, myHandle), FabrActions.AgentMessage, targetHandle, request);
+            _acl.StampAndWarnCrossPrincipal(request, myPrincipal, targetPrincipal);
+        }
+
+        /// <summary>
+        /// Sender-side ACL enforcement for cross-principal event delivery on the default agent
+        /// event stream (namespaced pub/sub streams are out of scope for ACL).
+        /// </summary>
+        private void EnforceCrossPrincipalEventAcl(string? channel)
+        {
+            if (string.IsNullOrWhiteSpace(channel))
+                return;
+
+            var myHandle = this.GetPrimaryKeyString();
+            var (myPrincipal, _) = HandleUtilities.ParseHandle(myHandle);
+            var (targetPrincipal, _) = HandleUtilities.ParseHandle(channel);
+
+            if (string.Equals(myPrincipal, targetPrincipal, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            _acl.Authorize(new AclSubjectContext(myPrincipal, myHandle), FabrActions.AgentMessage, channel);
+        }
+
         public async Task<AgentMessage> SendAndReceiveMessage(AgentMessage request)
         {
             // Ensure FromHandle is set to this agent's handle if not provided
@@ -1314,6 +1387,9 @@ namespace FabrCore.Host.Grains
             {
                 request.ToHandle = ResolveTargetHandle(request.ToHandle);
             }
+
+            if (!string.IsNullOrWhiteSpace(request.ToHandle))
+                EnforceCrossPrincipalAcl(request, request.ToHandle);
 
             using var activity = ActivitySource.StartActivity("SendAndReceiveMessage", ActivityKind.Client);
             activity?.SetTag("message.from", request.FromHandle);
@@ -1380,6 +1456,8 @@ namespace FabrCore.Host.Grains
             if (string.IsNullOrEmpty(request.ToHandle))
                 throw new ArgumentException("ToHandle cannot be null or empty after resolution", nameof(request));
 
+            EnforceCrossPrincipalAcl(request, request.ToHandle);
+
             using var activity = ActivitySource.StartActivity("SendMessage", ActivityKind.Producer);
             activity?.SetTag("message.from", request.FromHandle);
             activity?.SetTag("message.to", request.ToHandle);
@@ -1432,6 +1510,7 @@ namespace FabrCore.Host.Grains
                 if (string.IsNullOrWhiteSpace(request.Namespace))
                 {
                     request.Channel = ResolveTargetHandle(request.Channel);
+                    EnforceCrossPrincipalEventAcl(request.Channel);
                 }
 
                 var streamName = EventStreamSubscription.ToStreamName(request);

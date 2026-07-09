@@ -1,5 +1,6 @@
 using FabrCore.Core;
 using FabrCore.Core.Acl;
+using FabrCore.Core.Auditing;
 using FabrCore.Core.Monitoring;
 using FabrCore.Core.VerifiableExecution;
 using FabrCore.Host.Configuration;
@@ -34,10 +35,17 @@ namespace FabrCore.Host
         internal Type AgentManagementProviderType { get; private set; } = typeof(OrleansAgentManagementProvider);
 
         /// <summary>
-        /// The implementation type for <see cref="IAclProvider"/>.
-        /// Defaults to <see cref="InMemoryAclProvider"/> which loads rules from configuration.
+        /// The implementation type for <see cref="IAclEvaluator"/>.
+        /// Defaults to <see cref="AclEvaluator"/>, the synchronous snapshot-backed evaluator.
         /// </summary>
-        internal Type AclProviderType { get; private set; } = typeof(InMemoryAclProvider);
+        internal Type AclEvaluatorType { get; private set; } = typeof(AclEvaluator);
+
+        /// <summary>
+        /// The implementation type for <see cref="IAuditProvider"/>.
+        /// Defaults to <see cref="InMemoryAuditProvider"/> so ACL denials and boundary crossings
+        /// are visible out of the box. Call <see cref="UseNullAuditProvider"/> to disable.
+        /// </summary>
+        internal Type AuditProviderType { get; private set; } = typeof(InMemoryAuditProvider);
 
         /// <summary>
         /// The implementation type for <see cref="IAgentMessageMonitor"/>.
@@ -68,13 +76,44 @@ namespace FabrCore.Host
         }
 
         /// <summary>
-        /// Configures a custom <see cref="IAclProvider"/> implementation for
-        /// agent access control. The default is <see cref="InMemoryAclProvider"/>.
+        /// Configures a custom <see cref="IAclEvaluator"/> implementation for access control
+        /// decisions. The default is <see cref="AclEvaluator"/>. Custom evaluators must honor
+        /// the synchronous no-I/O contract — they run inside grain turns on the message hot path.
+        /// </summary>
+        /// <typeparam name="T">The evaluator implementation type.</typeparam>
+        public FabrCoreServerOptions UseAclEvaluator<T>() where T : class, IAclEvaluator
+        {
+            AclEvaluatorType = typeof(T);
+            return this;
+        }
+
+        /// <summary>
+        /// Configures a custom <see cref="IAuditProvider"/> implementation for security audit
+        /// events (database, SIEM, event hub, etc.). The default is <see cref="InMemoryAuditProvider"/>.
         /// </summary>
         /// <typeparam name="T">The provider implementation type.</typeparam>
-        public FabrCoreServerOptions UseAclProvider<T>() where T : class, IAclProvider
+        public FabrCoreServerOptions UseAuditProvider<T>() where T : class, IAuditProvider
         {
-            AclProviderType = typeof(T);
+            AuditProviderType = typeof(T);
+            return this;
+        }
+
+        /// <summary>
+        /// Uses the built-in <see cref="InMemoryAuditProvider"/> (the default): a bounded FIFO
+        /// buffer sized by <c>FabrCore:Audit:MaxBufferedEvents</c>.
+        /// </summary>
+        public FabrCoreServerOptions UseInMemoryAuditProvider()
+        {
+            AuditProviderType = typeof(InMemoryAuditProvider);
+            return this;
+        }
+
+        /// <summary>
+        /// Disables security audit recording entirely.
+        /// </summary>
+        public FabrCoreServerOptions UseNullAuditProvider()
+        {
+            AuditProviderType = typeof(NullAuditProvider);
             return this;
         }
 
@@ -355,13 +394,38 @@ namespace FabrCore.Host
                 builder.Services.AddSingleton(typeof(IAgentManagementProvider), options.AgentManagementProviderType);
                 logger.LogDebug("AgentManagementProvider added: {ProviderType}", options.AgentManagementProviderType.Name);
 
-                // Configure ACL Provider (pluggable — default is in-memory from fabrcore.json).
-                // Most FabrCore config files keep ACL at the root ("Acl"); the FabrCore:Acl
-                // section remains supported for hosts that wrap settings under a FabrCore node.
+                // Configure ACL (principals/roles/groups/permission grants, persisted via the
+                // single-activation AclRegistryGrain through the configured fabrcoreStorage
+                // backend). Most FabrCore config files keep ACL at the root ("Acl"); the
+                // FabrCore:Acl section remains supported for hosts that wrap settings under a
+                // FabrCore node.
                 builder.Services.Configure<FabrCoreAclOptions>(builder.Configuration.GetSection("Acl"));
-                builder.Services.Configure<FabrCoreAclOptions>(builder.Configuration.GetSection("FabrCore:Acl"));
-                builder.Services.AddSingleton(typeof(IAclProvider), options.AclProviderType);
-                logger.LogDebug("AclProvider added: {ProviderType}", options.AclProviderType.Name);
+                builder.Services.Configure<FabrCoreAclOptions>(builder.Configuration.GetSection(FabrCoreAclOptions.SectionName));
+                builder.Services.AddSingleton<GrainBackedAclEntityStore>();
+                builder.Services.AddSingleton<IAclEntityStore>(sp => sp.GetRequiredService<GrainBackedAclEntityStore>());
+                builder.Services.AddSingleton<IAclSnapshotProvider>(sp => sp.GetRequiredService<GrainBackedAclEntityStore>());
+                builder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<GrainBackedAclEntityStore>());
+                builder.Services.AddSingleton(typeof(IAclEvaluator), options.AclEvaluatorType);
+                builder.Services.AddSingleton<AclEnforcer>();
+                logger.LogDebug("ACL configured: evaluator {EvaluatorType}", options.AclEvaluatorType.Name);
+
+                // The legacy rule-based ACL config shape no longer binds — warn loudly so
+                // operators migrate to principals/roles/groups/grants (see fabrcore-acl skill).
+                if (builder.Configuration.GetSection("Acl:Rules").GetChildren().Any() ||
+                    builder.Configuration.GetSection("FabrCore:Acl:Rules").GetChildren().Any())
+                {
+                    logger.LogWarning(
+                        "Legacy ACL 'Rules' configuration detected and IGNORED. The rule-based ACL was replaced " +
+                        "by principals/roles/groups/permission grants — migrate to 'Acl:Seed:Grants' or the ACL " +
+                        "management API (see the fabrcore-acl skill for the mapping).");
+                }
+
+                // Configure Security Audit provider (default in-memory so denials are visible
+                // out of the box; UseNullAuditProvider() opts out).
+                builder.Services.Configure<FabrCore.Core.Auditing.AuditOptions>(
+                    builder.Configuration.GetSection(FabrCore.Core.Auditing.AuditOptions.SectionName));
+                builder.Services.AddSingleton(typeof(FabrCore.Core.Auditing.IAuditProvider), options.AuditProviderType);
+                logger.LogInformation("Security audit provider: {ProviderType}", options.AuditProviderType.Name);
 
                 // Bind tunable options (see FabrCoreHostOptions / AgentGrainOptions / PrincipalGrainOptions).
                 builder.Services.Configure<Configuration.FabrCoreHostOptions>(

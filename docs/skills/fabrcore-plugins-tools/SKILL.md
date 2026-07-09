@@ -6,6 +6,7 @@ description: >
   Triggers on: "build plugin", "create plugin", "IFabrCorePlugin", "PluginAlias", "standalone tool", "ToolAlias",
   "tool calling", "AIFunctionFactory", "add tools to agent", "[Description]", "plugin settings",
   "GetPluginSetting", "plugin DI", "tool description", "tool method",
+  "AgentMessage.IsSystemMessage", "SystemMessageTypes", "_thinking", "_status",
   "FabrCoreCapabilities", "FabrCoreNote", "plugin capabilities", "tool capabilities",
   "IFabrCoreStorageProvider", "typed storage", "entity storage", "IVerifiableExecutionContext",
   "attested external effect", "ExternalDbEffect", "ExternalHttpCall", "ExternalStorageEffect",
@@ -265,6 +266,8 @@ public class DataSyncPlugin : IFabrCorePlugin
 ```
 
 **Best practice:** Always reset the status message to `null` in a `finally` block so it reverts to the default even if the tool throws.
+
+For explicit progress messages rather than heartbeat text, send an `AgentMessage` with `MessageType = SystemMessageTypes.Thinking` and `Kind = MessageKind.OneWay`. Consumers that receive full `AgentMessage` objects should use `message.IsSystemMessage` to recognize `_status`, `_thinking`, `_error`, and other underscore-prefixed control traffic; use `SystemMessageTypes.IsSystemMessage(messageType)` only when working with a raw type string or monitor snapshot.
 
 ### Plugin with Disposable Resources
 

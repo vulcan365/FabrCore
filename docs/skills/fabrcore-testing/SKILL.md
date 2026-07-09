@@ -9,6 +9,7 @@ description: >
   "integration test agent", "test harness", "mock chat client", "deterministic response",
   "WithSequentialResponses", "WithTextResponse", "CreateMockAgent", "CreateLiveAgent",
   "test plugin", "MSTest FabrCore", "LLM eval", "evaluation", "evaluator", "eval agent",
+  "AgentMessage.IsSystemMessage", "SystemMessageTypes", "system message test",
   "RelevanceEvaluator", "CoherenceEvaluator", "FluencyEvaluator", "GroundednessEvaluator",
   "CompositeEvaluator", "EvaluationResult", "ScenarioRun", "ReportingConfiguration",
   "quality eval", "safety eval", "BLEU", "agent evaluation", "eval metrics",
@@ -204,6 +205,33 @@ public class MyAgentBusyTests
     }
 }
 ```
+
+### Testing System Messages
+
+`AgentMessage.IsSystemMessage` is the preferred way to test whether a full `AgentMessage` is FabrCore system/control traffic. It returns true for underscore-prefixed `MessageType` values such as `_status`, `_thinking`, and `_error`.
+
+```csharp
+[TestMethod]
+public void AgentMessage_IsSystemMessage_DetectsControlTraffic()
+{
+    var progress = new AgentMessage
+    {
+        MessageType = SystemMessageTypes.Thinking,
+        Message = "Searching documents.."
+    };
+
+    var domain = new AgentMessage
+    {
+        MessageType = "order-status",
+        Message = "Check order ORD-123"
+    };
+
+    Assert.IsTrue(progress.IsSystemMessage);
+    Assert.IsFalse(domain.IsSystemMessage);
+}
+```
+
+The in-memory harness calls `OnMessage`/`OnMessageBusy` directly, so it does not emulate `AgentGrain.ReceivedChatMessage` filtering system messages before dispatch. If a test uses monitor snapshots or other DTOs that only expose `MessageType`, use `SystemMessageTypes.IsSystemMessage(messageType)` instead.
 
 ### Testing Trace Propagation
 

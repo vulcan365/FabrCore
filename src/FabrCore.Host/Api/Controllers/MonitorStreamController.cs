@@ -31,16 +31,16 @@ namespace FabrCore.Host.Api.Controllers
         };
 
         private readonly IAgentMessageMonitor _monitor;
-        private readonly IAclProvider _aclProvider;
+        private readonly IAclEvaluator _aclEvaluator;
         private readonly ILogger<MonitorStreamController> _logger;
 
         public MonitorStreamController(
             IAgentMessageMonitor monitor,
-            IAclProvider aclProvider,
+            IAclEvaluator aclEvaluator,
             ILogger<MonitorStreamController> logger)
         {
             _monitor = monitor;
-            _aclProvider = aclProvider;
+            _aclEvaluator = aclEvaluator;
             _logger = logger;
         }
 
@@ -236,26 +236,22 @@ namespace FabrCore.Host.Api.Controllers
             }
         }
 
-        private async Task<bool> CanReadAgentAsync(string userHandle, string? agentHandle)
+        private Task<bool> CanReadAgentAsync(string userHandle, string? agentHandle)
         {
             if (string.IsNullOrWhiteSpace(agentHandle))
             {
-                return false;
+                return Task.FromResult(false);
             }
 
             var (targetUserHandle, targetAgentHandle) = HandleUtilities.ParseHandle(agentHandle);
             if (string.IsNullOrWhiteSpace(targetUserHandle) || string.IsNullOrWhiteSpace(targetAgentHandle))
             {
-                return false;
+                return Task.FromResult(false);
             }
 
-            if (string.Equals(userHandle, targetUserHandle, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            var result = await _aclProvider.EvaluateAsync(userHandle, targetUserHandle, targetAgentHandle, AclPermission.Read);
-            return result.Allowed;
+            // Read filtering is data exposure, not message flow: AuditOnly mode still filters
+            // (IsAllowed is false for unauthorized reads); Disabled mode bypasses.
+            return Task.FromResult(_aclEvaluator.CanRead(userHandle, agentHandle).IsAllowed);
         }
 
         private static IEnumerable<string?> MessageHandles(MonitoredMessage message)

@@ -26,19 +26,19 @@ namespace FabrCore.Host.Api.Controllers
         private readonly IHostEnvironment _environment;
         private readonly ILogger<MonitorController> _logger;
         private readonly ITokenCostCalculator? _costCalculator;
-        private readonly IAclProvider _aclProvider;
+        private readonly IAclEvaluator _aclEvaluator;
 
         public MonitorController(
             IAgentMessageMonitor monitor,
             IHostEnvironment environment,
             ILogger<MonitorController> logger,
-            IAclProvider aclProvider,
+            IAclEvaluator aclEvaluator,
             ITokenCostCalculator? costCalculator = null)
         {
             _monitor = monitor;
             _environment = environment;
             _logger = logger;
-            _aclProvider = aclProvider;
+            _aclEvaluator = aclEvaluator;
             _costCalculator = costCalculator;
         }
 
@@ -527,26 +527,22 @@ namespace FabrCore.Host.Api.Controllers
                 : StatusCode(403, new { Error = $"Access denied: '{userHandle}' cannot Read monitor data for '{agentHandle}'." });
         }
 
-        private async Task<bool> CanReadAgentAsync(string userHandle, string? agentHandle)
+        private Task<bool> CanReadAgentAsync(string userHandle, string? agentHandle)
         {
             if (string.IsNullOrWhiteSpace(agentHandle))
             {
-                return false;
+                return Task.FromResult(false);
             }
 
             var (targetUserHandle, targetAgentHandle) = HandleUtilities.ParseHandle(agentHandle);
             if (string.IsNullOrWhiteSpace(targetUserHandle) || string.IsNullOrWhiteSpace(targetAgentHandle))
             {
-                return false;
+                return Task.FromResult(false);
             }
 
-            if (string.Equals(userHandle, targetUserHandle, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            var result = await _aclProvider.EvaluateAsync(userHandle, targetUserHandle, targetAgentHandle, AclPermission.Read);
-            return result.Allowed;
+            // Read filtering is data exposure, not message flow: AuditOnly mode still filters
+            // (IsAllowed is false for unauthorized reads); Disabled mode bypasses.
+            return Task.FromResult(_aclEvaluator.CanRead(userHandle, agentHandle).IsAllowed);
         }
 
         private async Task<List<MonitoredMessage>> FilterMessagesAsync(string userHandle, IEnumerable<MonitoredMessage> messages)

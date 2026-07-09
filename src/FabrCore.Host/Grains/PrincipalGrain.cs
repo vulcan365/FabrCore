@@ -77,7 +77,7 @@ namespace FabrCore.Host.Grains
         private readonly IClusterClient clusterClient;
         private readonly ILogger<PrincipalGrain> logger;
         private readonly IFabrCoreAgentService _agentService;
-        private readonly IAclProvider _aclProvider;
+        private readonly AclEnforcer _acl;
         private readonly IAgentMessageMonitor _messageMonitor;
         private readonly VerifiableExecutionRecorder _verifiableExecution;
         private readonly ObserverManager<IPrincipalGrainObserver> observerManager;
@@ -90,7 +90,7 @@ namespace FabrCore.Host.Grains
             IClusterClient clusterClient,
             ILoggerFactory loggerFactory,
             IFabrCoreAgentService agentService,
-            IAclProvider aclProvider,
+            AclEnforcer acl,
             IAgentMessageMonitor messageMonitor,
             VerifiableExecutionRecorder verifiableExecution,
             Microsoft.Extensions.Options.IOptions<PrincipalGrainOptions> grainOptions,
@@ -101,7 +101,7 @@ namespace FabrCore.Host.Grains
             this.logger = loggerFactory.CreateLogger<PrincipalGrain>();
             this._grainOptions = grainOptions.Value;
             _agentService = agentService;
-            _aclProvider = aclProvider;
+            _acl = acl;
             _messageMonitor = messageMonitor;
             _verifiableExecution = verifiableExecution;
             this.observerManager = new ObserverManager<IPrincipalGrainObserver>(TimeSpan.FromMinutes(5), logger);
@@ -195,8 +195,8 @@ namespace FabrCore.Host.Grains
             // Resolve the ToHandle - if it contains ':', use as-is; otherwise prefix with principal handle
             var resolvedToHandle = ResolveAgentHandle(request.ToHandle, principalHandle);
 
-            // ACL check for cross-principal access
-            await AuthorizeOrThrow(resolvedToHandle, AclPermission.Message);
+            // ACL check for cross-principal access (stamps the cross-principal breadcrumb)
+            AuthorizeOrThrow(resolvedToHandle, FabrActions.AgentMessage, request);
 
             // Defense-in-depth: ensure FromHandle is set so the agent can route responses back
             if (string.IsNullOrEmpty(request.FromHandle))
@@ -259,8 +259,8 @@ namespace FabrCore.Host.Grains
             // Resolve the ToHandle - if it contains ':', use as-is; otherwise prefix with principal handle
             var resolvedToHandle = ResolveAgentHandle(request.ToHandle, principalHandle);
 
-            // ACL check for cross-principal access
-            await AuthorizeOrThrow(resolvedToHandle, AclPermission.Message);
+            // ACL check for cross-principal access (stamps the cross-principal breadcrumb)
+            AuthorizeOrThrow(resolvedToHandle, FabrActions.AgentMessage, request);
 
             // Defense-in-depth: ensure FromHandle is set so the agent can route responses back
             if (string.IsNullOrEmpty(request.FromHandle))
@@ -324,7 +324,7 @@ namespace FabrCore.Host.Grains
                     var resolvedChannel = ResolveAgentHandle(request.Channel, principalHandle);
 
                     // ACL check for cross-principal event delivery
-                    await AuthorizeOrThrow(resolvedChannel, AclPermission.Message);
+                    AuthorizeOrThrow(resolvedChannel, FabrActions.AgentMessage);
 
                     request.Channel = resolvedChannel;
                 }
@@ -706,7 +706,7 @@ namespace FabrCore.Host.Grains
                 handlePrefix);
 
             // ACL check for cross-principal agent creation
-            await AuthorizeOrThrow(agentConfiguration.Handle, AclPermission.Configure);
+            AuthorizeOrThrow(agentConfiguration.Handle, FabrActions.AgentCreate);
 
             activity?.SetTag("principal.handle", principalHandle);
             activity?.SetTag("agent.handle", agentConfiguration.Handle);
@@ -775,8 +775,8 @@ namespace FabrCore.Host.Grains
 
             var resolvedHandle = ResolveAgentHandle(handle, principalHandle);
 
-            // ACL check — reset requires Configure permission
-            await AuthorizeOrThrow(resolvedHandle, AclPermission.Configure);
+            // ACL check — reset requires the agent.reconfigure permission
+            AuthorizeOrThrow(resolvedHandle, FabrActions.AgentReconfigure);
 
             activity?.SetTag("principal.handle", principalHandle);
             activity?.SetTag("agent.handle", resolvedHandle);
@@ -811,7 +811,7 @@ namespace FabrCore.Host.Grains
             var principalHandle = this.GetPrimaryKeyString();
             var resolvedHandle = ResolveAgentHandle(handle, principalHandle);
 
-            await AuthorizeOrThrow(resolvedHandle, AclPermission.Configure);
+            AuthorizeOrThrow(resolvedHandle, FabrActions.AgentDestroy);
 
             var removed = _trackedAgents.Remove(resolvedHandle);
             var stateRemoved = _state.State.TrackedAgents.Remove(resolvedHandle);
@@ -927,14 +927,14 @@ namespace FabrCore.Host.Grains
 
             foreach (var agent in allAgents)
             {
-                var (targetPrincipalHandle, agentHandle) = HandleUtilities.ParseHandle(agent.Key);
+                var (targetPrincipalHandle, _) = HandleUtilities.ParseHandle(agent.Key);
 
                 // Skip own agents (already tracked via GetTrackedAgents)
                 if (string.Equals(principalHandle, targetPrincipalHandle, StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                var result = await _aclProvider.EvaluateAsync(principalHandle, targetPrincipalHandle, agentHandle, AclPermission.Message);
-                if (result.Allowed)
+                // Pure in-memory snapshot scan — no per-agent awaits.
+                if (_acl.Evaluator.CanSendMessage(principalHandle, null, agent.Key).IsAllowed)
                     accessible.Add(agent);
             }
 
@@ -942,28 +942,23 @@ namespace FabrCore.Host.Grains
         }
 
         /// <summary>
-        /// Checks ACL permissions for cross-principal access. Own-agent access is always allowed.
+        /// Checks ACL permissions for the requested action (synchronous — the evaluator is
+        /// snapshot-backed). Own-agent access is implicitly allowed by the evaluator. When a
+        /// message crosses a principal boundary, its cross-principal breadcrumb is stamped so
+        /// downstream fan-out can be audited.
         /// </summary>
-        private async Task AuthorizeOrThrow(string targetHandle, AclPermission required)
+        private void AuthorizeOrThrow(string targetHandle, AclAction action, AgentMessage? message = null)
         {
             var principalHandle = this.GetPrimaryKeyString();
-            var (targetPrincipalHandle, agentHandle) = HandleUtilities.ParseHandle(targetHandle);
 
-            // Own agents always allowed — short-circuit with zero overhead
-            if (string.Equals(principalHandle, targetPrincipalHandle, StringComparison.OrdinalIgnoreCase))
-                return;
+            _acl.Authorize(new AclSubjectContext(principalHandle, null), action, targetHandle, message);
 
-            var result = await _aclProvider.EvaluateAsync(principalHandle, targetPrincipalHandle, agentHandle, required);
-            if (!result.Allowed)
+            if (message is not null)
             {
-                logger.LogWarning("ACL denied: '{PrincipalHandle}' cannot {Permission} on '{TargetHandle}'. {Reason}",
-                    principalHandle, required, targetHandle, result.DeniedReason);
-                throw new UnauthorizedAccessException(
-                    $"Access denied: '{principalHandle}' cannot {required} on '{targetHandle}'. {result.DeniedReason}");
+                var (targetPrincipalHandle, _) = HandleUtilities.ParseHandle(targetHandle);
+                if (!string.Equals(principalHandle, targetPrincipalHandle, StringComparison.OrdinalIgnoreCase))
+                    _acl.StampAndWarnCrossPrincipal(message, principalHandle, targetPrincipalHandle);
             }
-
-            logger.LogDebug("ACL granted: '{PrincipalHandle}' can {Permission} on '{TargetHandle}'",
-                principalHandle, required, targetHandle);
         }
 
         /// <summary>

@@ -8,6 +8,7 @@ description: >
   "deploy FabrCore", "system agent", "ConfigureSystemAgentAsync", "IFabrCoreAgentService",
   "AgentManagementProvider", "UseAgentManagementProvider", "IAgentManagementProvider",
   "AdditionalAssemblies", "WebSocket", "server setup", "LLM provider", "Storage API",
+  "AgentMessage.IsSystemMessage", "SystemMessageTypes", "_status", "_thinking", "_error",
   "typed entity storage", "IFabrCoreStorageProvider", "UseVerifiableExecution",
   "IVerifiableExecutionStore", "IVerifiableExecutionSigner", "signed execution", "evidence bundle".
   Do NOT use for: Orleans clustering/configuration — use fabrcore-orleans.
@@ -77,7 +78,8 @@ builder.AddFabrCoreServer(new FabrCoreServerOptions
     AdditionalAssemblies = [typeof(MyAgent).Assembly]
 }
 .UseAgentManagementProvider<SqlAgentManagementProvider>()
-.UseAclProvider<SqlAclProvider>());
+.UseAclEvaluator<MyAclEvaluator>()      // custom access-control decisions (see fabrcore-acl)
+.UseAuditProvider<MySiemAuditProvider>());  // durable security audit sink (see fabrcore-acl)
 ```
 
 ### Verifiable Execution Providers
@@ -146,12 +148,12 @@ For instance-based registration, FabrCore registers both `TimeProvider` and the 
 ## What AddFabrCoreServer Configures
 
 1. **Orleans Silo** — Clustering, persistence, reminders, streaming, and registered `TimeProvider` based on `OrleansClusterOptions`
-2. **Services** — `FabrCoreChatClientService`, `FabrCoreToolRegistry`, `FabrCoreRegistry`, `FabrCoreAgentService`, `IAgentManagementProvider`, `IAclProvider`
+2. **Services** — `FabrCoreChatClientService`, `FabrCoreToolRegistry`, `FabrCoreRegistry`, `FabrCoreAgentService`, `IAgentManagementProvider`, `IAclEvaluator`, `IAuditProvider`
 3. **Typed Entity Storage** — `IFabrCoreStorageProvider` backed by the configured Orleans storage provider
 4. **Verifiable Execution Services** — `IVerifiableExecutionStore`, `IVerifiableExecutionSigner`, `IVerifiableExecutionVerifier`, `IVerifiableExecutionContext`, and SDK helper support for external effects (disabled/no-op unless enabled)
 5. **Background Services** — `AgentRegistryCleanupService`, `FileCleanupService`
 6. **Assembly Discovery** — Scans `AdditionalAssemblies` for agent, plugin, and tool types
-7. **ACL Configuration** — Loads `Acl` section from `fabrcore.json`, registers `IAclProvider`
+7. **ACL & Security Audit** — Loads `Acl` and `FabrCore:Audit` sections from `fabrcore.json`, registers the ACL evaluator/enforcer, the `AclRegistryGrain`-backed entity store, and the audit provider (see fabrcore-acl)
 
 ## What UseFabrCoreServer Configures
 
@@ -881,6 +883,8 @@ External systems should prefer bundle export plus local verification against the
 Connect at `/ws` for real-time bidirectional communication. Requires principal handle via `x-fabrcore-userhandle` header or `userhandle` query parameter.
 
 The WebSocket ingress honors the W3C `traceparent` header — if a client sets it, the resulting `AgentMessage` ingress span parents on the caller's trace via `AgentMessageTelemetry.StartIngressActivity` (see `src/FabrCore.Host/WebSocket/WebSocketSession.cs:314`). Error responses are stamped from `Activity.Current` at lines 384, 413, 700.
+
+WebSocket clients receive normal responses and system/control messages as `AgentMessage` objects. Use `message.IsSystemMessage` to branch `_status`, `_thinking`, `_error`, or any other underscore-prefixed control traffic into progress/error UI instead of normal chat transcript rendering. Use `SystemMessageTypes.IsSystemMessage(messageType)` only when working with raw `MessageType` strings or non-`AgentMessage` DTOs.
 
 ## OpenTelemetry exporter setup
 
