@@ -45,4 +45,8 @@
 		<ProjectReference Include="..\FabrCore.Sdk\FabrCore.Sdk.csproj" />
 	</ItemGroup>
 
+	<ItemGroup>
+		<InternalsVisibleTo Include="FabrCore.Host.Tests" />
+	</ItemGroup>
+
 </Project>

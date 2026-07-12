@@ -34,6 +34,28 @@ public sealed class CopilotAppPackageBuilderTests
         Assert.AreEqual("1.22", manifest.GetProperty("manifestVersion").GetString());
         Assert.AreEqual("Test Agent", manifest.GetProperty("name").GetProperty("short").GetString());
         Assert.AreEqual("agents.contoso.com", manifest.GetProperty("validDomains")[0].GetString());
+
+        // Removed from manifest schema v1.17+; the store rejects manifests that still carry it
+        // because the schema sets additionalProperties: false.
+        Assert.IsFalse(manifest.TryGetProperty("packageName", out _));
+    }
+
+    [TestMethod]
+    public void Manifest_NormalizesPublicHostName_FromUrl()
+    {
+        var builder = CreateBuilder(o => o.Manifest.PublicHostName = "https://surfaceapp.fabrcore.ai/some/path");
+        var manifest = JsonDocument.Parse(builder.BuildManifestJson()).RootElement;
+
+        Assert.AreEqual("surfaceapp.fabrcore.ai", manifest.GetProperty("validDomains")[0].GetString());
+    }
+
+    [TestMethod]
+    public void Manifest_NormalizesPublicHostName_FromHostWithPort()
+    {
+        var builder = CreateBuilder(o => o.Manifest.PublicHostName = "surfaceapp.fabrcore.ai:443");
+        var manifest = JsonDocument.Parse(builder.BuildManifestJson()).RootElement;
+
+        Assert.AreEqual("surfaceapp.fabrcore.ai", manifest.GetProperty("validDomains")[0].GetString());
     }
 
     [TestMethod]

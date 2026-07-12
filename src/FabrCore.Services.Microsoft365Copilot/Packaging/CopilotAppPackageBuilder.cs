@@ -32,9 +32,10 @@ public sealed class CopilotAppPackageBuilder
         var appId = manifest.Id ?? botId;
 
         var validDomains = new JsonArray();
-        if (!string.IsNullOrWhiteSpace(manifest.PublicHostName))
+        var publicHost = NormalizeHostName(manifest.PublicHostName);
+        if (publicHost is not null)
         {
-            validDomains.Add(manifest.PublicHostName);
+            validDomains.Add(publicHost);
         }
 
         var root = new JsonObject
@@ -43,7 +44,6 @@ public sealed class CopilotAppPackageBuilder
             ["manifestVersion"] = ManifestSchemaVersion,
             ["version"] = manifest.Version,
             ["id"] = appId,
-            ["packageName"] = manifest.PackageName,
             ["developer"] = new JsonObject
             {
                 ["name"] = manifest.DeveloperName,
@@ -150,4 +150,29 @@ public sealed class CopilotAppPackageBuilder
 
     private static byte[] LoadIcon(string? path, byte[] fallback)
         => string.IsNullOrWhiteSpace(path) ? fallback : File.ReadAllBytes(path);
+
+    /// <summary>
+    /// Manifest validDomains entries must be bare host names. Accept full URLs
+    /// ("https://host/path") and host:port forms and reduce them to the host.
+    /// </summary>
+    private static string? NormalizeHostName(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var trimmed = value.Trim();
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var absolute) && !string.IsNullOrEmpty(absolute.Host))
+        {
+            return absolute.Host;
+        }
+
+        if (Uri.TryCreate($"https://{trimmed}", UriKind.Absolute, out var hostOnly) && !string.IsNullOrEmpty(hostOnly.Host))
+        {
+            return hostOnly.Host;
+        }
+
+        return trimmed;
+    }
 }

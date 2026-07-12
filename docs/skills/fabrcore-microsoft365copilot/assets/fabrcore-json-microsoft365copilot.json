@@ -1,0 +1,58 @@
+{
+  "ModelConfigurations": [
+    {
+      "Name": "default",
+      "Provider": "OpenAI",
+      "Model": "gpt-4o",
+      "ApiKeyAlias": "openai"
+    }
+  ],
+  "ApiKeys": [
+    {
+      "Alias": "openai",
+      "Value": "replace-with-api-key"
+    }
+  ],
+  "Microsoft365Copilot": {
+    "TenantId": "replace-with-entra-tenant-id",
+    "ClientId": "replace-with-bot-app-registration-client-id",
+    "ClientSecret": "replace-with-bot-app-registration-client-secret",
+    "WelcomeMessage": "Hello! Ask me anything.",
+    "Agent": {
+      "AgentType": "replace-with-your-agent-alias",
+      "Handle": "copilot",
+      "Models": "default",
+      "SystemPrompt": "You are a helpful assistant.",
+      "Plugins": [],
+      "Tools": [],
+      "Args": {}
+    },
+    "Streaming": {
+      "Enabled": true,
+      "InformativeUpdate": "Working on it...",
+      "EnableGeneratedByAILabel": true,
+      "EnableFeedbackLoop": false
+    },
+    "Principal": {
+      "Strategy": "EntraObjectId",
+      "Prefix": ""
+    },
+    "Manifest": {
+      "Name": "My FabrCore Agent",
+      "FullName": "My FabrCore Agent (Full Name)",
+      "Description": "A FabrCore agent available in Microsoft 365 Copilot.",
+      "FullDescription": "Custom engine agent that bridges Microsoft 365 Copilot and Teams to FabrCore agents.",
+      "DeveloperName": "Your Company",
+      "WebsiteUrl": "https://example.com",
+      "PrivacyUrl": "https://example.com/privacy",
+      "TermsOfUseUrl": "https://example.com/terms",
+      "PublicHostName": "replace-with-public-host",
+      "ConversationStarters": [
+        {
+          "Title": "Get started",
+          "Description": "What can you help me with?"
+        }
+      ]
+    }
+  }
+}
