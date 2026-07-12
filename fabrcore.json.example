@@ -26,5 +26,20 @@
       "Alias": "OPENAI_KEY",
       "Value": "your-openai-api-key-here"
     }
-  ]
+  ],
+  "Microsoft365Copilot": {
+    "TenantId": "your-entra-tenant-id",
+    "ClientId": "your-bot-app-registration-client-id",
+    "ClientSecret": "your-bot-app-registration-secret",
+    "Agent": {
+      "AgentType": "chat-agent",
+      "SystemPrompt": "You are a helpful assistant.",
+      "Models": "default"
+    },
+    "Manifest": {
+      "Name": "My FabrCore Agent",
+      "Description": "Answers questions using my FabrCore agents.",
+      "PublicHostName": "your-public-host.example.com"
+    }
+  }
 }

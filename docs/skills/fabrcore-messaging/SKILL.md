@@ -160,9 +160,11 @@ HandleUtilities.ParseHandle("assistant");                 // ("", "assistant")
 
 Agents and plugins can access their own handle components directly:
 
+Compatibility naming: `GetUserHandle()` and `HasUserHandle()` are legacy method names. They return/check the principal handle prefix used for routing and ACL boundaries.
+
 ```csharp
 var full   = fabrcoreAgentHost.GetHandle();             // "principal1:assistant"
-var principalHandle = fabrcoreAgentHost.GetUserHandle(); // "principal1"
+var principalHandle = fabrcoreAgentHost.GetUserHandle(); // "principal1" (principal handle)
 var agent  = fabrcoreAgentHost.GetAgentHandle();   // "assistant"
 var (principalHandle, agentHandle) = fabrcoreAgentHost.GetParsedHandle(); // ("principal1", "assistant")
 if (fabrcoreAgentHost.HasUserHandle()) { /* ... */ }
@@ -447,7 +449,7 @@ Grant shapes for cross-talk (see fabrcore-acl for the full model):
 
 ### Storage principal handle partitioning
 
-Typed entity storage is not message routing, but it uses the same principal handle discipline. The Storage API requires `x-user-handle`; that value is the principal handle partition for `container/entityKey`. Treat it as an ACL boundary:
+Typed entity storage is not message routing, but it uses the same principal handle discipline. The Storage API requires `x-user-handle`; that legacy header name carries the principal handle partition for `container/entityKey`. Treat it as an ACL boundary:
 
 - Principal data should use the principal handle as `x-user-handle`.
 - Agent-associated shared data should deliberately use the owning agent or principal partition.

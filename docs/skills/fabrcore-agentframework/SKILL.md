@@ -437,9 +437,9 @@ public override async Task<AgentMessage> OnMessage(AgentMessage message)
 }
 ```
 
-### Per-User Session
+### Per-Principal Session
 
-Separate conversation history per user. Use different `threadId` values:
+Separate conversation history per principal. Use different `threadId` values:
 
 ```csharp
 private readonly Dictionary<string, (AIAgent Agent, AgentSession Session)> _principalSessions = new();

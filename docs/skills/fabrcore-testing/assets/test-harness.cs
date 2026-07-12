@@ -94,7 +94,7 @@ public class FabrCoreTestHarness : IDisposable
     {
         var message = new AgentMessage
         {
-            FromHandle = fromHandle ?? "test-user",
+            FromHandle = fromHandle ?? "test-principal",
             ToHandle = AgentHost.GetHandle(),
             Message = messageText,
             Kind = MessageKind.Request
@@ -110,7 +110,7 @@ public class FabrCoreTestHarness : IDisposable
     {
         var message = new AgentMessage
         {
-            FromHandle = fromHandle ?? "test-user",
+            FromHandle = fromHandle ?? "test-principal",
             ToHandle = AgentHost.GetHandle(),
             Message = messageText,
             Kind = MessageKind.Request

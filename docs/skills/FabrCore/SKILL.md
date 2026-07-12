@@ -28,7 +28,7 @@ Build distributed AI agent systems with FabrCore — an open-source .NET 10 fram
 | Concept | Type | Key Class/Interface | Skill |
 |---------|------|-------------------|-------|
 | Agent | Business logic actor | `FabrCoreAgentProxy`, `TryGetStateAsync` | fabrcore-agent |
-| Agent Blueprint | Admin ensure list for user agents | `AgentBlueprintRequest`, `POST /fabrcoreapi/Agent/blueprint` | fabrcore-server |
+| Agent Blueprint | Admin ensure list for principal-scoped agents | `AgentBlueprintRequest`, `POST /fabrcoreapi/Agent/blueprint` | fabrcore-server |
 | Agent Eviction | Hard-delete an agent instance | `AgentEvictionResult`, `DELETE /fabrcoreapi/Agent/{handle}` | fabrcore-server, fabrcore-orleans |
 | Agent Framework | LLM agent runtime | `AIAgent`, `AgentSession` | fabrcore-agentframework |
 | Plugin | Stateful tool collection | `IFabrCorePlugin` | fabrcore-plugins-tools |
@@ -38,7 +38,7 @@ Build distributed AI agent systems with FabrCore — an open-source .NET 10 fram
 | Orleans | Distributed runtime | Clustering, Persistence, `TimeProvider` | fabrcore-orleans |
 | API Client | HTTP client access | `FabrCore.Sdk.IFabrCoreHostApiClient` | fabrcore-server |
 | Entity Storage | Typed key/value app data | `IFabrCoreStorageProvider`, `FabrCore.Sdk.IFabrCoreHostApiClient` | fabrcore-server, fabrcore-orleans |
-| Handle Access | Principal handle/agent handle parsing | `IFabrCoreAgentHost.GetUserHandle()`, `GetAgentHandle()` | fabrcore-agent |
+| Handle Access | Principal handle/agent handle parsing | `IFabrCoreAgentHost.GetUserHandle()` (legacy name), `GetAgentHandle()` | fabrcore-agent |
 | Messaging | Agent communication | `AgentMessage`, `AgentMessage.IsSystemMessage`, `HandleUtilities` | fabrcore-messaging |
 | ACL | Principals, roles, groups, permission grants | `IAclEvaluator`, `PermissionGrant`, `AclController` | fabrcore-acl |
 | Security Audit | ACL decisions, boundary crossings | `IAuditProvider`, `AuditEvent` | fabrcore-acl |
@@ -47,7 +47,17 @@ Build distributed AI agent systems with FabrCore — an open-source .NET 10 fram
 | Telemetry | W3C TraceContext on every message | `AgentMessageTelemetry`, `StampFromActivity`, `StartIngressActivity` | fabrcore-messaging (surface), fabrcore-server (exporter setup) |
 | Verifiable Execution | Signed/tamper-evident agent/event evidence | `IVerifiableExecutionStore`, `IVerifiableExecutionSigner`, `VerifiableExecutionEnvelope` | fabrcore-spiffe |
 
+## Blueprints
+
+A Blueprint is a caller-supplied, idempotent manifest of agents to ensure for one principal. It is not a Host-startup setting, stored server-side template, or continuous reconciler: the application must call `POST /fabrcoreapi/Agent/blueprint` (or `EnsureBlueprintAgentsAsync`) when it provisions a principal, such as at first sign-in or workspace initialization. Existing configured agents keep their configuration; use `/agent/create` for an intentional reconfiguration.
+
+Use **fabrcore-server** for the request contract, bootstrap pattern, and manifest asset. Use **fabrcore-testing** to verify lifecycle behavior against a running Host.
+
 ## Architecture Overview
+
+## Principal vs User Naming
+
+FabrCore's authorization, routing, storage partitioning, and ACL model use **principals**. Some public compatibility names still say `user` or `users`, including `x-user-handle`, `x-fabrcore-userhandle`, `GetUserHandle()`, `HasUserHandle()`, `UserHandle` DTO fields, and `/fabrcoreapi/Diagnostics/users`. Treat those names as legacy wire/API names: the value is a **principal handle**, not a separate end-user profile.
 
 FabrCore layers on top of Orleans (distributed actor model) and Microsoft.Extensions.AI:
 

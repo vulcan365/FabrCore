@@ -1,0 +1,18 @@
+{
+  "name": "workspace-defaults",
+  "version": "1.0.0",
+  "agents": [
+    {
+      "handle": "assistant",
+      "agentType": "your-agent-alias",
+      "models": "default",
+      "systemPrompt": "Help the principal with their workspace.",
+      "description": "Default workspace assistant.",
+      "streams": [],
+      "args": {},
+      "plugins": [],
+      "tools": [],
+      "mcpServers": []
+    }
+  ]
+}
