@@ -1,16 +1,15 @@
 ---
 name: fabrcore-server
 description: >
-  Set up and configure FabrCore servers — AddFabrCoreServer, FabrCoreServerOptions, TimeProvider, fabrcore.json LLM provider
-  configuration, REST API endpoints, WebSocket, system agents, custom providers, and deployment.
-  Triggers on: "FabrCore server", "AddFabrCoreServer", "AddFabrCoreServices", "UseFabrCoreServer",
-  "FabrCoreServerOptions", "TimeProvider", "UseTimeProvider", "fabrcore.json", "ModelConfigurations", "ApiKeys", "REST API", "/fabrcoreapi",
-  "deploy FabrCore", "system agent", "ConfigureSystemAgentAsync", "IFabrCoreAgentService",
-  "AgentManagementProvider", "UseAgentManagementProvider", "IAgentManagementProvider",
+  Set up and configure FabrCore servers: AddFabrCoreServer, options, fabrcore.json LLM providers,
+  REST APIs, WebSocket, system agents, Blueprint provisioning, storage, custom providers, and deployment.
+  Use for: "FabrCore server", "AddFabrCoreServer", "AddFabrCoreServices", "UseFabrCoreServer",
+  "FabrCoreServerOptions", "TimeProvider", "fabrcore.json", "REST API", "/fabrcoreapi",
+  "Blueprint", "AgentBlueprintRequest", "EnsureBlueprintAgentsAsync", "agent/blueprint",
+  "ConfigureSystemAgentAsync", "IFabrCoreAgentService", "AgentManagementProvider",
   "AdditionalAssemblies", "WebSocket", "server setup", "LLM provider", "Storage API",
-  "AgentMessage.IsSystemMessage", "SystemMessageTypes", "_status", "_thinking", "_error",
   "typed entity storage", "IFabrCoreStorageProvider", "UseVerifiableExecution",
-  "IVerifiableExecutionStore", "IVerifiableExecutionSigner", "signed execution", "evidence bundle".
+  "IVerifiableExecutionStore", "signed execution", or "evidence bundle".
   Do NOT use for: Orleans clustering/configuration — use fabrcore-orleans.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
 ---
@@ -334,9 +333,17 @@ The agent grain key becomes `"system:{config.Handle}"`, and the system principal
 
 ## REST API Endpoints
 
-Base path: `/fabrcoreapi/`. All agent-scoped endpoints require the `x-user-handle` header to identify the caller.
+Base path: `/fabrcoreapi/`. All agent-scoped endpoints require the `x-user-handle` header to identify the caller principal.
+
+Compatibility naming: several REST and SDK surfaces still use `user`/`users` in the route, header, or parameter name. Treat `x-user-handle`, `x-fabrcore-userhandle`, `userhandle`, and diagnostics `users` routes as compatibility names for **principal** handles/entries.
 
 > **Typed C# client:** `IFabrCoreHostApiClient` in `FabrCore.Sdk` wraps the common endpoint groups below (Agent, Storage, Discovery, Embeddings, File, ModelConfig, Diagnostics). Most agent-scoped methods take a fully-qualified `"principalHandle:agentHandle"` handle and the client extracts the principal handle into the `x-user-handle` header automatically. Blueprint ensure and storage methods take an explicit principal handle. If a newly added endpoint is not yet surfaced by the typed client, call its REST route directly.
+
+## Blueprint Provisioning
+
+Apply a Blueprint from application-owned provisioning code (for example, first sign-in, tenant creation, or workspace bootstrap). `AddFabrCoreServer` and `UseFabrCoreServer` do **not** discover, store, or automatically apply Blueprints for every principal at Host startup. A Blueprint is a request-time manifest, not a continuous reconciliation service.
+
+Use `assets/agent-blueprint.json` as a copyable HTTP-body template. For the lifecycle rules, SDK bootstrap example, response handling, and upgrade behavior, read `references/blueprints.md` before implementing Blueprint provisioning.
 
 ---
 
@@ -366,9 +373,11 @@ Creates one or more agents for a principal through that principal's `PrincipalGr
 
 #### POST `/agent/blueprint` — Ensure blueprint agents
 
-Ensures the agents listed in an admin-authored blueprint exist for the target principal from `x-user-handle`. This endpoint is idempotent for already configured agents: it uses the principal's host-side `PrincipalGrain.CreateAgent` path, checks health first for tracked agents, and does not reconfigure healthy/degraded/unhealthy configured agents. Missing or not-configured agents are configured from the blueprint and added to that principal's tracked-agent list.
+Ensures the agents listed in an admin-authored blueprint exist for the target principal from `x-user-handle`. Call it from application provisioning code; FabrCore does not invoke it automatically during Host startup. This endpoint is idempotent for already configured agents: it uses the principal's host-side `PrincipalGrain.CreateAgent` path, checks health first for tracked agents, and does not reconfigure healthy/degraded/unhealthy configured agents. Missing or not-configured agents are configured from the blueprint and added to that principal's tracked-agent list.
 
 Blueprint processing ignores incoming `ForceReconfigure = true`; use `/agent/create` when an intentional reconfigure is required.
+
+`Name` and `Version` are caller traceability fields echoed in the response. The Host does not persist them, compare versions, or remove agents omitted from a later Blueprint.
 
 | Parameter | Source | Type | Required | Description |
 |-----------|--------|------|----------|-------------|
@@ -745,7 +754,7 @@ Read model configuration and API keys from `fabrcore.json`. Useful for clients t
 
 ### Diagnostics API (`/fabrcoreapi/diagnostics`)
 
-Monitor and manage agent lifecycle across the cluster.
+Monitor and manage agent/principal lifecycle across the cluster. The `users` route name is a compatibility name; it returns principal entries from the management registry.
 
 #### GET `/diagnostics/agents` — List all agents
 
@@ -765,13 +774,29 @@ Monitor and manage agent lifecycle across the cluster.
 
 **Response** `200 OK`: `AgentInfo` or `404` if not found.
 
+#### GET `/diagnostics/users` — List all principals
+
+Compatibility route name: these are principals, not a separate user profile model. The optional `status` query filters by registry status.
+
+| Parameter | Source | Type | Required | Description |
+|-----------|--------|------|----------|-------------|
+| `status` | Query | string | No | Filter by status (e.g., `"Active"`, `"Deactivated"`) |
+
+**Response** `200 OK`:
+```json
+{
+  "Count": 3,
+  "Users": [ /* AgentInfo[] with EntityType = Principal */ ]
+}
+```
+
 #### GET `/diagnostics/agents/statistics` — Cluster statistics
 
-**Response** `200 OK`: `{ "Total": 10, "Active": 8, "Deactivated": 2 }`
+**Response** `200 OK`: `{ "Total": 10, "Active": 8, "Deactivated": 2 }` plus implementation-specific agent/principal breakdown keys when available.
 
 #### POST `/diagnostics/agents/purge` — Purge old deactivated agents
 
-Removes old deactivated entries from the diagnostics/management registry only. It does not clear `AgentGrain` persisted state, timers, reminders, or stream subscriptions. Use `DELETE /agent/{handle}` for hard eviction.
+Removes old deactivated agent entries from the diagnostics/management registry only. It does not purge principal entries, and it does not clear `AgentGrain` persisted state, timers, reminders, or stream subscriptions. Use `DELETE /agent/{handle}` for hard eviction.
 
 | Parameter | Source | Type | Required | Description |
 |-----------|--------|------|----------|-------------|
@@ -804,7 +829,7 @@ External systems should prefer bundle export plus local verification against the
 |-------|------|-------------|
 | `Name` | string? | Optional blueprint name for caller traceability |
 | `Version` | string? | Optional blueprint version |
-| `Agents` | List\<AgentConfiguration\> | Agent configurations to ensure for `x-user-handle` |
+| `Agents` | List\<AgentConfiguration\> | Agent configurations to ensure for the principal named by `x-user-handle` |
 
 **`AgentBlueprintResponse`** — returned by `/agent/blueprint`:
 
@@ -880,7 +905,7 @@ External systems should prefer bundle export plus local verification against the
 
 ## WebSocket
 
-Connect at `/ws` for real-time bidirectional communication. Requires principal handle via `x-fabrcore-userhandle` header or `userhandle` query parameter.
+Connect at `/ws` for real-time bidirectional communication. Requires principal handle via `x-fabrcore-userhandle` header or `userhandle` query parameter; both names are compatibility names for the principal handle.
 
 The WebSocket ingress honors the W3C `traceparent` header — if a client sets it, the resulting `AgentMessage` ingress span parents on the caller's trace via `AgentMessageTelemetry.StartIngressActivity` (see `src/FabrCore.Host/WebSocket/WebSocketSession.cs:314`). Error responses are stamped from `Activity.Current` at lines 384, 413, 700.
 

@@ -49,6 +49,7 @@ public class TestFabrCoreAgentHost : IFabrCoreAgentHost
 
     public string GetHandle() => _handle;
 
+    // UserHandle is the legacy tuple field name used by HandleUtilities; its value is the principal handle.
     public (string UserHandle, string AgentHandle) GetParsedHandle()
         => HandleUtilities.ParseHandle(_handle);
 

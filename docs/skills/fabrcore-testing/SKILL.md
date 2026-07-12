@@ -1,20 +1,14 @@
 ---
 name: fabrcore-testing
 description: >
-  Test and evaluate FabrCore agents — in-memory test host, mock and live LLM modes,
-  FabrCoreTestHarness, FakeChatClient, TestFabrCoreAgentHost, MSTest patterns,
-  and LLM evaluation with Microsoft.Extensions.AI.Evaluation quality/safety/NLP metrics.
-  Triggers on: "test agent", "test FabrCore", "FabrCoreTestHarness", "TestFabrCoreAgentHost",
-  "FakeChatClient", "TestChatClientService", "mock LLM", "agent test", "unit test agent",
-  "integration test agent", "test harness", "mock chat client", "deterministic response",
-  "WithSequentialResponses", "WithTextResponse", "CreateMockAgent", "CreateLiveAgent",
-  "test plugin", "MSTest FabrCore", "LLM eval", "evaluation", "evaluator", "eval agent",
-  "AgentMessage.IsSystemMessage", "SystemMessageTypes", "system message test",
-  "RelevanceEvaluator", "CoherenceEvaluator", "FluencyEvaluator", "GroundednessEvaluator",
-  "CompositeEvaluator", "EvaluationResult", "ScenarioRun", "ReportingConfiguration",
-  "quality eval", "safety eval", "BLEU", "agent evaluation", "eval metrics",
-  "IFabrCoreStorageProvider", "typed storage", "storage test", "TryGetStateAsync",
-  "custom state test", "malformed state", "undefined JsonElement".
+  Test and evaluate FabrCore agents with the in-memory test host, mock/live LLM modes,
+  MSTest patterns, Host lifecycle checks, and Microsoft.Extensions.AI.Evaluation metrics.
+  Use for: "test FabrCore", "FabrCoreTestHarness", "TestFabrCoreAgentHost", "FakeChatClient",
+  "mock LLM", "agent test", "integration test agent", "test harness", "WithTextResponse",
+  "CreateMockAgent", "CreateLiveAgent", "Blueprint test", "agent blueprint", "MSTest FabrCore",
+  "LLM eval", "evaluation", "evaluator", "RelevanceEvaluator", "GroundednessEvaluator",
+  "EvaluationResult", "ReportingConfiguration", "quality eval", "safety eval", "BLEU",
+  "typed storage", "storage test", "TryGetStateAsync", "custom state test", or "malformed state".
   Do NOT use for: agent development — use fabrcore-agent.
   Do NOT use for: server setup — use fabrcore-server.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
@@ -259,7 +253,7 @@ public async Task OnMessage_PreservesTraceIdAcrossResponse()
     using var activity = source.StartActivity("test");
     var request = new AgentMessage
     {
-        FromHandle = "test-user",
+        FromHandle = "test-principal",
         ToHandle = harness.AgentHost.GetHandle(),
         Message = "hi",
         Kind = MessageKind.Request
@@ -297,6 +291,8 @@ For end-to-end `SpanId`/`ParentSpanId` propagation checks you need the grain ing
 ## TestFabrCoreAgentHost Handle Methods
 
 `TestFabrCoreAgentHost` implements all handle methods from `IFabrCoreAgentHost`:
+
+Compatibility naming: `GetUserHandle()`, `HasUserHandle()`, and `UserHandle` tuple fields are legacy contract names. In tests, assert them as principal handles.
 
 ```csharp
 // Default handle is "test-agent" (no principal handle)
@@ -337,7 +333,7 @@ Agent eviction is a Host/Orleans lifecycle feature, so cover it with integration
 
 Verify these scenarios against a running Host:
 
-- `DELETE /fabrcoreapi/Agent/{handle}` with `x-user-handle` returns `AgentEvictionResult`.
+- `DELETE /fabrcoreapi/Agent/{handle}` with `x-user-handle` returns `AgentEvictionResult`; the header value is the principal handle.
 - Persisted chat/custom state is gone after eviction; a later health call reactivates the virtual grain as `NotConfigured`.
 - Registered timers are disposed and persistent reminders are unregistered, including reminders restored from Orleans storage.
 - Stream subscriptions are removed; publishing to the former agent chat/event streams does not invoke the evicted agent.
@@ -350,18 +346,21 @@ Verify these scenarios against a running Host:
 
 Blueprint processing is also a Host/Orleans lifecycle feature. Cover it with integration-style tests or manual Host API verification against `POST /fabrcoreapi/Agent/blueprint` rather than only `FabrCoreTestHarness` unit tests.
 
+Blueprints are caller-driven: a Host restart does not apply them automatically. In an integration test, arrange the principal by posting the Blueprint, then assert the tracked/configured results. Read `../fabrcore-server/references/blueprints.md` when the test also needs the full request contract or SDK bootstrap pattern.
+
 Verify these scenarios against a running Host:
 
-- Missing or empty `x-user-handle` returns `400 Bad Request`.
+- Missing or empty `x-user-handle` returns `400 Bad Request`; the header value is the principal handle.
 - Missing or empty `agents` returns `400 Bad Request`.
 - Bare blueprint handles are scoped to the `x-user-handle` principal.
 - Fully-qualified handles are accepted only when their principal prefix matches `x-user-handle`.
 - Cross-principal fully-qualified handles return `400 Bad Request`.
 - Existing tracked and configured agents return health without reconfiguration.
+- Existing configured agents in `Healthy`, `Degraded`, or `Unhealthy` state are not intentionally reconfigured.
 - Tracked but `NotConfigured` agents are configured from the blueprint.
 - New agents are configured and added to the principal's tracked-agent list.
 - Incoming `ForceReconfigure = true` in a blueprint config is ignored; use `/fabrcoreapi/Agent/create` for intentional reconfiguration.
-- A failing agent config produces an unhealthy per-agent result while the rest of the blueprint continues.
+- Invalid handle or cross-principal entries are rejected before any agent is processed; a per-agent configuration failure instead yields an unhealthy result and processing continues with the remaining entries.
 
 ## Testing Custom State Resilience
 

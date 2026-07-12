@@ -1,17 +1,14 @@
 ---
 name: fabrcore-agent
 description: >
-  Build FabrCore agents — extend FabrCoreAgentProxy, implement lifecycle methods (OnInitialize, OnMessage, OnEvent),
-  manage custom state, configure compaction, timers, reminders, and health monitoring.
-  Triggers on: "FabrCoreAgentProxy", "AgentAlias", "OnInitialize", "OnMessage", "OnMessageBusy", "OnEvent", "OnCompaction",
-  "ResolveConfiguredToolsAsync", "CreateChatClientAgent", "SetStatusMessage", "agent state", "GetStateAsync",
-  "TryGetStateAsync", "StateReadResult", "SetState", "FlushStateAsync", "compaction", "agent timer", "RegisterTimer", "agent reminder", "RegisterReminder",
-  "OnReminder", "agent health", "GetHealth", "AgentHealthStatus", "build agent", "create agent",
-  "FabrCoreCapabilities", "FabrCoreNote", "agent capabilities", "agent notes", "busy message", "concurrent message",
-  "AlwaysInterleave", "busy routing", "agent busy", "IFabrCoreStorageProvider", "typed storage",
-  "AgentMessage.IsSystemMessage", "SystemMessageTypes", "_status", "_thinking", "_error",
-  "verifiable execution", "VerifiableExecutionEnvelope", "signed evidence", "IVerifiableExecutionContext",
-  "RecordDbEffectAsync", "RecordHttpCallAsync", "RecordStorageEffectAsync", "RecordLibraryCallAsync".
+  Build FabrCore agents: extend FabrCoreAgentProxy, implement lifecycle methods, and manage custom
+  state, compaction, timers, reminders, health, telemetry, and agent configuration.
+  Use for: "FabrCoreAgentProxy", "AgentAlias", "OnInitialize", "OnMessage", "OnMessageBusy",
+  "OnEvent", "OnCompaction", "CreateChatClientAgent", "SetStatusMessage", "AgentConfiguration",
+  "GetStateAsync", "TryGetStateAsync", "FlushStateAsync", "compaction", "RegisterTimer",
+  "RegisterReminder", "agent health", "AgentHealthStatus", "build agent", "busy routing",
+  "IFabrCoreStorageProvider", "typed storage", "SystemMessageTypes", "verifiable execution",
+  "VerifiableExecutionEnvelope", "IVerifiableExecutionContext", or "RecordHttpCallAsync".
   Do NOT use for: Microsoft Agent Framework internals (AIAgent, AgentSession) — use fabrcore-agentframework.
   Do NOT use for: plugins, tools, MCP — use fabrcore-plugins-tools or fabrcore-mcp.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
@@ -104,6 +101,8 @@ protected readonly IFabrCoreChatClientService chatClientService;
 
 `IFabrCoreAgentHost` provides methods to access the agent's handle and its components:
 
+Compatibility naming: `GetUserHandle()`, `HasUserHandle()`, and the `UserHandle` tuple field are legacy API names. Their value is the principal handle that scopes routing, storage, diagnostics, and ACL checks.
+
 ```csharp
 // Full handle (e.g., "principal123:assistant")
 var full = fabrcoreAgentHost.GetHandle();
@@ -117,7 +116,7 @@ var agent = fabrcoreAgentHost.GetAgentHandle();
 // Decompose into both parts at once
 var (principalHandle, agentHandle) = fabrcoreAgentHost.GetParsedHandle();
 
-// Check if this agent has a principal handle
+// Check if this agent has a principal handle (legacy method name)
 if (fabrcoreAgentHost.HasUserHandle())
 {
     // Principal-handle-scoped logic
@@ -127,10 +126,10 @@ if (fabrcoreAgentHost.HasUserHandle())
 | Method | Returns | Example (`"principal123:assistant"`) | Example (`"assistant"`) |
 |--------|---------|-------------------------------|------------------------|
 | `GetHandle()` | Full handle string | `"principal123:assistant"` | `"assistant"` |
-| `GetUserHandle()` | Principal handle portion | `"principal123"` | `""` |
+| `GetUserHandle()` | Principal handle portion (legacy API name) | `"principal123"` | `""` |
 | `GetAgentHandle()` | Agent handle portion | `"assistant"` | `"assistant"` |
-| `GetParsedHandle()` | `(UserHandle, AgentHandle)` tuple | `("principal123", "assistant")` | `("", "assistant")` |
-| `HasUserHandle()` | `bool` | `true` | `false` |
+| `GetParsedHandle()` | `(UserHandle, AgentHandle)` tuple; `UserHandle` means principal handle | `("principal123", "assistant")` | `("", "assistant")` |
+| `HasUserHandle()` | `bool`; true when a principal prefix exists | `true` | `false` |
 
 These methods are available in both agents and plugins (via `IFabrCoreAgentHost`).
 
@@ -151,7 +150,7 @@ These methods are available in both agents and plugins (via `IFabrCoreAgentHost`
 
 `ResetAgent` is a soft lifecycle operation: it calls the agent reset hook, clears chat/custom state, and reconfigures the same agent.
 
-Eviction is a hard delete initiated through the Host API: `DELETE /fabrcoreapi/Agent/{handle}` with `x-user-handle`. It is handled by `AgentGrain`, not agent code. Eviction unregisters timers and reminders, removes stream subscriptions, clears persisted Orleans state, removes diagnostics/principal tracking entries, and deactivates the grain. If the agent is actively processing a message, the API returns `409 Conflict` and the caller should retry later.
+Eviction is a hard delete initiated through the Host API: `DELETE /fabrcoreapi/Agent/{handle}` with `x-user-handle` (legacy header name for the principal handle). It is handled by `AgentGrain`, not agent code. Eviction unregisters timers and reminders, removes stream subscriptions, clears persisted Orleans state, removes diagnostics/principal tracking entries, and deactivates the grain. If the agent is actively processing a message, the API returns `409 Conflict` and the caller should retry later.
 
 ### OnInitialize()
 
@@ -433,7 +432,7 @@ public interface IFabrCoreStorageProvider
 }
 ```
 
-Important pitfall for agents: when resolving `IFabrCoreStorageProvider` directly inside the Host DI container, the principal-handle-free methods use the system partition. That is appropriate for system/shared data, not per-principal data. For per-agent or per-principal data, prefer `GetStateAsync`/`TryGetStateAsync`/`SetState` or call a principal-handle-aware Host/API path that explicitly supplies the principal handle from `fabrcoreAgentHost.GetUserHandle()`.
+Important pitfall for agents: when resolving `IFabrCoreStorageProvider` directly inside the Host DI container, the principal-handle-free methods use the system partition. That is appropriate for system/shared data, not per-principal data. For per-agent or per-principal data, prefer `GetStateAsync`/`TryGetStateAsync`/`SetState` or call a principal-handle-aware Host/API path that explicitly supplies the principal handle from `fabrcoreAgentHost.GetUserHandle()` (legacy method name).
 
 Do not reference Orleans storage APIs (`IGrainStorage`, `GrainId`, `IGrainState<T>`) from agent code. FabrCore keeps those Host-internal so agents and SDK consumers do not depend on Orleans storage internals.
 
@@ -624,6 +623,8 @@ var agentConfig = new AgentConfiguration
     }
 };
 ```
+
+Blueprints use this same `AgentConfiguration` shape to ensure a baseline set of agents for one principal. They are applied by the Host API, not by an agent or automatically at Host startup. In a Blueprint, `ForceReconfigure` is always ignored; use `POST /fabrcoreapi/Agent/create` when an existing agent must be intentionally reconfigured. See **fabrcore-server → Blueprint Provisioning** for the caller workflow.
 
 ## Important Constraints
 

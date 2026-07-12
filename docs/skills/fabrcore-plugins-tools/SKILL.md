@@ -155,15 +155,17 @@ The `IServiceProvider` in `InitializeAsync` includes:
 
 Plugins can access the hosting agent's handle components via `IFabrCoreAgentHost`:
 
+Compatibility naming: `GetUserHandle()` and `HasUserHandle()` are legacy method names. They return/check the principal handle prefix used for routing, storage partitioning, and ACL checks.
+
 ```csharp
 public Task InitializeAsync(AgentConfiguration config, IServiceProvider serviceProvider)
 {
     _agentHost = serviceProvider.GetRequiredService<IFabrCoreAgentHost>();
 
-    var fullHandle = _agentHost.GetHandle();        // "user123:assistant"
+    var fullHandle = _agentHost.GetHandle();        // "principal123:assistant"
     var principalHandle = _agentHost.GetUserHandle();   // "principal123"
     var agent      = _agentHost.GetAgentHandle();   // "assistant"
-    var (o, a)     = _agentHost.GetParsedHandle();  // ("user123", "assistant")
+    var (p, a)     = _agentHost.GetParsedHandle();  // ("principal123", "assistant")
     var hasPrincipalHandle = _agentHost.HasUserHandle();      // true
 
     return Task.CompletedTask;
@@ -468,7 +470,7 @@ public class WorkflowPlugin : IFabrCorePlugin
 
 Pitfalls:
 - In Host DI, principal-handle-free `IFabrCoreStorageProvider` writes to the system partition. Use this for shared/system plugin data.
-- For per-principal data, make principal handle partitioning explicit in a Host service or through the Storage HTTP API. Use `fabrcoreAgentHost.GetUserHandle()` as the principal handle when appropriate.
+- For per-principal data, make principal handle partitioning explicit in a Host service or through the Storage HTTP API. Use `fabrcoreAgentHost.GetUserHandle()` as the principal handle when appropriate; the method name is legacy.
 - Prefer `GetStateAsync`/`TryGetStateAsync`/`SetState` on the agent for private per-agent state; it is simpler and benefits from grain single-threaded execution. Use `TryGetStateAsync<T>` when a built-in or plugin-backed agent can reset or migrate stale private state after package updates.
 - Typed storage is CRUD-only in v1. There is no query/list API, no partial update, and no optimistic concurrency token.
 - Do not resolve Orleans `IGrainStorage` in plugin code. Keep Orleans storage details inside FabrCore.Host.

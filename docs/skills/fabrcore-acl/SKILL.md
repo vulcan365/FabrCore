@@ -198,7 +198,8 @@ own-principal traffic allowed, cross-principal denied, all-principals → messag
 warning. Mapping: `Message`→`agent.message.*`, `Configure`→`agent.create.*` /
 `agent.reconfigure.*` / `agent.destroy.*`, `Read`→`agent.read.*`, `Admin`→`acl.manage.*`;
 `CallerPattern` becomes the grant Subject (`"*"` → group `all-principals`), and
-`UserHandlePattern:AgentPattern` becomes the Resource.
+`UserHandlePattern:AgentPattern` becomes the Resource. In this legacy config shape,
+`UserHandlePattern` meant the principal handle pattern.
 
 ## Bootstrap & Secure Defaults
 
@@ -215,8 +216,9 @@ warning. Mapping: `Message`→`agent.message.*`, `Configure`→`agent.create.*` 
 
 ## Storage Layout
 
-Entities persist through `IUserScopedFabrCoreStorageProvider` (the same backend as the Storage
-API) under the `system` scope:
+Entities persist through `IUserScopedFabrCoreStorageProvider` (legacy provider name; the scope is
+the principal handle, and ACL data lives in the `system` principal) using the same backend as the
+Storage API:
 
 | Container | Keys |
 |---|---|
@@ -230,7 +232,7 @@ index entries on activation, but direct writes are unsupported.
 
 ## Management REST API
 
-All endpoints read the caller from `x-user-handle`. Mutations require `acl.manage.allow`;
+All endpoints read the caller principal from `x-user-handle` (legacy header name). Mutations require `acl.manage.allow`;
 reads/evaluate/check require `acl.read.allow` or `acl.manage.allow`; System bypasses. Every
 call emits an `AclManagement` audit event. Base route: `fabrcoreapi/acl`.
 
@@ -250,7 +252,7 @@ call emits an `AclManagement` audit event. Base route: `fabrcoreapi/acl`.
 | PUT | `config/enforcement-mode` | `{ "mode": "Enforce"\|"AuditOnly"\|"Disabled"\|null }` |
 
 **Security note:** identity is the trusted `x-user-handle` header, matching the rest of the
-FabrCore API surface. Authentication is the hosting layer's job (gateway/proxy). Anyone who can
+FabrCore API surface. Despite the name, this is the caller principal handle. Authentication is the hosting layer's job (gateway/proxy). Anyone who can
 reach the API claiming the System handle has full control — protect the endpoint accordingly.
 
 ## SDK Client Methods (`IFabrCoreHostApiClient`)
@@ -260,7 +262,7 @@ CRUD: `Get/Upsert/DeleteAclPrincipal(s)Async`, `...AclRole(s)...`, `...AclGroup(
 Queries: `GetPrincipalRolesAsync`, `GetPrincipalGroupsAsync`, `IsPrincipalInRoleAsync`,
 `CheckPermissionAsync`, `EvaluateAclAsync`. Config: `GetAclConfigAsync`,
 `SetAclEnforcementModeAsync`. Audit: `GetAuditEventsAsync`, `GetAuditConfigAsync`.
-Every method takes `callerUserHandle` (sent as `x-user-handle`).
+Every method takes `callerUserHandle` (legacy parameter name; pass the caller principal handle, sent as `x-user-handle`).
 
 ```csharp
 // Grant P1's agent1 cross-talk to P2's agent3 (as System / an acl-admin):

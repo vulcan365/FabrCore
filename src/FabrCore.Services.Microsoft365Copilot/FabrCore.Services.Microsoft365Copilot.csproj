@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<Title>FabrCore Microsoft 365 Copilot Service</Title>
+		<Description>FabrCore server addon that surfaces FabrCore agents as Microsoft 365 Copilot custom engine agents: hosts the /api/messages Azure Bot Service endpoint, validates channel and Entra user identity, bridges Copilot conversations to FabrCore agents, and generates the Microsoft 365 app package.</Description>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Agents.Hosting.AspNetCore" Version="1.6.150" />
+		<PackageReference Include="Microsoft.Agents.Authentication.Msal" Version="1.6.150" />
+		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.9" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\FabrCore.Host\FabrCore.Host.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<InternalsVisibleTo Include="FabrCore.Services.Microsoft365Copilot.Tests" />
+	</ItemGroup>
+
+</Project>

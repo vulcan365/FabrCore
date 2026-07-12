@@ -7,7 +7,7 @@ CREATE TABLE FabrCoreExecutionRecords (
     SpanId nvarchar(32) NULL,
     ParentSpanId nvarchar(32) NULL,
     ParentRecordId nvarchar(64) NULL,
-    UserHandle nvarchar(256) NULL,
+    UserHandle nvarchar(256) NULL, -- legacy column name; stores the principal handle
     AgentHandle nvarchar(256) NULL,
     AgentType nvarchar(256) NULL,
     Subject nvarchar(512) NULL,

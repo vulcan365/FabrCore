@@ -42,7 +42,7 @@ Cluster B should verify:
 - caller identity chains to a configured trust root
 - `SignerIdentity` in evidence matches the authenticated caller or an allowed delegated signer
 - signed record message fields match the actual `AgentMessage`
-- `FromHandle` / remote user namespace is allowed
+- `FromHandle` / remote principal namespace is allowed
 - target local `ToHandle` is allowed
 - message type/action is allowed
 - evidence chain verifies or policy allows unsigned legacy mode
