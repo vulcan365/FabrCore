@@ -1341,17 +1341,34 @@ namespace FabrCore.Host.Grains
 
             var myHandle = this.GetPrimaryKeyString();
             var (myPrincipal, _) = HandleUtilities.ParseHandle(myHandle);
-            var (targetPrincipal, _) = HandleUtilities.ParseHandle(targetHandle);
 
-            if (string.Equals(myPrincipal, targetPrincipal, StringComparison.OrdinalIgnoreCase))
+            if (IsSamePrincipalTarget(myPrincipal, targetHandle))
             {
                 if (request.CrossPrincipalOrigin is not null)
                     _acl.NoteTaggedSamePrincipalHop(request, myPrincipal, targetHandle);
                 return;
             }
 
+            var (targetPrincipal, _) = HandleUtilities.ParseHandle(targetHandle);
             _acl.Authorize(new AclSubjectContext(myPrincipal, myHandle), FabrActions.AgentMessage, targetHandle, request);
             _acl.StampAndWarnCrossPrincipal(request, myPrincipal, targetPrincipal);
+        }
+
+        /// <summary>
+        /// True when a resolved target stays inside the sender's principal boundary. Covers the
+        /// qualified same-principal form ("p1:agent" from principal "p1") and the bare
+        /// client-delivery form recognized by <see cref="ResolveTargetHandle"/> — a target equal
+        /// to the sender's own principal handle routes to that principal's client stream and is
+        /// same-principal by definition (ParseHandle would otherwise report an empty principal
+        /// for it and misclassify the send as cross-principal).
+        /// </summary>
+        internal static bool IsSamePrincipalTarget(string myPrincipal, string targetHandle)
+        {
+            if (string.Equals(targetHandle, myPrincipal, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            var (targetPrincipal, _) = HandleUtilities.ParseHandle(targetHandle);
+            return string.Equals(myPrincipal, targetPrincipal, StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -1365,9 +1382,8 @@ namespace FabrCore.Host.Grains
 
             var myHandle = this.GetPrimaryKeyString();
             var (myPrincipal, _) = HandleUtilities.ParseHandle(myHandle);
-            var (targetPrincipal, _) = HandleUtilities.ParseHandle(channel);
 
-            if (string.Equals(myPrincipal, targetPrincipal, StringComparison.OrdinalIgnoreCase))
+            if (IsSamePrincipalTarget(myPrincipal, channel))
                 return;
 
             _acl.Authorize(new AclSubjectContext(myPrincipal, myHandle), FabrActions.AgentMessage, channel);

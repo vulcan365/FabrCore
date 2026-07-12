@@ -11,7 +11,9 @@ description: >
   fabrcore-acl (access control: principals, roles, groups, permission grants, enforcement
   modes, cross-principal agent-to-agent security, security audit),
   fabrcore-mcp (MCP integration), fabrcore-spiffe (verifiable execution, signed evidence,
-  optional SPIFFE/SVID signing, trust bundles, evidence stores, attested external effects).
+  optional SPIFFE/SVID signing, trust bundles, evidence stores, attested external effects),
+  fabrcore-microsoft365copilot (surface agents in Microsoft 365 Copilot/Teams via the
+  FabrCore.Services.Microsoft365Copilot addon).
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
 metadata:
   author: FabrCore
@@ -43,6 +45,7 @@ Build distributed AI agent systems with FabrCore — an open-source .NET 10 fram
 | ACL | Principals, roles, groups, permission grants | `IAclEvaluator`, `PermissionGrant`, `AclController` | fabrcore-acl |
 | Security Audit | ACL decisions, boundary crossings | `IAuditProvider`, `AuditEvent` | fabrcore-acl |
 | MCP | External tool protocol | `McpServerConfig` | fabrcore-mcp |
+| Microsoft 365 Copilot | Copilot/Teams channel addon | `AddMicrosoft365Copilot()`, `Microsoft365CopilotOptions` | fabrcore-microsoft365copilot |
 | Configuration | Agent definition | `AgentConfiguration` | fabrcore-server |
 | Telemetry | W3C TraceContext on every message | `AgentMessageTelemetry`, `StampFromActivity`, `StartIngressActivity` | fabrcore-messaging (surface), fabrcore-server (exporter setup) |
 | Verifiable Execution | Signed/tamper-evident agent/event evidence | `IVerifiableExecutionStore`, `IVerifiableExecutionSigner`, `VerifiableExecutionEnvelope` | fabrcore-spiffe |

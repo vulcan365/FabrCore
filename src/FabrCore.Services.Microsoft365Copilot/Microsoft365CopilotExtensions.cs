@@ -155,18 +155,21 @@ public static class Microsoft365CopilotExtensions
     {
         app.MapGet(
                 Microsoft365CopilotDefaults.AppPackageRoutePrefix + "/manifest.json",
-                (CopilotAppPackageBuilder packageBuilder)
-                    => BuildPackageResult(() => Results.Text(packageBuilder.BuildManifestJson(), "application/json")))
+                (HttpContext context, CopilotAppPackageBuilder packageBuilder)
+                    => BuildPackageResult(context, () => Results.Text(packageBuilder.BuildManifestJson(), "application/json")))
             .AllowAnonymous();
 
         app.MapGet(
                 Microsoft365CopilotDefaults.AppPackageRoutePrefix + "/appPackage.zip",
-                (CopilotAppPackageBuilder packageBuilder)
-                    => BuildPackageResult(() => Results.File(packageBuilder.BuildPackageZip(), "application/zip", "appPackage.zip")))
+                (HttpContext context, CopilotAppPackageBuilder packageBuilder)
+                    => BuildPackageResult(context, () => Results.File(packageBuilder.BuildPackageZip(), "application/zip", "appPackage.zip")))
             .AllowAnonymous();
 
-        static IResult BuildPackageResult(Func<IResult> build)
+        static IResult BuildPackageResult(HttpContext context, Func<IResult> build)
         {
+            // Always regenerated from live configuration — a cached copy is exactly the
+            // stale-manifest confusion we want to avoid.
+            context.Response.Headers.CacheControl = "no-store, no-cache";
             try
             {
                 return build();

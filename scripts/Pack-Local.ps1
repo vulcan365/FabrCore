@@ -10,7 +10,8 @@ $solutionDir = Join-Path $PSScriptRoot "..\src"
 $packages = @(
     "FabrCore.Core",
     "FabrCore.Sdk",
-    "FabrCore.Host"
+    "FabrCore.Host",
+    "FabrCore.Services.Microsoft365Copilot"
 )
 
 # Use the latest git tag (across all branches) to determine the base version,

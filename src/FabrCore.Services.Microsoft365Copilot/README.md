@@ -19,7 +19,170 @@ POST /api/messages  ──►  FabrCoreCopilotAgent (Agents SDK bridge)
         ◄── streamed reply ── your [AgentAlias] agent on the Orleans silo
 ```
 
-## Quick start
+## Quickstart — chat with your agent in Microsoft 365 Copilot
+
+From an empty folder to chatting with a FabrCore agent inside Copilot, using a dev tunnel so
+nothing has to be deployed yet.
+
+**What you need**
+
+- A Microsoft 365 work account with a **Microsoft 365 Copilot license** (the $30/user/month
+  add-on) — that license is what gives you the *Agents* list in the Copilot app.
+- Permission to upload custom apps in Teams. If *Upload a custom app* is missing in step 7, ask a
+  tenant admin to allow custom app uploads (Teams admin center → *Teams apps → Setup policies*) or
+  to deploy the package org-wide instead.
+- An Azure subscription (the Azure Bot resource below uses the free F0 tier) and the
+  [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli).
+- .NET 10 SDK, the [devtunnel CLI](https://learn.microsoft.com/azure/developer/dev-tunnels/get-started),
+  and an LLM API key (OpenAI shown; Azure OpenAI, OpenRouter, Grok, and Gemini also work).
+
+**1. Create the server project with a chat agent**
+
+```powershell
+dotnet new web -n CopilotQuickstart
+cd CopilotQuickstart
+dotnet add package FabrCore.Host
+dotnet add package FabrCore.Services.Microsoft365Copilot
+```
+
+`MyChatAgent.cs`:
+
+```csharp
+using System.ComponentModel;
+using FabrCore.Core;
+using FabrCore.Sdk;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
+
+[AgentAlias("chat-agent")]
+[Description("General-purpose chat agent")]
+public class MyChatAgent : FabrCoreAgentProxy
+{
+    private AIAgent? _agent;
+    private AgentSession? _session;
+
+    public MyChatAgent(AgentConfiguration config, IServiceProvider serviceProvider, IFabrCoreAgentHost fabrcoreAgentHost)
+        : base(config, serviceProvider, fabrcoreAgentHost) { }
+
+    public override async Task OnInitialize()
+    {
+        var tools = await ResolveConfiguredToolsAsync();
+        var result = await CreateChatClientAgent("default",
+            threadId: config.Handle ?? fabrcoreAgentHost.GetHandle(), tools: tools);
+        _agent = result.Agent;
+        _session = result.Session;
+    }
+
+    public override async Task<AgentMessage> OnMessage(AgentMessage message)
+    {
+        var response = message.Response();
+        await foreach (var update in _agent!.RunStreamingAsync(
+            new ChatMessage(ChatRole.User, message.Message), _session!))
+        {
+            response.Message += update.Text;
+        }
+        return response;
+    }
+}
+```
+
+`Program.cs`:
+
+```csharp
+using FabrCore.Host;
+using FabrCore.Services.Microsoft365Copilot;
+
+var builder = WebApplication.CreateBuilder(args);
+builder.AddFabrCoreServer(new FabrCoreServerOptions
+{
+    AdditionalAssemblies = [typeof(MyChatAgent).Assembly]
+});
+builder.AddMicrosoft365Copilot();
+
+var app = builder.Build();
+app.UseFabrCoreServer();
+app.UseMicrosoft365Copilot();
+app.Run();
+```
+
+**2. Register the bot identity in Entra**
+
+```bash
+az login
+APP_ID=$(az ad app create --display-name "My FabrCore Agent" --sign-in-audience AzureADMyOrg --query appId -o tsv)
+SECRET=$(az ad app credential reset --id $APP_ID --query password -o tsv)
+TENANT_ID=$(az account show --query tenantId -o tsv)
+```
+
+**3. Start a dev tunnel** (so Azure Bot Service can reach your machine):
+
+```bash
+devtunnel user login
+devtunnel host -p 5000 --allow-anonymous
+```
+
+Note the `https://<tunnel-host>` URL it prints.
+
+**4. Create the Azure Bot and enable the Teams channel** (Teams also carries Copilot traffic):
+
+```bash
+az group create -n my-agents-rg -l eastus
+az bot create -g my-agents-rg -n my-fabrcore-agent --app-type SingleTenant \
+  --appid $APP_ID --tenant-id $TENANT_ID \
+  --endpoint "https://<tunnel-host>/api/messages" --sku F0
+az bot msteams create -g my-agents-rg -n my-fabrcore-agent
+```
+
+**5. Create `fabrcore.json`** in the project root (LLM + Copilot config in one file):
+
+```json
+{
+  "ModelConfigurations": [
+    { "Name": "default", "Provider": "OpenAI", "Model": "gpt-4o-mini", "ApiKeyAlias": "openai" }
+  ],
+  "ApiKeys": [
+    { "Alias": "openai", "Value": "sk-..." }
+  ],
+  "Microsoft365Copilot": {
+    "TenantId": "<TENANT_ID>",
+    "ClientId": "<APP_ID>",
+    "ClientSecret": "<SECRET>",
+    "Agent": { "AgentType": "chat-agent", "SystemPrompt": "You are a helpful assistant." },
+    "Manifest": {
+      "Name": "My FabrCore Agent",
+      "Description": "A FabrCore agent in Microsoft 365 Copilot.",
+      "PublicHostName": "<tunnel-host>"
+    }
+  }
+}
+```
+
+**6. Run, and download the generated app package:**
+
+```bash
+dotnet run --urls http://localhost:5000
+curl -o appPackage.zip http://localhost:5000/m365copilot/appPackage.zip
+```
+
+**7. Upload the app:** Teams → *Apps → Manage your apps → Upload an app → Upload a custom app* →
+pick `appPackage.zip`. (Org-wide instead: Microsoft 365 admin center → *Settings → Integrated
+apps → Upload custom apps*.)
+
+**8. Chat.** Open Microsoft 365 Copilot — the Copilot app in Teams, or
+<https://m365.cloud.microsoft/chat> — and pick **My FabrCore Agent** under *Agents* in the side
+rail. You're now chatting with your FabrCore agent: each user gets their own agent instance,
+replies stream in with the AI-generated label, and the same agent also answers 1:1 chat in Teams.
+
+If something doesn't click:
+
+- **Agent not in the list** — allow a few minutes after upload; confirm your user has the Copilot
+  license and the app shows under *Manage your apps* in Teams.
+- **No reply** — check the server console: the bot's messaging endpoint must exactly match the
+  tunnel URL + `/api/messages`, and `TenantId`/`ClientId`/`ClientSecret` must match step 2.
+- **401s in the log** — token validation is on (good) but the `ClientId`/`TenantId` don't match
+  the tokens Azure Bot Service is sending.
+
+## Adding the addon to an existing FabrCore server
 
 **1. Reference the addon from your FabrCore server project** and add two lines to `Program.cs`:
 

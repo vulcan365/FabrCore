@@ -265,9 +265,6 @@ public sealed class CopilotManifestOptions
     /// <summary>Microsoft 365 app id (GUID). Defaults to the bot's <c>ClientId</c>.</summary>
     public string? Id { get; set; }
 
-    /// <summary>Reverse-DNS package name. Default <c>com.fabrcore.copilotagent</c>.</summary>
-    public string PackageName { get; set; } = "com.fabrcore.copilotagent";
-
     /// <summary>App version (semver). Default <c>1.0.0</c>.</summary>
     public string Version { get; set; } = "1.0.0";
 
