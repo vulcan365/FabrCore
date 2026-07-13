@@ -116,4 +116,37 @@ public sealed class CopilotAppPackageBuilderTests
 
         Assert.ThrowsExactly<InvalidOperationException>(() => builder.BuildManifestJson());
     }
+
+    [TestMethod]
+    public void ManifestName_IsSlugOfConfiguredName()
+    {
+        Assert.AreEqual("test-agent", CreateBuilder().ManifestName);
+        Assert.AreEqual(
+            "my-fabrcore-agent-v2",
+            CreateBuilder(o => o.Manifest.Name = "  My FabrCore Agent (v2)! ").ManifestName);
+    }
+
+    [TestMethod]
+    public void MatchesManifestName_AcceptsSlugNameVariantsAndAppId()
+    {
+        var builder = CreateBuilder();
+
+        Assert.IsTrue(builder.MatchesManifestName("test-agent"));
+        Assert.IsTrue(builder.MatchesManifestName("Test Agent"));
+        Assert.IsTrue(builder.MatchesManifestName("TEST-AGENT"));
+        Assert.IsTrue(builder.MatchesManifestName("11111111-2222-3333-4444-555555555555"));
+
+        Assert.IsFalse(builder.MatchesManifestName("other-agent"));
+        Assert.IsFalse(builder.MatchesManifestName(""));
+        Assert.IsFalse(builder.MatchesManifestName(null));
+    }
+
+    [TestMethod]
+    public void MatchesManifestName_PrefersManifestIdOverClientId()
+    {
+        var builder = CreateBuilder(o => o.Manifest.Id = "99999999-8888-7777-6666-555555555555");
+
+        Assert.IsTrue(builder.MatchesManifestName("99999999-8888-7777-6666-555555555555"));
+        Assert.IsFalse(builder.MatchesManifestName("11111111-2222-3333-4444-555555555555"));
+    }
 }

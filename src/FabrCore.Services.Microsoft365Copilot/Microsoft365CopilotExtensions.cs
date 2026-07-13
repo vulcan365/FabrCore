@@ -95,7 +95,7 @@ public static class Microsoft365CopilotExtensions
     /// <summary>
     /// Maps the Azure Bot Service messaging endpoint (default <c>/api/messages</c>) and, in
     /// development (or when explicitly enabled), the app-package download endpoints under
-    /// <c>/m365copilot</c>.
+    /// <c>/m365copilot</c> plus the name-addressed manifest at <c>/manifests/{name}.json</c>.
     /// </summary>
     public static WebApplication UseMicrosoft365Copilot(this WebApplication app)
     {
@@ -135,10 +135,12 @@ public static class Microsoft365CopilotExtensions
         if (options.Manifest.EnableAppPackageEndpoint ?? app.Environment.IsDevelopment())
         {
             MapAppPackageEndpoints(app);
+            var manifestName = app.Services.GetRequiredService<CopilotAppPackageBuilder>().ManifestName;
             logger.LogInformation(
-                "Microsoft 365 app package available at {PackageRoute} (manifest at {ManifestRoute}).",
+                "Microsoft 365 app package available at {PackageRoute} (manifest at {ManifestRoute} and {NamedManifestRoute}).",
                 Microsoft365CopilotDefaults.AppPackageRoutePrefix + "/appPackage.zip",
-                Microsoft365CopilotDefaults.AppPackageRoutePrefix + "/manifest.json");
+                Microsoft365CopilotDefaults.AppPackageRoutePrefix + "/manifest.json",
+                $"{Microsoft365CopilotDefaults.ManifestsRoutePrefix}/{manifestName}.json");
         }
 
         logger.LogInformation(
@@ -163,6 +165,16 @@ public static class Microsoft365CopilotExtensions
                 Microsoft365CopilotDefaults.AppPackageRoutePrefix + "/appPackage.zip",
                 (HttpContext context, CopilotAppPackageBuilder packageBuilder)
                     => BuildPackageResult(context, () => Results.File(packageBuilder.BuildPackageZip(), "application/zip", "appPackage.zip")))
+            .AllowAnonymous();
+
+        // Name-addressed manifest for tooling that fetches manifests by app name
+        // (or app id): /manifests/my-fabrcore-agent.json.
+        app.MapGet(
+                Microsoft365CopilotDefaults.ManifestsRoutePrefix + "/{name}.json",
+                (string name, HttpContext context, CopilotAppPackageBuilder packageBuilder)
+                    => packageBuilder.MatchesManifestName(name)
+                        ? BuildPackageResult(context, () => Results.Text(packageBuilder.BuildManifestJson(), "application/json"))
+                        : Results.NotFound())
             .AllowAnonymous();
 
         static IResult BuildPackageResult(HttpContext context, Func<IResult> build)

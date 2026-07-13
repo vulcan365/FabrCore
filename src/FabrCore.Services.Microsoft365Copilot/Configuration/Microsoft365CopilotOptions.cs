@@ -312,7 +312,9 @@ public sealed class CopilotManifestOptions
 
     /// <summary>
     /// Expose developer endpoints that serve the generated manifest and app package
-    /// (<c>/m365copilot/manifest.json</c>, <c>/m365copilot/appPackage.zip</c>).
+    /// (<c>/m365copilot/manifest.json</c>, <c>/m365copilot/appPackage.zip</c>, and the
+    /// name-addressed <c>/manifests/{name}.json</c> where <c>{name}</c> is the slug of
+    /// <see cref="Name"/>, for example <c>my-fabrcore-agent</c>).
     /// Defaults to enabled only in the Development environment.
     /// </summary>
     public bool? EnableAppPackageEndpoint { get; set; }

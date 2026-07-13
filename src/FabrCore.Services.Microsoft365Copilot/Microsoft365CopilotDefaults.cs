@@ -26,6 +26,9 @@ public static class Microsoft365CopilotDefaults
     /// <summary>Route prefix for the developer app-package endpoints.</summary>
     public const string AppPackageRoutePrefix = "/m365copilot";
 
+    /// <summary>Route prefix for the name-addressed manifest endpoint (<c>/manifests/{name}.json</c>).</summary>
+    public const string ManifestsRoutePrefix = "/manifests";
+
     // Keys stamped onto AgentMessage.Args for every bridged message so FabrCore
     // agents and plugins can see who is talking and from where.
     public const string ArgAadObjectId = "Microsoft365Copilot:AadObjectId";

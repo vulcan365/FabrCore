@@ -6,6 +6,7 @@ using Microsoft.Agents.Builder.State;
 using Microsoft.Agents.Core.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Orleans;
 
 namespace FabrCore.Services.Microsoft365Copilot;
 
@@ -13,13 +14,20 @@ namespace FabrCore.Services.Microsoft365Copilot;
 /// The Microsoft 365 Agents SDK application that bridges Copilot/Teams conversations to FabrCore
 /// agents: each inbound message activity is mapped to a FabrCore principal, routed to that
 /// principal's configured agent through <see cref="IFabrCoreAgentService"/>, and the agent's reply
-/// is returned to the channel (streamed on streaming-capable channels).
+/// is returned to the channel (streamed on streaming-capable channels). Adaptive Card submits —
+/// message activities carrying the payload in <c>Value</c> with empty text — are routed the same
+/// way as surface <c>ui.action</c> messages.
 /// </summary>
 public class FabrCoreCopilotAgent : AgentApplication
 {
+    // Surface renders are one-way sends racing the agent's direct reply; wait briefly after the
+    // reply so cards dispatched at the very end of the agent's turn are still captured.
+    private static readonly TimeSpan TrailingRenderWait = TimeSpan.FromMilliseconds(250);
+
     private readonly IFabrCoreAgentService _agentService;
     private readonly ICopilotPrincipalResolver _principalResolver;
     private readonly ICopilotAgentProvisioner _provisioner;
+    private readonly IGrainFactory _grainFactory;
     private readonly Microsoft365CopilotOptions _copilotOptions;
     private readonly ILogger<FabrCoreCopilotAgent> _logger;
 
@@ -28,6 +36,7 @@ public class FabrCoreCopilotAgent : AgentApplication
         IFabrCoreAgentService agentService,
         ICopilotPrincipalResolver principalResolver,
         ICopilotAgentProvisioner provisioner,
+        IGrainFactory grainFactory,
         IOptions<Microsoft365CopilotOptions> copilotOptions,
         ILogger<FabrCoreCopilotAgent> logger)
         : base(options)
@@ -35,6 +44,7 @@ public class FabrCoreCopilotAgent : AgentApplication
         _agentService = agentService;
         _principalResolver = principalResolver;
         _provisioner = provisioner;
+        _grainFactory = grainFactory;
         _copilotOptions = copilotOptions.Value;
         _logger = logger;
 
@@ -64,9 +74,19 @@ public class FabrCoreCopilotAgent : AgentApplication
     private async Task OnMessageActivityAsync(ITurnContext turnContext, ITurnState turnState, CancellationToken cancellationToken)
     {
         var text = turnContext.Activity.Text?.Trim();
+        AgentMessage? agentMessage = null;
         if (string.IsNullOrEmpty(text))
         {
-            return;
+            // An Adaptive Card Action.Submit arrives as a message activity with empty text and
+            // the submit payload in Value; anything else without text is not routable.
+            if (!CopilotActivityMapper.TryCreateUiActionMessage(turnContext.Activity.Value, out agentMessage))
+            {
+                return;
+            }
+
+            _logger.LogDebug(
+                "Routing Adaptive Card submit on activity {ActivityId} as a ui.action message",
+                turnContext.Activity.Id);
         }
 
         var userToken = await TryGetUserTokenAsync(turnContext, cancellationToken);
@@ -83,18 +103,36 @@ public class FabrCoreCopilotAgent : AgentApplication
         var targetHandle = await _provisioner.EnsureAgentAsync(
             principalHandle, turnContext.Activity.Conversation?.Id, cancellationToken);
 
-        var agentMessage = BuildAgentMessage(turnContext, text, userToken);
+        agentMessage ??= new AgentMessage { Message = text, Kind = MessageKind.Request };
+        PopulateChannelContext(agentMessage, turnContext, userToken);
+
+        // Observe the principal for the duration of the turn: agents deliver ui.render surface
+        // messages there (not as the OnMessage reply), and with no observer subscribed they
+        // would queue on the grain and never reach this channel.
+        PrincipalMessageCapture? capture = null;
+        try
+        {
+            capture = await PrincipalMessageCapture.SubscribeAsync(_grainFactory, principalHandle);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Could not subscribe to principal {Principal} for surface message capture; adaptive-card renders will not be relayed this turn.",
+                principalHandle);
+        }
+
+        await using var _ = capture;
 
         var useStreaming = _copilotOptions.Streaming.Enabled
             && turnContext.StreamingResponse.IsStreamingChannel;
 
         if (useStreaming)
         {
-            await RespondStreamingAsync(turnContext, principalHandle, targetHandle, agentMessage, cancellationToken);
+            await RespondStreamingAsync(turnContext, principalHandle, targetHandle, agentMessage, capture, cancellationToken);
         }
         else
         {
-            await RespondBufferedAsync(turnContext, principalHandle, targetHandle, agentMessage, cancellationToken);
+            await RespondBufferedAsync(turnContext, principalHandle, targetHandle, agentMessage, capture, cancellationToken);
         }
     }
 
@@ -103,6 +141,7 @@ public class FabrCoreCopilotAgent : AgentApplication
         string principalHandle,
         string targetHandle,
         AgentMessage agentMessage,
+        PrincipalMessageCapture? capture,
         CancellationToken cancellationToken)
     {
         var stream = turnContext.StreamingResponse;
@@ -119,10 +158,20 @@ public class FabrCoreCopilotAgent : AgentApplication
 
         try
         {
-            var replyText = await InvokeFabrCoreAgentAsync(principalHandle, targetHandle, agentMessage);
-            stream.QueueTextChunk(string.IsNullOrWhiteSpace(replyText)
-                ? "The agent returned an empty response."
-                : replyText);
+            var reply = await InvokeFabrCoreAgentAsync(principalHandle, targetHandle, agentMessage);
+            var replyActivity = await BuildReplyActivityAsync(reply, capture, cancellationToken);
+
+            if (replyActivity.Attachments is { Count: > 0 })
+            {
+                // Cards can't be streamed as text chunks; deliver the whole activity as the
+                // final streamed message (SDK 1.6.x has no StreamingResponse.AddAttachment,
+                // and FinalMessage keeps its own text and attachments untouched).
+                stream.FinalMessage = replyActivity;
+            }
+            else
+            {
+                stream.QueueTextChunk(replyActivity.Text);
+            }
         }
         catch (Exception ex)
         {
@@ -143,13 +192,14 @@ public class FabrCoreCopilotAgent : AgentApplication
         string principalHandle,
         string targetHandle,
         AgentMessage agentMessage,
+        PrincipalMessageCapture? capture,
         CancellationToken cancellationToken)
     {
-        string replyText;
+        IActivity replyActivity;
         try
         {
-            replyText = await InvokeFabrCoreAgentAsync(principalHandle, targetHandle, agentMessage)
-                ?? "The agent returned an empty response.";
+            var reply = await InvokeFabrCoreAgentAsync(principalHandle, targetHandle, agentMessage);
+            replyActivity = await BuildReplyActivityAsync(reply, capture, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -157,40 +207,62 @@ public class FabrCoreCopilotAgent : AgentApplication
                 "FabrCore agent {Principal}:{Handle} failed to answer Copilot message {ActivityId}",
                 principalHandle, targetHandle, turnContext.Activity.Id);
             _provisioner.Invalidate(principalHandle, targetHandle);
-            replyText = _copilotOptions.ErrorMessage;
+            replyActivity = MessageFactory.Text(_copilotOptions.ErrorMessage);
         }
 
-        await turnContext.SendActivityAsync(MessageFactory.Text(replyText), cancellationToken);
+        await turnContext.SendActivityAsync(replyActivity, cancellationToken);
     }
 
-    private async Task<string?> InvokeFabrCoreAgentAsync(
+    private async Task<AgentMessage?> InvokeFabrCoreAgentAsync(
         string principalHandle, string targetHandle, AgentMessage agentMessage)
     {
         var reply = await _agentService.SendAndReceiveMessageAsync(principalHandle, targetHandle, agentMessage);
 
-        if (reply is null)
-        {
-            return null;
-        }
-
-        if (reply.MessageType == SystemMessageTypes.Error)
+        if (reply?.MessageType == SystemMessageTypes.Error)
         {
             throw new InvalidOperationException($"Agent returned an error: {reply.Message}");
         }
 
-        return reply.Message;
+        return reply;
     }
 
-    private AgentMessage BuildAgentMessage(ITurnContext turnContext, string text, string? userToken)
+    /// <summary>
+    /// Maps a FabrCore reply plus any surface renders captured from the principal during the
+    /// turn to the outgoing channel activity: adaptive-card renders become card attachments,
+    /// plain replies are sent as text.
+    /// </summary>
+    private async Task<IActivity> BuildReplyActivityAsync(
+        AgentMessage? reply, PrincipalMessageCapture? capture, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<AgentMessage> surfaceRenders = [];
+        if (capture is not null)
+        {
+            await Task.Delay(TrailingRenderWait, cancellationToken);
+            surfaceRenders = capture.DrainAdaptiveCardRenders();
+        }
+
+        var activity = CopilotActivityMapper.BuildReplyActivity(
+            reply, surfaceRenders, "The agent returned an empty response.", out var unmappedRenderIds);
+
+        foreach (var messageId in unmappedRenderIds)
+        {
+            _logger.LogWarning(
+                "Agent message {MessageId} is an adaptive-card render but no Adaptive Card could be parsed from its data payload; it was skipped.",
+                messageId);
+        }
+
+        return activity;
+    }
+
+    /// <summary>
+    /// Stamps the channel identity, conversation args, optional user token, and trace context
+    /// this addon adds to every bridged message.
+    /// </summary>
+    private void PopulateChannelContext(AgentMessage message, ITurnContext turnContext, string? userToken)
     {
         var activity = turnContext.Activity;
-        var message = new AgentMessage
-        {
-            Message = text,
-            Kind = MessageKind.Request,
-            Channel = Microsoft365CopilotDefaults.ChannelName,
-            Args = new Dictionary<string, string>(),
-        };
+        message.Channel = Microsoft365CopilotDefaults.ChannelName;
+        message.Args ??= new Dictionary<string, string>();
 
         AddArg(message, Microsoft365CopilotDefaults.ArgChannelId, activity.ChannelId?.ToString());
         AddArg(message, Microsoft365CopilotDefaults.ArgConversationId, activity.Conversation?.Id);
@@ -207,7 +279,6 @@ public class FabrCoreCopilotAgent : AgentApplication
         }
 
         message.StampFromActivity(System.Diagnostics.Activity.Current);
-        return message;
     }
 
     private static void AddArg(AgentMessage message, string key, string? value)
