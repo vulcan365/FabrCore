@@ -26,6 +26,9 @@ public static class Microsoft365CopilotDefaults
     /// <summary>Route prefix for the developer app-package endpoints.</summary>
     public const string AppPackageRoutePrefix = "/m365copilot";
 
+    /// <summary>Route prefix for the name-addressed manifest endpoint (<c>/manifests/{name}.json</c>).</summary>
+    public const string ManifestsRoutePrefix = "/manifests";
+
     // Keys stamped onto AgentMessage.Args for every bridged message so FabrCore
     // agents and plugins can see who is talking and from where.
     public const string ArgAadObjectId = "Microsoft365Copilot:AadObjectId";
@@ -35,6 +38,10 @@ public static class Microsoft365CopilotDefaults
     public const string ArgChannelId = "Microsoft365Copilot:ChannelId";
     public const string ArgLocale = "Microsoft365Copilot:Locale";
     public const string ArgActivityId = "Microsoft365Copilot:ActivityId";
+    public const string ArgDeliveryEndpointId = "Microsoft365Copilot:DeliveryEndpointId";
+
+    /// <summary>Versioned principal-context key containing proactive conversation endpoints.</summary>
+    public const string ProactiveEndpointsContextKey = "m365copilot:proactive:endpoints:v1";
 
     /// <summary>
     /// Arg key that carries the signed-in user's Entra access token when

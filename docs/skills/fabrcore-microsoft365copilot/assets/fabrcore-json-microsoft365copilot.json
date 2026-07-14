@@ -33,6 +33,10 @@
       "EnableGeneratedByAILabel": true,
       "EnableFeedbackLoop": false
     },
+    "Proactive": {
+      "Enabled": false,
+      "AllowedConversationTypes": [ "personal" ]
+    },
     "Principal": {
       "Strategy": "EntraObjectId",
       "Prefix": ""

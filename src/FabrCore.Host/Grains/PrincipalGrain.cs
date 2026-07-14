@@ -27,8 +27,9 @@ using System.Threading.Tasks;
 
 namespace FabrCore.Host.Grains
 {
-    internal class PrincipalGrain : Grain, IPrincipalGrain
+    internal class PrincipalGrain : Grain, IPrincipalGrain, IRemindable
     {
+        private const string DeliveryRecoveryReminderName = "__principal_delivery_recovery";
         private static readonly ActivitySource ActivitySource = new("FabrCore.Host.PrincipalGrain");
         private static readonly Meter Meter = new("FabrCore.Host.PrincipalGrain");
 
@@ -74,6 +75,10 @@ namespace FabrCore.Host.Grains
             "fabrcore.principal.pending.messages.flushed",
             description: "Number of pending messages flushed to observers");
 
+        private static readonly Counter<long> DeliveryCounter = Meter.CreateCounter<long>(
+            "fabrcore.principal.delivery.operations",
+            description: "Principal external delivery state transitions");
+
         private readonly IClusterClient clusterClient;
         private readonly ILogger<PrincipalGrain> logger;
         private readonly IFabrCoreAgentService _agentService;
@@ -85,6 +90,10 @@ namespace FabrCore.Host.Grains
         private readonly Dictionary<string, TrackedAgentInfo> _trackedAgents = new();
         private readonly IPersistentState<PrincipalGrainState> _state;
         private readonly PrincipalGrainOptions _grainOptions;
+        private readonly PrincipalContextOptions _contextOptions;
+        private readonly PrincipalDeliveryOptions _deliveryOptions;
+        private readonly PrincipalMessageRelayDispatcher _relayDispatcher;
+        private bool _deliveryReminderRegistered;
 
         public PrincipalGrain(
             IClusterClient clusterClient,
@@ -94,12 +103,18 @@ namespace FabrCore.Host.Grains
             IAgentMessageMonitor messageMonitor,
             VerifiableExecutionRecorder verifiableExecution,
             Microsoft.Extensions.Options.IOptions<PrincipalGrainOptions> grainOptions,
+            Microsoft.Extensions.Options.IOptions<PrincipalContextOptions> contextOptions,
+            Microsoft.Extensions.Options.IOptions<PrincipalDeliveryOptions> deliveryOptions,
+            PrincipalMessageRelayDispatcher relayDispatcher,
             [PersistentState("principalState", FabrCoreOrleansConstants.StorageProviderName)]
             IPersistentState<PrincipalGrainState> state)
         {
             this.clusterClient = clusterClient;
             this.logger = loggerFactory.CreateLogger<PrincipalGrain>();
             this._grainOptions = grainOptions.Value;
+            _contextOptions = contextOptions.Value;
+            _deliveryOptions = deliveryOptions.Value;
+            _relayDispatcher = relayDispatcher;
             _agentService = agentService;
             _acl = acl;
             _messageMonitor = messageMonitor;
@@ -108,7 +123,7 @@ namespace FabrCore.Host.Grains
             _state = state;
         }
 
-        public Task Subscribe(IPrincipalGrainObserver observer)
+        public async Task Subscribe(IPrincipalGrainObserver observer)
         {
             using var activity = ActivitySource.StartActivity("Subscribe", ActivityKind.Internal);
             var principalHandle = this.GetPrimaryKeyString();
@@ -140,6 +155,8 @@ namespace FabrCore.Host.Grains
 
                     PendingMessagesFlushedCounter.Add(messageCount);
 
+                    await PersistPendingAndDeliveryStateAsync();
+
                     logger.LogInformation("Finished flushing pending messages - PrincipalHandle: {PrincipalHandle}", principalHandle);
                 }
 
@@ -154,7 +171,6 @@ namespace FabrCore.Host.Grains
                 throw;
             }
 
-            return Task.CompletedTask;
         }
 
         public Task Unsubscribe(IPrincipalGrainObserver observer)
@@ -185,6 +201,132 @@ namespace FabrCore.Host.Grains
             }
 
             return Task.CompletedTask;
+        }
+
+        public async Task SetContextValue(string key, string? value)
+        {
+            var context = _state.State.ContextValues;
+            if (!PrincipalContextValues.Apply(context, key, value, _contextOptions))
+            {
+                logger.LogDebug(
+                    "Principal context value unchanged - PrincipalHandle: {PrincipalHandle}, Key: {Key}",
+                    this.GetPrimaryKeyString(),
+                    key);
+                return;
+            }
+
+            var now = DateTimeOffset.UtcNow;
+            var refreshedDeliveries = 0;
+            foreach (var delivery in _state.State.DeliveryOutbox.Where(item =>
+                         item.WaitingForEndpointRefresh))
+            {
+                delivery.WaitingForEndpointRefresh = false;
+                delivery.AvailableAfterUtc = now;
+                refreshedDeliveries++;
+            }
+
+            _state.State.LastModified = DateTime.UtcNow;
+            await _state.WriteStateAsync();
+            logger.LogInformation(
+                "Principal context value persisted - PrincipalHandle: {PrincipalHandle}, Key: {Key}, ValuePresent: {ValuePresent}, ValueLength: {ValueLength}, ContextEntries: {ContextEntries}, DeliveriesReleasedForEndpointRefresh: {RefreshedDeliveries}",
+                this.GetPrimaryKeyString(),
+                key,
+                value is not null,
+                value?.Length ?? 0,
+                context.Count,
+                refreshedDeliveries);
+
+            if (observerManager.Count == 0)
+            {
+                await PromotePendingMessagesAsync();
+            }
+
+            // Work already committed to the outbox stays on its durable relay
+            // path even if an observer has since connected.
+            await DispatchNextDeliveryAsync();
+        }
+
+        public Task<string?> GetContextValue(string key)
+        {
+            PrincipalContextValues.ValidateKey(key, _contextOptions);
+            _state.State.ContextValues.TryGetValue(key, out var value);
+            return Task.FromResult(value);
+        }
+
+        public Task<Dictionary<string, string>> GetContextValues() =>
+            Task.FromResult(new Dictionary<string, string>(
+                _state.State.ContextValues,
+                StringComparer.Ordinal));
+
+        public async Task CompletePrincipalMessageDelivery(
+            string deliveryId,
+            PrincipalMessageDeliveryOutcome outcome)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(deliveryId);
+            ArgumentNullException.ThrowIfNull(outcome);
+
+            var entry = _state.State.DeliveryOutbox.FirstOrDefault(item =>
+                string.Equals(item.DeliveryId, deliveryId, StringComparison.Ordinal));
+            if (entry is null)
+            {
+                logger.LogDebug(
+                    "Ignoring completion for unknown or completed principal delivery {DeliveryId}",
+                    deliveryId);
+                return;
+            }
+
+            logger.LogInformation(
+                "Principal delivery completion received - PrincipalHandle: {PrincipalHandle}, DeliveryId: {DeliveryId}, MessageId: {MessageId}, Channel: {Channel}, Endpoint: {Endpoint}, Outcome: {Outcome}, RetryAfter: {RetryAfter}, HasError: {HasError}",
+                this.GetPrimaryKeyString(),
+                deliveryId,
+                entry.Message.Id,
+                entry.Channel,
+                ShortIdentifier(entry.EndpointId),
+                outcome.Kind,
+                outcome.RetryAfter,
+                !string.IsNullOrWhiteSpace(outcome.Error));
+
+            var now = DateTimeOffset.UtcNow;
+            switch (outcome.Kind)
+            {
+                case PrincipalMessageDeliveryOutcomeKind.Delivered:
+                    _state.State.DeliveryOutbox.Remove(entry);
+                    RecordDeliveryMetric("delivered", entry.Channel);
+                    break;
+
+                case PrincipalMessageDeliveryOutcomeKind.RetryableFailure:
+                    PrincipalDeliveryStateMachine.ApplyRetryableFailure(
+                        entry, outcome, _deliveryOptions, now);
+                    RecordDeliveryMetric("retryable", entry.Channel);
+                    break;
+
+                case PrincipalMessageDeliveryOutcomeKind.EndpointUnavailable:
+                    PrincipalDeliveryStateMachine.ApplyEndpointUnavailable(
+                        entry, outcome, _deliveryOptions, now);
+                    RecordDeliveryMetric("endpoint_unavailable", entry.Channel);
+                    break;
+
+                case PrincipalMessageDeliveryOutcomeKind.PermanentFailure:
+                    MoveToDeadLetters(entry, outcome.Error ?? "The relay reported a permanent failure.", now);
+                    RecordDeliveryMetric("dead_letter", entry.Channel);
+                    break;
+
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(outcome), outcome.Kind, "Unknown delivery outcome.");
+            }
+
+            PruneDeadLetters(now);
+            await PersistPendingAndDeliveryStateAsync();
+            logger.LogInformation(
+                "Principal delivery completion persisted - PrincipalHandle: {PrincipalHandle}, DeliveryId: {DeliveryId}, Outcome: {Outcome}, PendingMessages: {PendingMessages}, OutboxEntries: {OutboxEntries}, DeadLetters: {DeadLetters}",
+                this.GetPrimaryKeyString(),
+                deliveryId,
+                outcome.Kind,
+                pendingMessages.Count,
+                _state.State.DeliveryOutbox.Count,
+                _state.State.DeliveryDeadLetters.Count);
+            await EnsureDeliveryReminderAsync();
+            await DispatchNextDeliveryAsync();
         }
 
         public async Task<AgentMessage> SendAndReceiveMessage(AgentMessage request)
@@ -399,6 +541,8 @@ namespace FabrCore.Host.Grains
                                 _state.State.PendingMessages.Count, principalHandle, age);
                             _state.State.PendingMessages.Clear();
                             _state.State.PendingMessagesPersisted = null;
+                            _state.State.LastModified = DateTime.UtcNow;
+                            await _state.WriteStateAsync();
                             shouldRestore = false;
                         }
                     }
@@ -416,6 +560,18 @@ namespace FabrCore.Host.Grains
 
                 await CreateStreams();
                 await RegisterWithManagement();
+
+                _deliveryReminderRegistered =
+                    await this.GetReminder(DeliveryRecoveryReminderName) is not null;
+                var deadLetterCount = _state.State.DeliveryDeadLetters.Count;
+                PruneDeadLetters(DateTimeOffset.UtcNow);
+                if (deadLetterCount != _state.State.DeliveryDeadLetters.Count)
+                {
+                    await PersistPendingAndDeliveryStateAsync();
+                }
+                await PromotePendingMessagesAsync();
+                await EnsureDeliveryReminderAsync();
+                await DispatchNextDeliveryAsync();
 
                 logger.LogInformation("Principal activated and streams created: {PrincipalHandle}", principalHandle);
 
@@ -452,7 +608,9 @@ namespace FabrCore.Host.Grains
                 // Copy pending messages to state (Queue to List) with timestamp
                 _state.State.PendingMessages.Clear();
                 _state.State.PendingMessages.AddRange(pendingMessages);
-                _state.State.PendingMessagesPersisted = pendingMessages.Count > 0 ? DateTime.UtcNow : null;
+                _state.State.PendingMessagesPersisted = pendingMessages.Count > 0
+                    ? _state.State.PendingMessagesPersisted ?? DateTime.UtcNow
+                    : null;
 
                 _state.State.LastModified = DateTime.UtcNow;
                 await _state.WriteStateAsync();
@@ -613,7 +771,7 @@ namespace FabrCore.Host.Grains
         private static string DigestBytes(byte[]? bytes)
             => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes ?? Array.Empty<byte>())).ToLowerInvariant();
 
-        private Task ReceivedStreamingMessage(AgentMessage request, StreamSequenceToken? token = null)
+        private async Task ReceivedStreamingMessage(AgentMessage request, StreamSequenceToken? token = null)
         {
             using var activity = ActivitySource.StartActivity("ReceivedStreamingMessage", ActivityKind.Consumer);
             var principalHandle = this.GetPrimaryKeyString();
@@ -660,13 +818,19 @@ namespace FabrCore.Host.Grains
             try
             {
                 // If no observers are subscribed, queue the message for later delivery
-                if (observerManager.Count == 0)
+                if (!PrincipalDeliveryStateMachine.ShouldDeliverToObservers(observerManager.Count))
                 {
                     pendingMessages.Enqueue(request);
                     logger.LogInformation("No observers subscribed, message queued - PrincipalHandle: {PrincipalHandle}, QueueLength: {QueueLength}",
                         principalHandle, pendingMessages.Count);
 
                     PendingMessagesQueuedCounter.Add(1);
+
+                    // Persist before any provider resolution or enqueueing so a silo
+                    // crash cannot lose a message between the stream and the outbox.
+                    await PersistPendingAndDeliveryStateAsync();
+                    await PromotePendingMessagesAsync();
+                    await DispatchNextDeliveryAsync();
 
                     activity?.SetStatus(ActivityStatusCode.Ok);
                 }
@@ -690,8 +854,369 @@ namespace FabrCore.Host.Grains
                 throw;
             }
 
-            return Task.CompletedTask;
         }
+
+        private async Task PromotePendingMessagesAsync()
+        {
+            if (pendingMessages.Count == 0 || observerManager.Count > 0)
+            {
+                return;
+            }
+
+            var principalHandle = this.GetPrimaryKeyString();
+            var context = new Dictionary<string, string>(
+                _state.State.ContextValues,
+                StringComparer.Ordinal);
+            var retained = new Queue<AgentMessage>();
+            var promoted = 0;
+
+            logger.LogInformation(
+                "Principal pending-message promotion started - PrincipalHandle: {PrincipalHandle}, PendingMessages: {PendingMessages}, ContextEntries: {ContextEntries}, RegisteredObservers: {RegisteredObservers}",
+                principalHandle,
+                pendingMessages.Count,
+                context.Count,
+                observerManager.Count);
+
+            while (pendingMessages.TryDequeue(out var message))
+            {
+                logger.LogInformation(
+                    "Resolving principal pending message for external delivery - PrincipalHandle: {PrincipalHandle}, MessageId: {MessageId}, MessageType: {MessageType}, TargetChannel: {TargetChannel}, TargetEndpoint: {TargetEndpoint}",
+                    principalHandle,
+                    message.Id,
+                    message.MessageType,
+                    message.DeliveryTarget?.Channel,
+                    ShortIdentifier(message.DeliveryTarget?.EndpointId));
+                var resolution = await _relayDispatcher.ResolveAsync(
+                    principalHandle,
+                    message,
+                    context);
+
+                if (resolution.Status != PrincipalMessageRelayResolutionStatus.Available ||
+                    string.IsNullOrWhiteSpace(resolution.Channel) ||
+                    string.IsNullOrWhiteSpace(resolution.EndpointId))
+                {
+                    retained.Enqueue(message);
+
+                    if (resolution.Status == PrincipalMessageRelayResolutionStatus.Unavailable)
+                    {
+                        logger.LogWarning(
+                            "Principal pending message retained because external delivery is unavailable - PrincipalHandle: {PrincipalHandle}, MessageId: {MessageId}, ResolutionStatus: {ResolutionStatus}, ResolutionChannel: {ResolutionChannel}, ResolutionEndpoint: {ResolutionEndpoint}",
+                            principalHandle,
+                            message.Id,
+                            resolution.Status,
+                            resolution.Channel,
+                            ShortIdentifier(resolution.EndpointId));
+                    }
+                    else
+                    {
+                        logger.LogInformation(
+                            "Principal pending message is not applicable to an external relay - PrincipalHandle: {PrincipalHandle}, MessageId: {MessageId}, ResolutionStatus: {ResolutionStatus}",
+                            principalHandle,
+                            message.Id,
+                            resolution.Status);
+                    }
+
+                    // A supported-but-currently-unavailable message is an ordering
+                    // barrier. NotApplicable control messages may be skipped, but a
+                    // later deliverable user message must not overtake this one.
+                    if (resolution.Status == PrincipalMessageRelayResolutionStatus.Unavailable ||
+                        resolution.Status == PrincipalMessageRelayResolutionStatus.Available)
+                    {
+                        while (pendingMessages.TryDequeue(out var laterMessage))
+                        {
+                            retained.Enqueue(laterMessage);
+                        }
+                        break;
+                    }
+
+                    continue;
+                }
+
+                var outboxEntry = new PrincipalDeliveryOutboxEntry
+                {
+                    DeliveryId = Guid.NewGuid().ToString("N"),
+                    Message = message,
+                    Channel = resolution.Channel,
+                    EndpointId = resolution.EndpointId,
+                    CreatedUtc = DateTimeOffset.UtcNow,
+                    AvailableAfterUtc = DateTimeOffset.UtcNow
+                };
+                _state.State.DeliveryOutbox.Add(outboxEntry);
+                promoted++;
+                RecordDeliveryMetric("promoted", resolution.Channel);
+                logger.LogInformation(
+                    "Principal pending message promoted to delivery outbox - PrincipalHandle: {PrincipalHandle}, MessageId: {MessageId}, DeliveryId: {DeliveryId}, Channel: {Channel}, Endpoint: {Endpoint}, OutboxEntries: {OutboxEntries}",
+                    principalHandle,
+                    message.Id,
+                    outboxEntry.DeliveryId,
+                    resolution.Channel,
+                    ShortIdentifier(resolution.EndpointId),
+                    _state.State.DeliveryOutbox.Count);
+            }
+
+            while (retained.TryDequeue(out var message))
+            {
+                pendingMessages.Enqueue(message);
+            }
+
+            if (promoted > 0)
+            {
+                await PersistPendingAndDeliveryStateAsync();
+                await EnsureDeliveryReminderAsync();
+            }
+
+            logger.LogInformation(
+                "Principal pending-message promotion completed - PrincipalHandle: {PrincipalHandle}, PromotedMessages: {PromotedMessages}, RetainedMessages: {RetainedMessages}, OutboxEntries: {OutboxEntries}",
+                principalHandle,
+                promoted,
+                pendingMessages.Count,
+                _state.State.DeliveryOutbox.Count);
+        }
+
+        private async Task DispatchNextDeliveryAsync()
+        {
+            var now = DateTimeOffset.UtcNow;
+            var stateChanged = false;
+
+            while (_state.State.DeliveryOutbox.Count > 0)
+            {
+                var candidate = _state.State.DeliveryOutbox[0];
+                if (now - candidate.CreatedUtc <= _deliveryOptions.MaxDeliveryAge)
+                {
+                    break;
+                }
+
+                MoveToDeadLetters(
+                    candidate,
+                    $"Delivery expired after {_deliveryOptions.MaxDeliveryAge}.",
+                    now);
+                RecordDeliveryMetric("expired", candidate.Channel);
+                stateChanged = true;
+            }
+
+            var deadLetterCount = _state.State.DeliveryDeadLetters.Count;
+            PruneDeadLetters(now);
+            stateChanged |= deadLetterCount != _state.State.DeliveryDeadLetters.Count;
+
+            if (_state.State.DeliveryOutbox.Count == 0)
+            {
+                if (stateChanged)
+                {
+                    await PersistPendingAndDeliveryStateAsync();
+                }
+
+                await EnsureDeliveryReminderAsync();
+                logger.LogDebug(
+                    "Principal delivery dispatch has no ready outbox work - PrincipalHandle: {PrincipalHandle}, PendingMessages: {PendingMessages}",
+                    this.GetPrimaryKeyString(),
+                    pendingMessages.Count);
+                return;
+            }
+
+            var entry = _state.State.DeliveryOutbox[0];
+            if (entry.LeaseExpiresUtc is { } leaseExpiresUtc)
+            {
+                if (leaseExpiresUtc > now)
+                {
+                    logger.LogInformation(
+                        "Principal delivery dispatch deferred because a lease is active - PrincipalHandle: {PrincipalHandle}, DeliveryId: {DeliveryId}, Channel: {Channel}, LeaseExpiresUtc: {LeaseExpiresUtc}",
+                        this.GetPrimaryKeyString(),
+                        entry.DeliveryId,
+                        entry.Channel,
+                        leaseExpiresUtc);
+                    await EnsureDeliveryReminderAsync();
+                    return;
+                }
+
+                PrincipalDeliveryStateMachine.TryRecoverExpiredLease(entry, now);
+                RecordDeliveryMetric("lease_recovered", entry.Channel);
+                logger.LogWarning(
+                    "Principal delivery recovered an expired lease - PrincipalHandle: {PrincipalHandle}, DeliveryId: {DeliveryId}, Channel: {Channel}",
+                    this.GetPrimaryKeyString(),
+                    entry.DeliveryId,
+                    entry.Channel);
+                stateChanged = true;
+            }
+
+            if (entry.AvailableAfterUtc > now)
+            {
+                if (stateChanged)
+                {
+                    await PersistPendingAndDeliveryStateAsync();
+                }
+
+                await EnsureDeliveryReminderAsync();
+                logger.LogInformation(
+                    "Principal delivery dispatch deferred until available time - PrincipalHandle: {PrincipalHandle}, DeliveryId: {DeliveryId}, Channel: {Channel}, AvailableAfterUtc: {AvailableAfterUtc}, WaitingForEndpointRefresh: {WaitingForEndpointRefresh}",
+                    this.GetPrimaryKeyString(),
+                    entry.DeliveryId,
+                    entry.Channel,
+                    entry.AvailableAfterUtc,
+                    entry.WaitingForEndpointRefresh);
+                return;
+            }
+
+            PrincipalDeliveryStateMachine.TryAcquireLease(
+                entry,
+                now,
+                _deliveryOptions.LeaseDuration);
+            await PersistPendingAndDeliveryStateAsync();
+            logger.LogInformation(
+                "Principal delivery lease acquired - PrincipalHandle: {PrincipalHandle}, DeliveryId: {DeliveryId}, MessageId: {MessageId}, Channel: {Channel}, Endpoint: {Endpoint}, LeaseExpiresUtc: {LeaseExpiresUtc}, AttemptNumber: {AttemptNumber}",
+                this.GetPrimaryKeyString(),
+                entry.DeliveryId,
+                entry.Message.Id,
+                entry.Channel,
+                ShortIdentifier(entry.EndpointId),
+                entry.LeaseExpiresUtc,
+                entry.AttemptCount + 1);
+
+            var delivery = new PrincipalMessageDelivery
+            {
+                DeliveryId = entry.DeliveryId,
+                PrincipalHandle = this.GetPrimaryKeyString(),
+                Message = entry.Message,
+                Channel = entry.Channel,
+                EndpointId = entry.EndpointId,
+                PrincipalContext = new Dictionary<string, string>(
+                    _state.State.ContextValues,
+                    StringComparer.Ordinal),
+                AttemptNumber = entry.AttemptCount + 1
+            };
+
+            var accepted = await _relayDispatcher.TryEnqueueAsync(delivery);
+            if (!accepted)
+            {
+                entry.LeaseExpiresUtc = null;
+                entry.WaitingForEndpointRefresh = false;
+                entry.AvailableAfterUtc = DateTimeOffset.UtcNow + GetRecoveryPeriod();
+                entry.LastError = "The relay queue was unavailable or full.";
+                await PersistPendingAndDeliveryStateAsync();
+                RecordDeliveryMetric("queue_saturated", entry.Channel);
+                logger.LogWarning(
+                    "Principal delivery retained because relay queue was unavailable - PrincipalHandle: {PrincipalHandle}, DeliveryId: {DeliveryId}, Channel: {Channel}, NextAttemptUtc: {NextAttemptUtc}",
+                    this.GetPrimaryKeyString(),
+                    entry.DeliveryId,
+                    entry.Channel,
+                    entry.AvailableAfterUtc);
+            }
+            else
+            {
+                RecordDeliveryMetric("enqueued", entry.Channel);
+                logger.LogInformation(
+                    "Principal delivery enqueued to relay - PrincipalHandle: {PrincipalHandle}, DeliveryId: {DeliveryId}, MessageId: {MessageId}, Channel: {Channel}, Endpoint: {Endpoint}",
+                    this.GetPrimaryKeyString(),
+                    entry.DeliveryId,
+                    entry.Message.Id,
+                    entry.Channel,
+                    ShortIdentifier(entry.EndpointId));
+            }
+
+            await EnsureDeliveryReminderAsync();
+        }
+
+        private async Task PersistPendingAndDeliveryStateAsync()
+        {
+            _state.State.PendingMessages.Clear();
+            _state.State.PendingMessages.AddRange(pendingMessages);
+
+            if (pendingMessages.Count == 0)
+            {
+                _state.State.PendingMessagesPersisted = null;
+            }
+            else if (!_state.State.PendingMessagesPersisted.HasValue)
+            {
+                _state.State.PendingMessagesPersisted = DateTime.UtcNow;
+            }
+
+            _state.State.LastModified = DateTime.UtcNow;
+            await _state.WriteStateAsync();
+        }
+
+        private async Task EnsureDeliveryReminderAsync()
+        {
+            if (_state.State.DeliveryOutbox.Count > 0)
+            {
+                var period = GetRecoveryPeriod();
+                await this.RegisterOrUpdateReminder(
+                    DeliveryRecoveryReminderName,
+                    period,
+                    period);
+                _deliveryReminderRegistered = true;
+                return;
+            }
+
+            if (!_deliveryReminderRegistered)
+            {
+                return;
+            }
+
+            var reminder = await this.GetReminder(DeliveryRecoveryReminderName);
+            if (reminder is not null)
+            {
+                await this.UnregisterReminder(reminder);
+            }
+
+            _deliveryReminderRegistered = false;
+        }
+
+        public async Task ReceiveReminder(string reminderName, TickStatus status)
+        {
+            if (!string.Equals(
+                    reminderName,
+                    DeliveryRecoveryReminderName,
+                    StringComparison.Ordinal))
+            {
+                logger.LogWarning("Ignoring unknown principal reminder {ReminderName}", reminderName);
+                return;
+            }
+
+            _deliveryReminderRegistered = true;
+            await DispatchNextDeliveryAsync();
+        }
+
+        private void MoveToDeadLetters(
+            PrincipalDeliveryOutboxEntry entry,
+            string reason,
+            DateTimeOffset now)
+        {
+            PrincipalDeliveryStateMachine.MoveToDeadLetters(
+                _state.State,
+                entry,
+                reason,
+                _deliveryOptions,
+                now);
+
+            logger.LogWarning(
+                "Principal delivery {DeliveryId} moved to dead letters for channel {Channel}: {Reason}",
+                entry.DeliveryId,
+                entry.Channel,
+                reason);
+        }
+
+        private void PruneDeadLetters(DateTimeOffset now)
+        {
+            PrincipalDeliveryStateMachine.PruneDeadLetters(
+                _state.State,
+                _deliveryOptions,
+                now);
+        }
+
+        private TimeSpan GetRecoveryPeriod() =>
+            _deliveryOptions.RecoveryReminderPeriod < TimeSpan.FromMinutes(1)
+                ? TimeSpan.FromMinutes(1)
+                : _deliveryOptions.RecoveryReminderPeriod;
+
+        private static void RecordDeliveryMetric(string status, string channel) =>
+            DeliveryCounter.Add(
+                1,
+                new KeyValuePair<string, object?>("status", status),
+                new KeyValuePair<string, object?>("channel", channel));
+
+        private static string ShortIdentifier(string? value) =>
+            string.IsNullOrWhiteSpace(value)
+                ? "(none)"
+                : value[..Math.Min(12, value.Length)];
 
         public async Task<AgentHealthStatus> CreateAgent(AgentConfiguration agentConfiguration)
         {

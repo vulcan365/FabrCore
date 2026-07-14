@@ -234,7 +234,10 @@ agent instance (principal handle = their Entra object id), with isolated chat hi
 
 **4. Upload the app package.** Run the server in Development and download
 `https://localhost:<port>/m365copilot/appPackage.zip` — a ready-to-upload zip generated from your
-configuration. Upload it in Teams (*Apps → Manage your apps → Upload a custom app*) or the
+configuration. The manifest alone is also served at `/m365copilot/manifest.json` and, addressed by
+app name, at `/manifests/{name}.json` — `{name}` is the URL slug of `Manifest:Name` (for the
+config above: `/manifests/my-fabrcore-agent.json`; the app id works too). The startup log prints
+the exact URL. Upload it in Teams (*Apps → Manage your apps → Upload a custom app*) or the
 [Microsoft 365 admin center](https://admin.microsoft.com) (*Settings → Integrated apps → Upload
 custom apps*) for the whole org. The agent then appears in Teams chat and in the Microsoft 365
 Copilot side panel.
@@ -369,6 +372,106 @@ and delivers the reply through the channel's streaming protocol with the *AI gen
 > token-by-token relay of the agent's internal `_thinking` updates would require a host-side
 > observer hook that FabrCore does not currently expose to addons.
 
+## Proactive messages (opt in)
+
+Agents can send messages between user turns through FabrCore's generic durable principal-delivery
+pipeline. Microsoft 365 is one relay provider; agents remain channel-neutral:
+
+```csharp
+await SendToUserAsync("Your report is ready.");
+```
+
+Enable endpoint capture and proactive delivery explicitly:
+
+```json
+"Microsoft365Copilot": {
+  "Proactive": {
+    "Enabled": true,
+    "AllowedConversationTypes": [ "personal" ]
+  }
+}
+```
+
+On every eligible inbound turn, the addon stores a versioned conversation endpoint under
+`m365copilot:proactive:endpoints:v1` and stamps its stable id into
+`AgentMessage.Args["Microsoft365Copilot:DeliveryEndpointId"]`. It retains up to eight endpoints per
+principal. Personal scope is the safe default; group or channel conversation types must be added
+deliberately.
+
+Plain text and valid Adaptive Cards are supported. System messages, blank content, `ui.action`,
+other `ui.*` payloads, and targets for another channel are not sent. The provider uses four bounded
+worker shards (64 queued entries each), three attempts with two-second exponential backoff, and a
+30-second send timeout. `429`, `5xx`, network, and timeout failures are retryable; permanent `4xx`
+and mapping errors are dead-lettered. Proactive delivery is durable at-least-once, so a timeout or
+crash after Microsoft accepted a request can result in a duplicate.
+
+See [the generic relay authoring guide](../../docs/principal-message-relays.md) for the platform
+contracts and a provider-SDK-free webhook sample.
+
+## Adaptive Cards
+
+FabrCore surface renders are delivered to Copilot/Teams as Adaptive Cards. A message is treated
+as a card when:
+
+- `MessageType` is `ui.render`, and
+- `DataType` is `application/vnd.fabrcore.surface.adaptive-card+json`.
+
+Both delivery styles agents use are supported:
+
+- **Returned from `OnMessage`** — the reply itself is the render.
+- **Sent to the principal** — the common surface pattern. Agents deliver `ui.render` messages to
+  their principal for surface clients to observe; since no surface client exists on this channel,
+  the addon subscribes a turn-scoped observer on the principal grain, captures renders emitted
+  during the turn, and relays them. When proactive delivery is enabled, eligible messages queued
+  between turns are promoted to the durable M365 outbox when an endpoint is refreshed. Renders of
+  other data types and `_thinking`/`_status` updates are discarded.
+
+The addon parses the UTF-8 JSON payload in `Data`, finds the `"type": "AdaptiveCard"` object
+(at the root or nested inside a surface envelope), and attaches it — as a parsed JSON object,
+never a re-encoded string — with the `application/vnd.microsoft.card.adaptive` content type. All
+cards from a turn are combined onto one reply activity, with the agent's reply text (when set) as
+the accompanying message. On streaming channels that activity is delivered as the final streamed
+message; elsewhere as a regular reply. If a render's payload contains no parseable card, it is
+skipped with a warning, and a turn with no cards at all falls back to plain text.
+
+For Copilot compatibility, author cards against schema **1.5** and use `Action.Submit` for
+interaction.
+
+### Card submits (inbound)
+
+Pressing `Action.Submit` sends a message activity whose `Value` holds the submit payload — the
+action's `data` merged with the card's input values — and whose text is empty. The addon routes
+it to the same FabrCore agent as a `ui.action` message, mirroring what surface clients send:
+
+- `MessageType` is `ui.action`, `DataType` is
+  `application/vnd.fabrcore.surface.adaptive-card+json`.
+- `Data` carries a UTF-8 JSON action event shaped like the surface `AdaptiveCardActionEvent`:
+
+  ```json
+  {
+    "version": "2.0",
+    "kind": "ui.action",
+    "actionType": "Action.Submit",
+    "actionId": "approve",
+    "verb": "approve",
+    "routeTo": "agent",
+    "envelopeId": null,
+    "message": null,
+    "payload": { "actionType": "Action.Submit", "verb": "approve", "comment": "..." }
+  }
+  ```
+
+  `actionId` resolves from the payload's `actionId`, `id`, `verb`, or `title` (first non-empty,
+  case-insensitive), falling back to `Action.Submit`; `verb` and `envelopeId` are lifted from the
+  payload when present, and the full submit payload is flattened into `payload`.
+- If the payload contains a `messageTemplate` string, `{token}` placeholders (dotted paths
+  supported) are expanded against the payload and the result becomes `AgentMessage.Message`;
+  otherwise `Message` is null — the receiving agent owns verb handling from `Data` and should
+  respond gracefully to unknown verbs.
+- Surface clients dispatch `ui.action` one-way; this channel needs something to show the user, so
+  the addon sends the action as a **request** and relays the agent's reply — including `ui.render`
+  card replies, so an agent can answer a submit with a fresh card.
+
 ## Production checklist
 
 - **Durable Agents SDK storage** — sign-in and turn state default to `MemoryStorage`. When running
@@ -405,11 +508,16 @@ and delivers the reply through the channel's streaming protocol with the *AI gen
 | `Streaming:InformativeUpdate` | "Working on it..." | Status text while the agent thinks |
 | `Streaming:EnableGeneratedByAILabel` | `true` | "AI generated" label on replies |
 | `Streaming:EnableFeedbackLoop` | `false` | Thumbs up/down buttons |
+| `Proactive:Enabled` | `false` | Enable stored-endpoint, out-of-turn delivery |
+| `Proactive:AllowedConversationTypes` | `["personal"]` | Conversation scopes eligible for endpoint capture |
+| `Proactive:MaxDeliveryAttempts` / `RetryBaseDelay` / `SendTimeout` | `3` / `2s` / `30s` | Provider retry policy |
+| `Proactive:WorkerShards` / `OutboundQueueCapacity` | `4` / `64` | Bounded sender queues (capacity is per shard) |
+| `Proactive:MaxStoredEndpoints` | `8` | Conversation endpoints retained per principal |
 | `Principal:Strategy` / `Prefix` / `AllowChannelIdFallback` | `EntraObjectId` | User → principal mapping |
 | `UserAuthorization:Handlers:*` | — | Agents SDK SSO handlers (verbatim passthrough) |
 | `UserAuthorization:PassUserTokenToAgent` | `false` | Stamp the user's token on agent messages |
 | `Manifest:*` | sensible defaults | App name, developer info, icons, conversation starters |
-| `Manifest:EnableAppPackageEndpoint` | dev-only | Serve `/m365copilot/appPackage.zip` |
+| `Manifest:EnableAppPackageEndpoint` | dev-only | Serve `/m365copilot/appPackage.zip` and `/manifests/{name}.json` |
 
 **Escape hatch:** if you define the Agents SDK's native `Connections`, `ConnectionsMap`, or
 `AgentApplication` sections yourself, the addon leaves them untouched and only supplies what's

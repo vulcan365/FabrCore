@@ -22,6 +22,35 @@ public sealed class CopilotAppPackageBuilder
         _options = options.Value;
     }
 
+    /// <summary>
+    /// Canonical URL-safe name the manifest is addressable by on the
+    /// <c>/manifests/{name}.json</c> endpoint — a slug of <c>Manifest:Name</c>
+    /// (for example "My FabrCore Agent" → <c>my-fabrcore-agent</c>).
+    /// </summary>
+    public string ManifestName => Slugify(_options.Manifest.Name);
+
+    /// <summary>
+    /// Whether <paramref name="name"/> addresses this app's manifest. Accepts any value that
+    /// slugs to <see cref="ManifestName"/> (so the raw display name and case variants match)
+    /// as well as the Microsoft 365 app id (<c>Manifest:Id</c>, falling back to <c>ClientId</c>).
+    /// </summary>
+    public bool MatchesManifestName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return false;
+        }
+
+        var candidate = name.Trim();
+        if (Slugify(candidate) == ManifestName)
+        {
+            return true;
+        }
+
+        var appId = _options.Manifest.Id ?? _options.ClientId;
+        return appId is not null && string.Equals(candidate, appId, StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>Builds the manifest.json for the custom engine agent.</summary>
     public string BuildManifestJson()
     {
@@ -150,6 +179,29 @@ public sealed class CopilotAppPackageBuilder
 
     private static byte[] LoadIcon(string? path, byte[] fallback)
         => string.IsNullOrWhiteSpace(path) ? fallback : File.ReadAllBytes(path);
+
+    /// <summary>Lowercase ASCII letters and digits; every other run of characters becomes one dash.</summary>
+    private static string Slugify(string value)
+    {
+        var builder = new StringBuilder(value.Length);
+        var lastWasDash = false;
+
+        foreach (var ch in value)
+        {
+            if (char.IsAsciiLetterOrDigit(ch))
+            {
+                builder.Append(char.ToLowerInvariant(ch));
+                lastWasDash = false;
+            }
+            else if (!lastWasDash && builder.Length > 0)
+            {
+                builder.Append('-');
+                lastWasDash = true;
+            }
+        }
+
+        return builder.ToString().TrimEnd('-');
+    }
 
     /// <summary>
     /// Manifest validDomains entries must be bare host names. Accept full URLs

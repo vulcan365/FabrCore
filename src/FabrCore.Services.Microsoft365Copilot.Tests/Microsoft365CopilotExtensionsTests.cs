@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using FabrCore.Core;
 
 namespace FabrCore.Services.Microsoft365Copilot.Tests;
 
@@ -118,5 +119,30 @@ public sealed class Microsoft365CopilotExtensionsTests
         });
 
         Assert.ThrowsExactly<InvalidOperationException>(() => builder.AddMicrosoft365Copilot());
+    }
+
+    [TestMethod]
+    public void ProactiveRelay_IsOptInAndUsesGenericRelayContract()
+    {
+        var disabled = CreateBuilder(new()
+        {
+            ["Microsoft365Copilot:TokenValidation:Enabled"] = "false",
+            ["Microsoft365Copilot:Agent:AgentType"] = "chat-agent"
+        });
+        disabled.AddMicrosoft365Copilot();
+        Assert.IsFalse(disabled.Services.Any(descriptor =>
+            descriptor.ServiceType == typeof(IPrincipalMessageRelay)));
+
+        var enabled = CreateBuilder(new()
+        {
+            ["Microsoft365Copilot:TokenValidation:Enabled"] = "false",
+            ["Microsoft365Copilot:Agent:AgentType"] = "chat-agent",
+            ["Microsoft365Copilot:Proactive:Enabled"] = "true"
+        });
+        enabled.AddMicrosoft365Copilot();
+
+        Assert.IsTrue(enabled.Services.Any(descriptor =>
+            descriptor.ServiceType == typeof(IPrincipalMessageRelay) &&
+            descriptor.ImplementationType == typeof(CopilotPrincipalMessageRelay)));
     }
 }

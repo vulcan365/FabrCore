@@ -1,16 +1,14 @@
 ---
 name: fabrcore-agent
 description: >
-  Build FabrCore agents: extend FabrCoreAgentProxy, implement lifecycle methods, and manage custom
-  state, compaction, timers, reminders, health, telemetry, and agent configuration.
-  Use for: "FabrCoreAgentProxy", "AgentAlias", "OnInitialize", "OnMessage", "OnMessageBusy",
-  "OnEvent", "OnCompaction", "CreateChatClientAgent", "SetStatusMessage", "AgentConfiguration",
-  "GetStateAsync", "TryGetStateAsync", "FlushStateAsync", "compaction", "RegisterTimer",
-  "RegisterReminder", "agent health", "AgentHealthStatus", "build agent", "busy routing",
-  "IFabrCoreStorageProvider", "typed storage", "SystemMessageTypes", "verifiable execution",
-  "VerifiableExecutionEnvelope", "IVerifiableExecutionContext", or "RecordHttpCallAsync".
-  Do NOT use for: Microsoft Agent Framework internals (AIAgent, AgentSession) — use fabrcore-agentframework.
-  Do NOT use for: plugins, tools, MCP — use fabrcore-plugins-tools or fabrcore-mcp.
+  Build FabrCoreAgentProxy agents and implement lifecycle, state, compaction, timers, reminders,
+  health, telemetry, storage, and configuration. Use for FabrCoreAgentProxy, AgentAlias,
+  OnInitialize, OnMessage, OnMessageBusy, OnEvent, OnCompaction, CreateChatClientAgent,
+  SetStatusMessage, SendToUserAsync, proactive/out-of-turn notifications, AgentConfiguration,
+  GetStateAsync, TryGetStateAsync, FlushStateAsync, RegisterTimer, RegisterReminder,
+  SystemMessageTypes, and verifiable execution. Use fabrcore-agentframework for AIAgent or
+  AgentSession internals; fabrcore-plugins-tools/fabrcore-mcp for tools or MCP; and
+  fabrcore-principal-delivery for durable outbox internals and relay-provider authoring.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
 ---
 
@@ -217,6 +215,37 @@ public override async Task<AgentMessage> OnMessage(AgentMessage message)
 ```
 
 **LLM Usage Tracking:** Token counts are automatically captured and attached to the response `Args` (e.g., `_tokens_input`, `_tokens_output`, `_llm_calls`). Clients can read these underscore-prefixed keys directly from `AgentMessage.Args`; Agent Monitor is not required for response-level usage.
+
+### SendToUserAsync (out-of-turn principal delivery)
+
+Use the protected helper when an agent needs to notify its owning principal outside an active
+user turn, such as after a reminder, timer, workflow completion, or background job:
+
+```csharp
+await SendToUserAsync("Your report is ready");
+
+await SendToUserAsync(
+    "Your verification code is 482901",
+    messageType: "verification.ready",
+    target: new PrincipalDeliveryTarget("sms", "verified-phone-1"));
+
+await SendToUserAsync(new AgentMessage
+{
+    MessageType = "report.ready",
+    Message = "Quarterly report ready",
+    DataType = "application/vnd.microsoft.card.adaptive",
+    Data = cardJsonBytes
+});
+```
+
+The agent must have a principal-qualified handle. The helper targets that owning principal and
+sends a one-way `AgentMessage`; agents remain independent of M365, SMS, email, push, or webhook
+SDKs. If the principal has a live observer, a newly arriving message follows the observer path.
+Otherwise the host retains it for a supported relay; with no eligible relay it remains pending
+until an endpoint becomes available or the message expires.
+
+Use **fabrcore-principal-delivery** for explicit routing rules, durable outbox behavior, host
+configuration, provider contracts, and the M365 reference provider.
 
 ### SetStatusMessage(string? message)
 
@@ -634,4 +663,5 @@ Blueprints use this same `AgentConfiguration` shape to ensure a baseline set of 
 - **`OnMessage` is single-entry** — Orleans interleaving allows `OnMessageBusy` to execute concurrently, but only one `OnMessage` runs at a time. Do not mutate shared state in `OnMessageBusy`.
 - **Chat history is auto-flushed** after `OnMessage` completes and on grain deactivation. Not flushed after `OnMessageBusy`.
 - **Custom state requires explicit flush** — call `FlushStateAsync()` if you need durability before `OnMessage` returns.
+- **Do not call channel provider APIs directly for principal notifications** — use `SendToUserAsync` and an installed principal-message relay so delivery remains durable and provider-neutral.
 - **Eviction is host-owned** — agents should unregister timers/reminders they no longer need during normal operation, but `DELETE /fabrcoreapi/Agent/{handle}` is responsible for final cleanup and rejects active `OnMessage` work with `409 Conflict`.
