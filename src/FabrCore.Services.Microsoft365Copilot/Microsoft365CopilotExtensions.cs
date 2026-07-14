@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using FabrCore.Host;
 
 namespace FabrCore.Services.Microsoft365Copilot;
 
@@ -78,7 +79,15 @@ public static class Microsoft365CopilotExtensions
 
         builder.Services.TryAddSingleton<ICopilotPrincipalResolver, DefaultCopilotPrincipalResolver>();
         builder.Services.TryAddSingleton<ICopilotAgentProvisioner, CopilotAgentProvisioner>();
+        builder.Services.TryAddSingleton<ICopilotConversationContextWriter, CopilotConversationContextWriter>();
         builder.Services.AddSingleton<CopilotAppPackageBuilder>();
+
+        if (options.Proactive.Enabled)
+        {
+            builder.Services.TryAddSingleton<ICopilotProactiveActivitySender, CopilotProactiveActivitySender>();
+            builder.Services.TryAddSingleton<CopilotProactiveMessenger>();
+            builder.Services.AddPrincipalMessageRelay<CopilotPrincipalMessageRelay>();
+        }
 
         // Registers the CloudAdapter (IAgentHttpAdapter), IConnections, channel client factory,
         // background activity queue, and the bridge agent itself.
@@ -215,6 +224,27 @@ public static class Microsoft365CopilotExtensions
         {
             throw new InvalidOperationException(
                 "Microsoft365Copilot: Principal:Prefix must not contain ':' — it is the FabrCore handle separator.");
+        }
+
+        if (options.Proactive.Enabled)
+        {
+            if (options.Proactive.MaxDeliveryAttempts <= 0 ||
+                options.Proactive.RetryBaseDelay <= TimeSpan.Zero ||
+                options.Proactive.SendTimeout <= TimeSpan.Zero ||
+                options.Proactive.WorkerShards <= 0 ||
+                options.Proactive.OutboundQueueCapacity <= 0 ||
+                options.Proactive.MaxStoredEndpoints <= 0)
+            {
+                throw new InvalidOperationException(
+                    "Microsoft365Copilot:Proactive numeric counts and durations must be greater than zero.");
+            }
+
+            if (options.Proactive.AllowedConversationTypes.Count == 0 ||
+                options.Proactive.AllowedConversationTypes.Any(string.IsNullOrWhiteSpace))
+            {
+                throw new InvalidOperationException(
+                    "Microsoft365Copilot:Proactive:AllowedConversationTypes must contain at least one non-empty conversation type.");
+            }
         }
 
         if (options.TokenValidation.Enabled)

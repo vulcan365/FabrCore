@@ -1,19 +1,15 @@
 ---
 name: fabrcore
 description: >
-  FabrCore overview — architecture, quick reference, prerequisites, NuGet packages, and project templates
-  for building distributed AI agent systems with .NET and Orleans.
-  Use for general FabrCore questions, "what is FabrCore", architecture overview, getting started, NuGet packages.
-  For specific topics use the specialized skills:
-  fabrcore-agent (agent development), fabrcore-agentframework (Microsoft Agent Framework),
-  fabrcore-plugins-tools (plugins/tools), fabrcore-server (server setup),
-  fabrcore-orleans (Orleans configuration), fabrcore-messaging (messaging),
-  fabrcore-acl (access control: principals, roles, groups, permission grants, enforcement
-  modes, cross-principal agent-to-agent security, security audit),
-  fabrcore-mcp (MCP integration), fabrcore-spiffe (verifiable execution, signed evidence,
-  optional SPIFFE/SVID signing, trust bundles, evidence stores, attested external effects),
-  fabrcore-microsoft365copilot (surface agents in Microsoft 365 Copilot/Teams via the
-  FabrCore.Services.Microsoft365Copilot addon).
+  FabrCore overview, architecture, prerequisites, NuGet packages, and project templates for
+  distributed .NET/Orleans AI agent systems. Use for general FabrCore questions, getting started,
+  or choosing a specialized skill. Route agent code to fabrcore-agent; Microsoft Agent Framework
+  to fabrcore-agentframework; plugins/tools to fabrcore-plugins-tools; hosting/API to
+  fabrcore-server; Orleans to fabrcore-orleans; ordinary messages/orchestration to
+  fabrcore-messaging; durable proactive/out-of-turn delivery and relay providers to
+  fabrcore-principal-delivery; authorization/audit to fabrcore-acl; MCP to fabrcore-mcp;
+  verifiable execution/SPIFFE to fabrcore-spiffe; Microsoft 365 Copilot/Teams integration to
+  fabrcore-microsoft365copilot; and tests to fabrcore-testing.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
 metadata:
   author: FabrCore
@@ -42,6 +38,7 @@ Build distributed AI agent systems with FabrCore — an open-source .NET 10 fram
 | Entity Storage | Typed key/value app data | `IFabrCoreStorageProvider`, `FabrCore.Sdk.IFabrCoreHostApiClient` | fabrcore-server, fabrcore-orleans |
 | Handle Access | Principal handle/agent handle parsing | `IFabrCoreAgentHost.GetUserHandle()` (legacy name), `GetAgentHandle()` | fabrcore-agent |
 | Messaging | Agent communication | `AgentMessage`, `AgentMessage.IsSystemMessage`, `HandleUtilities` | fabrcore-messaging |
+| Principal Delivery | Durable proactive/out-of-turn delivery | `SendToUserAsync`, `IPrincipalMessageRelay`, `PrincipalDeliveryTarget` | fabrcore-principal-delivery |
 | ACL | Principals, roles, groups, permission grants | `IAclEvaluator`, `PermissionGrant`, `AclController` | fabrcore-acl |
 | Security Audit | ACL decisions, boundary crossings | `IAuditProvider`, `AuditEvent` | fabrcore-acl |
 | MCP | External tool protocol | `McpServerConfig` | fabrcore-mcp |

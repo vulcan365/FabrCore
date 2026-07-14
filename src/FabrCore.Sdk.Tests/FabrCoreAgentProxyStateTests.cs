@@ -12,6 +12,46 @@ namespace FabrCore.Sdk.Tests;
 public sealed class FabrCoreAgentProxyStateTests
 {
     [TestMethod]
+    public async Task SendToUserText_TargetsOwningPrincipalAndPreservesDeliveryTarget()
+    {
+        var agent = CreateAgent(new Dictionary<string, JsonElement>());
+
+        await agent.SendText(
+            "Report ready",
+            "report.ready",
+            new PrincipalDeliveryTarget("sms", "phone-1"));
+
+        var sent = agent.SentMessage;
+        Assert.IsNotNull(sent);
+        Assert.AreEqual("owner", sent.ToHandle);
+        Assert.AreEqual(MessageKind.OneWay, sent.Kind);
+        Assert.AreEqual("Report ready", sent.Message);
+        Assert.AreEqual("report.ready", sent.MessageType);
+        Assert.AreEqual("sms", sent.DeliveryTarget?.Channel);
+        Assert.AreEqual("phone-1", sent.DeliveryTarget?.EndpointId);
+    }
+
+    [TestMethod]
+    public async Task SendToUserStructured_PreservesStructuredPayload()
+    {
+        var agent = CreateAgent(new Dictionary<string, JsonElement>());
+        var message = new AgentMessage
+        {
+            DataType = "application/example+json",
+            Data = [1, 2, 3],
+            Args = new Dictionary<string, string> { ["source"] = "test" }
+        };
+
+        await agent.SendStructured(message);
+
+        Assert.AreSame(message, agent.SentMessage);
+        Assert.AreEqual("owner", message.ToHandle);
+        Assert.AreEqual(MessageKind.OneWay, message.Kind);
+        CollectionAssert.AreEqual(new byte[] { 1, 2, 3 }, message.Data);
+        Assert.AreEqual("test", message.Args?["source"]);
+    }
+
+    [TestMethod]
     public async Task GetStateAsync_ReturnsDefault_WhenStateElementIsUndefined()
     {
         var agent = CreateAgent(new Dictionary<string, JsonElement>
@@ -120,6 +160,16 @@ public sealed class FabrCoreAgentProxyStateTests
 
         public Task<StateReadResult<T>> TryGetState<T>(string key) => TryGetStateAsync<T>(key);
 
+        public AgentMessage? SentMessage => ((TestAgentHost)fabrcoreAgentHost).SentMessage;
+
+        public Task SendText(
+            string message,
+            string? messageType = null,
+            PrincipalDeliveryTarget? target = null) =>
+            SendToUserAsync(message, messageType, target);
+
+        public Task SendStructured(AgentMessage message) => SendToUserAsync(message);
+
         public override Task OnInitialize() => Task.CompletedTask;
 
         public override Task<AgentMessage> OnMessage(AgentMessage message) => Task.FromResult(message.Response());
@@ -138,9 +188,15 @@ public sealed class FabrCoreAgentProxyStateTests
 
         public string GetHandle() => _handle;
 
+        public AgentMessage? SentMessage { get; private set; }
+
         public Task<AgentMessage> SendAndReceiveMessage(AgentMessage request) => Task.FromResult(request.Response());
 
-        public Task SendMessage(AgentMessage request) => Task.CompletedTask;
+        public Task SendMessage(AgentMessage request)
+        {
+            SentMessage = request;
+            return Task.CompletedTask;
+        }
 
         public Task<AgentHealthStatus> GetAgentHealth(string? handle = null, HealthDetailLevel detailLevel = HealthDetailLevel.Detailed)
             => Task.FromResult(new AgentHealthStatus

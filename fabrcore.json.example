@@ -36,6 +36,10 @@
       "SystemPrompt": "You are a helpful assistant.",
       "Models": "default"
     },
+    "Proactive": {
+      "Enabled": false,
+      "AllowedConversationTypes": [ "personal" ]
+    },
     "Manifest": {
       "Name": "My FabrCore Agent",
       "Description": "Answers questions using my FabrCore agents.",

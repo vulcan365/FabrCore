@@ -60,6 +60,12 @@ namespace FabrCore.Core
 
         public string? Channel { get; set; }
 
+        /// <summary>
+        /// Optional external delivery target used when no live principal observer is
+        /// present. Null allows FabrCore to choose the most recently active endpoint.
+        /// </summary>
+        public PrincipalDeliveryTarget? DeliveryTarget { get; set; }
+
         public string? MessageType { get; set; }
 
         public string? Message { get; set; }
@@ -199,6 +205,9 @@ namespace FabrCore.Core
         [Id(19)]
         public int CrossPrincipalHops { get; set; }
 
+        [Id(20)]
+        public PrincipalDeliveryTarget? DeliveryTarget { get; set; }
+
     }
 
     [RegisterConverter]
@@ -231,7 +240,8 @@ namespace FabrCore.Core
                 ParentSpanId = surrogate.ParentSpanId,
                 VerifiableExecution = surrogate.VerifiableExecution,
                 CrossPrincipalOrigin = surrogate.CrossPrincipalOrigin,
-                CrossPrincipalHops = surrogate.CrossPrincipalHops
+                CrossPrincipalHops = surrogate.CrossPrincipalHops,
+                DeliveryTarget = surrogate.DeliveryTarget
             };
         }
 
@@ -258,7 +268,8 @@ namespace FabrCore.Core
                 ParentSpanId = value.ParentSpanId,
                 VerifiableExecution = value.VerifiableExecution,
                 CrossPrincipalOrigin = value.CrossPrincipalOrigin,
-                CrossPrincipalHops = value.CrossPrincipalHops
+                CrossPrincipalHops = value.CrossPrincipalHops,
+                DeliveryTarget = value.DeliveryTarget
             };
         }
     }

@@ -30,6 +30,7 @@ public class FabrCoreCopilotAgent : AgentApplication
     private readonly IGrainFactory _grainFactory;
     private readonly Microsoft365CopilotOptions _copilotOptions;
     private readonly ILogger<FabrCoreCopilotAgent> _logger;
+    private readonly ICopilotConversationContextWriter? _conversationContextWriter;
 
     public FabrCoreCopilotAgent(
         AgentApplicationOptions options,
@@ -38,7 +39,8 @@ public class FabrCoreCopilotAgent : AgentApplication
         ICopilotAgentProvisioner provisioner,
         IGrainFactory grainFactory,
         IOptions<Microsoft365CopilotOptions> copilotOptions,
-        ILogger<FabrCoreCopilotAgent> logger)
+        ILogger<FabrCoreCopilotAgent> logger,
+        ICopilotConversationContextWriter? conversationContextWriter = null)
         : base(options)
     {
         _agentService = agentService;
@@ -47,6 +49,7 @@ public class FabrCoreCopilotAgent : AgentApplication
         _grainFactory = grainFactory;
         _copilotOptions = copilotOptions.Value;
         _logger = logger;
+        _conversationContextWriter = conversationContextWriter;
 
         OnConversationUpdate(ConversationUpdateEvents.MembersAdded, WelcomeAsync);
         OnActivity(ActivityTypes.Message, OnMessageActivityAsync, rank: RouteRank.Last);
@@ -100,11 +103,41 @@ public class FabrCoreCopilotAgent : AgentApplication
             return;
         }
 
+        string? deliveryEndpointId = null;
+        if (_conversationContextWriter is not null)
+        {
+            try
+            {
+                // Refresh before the turn observer subscribes. This also wakes Core so
+                // durable messages that arrived between turns can enter the outbox.
+                deliveryEndpointId = await _conversationContextWriter.TrackAsync(
+                    principalHandle,
+                    turnContext,
+                    cancellationToken);
+                _logger.LogInformation(
+                    "Microsoft 365 conversation endpoint capture completed - Principal: {Principal}, ActivityId: {ActivityId}, EndpointCaptured: {EndpointCaptured}, Endpoint: {Endpoint}, ChannelId: {ChannelId}, ConversationType: {ConversationType}",
+                    principalHandle,
+                    turnContext.Activity.Id,
+                    !string.IsNullOrWhiteSpace(deliveryEndpointId),
+                    CopilotConversationContextWriter.ShortEndpointId(deliveryEndpointId),
+                    turnContext.Activity.ChannelId?.ToString(),
+                    turnContext.Activity.Conversation?.ConversationType);
+            }
+            catch (Exception ex)
+            {
+                // Endpoint capture must never break the existing in-turn bridge.
+                _logger.LogWarning(
+                    ex,
+                    "Could not update proactive conversation context for principal {Principal}",
+                    principalHandle);
+            }
+        }
+
         var targetHandle = await _provisioner.EnsureAgentAsync(
             principalHandle, turnContext.Activity.Conversation?.Id, cancellationToken);
 
         agentMessage ??= new AgentMessage { Message = text, Kind = MessageKind.Request };
-        PopulateChannelContext(agentMessage, turnContext, userToken);
+        PopulateChannelContext(agentMessage, turnContext, userToken, deliveryEndpointId);
 
         // Observe the principal for the duration of the turn: agents deliver ui.render surface
         // messages there (not as the OnMessage reply), and with no observer subscribed they
@@ -258,7 +291,11 @@ public class FabrCoreCopilotAgent : AgentApplication
     /// Stamps the channel identity, conversation args, optional user token, and trace context
     /// this addon adds to every bridged message.
     /// </summary>
-    private void PopulateChannelContext(AgentMessage message, ITurnContext turnContext, string? userToken)
+    private void PopulateChannelContext(
+        AgentMessage message,
+        ITurnContext turnContext,
+        string? userToken,
+        string? deliveryEndpointId)
     {
         var activity = turnContext.Activity;
         message.Channel = Microsoft365CopilotDefaults.ChannelName;
@@ -272,6 +309,7 @@ public class FabrCoreCopilotAgent : AgentApplication
             activity.From?.TenantId ?? activity.Conversation?.TenantId);
         AddArg(message, Microsoft365CopilotDefaults.ArgUserName, activity.From?.Name);
         AddArg(message, Microsoft365CopilotDefaults.ArgLocale, activity.Locale);
+        AddArg(message, Microsoft365CopilotDefaults.ArgDeliveryEndpointId, deliveryEndpointId);
 
         if (_copilotOptions.UserAuthorization.PassUserTokenToAgent && userToken is not null)
         {

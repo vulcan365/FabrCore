@@ -372,6 +372,42 @@ and delivers the reply through the channel's streaming protocol with the *AI gen
 > token-by-token relay of the agent's internal `_thinking` updates would require a host-side
 > observer hook that FabrCore does not currently expose to addons.
 
+## Proactive messages (opt in)
+
+Agents can send messages between user turns through FabrCore's generic durable principal-delivery
+pipeline. Microsoft 365 is one relay provider; agents remain channel-neutral:
+
+```csharp
+await SendToUserAsync("Your report is ready.");
+```
+
+Enable endpoint capture and proactive delivery explicitly:
+
+```json
+"Microsoft365Copilot": {
+  "Proactive": {
+    "Enabled": true,
+    "AllowedConversationTypes": [ "personal" ]
+  }
+}
+```
+
+On every eligible inbound turn, the addon stores a versioned conversation endpoint under
+`m365copilot:proactive:endpoints:v1` and stamps its stable id into
+`AgentMessage.Args["Microsoft365Copilot:DeliveryEndpointId"]`. It retains up to eight endpoints per
+principal. Personal scope is the safe default; group or channel conversation types must be added
+deliberately.
+
+Plain text and valid Adaptive Cards are supported. System messages, blank content, `ui.action`,
+other `ui.*` payloads, and targets for another channel are not sent. The provider uses four bounded
+worker shards (64 queued entries each), three attempts with two-second exponential backoff, and a
+30-second send timeout. `429`, `5xx`, network, and timeout failures are retryable; permanent `4xx`
+and mapping errors are dead-lettered. Proactive delivery is durable at-least-once, so a timeout or
+crash after Microsoft accepted a request can result in a duplicate.
+
+See [the generic relay authoring guide](../../docs/principal-message-relays.md) for the platform
+contracts and a provider-SDK-free webhook sample.
+
 ## Adaptive Cards
 
 FabrCore surface renders are delivered to Copilot/Teams as Adaptive Cards. A message is treated
@@ -386,8 +422,9 @@ Both delivery styles agents use are supported:
 - **Sent to the principal** — the common surface pattern. Agents deliver `ui.render` messages to
   their principal for surface clients to observe; since no surface client exists on this channel,
   the addon subscribes a turn-scoped observer on the principal grain, captures renders emitted
-  during the turn (plus any backlog the grain queued while nobody was listening), and relays
-  them. Renders of other data types and `_thinking`/`_status` updates are discarded.
+  during the turn, and relays them. When proactive delivery is enabled, eligible messages queued
+  between turns are promoted to the durable M365 outbox when an endpoint is refreshed. Renders of
+  other data types and `_thinking`/`_status` updates are discarded.
 
 The addon parses the UTF-8 JSON payload in `Data`, finds the `"type": "AdaptiveCard"` object
 (at the root or nested inside a surface envelope), and attaches it — as a parsed JSON object,
@@ -471,6 +508,11 @@ it to the same FabrCore agent as a `ui.action` message, mirroring what surface c
 | `Streaming:InformativeUpdate` | "Working on it..." | Status text while the agent thinks |
 | `Streaming:EnableGeneratedByAILabel` | `true` | "AI generated" label on replies |
 | `Streaming:EnableFeedbackLoop` | `false` | Thumbs up/down buttons |
+| `Proactive:Enabled` | `false` | Enable stored-endpoint, out-of-turn delivery |
+| `Proactive:AllowedConversationTypes` | `["personal"]` | Conversation scopes eligible for endpoint capture |
+| `Proactive:MaxDeliveryAttempts` / `RetryBaseDelay` / `SendTimeout` | `3` / `2s` / `30s` | Provider retry policy |
+| `Proactive:WorkerShards` / `OutboundQueueCapacity` | `4` / `64` | Bounded sender queues (capacity is per shard) |
+| `Proactive:MaxStoredEndpoints` | `8` | Conversation endpoints retained per principal |
 | `Principal:Strategy` / `Prefix` / `AllowChannelIdFallback` | `EntraObjectId` | User → principal mapping |
 | `UserAuthorization:Handlers:*` | — | Agents SDK SSO handlers (verbatim passthrough) |
 | `UserAuthorization:PassUserTokenToAgent` | `false` | Stamp the user's token on agent messages |

@@ -434,6 +434,10 @@ namespace FabrCore.Host
                     builder.Configuration.GetSection(Configuration.AgentGrainOptions.SectionName));
                 builder.Services.Configure<Configuration.PrincipalGrainOptions>(
                     builder.Configuration.GetSection(Configuration.PrincipalGrainOptions.SectionName));
+                builder.Services.Configure<Configuration.PrincipalContextOptions>(
+                    builder.Configuration.GetSection(Configuration.PrincipalContextOptions.SectionName));
+                builder.Services.Configure<Configuration.PrincipalDeliveryOptions>(
+                    builder.Configuration.GetSection(Configuration.PrincipalDeliveryOptions.SectionName));
 
                 // Pluggable WebSocket authenticator. Default preserves legacy header/query behavior;
                 // production apps override via AddFabrCoreServices().Services.AddSingleton<IWebSocketAuthenticator, MyAuthN>().
@@ -476,6 +480,9 @@ namespace FabrCore.Host
 
                 // Configure Agent Service
                 builder.Services.AddSingleton<IFabrCoreAgentService, FabrCoreAgentService>();
+                builder.Services.TryAddSingleton<IPrincipalContextStore, PrincipalContextStore>();
+                builder.Services.TryAddSingleton<IPrincipalMessageDeliveryCompletion, PrincipalMessageDeliveryCompletion>();
+                builder.Services.TryAddSingleton<PrincipalMessageRelayDispatcher>();
                 logger.LogDebug("FabrCoreAgentService added");
 
                 // Configure Agent Registry Cleanup

@@ -221,6 +221,69 @@ namespace FabrCore.Sdk
                 config.AgentType, config.Handle);
         }
 
+        /// <summary>
+        /// Sends a one-way text message to the principal that owns this agent. If the
+        /// principal has no live observer, the host can route it through an installed
+        /// principal message relay.
+        /// </summary>
+        protected Task SendToUserAsync(
+            string message,
+            string? messageType = null,
+            PrincipalDeliveryTarget? target = null)
+        {
+            ArgumentNullException.ThrowIfNull(message);
+
+            return SendToUserAsync(new AgentMessage
+            {
+                Message = message,
+                MessageType = messageType,
+                DeliveryTarget = target
+            });
+        }
+
+        /// <summary>
+        /// Sends a structured one-way message to the principal that owns this agent.
+        /// The message's data, files, state, arguments, and delivery target are retained.
+        /// </summary>
+        protected Task SendToUserAsync(AgentMessage message)
+        {
+            ArgumentNullException.ThrowIfNull(message);
+
+            var userHandle = fabrcoreAgentHost.GetUserHandle();
+            if (string.IsNullOrWhiteSpace(userHandle))
+            {
+                throw new InvalidOperationException(
+                    "This agent is not associated with a principal user handle.");
+            }
+
+            ValidateDeliveryTarget(message.DeliveryTarget);
+            message.ToHandle = userHandle;
+            message.Kind = MessageKind.OneWay;
+            return fabrcoreAgentHost.SendMessage(message);
+        }
+
+        private static void ValidateDeliveryTarget(PrincipalDeliveryTarget? target)
+        {
+            if (target is null)
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(target.Channel))
+            {
+                throw new ArgumentException(
+                    "A delivery target must specify a channel.",
+                    nameof(target));
+            }
+
+            if (target.Channel.Length > 128 || target.EndpointId?.Length > 512)
+            {
+                throw new ArgumentException(
+                    "The delivery target channel or endpoint identifier is too long.",
+                    nameof(target));
+            }
+        }
+
         protected async Task<Microsoft.Extensions.AI.IChatClient> GetChatClient(string name, int networkTimeoutSeconds = 100)
         {
             var client = await chatClientService.GetChatClient(name, networkTimeoutSeconds);

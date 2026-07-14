@@ -1,18 +1,14 @@
 ---
 name: fabrcore-messaging
 description: >
-  FabrCore messaging, handle routing, inter-agent communication, and orchestration patterns.
-  Covers AgentMessage, EventMessage, HandleUtilities, SendMessage vs SendAndReceiveMessage vs SendEvent,
-  fan-out/gather, pipeline, supervisor patterns, shared agents, and cross-principal routing.
-  Triggers on: "AgentMessage", "EventMessage", "handle routing", "HandleUtilities", "SendMessage",
-  "SendAndReceiveMessage", "SendEvent", "inter-agent", "agent-to-agent", "multi-agent", "orchestration",
-  "shared agent", "MessageKind", "fan-out", "pipeline",
-  "supervisor", "delegator", "SystemMessageTypes",
-  "AgentMessage.IsSystemMessage", "FromHandle", "ToHandle", "OnBehalfOfHandle", "TraceId", "message routing", "storage principal handle",
-  "VerifiableExecutionEnvelope", "signed evidence", "EventPublished", "EventDelivered", "EventHandled",
-  "RecordDbEffectAsync", "RecordHttpCallAsync", "RecordStorageEffectAsync", "RecordLibraryCallAsync".
-  Do NOT use for: agent lifecycle — use fabrcore-agent; ACL rules, permission grants, roles/groups,
-  enforcement modes, security audit — use fabrcore-acl.
+  FabrCore messages, handle routing, inter-agent communication, tracing, verifiable-execution
+  lineage, and multi-agent orchestration. Use for AgentMessage, EventMessage, HandleUtilities,
+  SendMessage, SendAndReceiveMessage, SendEvent, MessageKind, FromHandle, ToHandle,
+  OnBehalfOfHandle, DeliverToHandle, Channel, system messages, shared/cross-principal agents,
+  fan-out, pipeline, supervisor/delegator patterns, TraceId, and signed event/effect evidence.
+  Use fabrcore-agent for lifecycle; fabrcore-acl for grants, roles/groups, enforcement, or audit;
+  and fabrcore-principal-delivery for SendToUserAsync, durable proactive/out-of-turn
+  agent-to-principal delivery, external relay providers, endpoint context, or delivery outboxes.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
 ---
 
@@ -32,6 +28,7 @@ public class AgentMessage
     public string? OnBehalfOfHandle { get; set; }   // Original requester (for delegation)
     public string? DeliverToHandle { get; set; }    // Final delivery target
     public string? Channel { get; set; }            // Optional channel identifier
+    public PrincipalDeliveryTarget? DeliveryTarget { get; set; } // Optional external relay/endpoint
 
     // Content
     public string? Message { get; set; }            // Text content
@@ -189,6 +186,12 @@ Two messaging methods are available through `IFabrCoreAgentHost` and host ingres
 | `SendMessage(AgentMessage)` | Fire-and-forget. Response via stream/observer. | **Client-to-agent** |
 | `SendAndReceiveMessage(AgentMessage)` | Async RPC. Blocks until response. | **Agent-to-agent** |
 | `SendEvent(EventMessage)` | Fire-and-forget event. No response. | Event broadcasting |
+
+These methods route ordinary client, agent, and event traffic. When an agent must notify its
+own principal while no user turn is active, use the protected `SendToUserAsync(...)` helper.
+That path preserves the message durably and selects an installed external relay; it is not a
+substitute for `DeliverToHandle` or `Channel`. See **fabrcore-principal-delivery** for agent API,
+provider contracts, delivery semantics, and M365/SMS/email/push/webhook implementations.
 
 ### Client-to-Agent
 

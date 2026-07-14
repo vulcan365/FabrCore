@@ -246,6 +246,16 @@ public sealed class FabrCoreAgentServiceTrackingTests
 
         public Task SendMessage(AgentMessage request) => throw new NotSupportedException();
 
+        public Task SetContextValue(string key, string? value) => throw new NotSupportedException();
+
+        public Task<string?> GetContextValue(string key) => throw new NotSupportedException();
+
+        public Task<Dictionary<string, string>> GetContextValues() => throw new NotSupportedException();
+
+        public Task CompletePrincipalMessageDelivery(
+            string deliveryId,
+            PrincipalMessageDeliveryOutcome outcome) => throw new NotSupportedException();
+
         public Task SendEvent(EventMessage request) => throw new NotSupportedException();
 
         public Task<AgentHealthStatus> CreateAgent(AgentConfiguration agentConfiguration)

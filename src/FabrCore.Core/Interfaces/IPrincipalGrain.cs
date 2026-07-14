@@ -10,6 +10,18 @@ namespace FabrCore.Core.Interfaces
         Task<AgentMessage> SendAndReceiveMessage(AgentMessage request);
         Task SendMessage(AgentMessage request);
 
+        Task SetContextValue(string key, string? value);
+
+        [AlwaysInterleave]
+        Task<string?> GetContextValue(string key);
+
+        [AlwaysInterleave]
+        Task<Dictionary<string, string>> GetContextValues();
+
+        Task CompletePrincipalMessageDelivery(
+            string deliveryId,
+            PrincipalMessageDeliveryOutcome outcome);
+
         /// <summary>
         /// Sends an event to the stream identified by the event Namespace and Channel (fire-and-forget).
         /// Leave Namespace empty to send to the default AgentEvent stream for the target Channel.

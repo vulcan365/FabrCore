@@ -88,6 +88,12 @@ public sealed class Microsoft365CopilotOptions
     /// <summary>Response streaming behavior on streaming-capable channels (Teams, M365 Copilot).</summary>
     public CopilotStreamingOptions Streaming { get; set; } = new();
 
+    /// <summary>
+    /// Out-of-turn delivery through stored Teams/Copilot conversation endpoints.
+    /// Disabled by default and independent from normal turn replies.
+    /// </summary>
+    public CopilotProactiveOptions Proactive { get; set; } = new();
+
     /// <summary>How the inbound Microsoft 365 user is mapped to a FabrCore principal handle.</summary>
     public CopilotPrincipalOptions Principal { get; set; } = new();
 
@@ -188,6 +194,37 @@ public sealed class CopilotStreamingOptions
 
     /// <summary>Enable the Teams/Copilot feedback (thumbs up/down) buttons on responses.</summary>
     public bool EnableFeedbackLoop { get; set; }
+}
+
+/// <summary>Settings for the opt-in Microsoft 365 principal message relay.</summary>
+public sealed class CopilotProactiveOptions
+{
+    /// <summary>Enable durable out-of-turn delivery. Default false.</summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>Provider send attempts made before reporting a retryable failure to Core.</summary>
+    public int MaxDeliveryAttempts { get; set; } = 3;
+
+    /// <summary>Initial delay used by provider-local exponential backoff.</summary>
+    public TimeSpan RetryBaseDelay { get; set; } = TimeSpan.FromSeconds(2);
+
+    /// <summary>Timeout for each proactive send attempt.</summary>
+    public TimeSpan SendTimeout { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>Number of independent worker queues.</summary>
+    public int WorkerShards { get; set; } = 4;
+
+    /// <summary>Bounded entries per worker shard.</summary>
+    public int OutboundQueueCapacity { get; set; } = 64;
+
+    /// <summary>Maximum stored conversation endpoints per principal.</summary>
+    public int MaxStoredEndpoints { get; set; } = 8;
+
+    /// <summary>
+    /// Conversation types eligible for proactive delivery. The safe default is
+    /// personal scope only; add channel/group types deliberately.
+    /// </summary>
+    public List<string> AllowedConversationTypes { get; set; } = ["personal"];
 }
 
 /// <summary>Strategy for deriving the FabrCore principal handle from the Microsoft 365 user.</summary>
