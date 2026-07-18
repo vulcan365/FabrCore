@@ -89,20 +89,29 @@ namespace FabrCore.Sdk
                 switch (modelConfig.Provider.ToLowerInvariant())
                 {
                     case "openai":
+                        var openAiClientOptions = new OpenAIClientOptions
+                        {
+                            EnableDistributedTracing = true,
+                            NetworkTimeout = TimeSpan.FromSeconds(timeoutSeconds),
+                            ClientLoggingOptions = new System.ClientModel.Primitives.ClientLoggingOptions
+                            {
+                                EnableLogging = false,
+                                EnableMessageContentLogging = false,
+                                LoggerFactory = _loggerFactory,
+                                EnableMessageLogging = false
+                            }
+                        };
+
+#pragma warning disable OPENAI001 // OpenAIClientOptions.Endpoint is experimental
+                        if (!string.IsNullOrWhiteSpace(modelConfig.Uri))
+                        {
+                            openAiClientOptions.Endpoint = new Uri(modelConfig.Uri);
+                        }
+#pragma warning restore OPENAI001
+
                         openAiClient = new OpenAIClient(
                             new ApiKeyCredential(apiKey),
-                            new OpenAIClientOptions
-                            {
-                                EnableDistributedTracing = true,
-                                NetworkTimeout = TimeSpan.FromSeconds(timeoutSeconds),
-                                ClientLoggingOptions = new System.ClientModel.Primitives.ClientLoggingOptions
-                                {
-                                    EnableLogging = false,
-                                    EnableMessageContentLogging = false,
-                                    LoggerFactory = _loggerFactory,
-                                    EnableMessageLogging = false
-                                }
-                            }
+                            openAiClientOptions
                         );
                         break;
 
