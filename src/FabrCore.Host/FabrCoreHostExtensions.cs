@@ -13,7 +13,6 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry.Trace;
-using Orleans.Configuration;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Reflection;
@@ -57,6 +56,12 @@ namespace FabrCore.Host
         internal Type VerifiableExecutionStoreType { get; private set; } = typeof(InMemoryVerifiableExecutionStore);
         internal Type VerifiableExecutionSignerType { get; private set; } = typeof(NullVerifiableExecutionSigner);
         internal VerifiableExecutionOptions VerifiableExecutionOptions { get; } = new();
+
+        /// <summary>
+        /// Explicitly registered Orleans provider. When null, <see cref="FabrCoreHostExtensions.AddFabrCoreServer"/>
+        /// auto-discovers a provider matching <see cref="OrleansClusterOptions.ClusteringMode"/> by convention.
+        /// </summary>
+        internal IFabrCoreOrleansProvider? OrleansProvider { get; private set; }
 
         /// <summary>
         /// Options controlling LLM call capture behavior. Registered as a singleton and consumed
@@ -167,6 +172,21 @@ namespace FabrCore.Host
         {
             AgentMessageMonitorType = typeof(InMemoryAgentMessageMonitor);
             configureLlmCapture?.Invoke(LlmCaptureOptions);
+            return this;
+        }
+
+        /// <summary>
+        /// Registers an Orleans clustering/persistence/reminders/streaming provider for
+        /// <see cref="FabrCoreHostExtensions.AddFabrCoreServer"/>. Provider packages expose
+        /// shorthand extensions (e.g. <c>UseSqlServer()</c> from FabrCore.Host.SqlServer,
+        /// <c>UseAzureStorage()</c> from FabrCore.Host.AzureStorage). Explicit registration is
+        /// optional — referencing a provider package and setting <c>Orleans:ClusteringMode</c>
+        /// is enough for convention-based discovery.
+        /// </summary>
+        public FabrCoreServerOptions UseOrleansProvider(IFabrCoreOrleansProvider provider)
+        {
+            ArgumentNullException.ThrowIfNull(provider);
+            OrleansProvider = provider;
             return this;
         }
 
@@ -581,11 +601,14 @@ namespace FabrCore.Host
                 logger.LogInformation("Orleans clustering mode: {ClusteringMode}", orleansOptions.ClusteringMode);
                 activity?.SetTag("orleans.clustering_mode", orleansOptions.ClusteringMode.ToString());
 
-                // Auto-initialize Orleans SQL Server tables if needed
-                if (orleansOptions.ClusteringMode == ClusteringMode.SqlServer && orleansOptions.AutoInitDatabase)
+                // Resolve the Orleans provider for the configured mode.
+                var orleansProvider = ResolveOrleansProvider(options, orleansOptions, logger);
+
+                // Let the provider auto-provision its backing resources (SQL tables,
+                // Azure tables/containers/queues, ...) before the silo starts.
+                if (orleansOptions.AutoInitDatabase)
                 {
-                    logger.LogInformation("Auto-initializing Orleans SQL Server database tables");
-                    Services.OrleansSqlServerInitializer.EnsureOrleansTablesExist(orleansOptions, logger);
+                    orleansProvider.Initialize(orleansOptions, builder.Configuration, logger);
                 }
 
                 builder.UseOrleans(siloBuilder =>
@@ -593,20 +616,9 @@ namespace FabrCore.Host
                     using var orleansActivity = ActivitySource.StartActivity("ConfigureOrleans", ActivityKind.Internal);
                     logger.LogInformation("Configuring Orleans silo");
 
-                    // Configure clustering based on mode
-                    ConfigureClustering(siloBuilder, orleansOptions, logger);
+                    orleansProvider.ConfigureSilo(siloBuilder, orleansOptions, builder.Configuration, logger);
 
-                    // Configure persistence based on mode
-                    ConfigurePersistence(siloBuilder, orleansOptions, logger);
-
-                    // Configure reminders based on mode
-                    ConfigureReminders(siloBuilder, orleansOptions, logger);
-
-                    // Streaming always uses memory streams (no SQL Server streaming provider exists)
-                    siloBuilder.AddMemoryStreams(FabrCoreOrleansConstants.StreamProviderName);
-                    logger.LogDebug("Orleans memory streams configured");
-
-                    logger.LogInformation("Orleans clustering, persistence, and reminders configured");
+                    logger.LogInformation("Orleans clustering, persistence, reminders, and streaming configured");
 
                     // Register FabrCore grain assemblies
                     siloBuilder.AddFabrCore(options.AdditionalAssemblies);
@@ -641,158 +653,71 @@ namespace FabrCore.Host
             => AddFabrCoreServer(builder, options);
 
         /// <summary>
-        /// Configures Orleans clustering based on the specified mode.
+        /// Resolves the Orleans provider for the configured clustering mode.
+        /// Localhost is handled by the built-in <see cref="LocalhostOrleansProvider"/>.
         /// </summary>
-        private static void ConfigureClustering(ISiloBuilder siloBuilder, OrleansClusterOptions options, ILogger logger)
+        private static IFabrCoreOrleansProvider ResolveOrleansProvider(
+            FabrCoreServerOptions options, OrleansClusterOptions orleansOptions, ILogger logger)
         {
-            switch (options.ClusteringMode)
+            var mode = orleansOptions.ClusteringMode;
+
+            if (mode == ClusteringMode.Localhost)
             {
-                case ClusteringMode.SqlServer:
-                    if (string.IsNullOrEmpty(options.ConnectionString))
-                    {
-                        throw new InvalidOperationException("Orleans:ConnectionString is required when using SqlServer clustering mode.");
-                    }
-
-                    siloBuilder.UseAdoNetClustering(clustering =>
-                    {
-                        clustering.Invariant = "Microsoft.Data.SqlClient";
-                        clustering.ConnectionString = options.ConnectionString;
-                    });
-                    siloBuilder.Configure<ClusterOptions>(cluster =>
-                    {
-                        cluster.ClusterId = options.ClusterId;
-                        cluster.ServiceId = options.ServiceId;
-                    });
-                    logger.LogInformation("Orleans SQL Server clustering configured - ClusterId: {ClusterId}, ServiceId: {ServiceId}",
-                        options.ClusterId, options.ServiceId);
-                    break;
-
-                case ClusteringMode.AzureStorage:
-                    if (string.IsNullOrEmpty(options.ConnectionString))
-                    {
-                        throw new InvalidOperationException("Orleans:ConnectionString is required when using AzureStorage clustering mode.");
-                    }
-
-                    siloBuilder.UseAzureStorageClustering(clustering =>
-                    {
-                        clustering.ConfigureTableServiceClient(options.ConnectionString);
-                    });
-                    siloBuilder.Configure<ClusterOptions>(cluster =>
-                    {
-                        cluster.ClusterId = options.ClusterId;
-                        cluster.ServiceId = options.ServiceId;
-                    });
-                    logger.LogInformation("Orleans Azure Storage clustering configured - ClusterId: {ClusterId}, ServiceId: {ServiceId}",
-                        options.ClusterId, options.ServiceId);
-                    break;
-
-                case ClusteringMode.Localhost:
-                default:
-                    siloBuilder.UseLocalhostClustering();
-                    logger.LogDebug("Orleans localhost clustering configured");
-                    break;
-            }
-        }
-
-        /// <summary>
-        /// Configures Orleans grain persistence based on the specified mode.
-        /// </summary>
-        private static void ConfigurePersistence(ISiloBuilder siloBuilder, OrleansClusterOptions options, ILogger logger)
-        {
-            var storageConnectionString = options.EffectiveStorageConnectionString;
-
-            switch (options.ClusteringMode)
-            {
-                case ClusteringMode.SqlServer:
-                    if (string.IsNullOrEmpty(storageConnectionString))
-                    {
-                        throw new InvalidOperationException("Orleans:ConnectionString or Orleans:StorageConnectionString is required when using SqlServer clustering mode.");
-                    }
-
-                    siloBuilder.AddAdoNetGrainStorage(FabrCoreOrleansConstants.StorageProviderName, storage =>
-                    {
-                        storage.Invariant = "Microsoft.Data.SqlClient";
-                        storage.ConnectionString = storageConnectionString;
-                    });
-                    siloBuilder.AddAdoNetGrainStorage(FabrCoreOrleansConstants.PubSubStoreName, storage =>
-                    {
-                        storage.Invariant = "Microsoft.Data.SqlClient";
-                        storage.ConnectionString = storageConnectionString;
-                    });
-                    logger.LogInformation("Orleans SQL Server grain persistence configured");
-                    break;
-
-                case ClusteringMode.AzureStorage:
-                    if (string.IsNullOrEmpty(storageConnectionString))
-                    {
-                        throw new InvalidOperationException("Orleans:ConnectionString or Orleans:StorageConnectionString is required when using AzureStorage clustering mode.");
-                    }
-
-                    siloBuilder.AddAzureTableGrainStorage(FabrCoreOrleansConstants.StorageProviderName, storage =>
-                    {
-                        storage.ConfigureTableServiceClient(storageConnectionString);
-                    });
-                    siloBuilder.AddAzureTableGrainStorage(FabrCoreOrleansConstants.PubSubStoreName, storage =>
-                    {
-                        storage.ConfigureTableServiceClient(storageConnectionString);
-                    });
-                    logger.LogInformation("Orleans Azure Storage grain persistence configured");
-                    break;
-
-                case ClusteringMode.Localhost:
-                default:
-                    siloBuilder.AddMemoryGrainStorage(FabrCoreOrleansConstants.StorageProviderName);
-                    siloBuilder.AddMemoryGrainStorage(FabrCoreOrleansConstants.PubSubStoreName);
+                if (options.OrleansProvider is not null && options.OrleansProvider.Mode != ClusteringMode.Localhost)
+                {
                     logger.LogWarning(
-                        "Orleans Localhost mode uses in-memory grain storage for {StorageProviderName}. " +
-                        "FabrCore typed storage entities, agent state, client state, and management state will be lost when the process exits. " +
-                        "Use SqlServer, AzureStorage, or custom Orleans storage for restart-safe persistence.",
-                        FabrCoreOrleansConstants.StorageProviderName);
-                    logger.LogDebug("Orleans memory grain storage configured");
-                    break;
+                        "Orleans provider {ProviderType} is registered but Orleans:ClusteringMode is 'Localhost' — the provider is ignored. " +
+                        "Set Orleans:ClusteringMode to '{Mode}' to use it.",
+                        options.OrleansProvider.GetType().Name, options.OrleansProvider.Mode);
+                }
+                return options.OrleansProvider?.Mode == ClusteringMode.Localhost
+                    ? options.OrleansProvider
+                    : new LocalhostOrleansProvider();
             }
-        }
 
-        /// <summary>
-        /// Configures Orleans reminders based on the specified mode.
-        /// </summary>
-        private static void ConfigureReminders(ISiloBuilder siloBuilder, OrleansClusterOptions options, ILogger logger)
-        {
-            switch (options.ClusteringMode)
+            if (options.OrleansProvider is not null)
             {
-                case ClusteringMode.SqlServer:
-                    if (string.IsNullOrEmpty(options.ConnectionString))
-                    {
-                        throw new InvalidOperationException("Orleans:ConnectionString is required when using SqlServer clustering mode.");
-                    }
-
-                    siloBuilder.UseAdoNetReminderService(reminders =>
-                    {
-                        reminders.Invariant = "Microsoft.Data.SqlClient";
-                        reminders.ConnectionString = options.ConnectionString;
-                    });
-                    logger.LogInformation("Orleans SQL Server reminders configured");
-                    break;
-
-                case ClusteringMode.AzureStorage:
-                    if (string.IsNullOrEmpty(options.ConnectionString))
-                    {
-                        throw new InvalidOperationException("Orleans:ConnectionString is required when using AzureStorage clustering mode.");
-                    }
-
-                    siloBuilder.UseAzureTableReminderService(reminders =>
-                    {
-                        reminders.ConfigureTableServiceClient(options.ConnectionString);
-                    });
-                    logger.LogInformation("Orleans Azure Storage reminders configured");
-                    break;
-
-                case ClusteringMode.Localhost:
-                default:
-                    siloBuilder.UseInMemoryReminderService();
-                    logger.LogDebug("Orleans in-memory reminder service configured");
-                    break;
+                if (options.OrleansProvider.Mode != mode)
+                {
+                    throw new InvalidOperationException(
+                        $"The registered Orleans provider '{options.OrleansProvider.GetType().Name}' handles mode " +
+                        $"'{options.OrleansProvider.Mode}' but Orleans:ClusteringMode is '{mode}'.");
+                }
+                return options.OrleansProvider;
             }
+
+            // Convention-based discovery: an assembly named FabrCore.Host.<Mode> containing a
+            // public parameterless IFabrCoreOrleansProvider implementation. Referencing the
+            // provider package and setting Orleans:ClusteringMode is all a host needs to do.
+            var assemblyName = $"FabrCore.Host.{mode}";
+            try
+            {
+                var assembly = Assembly.Load(assemblyName);
+                var providerType = assembly.GetExportedTypes().FirstOrDefault(t =>
+                    !t.IsAbstract &&
+                    typeof(IFabrCoreOrleansProvider).IsAssignableFrom(t) &&
+                    t.GetConstructor(Type.EmptyTypes) is not null);
+
+                if (providerType is not null)
+                {
+                    var provider = (IFabrCoreOrleansProvider)Activator.CreateInstance(providerType)!;
+                    if (provider.Mode == mode)
+                    {
+                        logger.LogInformation("Orleans provider {ProviderType} auto-discovered from {Assembly}",
+                            providerType.Name, assemblyName);
+                        return provider;
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is System.IO.FileNotFoundException or System.IO.FileLoadException or BadImageFormatException)
+            {
+                // Assembly not referenced — fall through to the guidance below.
+            }
+
+            throw new InvalidOperationException(
+                $"Orleans:ClusteringMode is '{mode}' but no Orleans provider for that mode is available. " +
+                $"Reference the '{assemblyName}' NuGet package (it is auto-discovered), or register a provider " +
+                $"explicitly via FabrCoreServerOptions.UseOrleansProvider (e.g. options.Use{mode}()).");
         }
     }
 }

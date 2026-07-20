@@ -21,7 +21,24 @@ FabrCore uses Microsoft Orleans as its distributed runtime. This skill covers cl
 
 ## Simple Path: AddFabrCoreServer
 
-`AddFabrCoreServer()` configures Orleans automatically from `appsettings.json`. Use this when Localhost/SqlServer/AzureStorage modes are sufficient:
+`AddFabrCoreServer()` configures Orleans automatically from `appsettings.json`. Use this when Localhost/SqlServer/AzureStorage modes are sufficient.
+
+Localhost mode is built into `FabrCore.Host`. The other modes live in provider packages that are auto-discovered — reference the package and set `Orleans:ClusteringMode`; no code changes needed:
+
+| Mode | NuGet package |
+|------|---------------|
+| `Localhost` | (built into FabrCore.Host) |
+| `SqlServer` | `FabrCore.Host.SqlServer` |
+| `AzureStorage` | `FabrCore.Host.AzureStorage` |
+
+```csharp
+builder.AddFabrCoreServer(new FabrCoreServerOptions
+{
+    AdditionalAssemblies = [typeof(MyAgent).Assembly]
+});
+```
+
+Explicit registration is also available (optional): `options.UseSqlServer()` or `options.UseAzureStorage()`:
 
 ```csharp
 builder.AddFabrCoreServer(new FabrCoreServerOptions
@@ -84,9 +101,11 @@ Configure in `appsettings.json`:
 }
 ```
 
-- Requires SQL Server instance
+- Requires the `FabrCore.Host.SqlServer` package and a SQL Server instance
+- Orleans tables are created automatically on startup (`AutoInitDatabase`, default true)
 - Persistent state survives restarts
 - Multi-silo clustering supported
+- Streams use the in-memory provider (Orleans has no SQL Server streaming provider)
 - `StorageConnectionString` optional (falls back to `ConnectionString`)
 
 ### AzureStorage (Cloud)
@@ -103,9 +122,28 @@ Configure in `appsettings.json`:
 }
 ```
 
-- Azure Tables for clustering and reminders
-- Azure Blobs for grain persistence
+- Requires the `FabrCore.Host.AzureStorage` package
+- Azure Tables for clustering, reminders, and stream pub/sub state
+- Azure Blobs for grain persistence (default — agent state can exceed the 1 MB table entity limit); table storage opt-in
+- Azure Storage Queues for streams (default); memory streams opt-in
+- Tables, the blob container, and stream queues are provisioned automatically on startup (`AutoInitDatabase`, default true)
 - Multi-silo clustering supported
+- Local development: run [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite) and set `"ConnectionString": "UseDevelopmentStorage=true"`
+
+Optional tuning via the `Orleans:AzureStorage` section (all defaults are sensible):
+
+```json
+{
+  "Orleans": {
+    "AzureStorage": {
+      "GrainStorage": "Blob",              // Blob (default) | Table
+      "ContainerName": "fabrcore-grainstate",
+      "Streams": "AzureQueue",             // AzureQueue (default) | Memory
+      "StreamQueueCount": 8                // must match across all silos
+    }
+  }
+}
+```
 
 ## Orleans Configuration Schema
 
@@ -212,9 +250,9 @@ When using the advanced path, you must register these providers:
 | | Simple (`AddFabrCoreServer`) | Advanced (`AddFabrCoreServices` + `UseOrleans` + `AddFabrCore`) |
 |---|---|---|
 | Orleans config | From `appsettings.json` | You code it directly |
-| Clustering | Localhost, SqlServer, AzureStorage | Any Orleans provider |
-| Storage | Memory, ADO.NET, Azure | Any Orleans provider |
-| Streams | Memory provider | Any Orleans provider |
+| Clustering | Localhost, SqlServer, AzureStorage (provider packages), or custom `IFabrCoreOrleansProvider` | Any Orleans provider |
+| Storage | Memory, ADO.NET, Azure Blob/Table | Any Orleans provider |
+| Streams | Memory (Localhost/SqlServer), Azure Queue (AzureStorage) | Any Orleans provider |
 | TimeProvider | `UseTimeProvider(...)`, app DI registration, or `TimeProvider.System` | Register `TimeProvider` in DI before Orleans starts |
 | Use when | Standard modes are sufficient | Event Hubs, Cosmos DB, Redis, custom dashboards, etc. |
 

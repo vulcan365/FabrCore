@@ -11,6 +11,8 @@ $packages = @(
     "FabrCore.Core",
     "FabrCore.Sdk",
     "FabrCore.Host",
+    "FabrCore.Host.SqlServer",
+    "FabrCore.Host.AzureStorage",
     "FabrCore.Services.Microsoft365Copilot"
 )
 

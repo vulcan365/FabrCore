@@ -43,9 +43,9 @@ namespace FabrCore.Host.Configuration
         public string? EffectiveStorageConnectionString => StorageConnectionString ?? ConnectionString;
 
         /// <summary>
-        /// When true and ClusteringMode is SqlServer, automatically creates
-        /// required Orleans tables on startup if they do not exist.
-        /// Defaults to true.
+        /// When true, the configured Orleans provider automatically provisions its backing
+        /// resources on startup if they do not exist (SQL Server: Orleans tables;
+        /// AzureStorage: tables, blob container, and stream queues). Defaults to true.
         /// </summary>
         public bool AutoInitDatabase { get; set; } = true;
     }

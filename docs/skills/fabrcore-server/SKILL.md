@@ -521,7 +521,7 @@ The Host stores each value internally in an envelope:
 | `CreatedUtc` | First write time |
 | `UpdatedUtc` | Last write time |
 
-Storage uses the configured Orleans grain storage provider named `FabrCoreOrleansConstants.StorageProviderName` (`"fabrcoreStorage"`). With the simple `AddFabrCoreServer` path, `ClusteringMode: Localhost` uses Orleans memory grain storage, so typed storage entities and grain state are lost when the process exits. Use `SqlServer`, `AzureStorage`, or custom Orleans storage for restart-safe persistence.
+Storage uses the configured Orleans grain storage provider named `FabrCoreOrleansConstants.StorageProviderName` (`"fabrcoreStorage"`). With the simple `AddFabrCoreServer` path, `ClusteringMode: Localhost` uses Orleans memory grain storage, so typed storage entities and grain state are lost when the process exits. Use `SqlServer` (FabrCore.Host.SqlServer package), `AzureStorage` (FabrCore.Host.AzureStorage package), or custom Orleans storage for restart-safe persistence.
 
 Addressing:
 - `x-user-handle` is the principal handle partition and ACL boundary.

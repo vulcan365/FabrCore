@@ -53,7 +53,9 @@ FabrCore provides the building blocks for creating, hosting, and connecting to A
 |---------|-------------|
 | **[FabrCore.Core](https://www.nuget.org/packages/FabrCore.Core)** | Core interfaces, data models, and grain abstractions |
 | **[FabrCore.Sdk](https://www.nuget.org/packages/FabrCore.Sdk)** | Agent SDK -- `FabrCoreAgentProxy`, plugins, tools, MCP, monitoring |
-| **[FabrCore.Host](https://www.nuget.org/packages/FabrCore.Host)** | Server host -- Orleans silo, REST API, chat completions, WebSocket |
+| **[FabrCore.Host](https://www.nuget.org/packages/FabrCore.Host)** | Server host -- Orleans silo, REST API, chat completions, WebSocket (in-memory Localhost mode built in) |
+| **[FabrCore.Host.SqlServer](https://www.nuget.org/packages/FabrCore.Host.SqlServer)** | SQL Server clustering, persistence, and reminders for the host, with automatic Orleans table deployment |
+| **[FabrCore.Host.AzureStorage](https://www.nuget.org/packages/FabrCore.Host.AzureStorage)** | Azure Storage clustering (tables), persistence (blob/tables), reminders, and streams (queues) for the host, with automatic resource provisioning |
 | **[FabrCore.Services.Microsoft365Copilot](https://www.nuget.org/packages/FabrCore.Services.Microsoft365Copilot)** | Server addon -- surface FabrCore agents in Microsoft 365 Copilot and Teams (`/api/messages`, Entra auth, app package generation) |
 
 ## Quick Start

@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 using System.Reflection;
 using System.Text.RegularExpressions;
 
-namespace FabrCore.Host.Services;
+namespace FabrCore.Host.SqlServer;
 
 /// <summary>
 /// Ensures the required Orleans SQL Server tables exist before the silo starts.
@@ -43,9 +43,6 @@ internal static class OrleansSqlServerInitializer
     /// </summary>
     internal static void EnsureOrleansTablesExist(OrleansClusterOptions options, ILogger logger)
     {
-        if (options.ClusteringMode != ClusteringMode.SqlServer)
-            return;
-
         var clusteringConnStr = options.ConnectionString;
         var storageConnStr = options.EffectiveStorageConnectionString;
 
@@ -122,7 +119,7 @@ internal static class OrleansSqlServerInitializer
     private static string ReadEmbeddedScript(string scriptName)
     {
         var assembly = Assembly.GetExecutingAssembly();
-        var resourceName = $"FabrCore.Host.SqlScripts.{scriptName}";
+        var resourceName = $"FabrCore.Host.SqlServer.SqlScripts.{scriptName}";
 
         using var stream = assembly.GetManifestResourceStream(resourceName)
             ?? throw new InvalidOperationException(
