@@ -1,4 +1,3 @@
-using Azure.Data.Tables;
 using FabrCore.Core;
 using FabrCore.Core.Acl;
 using FabrCore.Core.Interfaces;

@@ -18,7 +18,7 @@ $newTag = "v$([int]$parts[0] + 1).0.0"
 
 Write-Host "Current: $lastTag"
 Write-Host "New:     $newTag"
-Write-Host "Packages: FabrCore.Core, FabrCore.Sdk, FabrCore.Host"
+Write-Host "Packages: FabrCore.Core, FabrCore.Sdk, FabrCore.Host, FabrCore.Host.SqlServer, FabrCore.Host.AzureStorage, FabrCore.Services.Microsoft365Copilot"
 
 if ($DryRun) {
     Write-Host "[DryRun] Would create and push tag $newTag for all FabrCore packages." -ForegroundColor Yellow

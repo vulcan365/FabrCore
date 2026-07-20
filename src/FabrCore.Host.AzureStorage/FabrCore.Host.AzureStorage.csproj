@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<Title>FabrCore Host Azure Storage</Title>
+		<Description>Azure Storage clustering (tables), grain persistence (blob/tables), reminders (tables), and streaming (queues) provider for the FabrCore Orleans host, with automatic resource provisioning</Description>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<!-- Azure Storage Providers -->
+		<PackageReference Include="Microsoft.Orleans.Clustering.AzureStorage" Version="10.2.1" />
+		<PackageReference Include="Microsoft.Orleans.Persistence.AzureStorage" Version="10.2.1" />
+		<PackageReference Include="Microsoft.Orleans.Streaming.AzureStorage" Version="10.2.1" />
+		<PackageReference Include="Microsoft.Orleans.Reminders.AzureStorage" Version="10.2.1" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\FabrCore.Host\FabrCore.Host.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<InternalsVisibleTo Include="FabrCore.Host.Tests" />
+	</ItemGroup>
+
+</Project>

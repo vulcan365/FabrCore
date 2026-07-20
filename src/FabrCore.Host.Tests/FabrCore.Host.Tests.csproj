@@ -19,6 +19,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\FabrCore.Host\FabrCore.Host.csproj" />
+    <ProjectReference Include="..\FabrCore.Host.SqlServer\FabrCore.Host.SqlServer.csproj" />
+    <ProjectReference Include="..\FabrCore.Host.AzureStorage\FabrCore.Host.AzureStorage.csproj" />
   </ItemGroup>
 
 </Project>
