@@ -71,17 +71,17 @@ public sealed class GatewayDiscoveryTests
     [TestMethod]
     public async Task DiscoveryClient_NonSuccessStatus_IncludesStatusAndBody()
     {
-        using var httpClient = CreateHttpClient(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized)
+        using var httpClient = CreateHttpClient(_ => new HttpResponseMessage(HttpStatusCode.BadGateway)
         {
-            Content = new StringContent("token expired")
+            Content = new StringContent("upstream unavailable")
         });
         var client = CreateDiscoveryClient(httpClient, allowInsecure: true);
 
         var exception = await Assert.ThrowsAsync<FabrCoreGatewayDiscoveryException>(
             () => client.GetGatewayDiscoveryAsync());
 
-        Assert.AreEqual(HttpStatusCode.Unauthorized, exception.StatusCode);
-        StringAssert.Contains(exception.Message, "token expired");
+        Assert.AreEqual(HttpStatusCode.BadGateway, exception.StatusCode);
+        StringAssert.Contains(exception.Message, "upstream unavailable");
     }
 
     [TestMethod]

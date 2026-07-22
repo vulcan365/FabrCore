@@ -147,17 +147,15 @@ For instance-based registration, FabrCore registers both `TimeProvider` and the 
 
 ### Provider-Neutral Gateway Discovery and Orleans TLS
 
-Enable gateway discovery only for trusted server-side applications that need a normal Orleans
-`IClusterClient`. The endpoint is disabled by default and requires a named ASP.NET Core
-authorization policy when enabled:
+`UseFabrCoreServer()` maps gateway discovery with the other FabrCore API endpoints for applications
+that need a normal Orleans `IClusterClient`. It has no separate enable flag, authentication
+requirement, or authorization policy. Configure only optional discovery behavior:
 
 ```json
 {
   "FabrCore": {
     "Host": {
       "GatewayDiscovery": {
-        "Enabled": true,
-        "AuthorizationPolicy": "FabrCoreGatewayDiscovery",
         "RefreshPeriod": "00:00:30",
         "AdvertisedGateways": [
           "gwy.tcp://silo-1.internal.example:30000/0"
@@ -169,9 +167,6 @@ authorization policy when enabled:
 }
 ```
 
-- `AuthorizationPolicy` is required when `Enabled` is `true`. The application owns
-  authentication, policy registration, bearer-token validation, and client-certificate rules.
-- Register authentication and authorization middleware before `UseFabrCoreServer()`.
 - `RefreshPeriod` defaults to 30 seconds.
 - `AdvertisedGateways`, when non-empty, take precedence over membership-derived addresses. Use
   them for NAT, containers, reverse routing, or any topology where silo membership addresses are
@@ -194,9 +189,8 @@ builder.AddFabrCoreServer(new FabrCoreServerOptions
 }));
 ```
 
-Discovery authentication protects only the HTTP document. It does not authenticate or encrypt
-the subsequent Orleans TCP connection. Production deployments should keep gateway ports on a
-private network and require Orleans mTLS.
+The discovery endpoint does not authenticate or encrypt the subsequent Orleans TCP connection.
+Production deployments should keep gateway ports on a private network and require Orleans mTLS.
 
 ## What AddFabrCoreServer Configures
 
@@ -207,7 +201,7 @@ private network and require Orleans mTLS.
 5. **Background Services** — `AgentRegistryCleanupService`, `FileCleanupService`
 6. **Assembly Discovery** — Scans `AdditionalAssemblies` for agent, plugin, and tool types
 7. **ACL & Security Audit** — Loads `Acl` and `FabrCore:Audit` sections from `fabrcore.json`, registers the ACL evaluator/enforcer, the `AclRegistryGrain`-backed entity store, and the audit provider (see fabrcore-acl)
-8. **Gateway Discovery** — Binds and validates `FabrCore:Host:GatewayDiscovery`, and registers provider-neutral active-gateway discovery (disabled by default)
+8. **Gateway Discovery** — Binds and validates `FabrCore:Host:GatewayDiscovery`, and registers provider-neutral active-gateway discovery
 
 ## What UseFabrCoreServer Configures
 
@@ -398,11 +392,10 @@ Compatibility naming: several REST and SDK surfaces still use `user`/`users` in 
 
 `GET /fabrcoreapi/cluster/gateways` returns the cluster identity and currently advertised Orleans
 gateway URIs for `FabrCore.Client.Orleans`. It is not part of `IFabrCoreHostApiClient`; clients use
-`FabrCoreGatewayDiscoveryClient` or `AddFabrCoreOrleansClientAsync` with an application-configured,
-authenticated `HttpClient`.
+`FabrCoreGatewayDiscoveryClient` or `AddFabrCoreOrleansClientAsync` with an application-supplied
+`HttpClient`.
 
-The endpoint returns `404` while disabled, `401` for an unauthenticated caller, `403` when the
-configured policy denies access, and `503` when no gateway can be advertised.
+The endpoint returns `503` when no gateway can be advertised.
 
 **Response** `200 OK`:
 
@@ -1098,7 +1091,5 @@ public FabrCoreServerOptions ConfigureOrleans(Action<ISiloBuilder> configure)
 3. Check that tool methods have `[Description]` attributes
 
 **Gateway discovery fails:**
-1. `404` means discovery is disabled; set `FabrCore:Host:GatewayDiscovery:Enabled` to `true`
-2. `401/403` means the discovery `HttpClient` lacks valid credentials or the named policy denied it
-3. `503` means no explicit advertised gateway exists and no active membership address is usable
-4. A successful HTTP response does not prove the Orleans gateway port or mTLS identity is reachable
+1. `503` means no explicit advertised gateway exists and no active membership address is usable
+2. A successful HTTP response does not prove the Orleans gateway port or mTLS identity is reachable

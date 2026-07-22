@@ -10,15 +10,6 @@ public sealed class GatewayDiscoveryOptions
 {
     public const string SectionName = "FabrCore:Host:GatewayDiscovery";
 
-    /// <summary>Gets or sets whether the gateway discovery endpoint is enabled.</summary>
-    public bool Enabled { get; set; }
-
-    /// <summary>
-    /// Gets or sets the ASP.NET Core authorization policy required to call the endpoint.
-    /// This value is required when discovery is enabled.
-    /// </summary>
-    public string? AuthorizationPolicy { get; set; }
-
     /// <summary>Gets or sets the gateway refresh period returned to clients.</summary>
     public TimeSpan RefreshPeriod { get; set; } = TimeSpan.FromSeconds(30);
 
@@ -36,17 +27,7 @@ internal sealed class GatewayDiscoveryOptionsValidator : IValidateOptions<Gatewa
 {
     public ValidateOptionsResult Validate(string? name, GatewayDiscoveryOptions options)
     {
-        if (!options.Enabled)
-        {
-            return ValidateOptionsResult.Success;
-        }
-
         var failures = new List<string>();
-        if (string.IsNullOrWhiteSpace(options.AuthorizationPolicy))
-        {
-            failures.Add($"{GatewayDiscoveryOptions.SectionName}:AuthorizationPolicy is required when gateway discovery is enabled.");
-        }
-
         if (options.RefreshPeriod <= TimeSpan.Zero)
         {
             failures.Add($"{GatewayDiscoveryOptions.SectionName}:RefreshPeriod must be greater than zero.");

@@ -46,7 +46,7 @@ public static class FabrCoreOrleansClientExtensions
     }
 
     /// <summary>
-    /// Fetches the authenticated discovery document before Orleans registration, configures the
+    /// Fetches the discovery document before Orleans registration, configures the
     /// discovered cluster identity and gateways, applies caller Orleans configuration (including
     /// TLS), and registers Orleans' normal <see cref="IClusterClient"/> singleton.
     /// </summary>

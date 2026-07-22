@@ -397,10 +397,6 @@ namespace FabrCore.Host
                     .AddApplicationPart(typeof(FabrCoreServerOptions).Assembly);
                 logger.LogDebug("FabrCore API controllers registered");
 
-                // Gateway discovery performs policy authorization dynamically because the
-                // required policy name is host configuration rather than controller metadata.
-                builder.Services.AddAuthorization();
-
                 builder.Services.AddSingleton<FabrCore.Sdk.IFabrCoreChatClientService, FabrCore.Sdk.FabrCoreChatClientService>();
                 logger.LogDebug("FabrCoreChatClientService added");
 

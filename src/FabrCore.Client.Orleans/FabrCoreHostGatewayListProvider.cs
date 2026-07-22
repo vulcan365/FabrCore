@@ -5,7 +5,7 @@ using Orleans.Messaging;
 namespace FabrCore.Client.Orleans;
 
 /// <summary>
-/// Orleans gateway provider which refreshes its list through the authenticated FabrCore Host API.
+/// Orleans gateway provider which refreshes its list through the FabrCore Host API.
 /// </summary>
 public sealed class FabrCoreHostGatewayListProvider : IGatewayListProvider, IDisposable
 {

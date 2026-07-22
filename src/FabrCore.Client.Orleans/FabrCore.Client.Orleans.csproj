@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <Title>FabrCore Orleans Client</Title>
-    <Description>Provider-neutral Orleans client connectivity through authenticated FabrCore Host gateway discovery.</Description>
+    <Description>Provider-neutral Orleans client connectivity through FabrCore Host gateway discovery.</Description>
   </PropertyGroup>
 
   <ItemGroup>

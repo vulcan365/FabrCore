@@ -1,11 +1,9 @@
 using System.Net;
-using System.Security.Claims;
 using System.Text.Json;
 using FabrCore.Core.Connectivity;
 using FabrCore.Host.Api.Controllers;
 using FabrCore.Host.Configuration;
 using FabrCore.Host.Services;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,42 +17,11 @@ namespace FabrCore.Host.Tests;
 public sealed class GatewayDiscoveryTests
 {
     [TestMethod]
-    public async Task Endpoint_IsDisabledByDefault()
+    public void Endpoint_IsAvailableWithoutAuthenticationAndOmitsProviderConfiguration()
     {
         var controller = CreateController(new GatewayDiscoveryOptions());
 
-        var result = await controller.GetGateways();
-
-        Assert.IsInstanceOfType<NotFoundResult>(result);
-    }
-
-    [TestMethod]
-    public async Task Endpoint_AnonymousCallerReceives401()
-    {
-        var controller = CreateController(EnabledOptions(), authenticated: false);
-
-        var result = await controller.GetGateways();
-
-        Assert.IsInstanceOfType<UnauthorizedResult>(result);
-    }
-
-    [TestMethod]
-    public async Task Endpoint_UnauthorizedPolicyReceives403()
-    {
-        var controller = CreateController(EnabledOptions(), authorizationSucceeded: false);
-
-        var result = await controller.GetGateways();
-
-        var status = Assert.IsInstanceOfType<StatusCodeResult>(result);
-        Assert.AreEqual(StatusCodes.Status403Forbidden, status.StatusCode);
-    }
-
-    [TestMethod]
-    public async Task Endpoint_ReturnsClusterIdentityAndGatewaysWithoutProviderConfiguration()
-    {
-        var controller = CreateController(EnabledOptions());
-
-        var result = await controller.GetGateways();
+        var result = controller.GetGateways();
 
         var ok = Assert.IsInstanceOfType<OkObjectResult>(result);
         var document = Assert.IsInstanceOfType<FabrCoreGatewayDiscoveryDocument>(ok.Value);
@@ -73,11 +40,11 @@ public sealed class GatewayDiscoveryTests
     }
 
     [TestMethod]
-    public async Task Endpoint_NoUsableGatewaysReceives503()
+    public void Endpoint_NoUsableGatewaysReceives503()
     {
-        var controller = CreateController(EnabledOptions(), gateways: []);
+        var controller = CreateController(new GatewayDiscoveryOptions(), gateways: []);
 
-        var result = await controller.GetGateways();
+        var result = controller.GetGateways();
 
         var problem = Assert.IsInstanceOfType<ObjectResult>(result);
         Assert.AreEqual(StatusCodes.Status503ServiceUnavailable, problem.StatusCode);
@@ -128,14 +95,13 @@ public sealed class GatewayDiscoveryTests
     }
 
     [TestMethod]
-    public void OptionsValidator_RequiresPolicyWhenEnabled()
+    public void OptionsValidator_AcceptsDefaults()
     {
         var result = new GatewayDiscoveryOptionsValidator().Validate(
             null,
-            new GatewayDiscoveryOptions { Enabled = true });
+            new GatewayDiscoveryOptions());
 
-        Assert.IsTrue(result.Failed);
-        StringAssert.Contains(result.FailureMessage, "AuthorizationPolicy");
+        Assert.IsTrue(result.Succeeded);
     }
 
     [TestMethod]
@@ -167,37 +133,16 @@ public sealed class GatewayDiscoveryTests
 
     private static ClusterGatewayController CreateController(
         GatewayDiscoveryOptions options,
-        bool authenticated = true,
-        bool authorizationSucceeded = true,
         IReadOnlyList<Uri>? gateways = null)
     {
         gateways ??= [new Uri("gwy.tcp://10.0.0.1:30000/0")];
         var controller = new ClusterGatewayController(
             new StaticOptionsMonitor<GatewayDiscoveryOptions>(options),
             Options.Create(new ClusterOptions { ClusterId = "cluster-a", ServiceId = "service-a" }),
-            new StaticGatewaySource(gateways),
-            new StaticAuthorizationService(authorizationSucceeded));
+            new StaticGatewaySource(gateways));
 
-        var identity = authenticated
-            ? new ClaimsIdentity([new Claim(ClaimTypes.Name, "client")], "test")
-            : new ClaimsIdentity();
-        controller.ControllerContext = new ControllerContext
-        {
-            HttpContext = new DefaultHttpContext
-            {
-                User = new ClaimsPrincipal(identity)
-            }
-        };
         return controller;
     }
-
-    private static GatewayDiscoveryOptions EnabledOptions() => new()
-    {
-        Enabled = true,
-        AuthorizationPolicy = "GatewayDiscovery",
-        RefreshPeriod = TimeSpan.FromSeconds(30),
-        RequireOrleansTls = true
-    };
 
     private static ClusterMember Member(string address, SiloStatus status)
         => new(
@@ -215,20 +160,5 @@ public sealed class GatewayDiscoveryTests
         public T CurrentValue => value;
         public T Get(string? name) => value;
         public IDisposable? OnChange(Action<T, string?> listener) => null;
-    }
-
-    private sealed class StaticAuthorizationService(bool succeeded) : IAuthorizationService
-    {
-        public Task<AuthorizationResult> AuthorizeAsync(
-            ClaimsPrincipal user,
-            object? resource,
-            IEnumerable<IAuthorizationRequirement> requirements)
-            => Task.FromResult(succeeded ? AuthorizationResult.Success() : AuthorizationResult.Failed());
-
-        public Task<AuthorizationResult> AuthorizeAsync(
-            ClaimsPrincipal user,
-            object? resource,
-            string policyName)
-            => Task.FromResult(succeeded ? AuthorizationResult.Success() : AuthorizationResult.Failed());
     }
 }
