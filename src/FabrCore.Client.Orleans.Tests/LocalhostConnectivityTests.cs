@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using FabrCore.Host;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -29,26 +28,14 @@ public sealed class LocalhostConnectivityTests
             ["Orleans:ClusterId"] = clusterId,
             ["Orleans:ServiceId"] = "fabrcore-discovery-tests",
             ["Orleans:ClusteringMode"] = "Localhost",
-            ["FabrCore:Host:GatewayDiscovery:Enabled"] = "true",
-            ["FabrCore:Host:GatewayDiscovery:AuthorizationPolicy"] = "GatewayDiscoveryTests",
             ["FabrCore:Host:GatewayDiscovery:RequireOrleansTls"] = "false"
         });
-        webBuilder.Services.AddAuthorization(options =>
-            options.AddPolicy("GatewayDiscoveryTests", policy =>
-                policy.RequireAuthenticatedUser()));
         webBuilder.AddFabrCoreServer(new FabrCoreServerOptions
         {
             AdditionalAssemblies = [typeof(GatewayDiscoveryTestGrain).Assembly]
         });
 
         await using var webApp = webBuilder.Build();
-        webApp.Use(async (context, next) =>
-        {
-            context.User = new ClaimsPrincipal(
-                new ClaimsIdentity([new Claim(ClaimTypes.Name, "integration-client")], "test"));
-            await next();
-        });
-        webApp.UseAuthorization();
         webApp.UseFabrCoreServer();
         await webApp.StartAsync();
 

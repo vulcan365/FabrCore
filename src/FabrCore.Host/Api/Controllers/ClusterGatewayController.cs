@@ -1,7 +1,6 @@
 using FabrCore.Core.Connectivity;
 using FabrCore.Host.Configuration;
 using FabrCore.Host.Services;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -9,7 +8,7 @@ using Orleans.Configuration;
 
 namespace FabrCore.Host.Api.Controllers;
 
-/// <summary>Exposes authenticated, provider-neutral Orleans gateway discovery.</summary>
+/// <summary>Exposes provider-neutral Orleans gateway discovery.</summary>
 [ApiController]
 [Route("fabrcoreapi/cluster")]
 public sealed class ClusterGatewayController : ControllerBase
@@ -17,48 +16,23 @@ public sealed class ClusterGatewayController : ControllerBase
     private readonly IOptionsMonitor<GatewayDiscoveryOptions> _discoveryOptions;
     private readonly IOptions<ClusterOptions> _clusterOptions;
     private readonly IGatewayDiscoverySource _gatewaySource;
-    private readonly IAuthorizationService _authorizationService;
 
     public ClusterGatewayController(
         IOptionsMonitor<GatewayDiscoveryOptions> discoveryOptions,
         IOptions<ClusterOptions> clusterOptions,
-        IGatewayDiscoverySource gatewaySource,
-        IAuthorizationService authorizationService)
+        IGatewayDiscoverySource gatewaySource)
     {
         _discoveryOptions = discoveryOptions;
         _clusterOptions = clusterOptions;
         _gatewaySource = gatewaySource;
-        _authorizationService = authorizationService;
     }
 
     [HttpGet("gateways")]
     [ProducesResponseType<FabrCoreGatewayDiscoveryDocument>(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
-    public async Task<IActionResult> GetGateways()
+    public IActionResult GetGateways()
     {
         var options = _discoveryOptions.CurrentValue;
-        if (!options.Enabled)
-        {
-            return NotFound();
-        }
-
-        if (User.Identity?.IsAuthenticated != true)
-        {
-            return Unauthorized();
-        }
-
-        var authorization = await _authorizationService.AuthorizeAsync(
-            User,
-            resource: null,
-            options.AuthorizationPolicy!);
-        if (!authorization.Succeeded)
-        {
-            return StatusCode(StatusCodes.Status403Forbidden);
-        }
-
         var gateways = _gatewaySource.GetGateways();
         if (gateways.Count == 0)
         {

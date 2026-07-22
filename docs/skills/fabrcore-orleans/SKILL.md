@@ -197,7 +197,7 @@ not reference the Host's clustering package or copy its cluster identity and con
 ```csharp
 using FabrCore.Client.Orleans;
 
-var discoveryHttpClient = CreateAuthenticatedDiscoveryClient();
+var discoveryHttpClient = new HttpClient();
 
 await builder.AddFabrCoreOrleansClientAsync(
     discoveryHttpClient,
@@ -211,7 +211,7 @@ await builder.AddFabrCoreOrleansClientAsync(
     });
 ```
 
-`AddFabrCoreOrleansClientAsync` performs authenticated discovery before Orleans registration,
+`AddFabrCoreOrleansClientAsync` performs discovery before Orleans registration,
 configures `ClusterOptions`, installs `FabrCoreHostGatewayListProvider`, applies the caller's
 Orleans configuration, and calls `UseOrleansClient`. Application services continue to inject the
 standard `IClusterClient`:
@@ -243,9 +243,8 @@ builder.UseOrleansClient(orleans =>
 });
 ```
 
-The application owns the discovery `HttpClient`, including bearer-token acquisition, certificate
-configuration, and identity-provider secrets. Keep it alive for periodic refreshes. Initial
-authentication, retrieval, validation, or TLS-policy failures fail startup with a
+The application owns the discovery `HttpClient`; keep it alive for periodic refreshes. Initial
+retrieval, validation, or TLS-policy failures fail startup with a
 `FabrCoreGatewayDiscoveryException`.
 
 When the Host advertises `requireOrleansTls: false`, the client still rejects insecure Orleans
@@ -381,7 +380,7 @@ Pitfalls:
 
 ## Connection Resilience
 
-`FabrCoreHostGatewayListProvider` refreshes through the authenticated Host endpoint at the interval
+`FabrCoreHostGatewayListProvider` refreshes through the Host endpoint at the interval
 in the discovery document. A transient refresh failure logs a warning and returns the last valid
 gateway list, so a Host API restart does not by itself disconnect an established Orleans client.
 A later successful refresh replaces the cached list. Orleans continues to own gateway selection,
@@ -391,8 +390,8 @@ The discovered `clusterId` and `serviceId` cannot change after client startup. A
 reports different identity is rejected and the last-known-good gateways remain in use. Restart the
 client intentionally when moving it to a different cluster.
 
-HTTP discovery authorization does not secure the subsequent Orleans TCP connection. Direct
-Orleans access is for trusted backend applications on private networking, with mTLS required in
+The discovery endpoint does not secure the subsequent Orleans TCP connection. Direct Orleans
+access is for trusted backend applications on private networking, with mTLS required in
 production. The Host alone references `FabrCore.Host.SqlServer` or
 `FabrCore.Host.AzureStorage`; client projects do not reference those packages or receive their
 connection strings.

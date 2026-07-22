@@ -448,21 +448,20 @@ Pitfalls:
 
 ## Testing Provider-Neutral Orleans Connectivity
 
-Test gateway discovery separately from the in-memory agent harness. The feature crosses ASP.NET
-Core authentication, Host membership, HTTP discovery, and a real Orleans client, so use unit tests
+Test gateway discovery separately from the in-memory agent harness. The feature crosses Host
+membership, HTTP discovery, and a real Orleans client, so use unit tests
 for contract behavior and a Localhost Host integration test for the end-to-end path.
 
 ### Host endpoint and source tests
 
-- Verify discovery is disabled by default and returns `404`.
-- Verify unauthenticated and policy-denied requests return `401` and `403`.
+- Verify the endpoint is available without authentication or a separate enable flag.
 - Assert the versioned response contains only `clusterId`, `serviceId`, gateway URIs, refresh
   seconds, and the TLS requirement; serialized output must not contain provider configuration,
   connection strings, storage settings, or credentials.
 - Verify explicit `AdvertisedGateways` take precedence over membership-derived addresses.
 - Include only active silos with usable addresses and return `503` for an empty gateway set.
-- Validate configuration startup failures for missing authorization policy, non-positive refresh
-  period, and malformed `gwy.tcp://host:port/0` overrides.
+- Validate configuration startup failures for a non-positive refresh period and malformed
+  `gwy.tcp://host:port/0` overrides.
 
 ### Client unit tests
 
@@ -471,17 +470,17 @@ for contract behavior and a Localhost Host integration test for the end-to-end p
   gateway URIs are deduplicated.
 - Verify `AddFabrCoreOrleansClientAsync` configures the discovered `ClusterOptions`, resolves the
   normal DI `IClusterClient`, and requires the TLS callback when the Host requires TLS.
-- Verify refresh success replaces the cache and interval, while transient HTTP/auth/JSON failures
+- Verify refresh success replaces the cache and interval, while transient HTTP/JSON failures
   return the last-known-good list and log a warning.
 - Reject a later `clusterId` or `serviceId` change without replacing the cached list.
 
 ### Real Localhost integration test
 
-Start a FabrCore Host with authenticated discovery and an explicit reachable Localhost gateway,
+Start a FabrCore Host with an explicit reachable Localhost gateway,
 then register a separate client through `AddFabrCoreOrleansClientAsync`. Assert all of these through
 the resulting `IClusterClient`:
 
-1. The client connects using only `FabrCoreHostUrl` plus discovery authentication.
+1. The client connects using only `FabrCoreHostUrl`.
 2. A grain request/response succeeds.
 3. `CreateObjectReference` creates an observer, a grain subscribes it, and the client receives a
    callback.

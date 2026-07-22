@@ -4,7 +4,7 @@ using FabrCore.Core.Connectivity;
 
 namespace FabrCore.Client.Orleans;
 
-/// <summary>Fetches and validates authenticated Orleans gateway discovery documents.</summary>
+/// <summary>Fetches and validates Orleans gateway discovery documents.</summary>
 public sealed class FabrCoreGatewayDiscoveryClient
 {
     private readonly HttpClient _httpClient;
