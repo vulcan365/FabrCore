@@ -38,6 +38,12 @@ internal sealed class ModelDefaultsChatClient : DelegatingChatClient
             reasoningEffort);
     }
 
+    public static void ValidateConfiguration(ModelConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        _ = ParseReasoningEffort(configuration);
+    }
+
     public override Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages,
         ChatOptions? options = null,

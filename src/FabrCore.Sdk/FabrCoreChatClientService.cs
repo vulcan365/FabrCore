@@ -21,7 +21,7 @@ namespace FabrCore.Sdk
         Task<IEmbeddingGenerator<string, Embedding<float>>> GetEmbeddingsClient(string name);
 
         /// <summary>
-        /// Gets the model configuration for creating ChatOptions with MaxOutputTokens.
+        /// Gets the model configuration and its inference, compaction, and safety defaults.
         /// </summary>
         Task<ModelConfiguration> GetModelConfigurationAsync(string name);
     }
@@ -80,6 +80,7 @@ namespace FabrCore.Sdk
             try
             {
                 var modelConfig = await GetModelConfiguration(name);
+                ModelDefaultsChatClient.ValidateConfiguration(modelConfig);
                 var apiKey = await GetApiKey(modelConfig.ApiKeyAlias);
 
                 // Use config timeout if set, otherwise use parameter

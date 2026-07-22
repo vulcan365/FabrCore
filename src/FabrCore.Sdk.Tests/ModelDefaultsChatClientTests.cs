@@ -172,6 +172,28 @@ public sealed class ModelDefaultsChatClientTests
             handler.RequestUri?.ToString());
     }
 
+    [TestMethod]
+    public async Task GetChatClient_InvalidReasoningEffortFailsBeforeApiKeyFetch()
+    {
+        var handler = new ModelConfigHandler("invalid");
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["FabrCoreHostUrl"] = "https://fabrcore.test"
+            })
+            .Build();
+        var service = new FabrCoreChatClientService(
+            configuration,
+            NullLoggerFactory.Instance,
+            new HttpClient(handler));
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.GetChatClient("graphrag"));
+
+        StringAssert.Contains(exception.Message, "unsupported ReasoningEffort");
+        Assert.AreEqual(1, handler.RequestCount);
+    }
+
     private static ModelConfiguration CreateConfiguration(
         int? maxOutputTokens = 1000,
         string? reasoningEffort = "none")
@@ -282,19 +304,21 @@ public sealed class ModelDefaultsChatClientTests
         }
     }
 
-    private sealed class ModelConfigHandler : HttpMessageHandler
+    private sealed class ModelConfigHandler(string reasoningEffort = "none") : HttpMessageHandler
     {
         public Uri? RequestUri { get; private set; }
+        public int RequestCount { get; private set; }
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
             RequestUri = request.RequestUri;
+            RequestCount++;
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(
-                    """
+                    $$"""
                     {
                       "name": "graphrag",
                       "provider": "Azure",
@@ -303,7 +327,7 @@ public sealed class ModelDefaultsChatClientTests
                       "apiKeyAlias": "test-key",
                       "timeoutSeconds": 60,
                       "maxOutputTokens": 1000,
-                      "reasoningEffort": "none"
+                      "reasoningEffort": "{{reasoningEffort}}"
                     }
                     """,
                     Encoding.UTF8,
