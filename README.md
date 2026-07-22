@@ -114,7 +114,9 @@ Copy `FabrCore.json.example` to `FabrCore.json` in your project root and add you
       "Provider": "Azure",
       "Uri": "https://your-resource.cognitiveservices.azure.com/",
       "Model": "gpt-4.1-mini",
-      "ApiKeyAlias": "AZURE_KEY"
+      "ApiKeyAlias": "AZURE_KEY",
+      "ReasoningEffort": "none",
+      "MaxOutputTokens": 1000
     }
   ],
   "ApiKeys": [

@@ -51,13 +51,23 @@ namespace FabrCore.Sdk
         private readonly IConfiguration _configuration;
         private readonly ILoggerFactory _loggerFactory;
         private readonly ILogger<FabrCoreChatClientService> _logger;
-        private static readonly HttpClient _httpClient = new HttpClient();
+        private static readonly HttpClient SharedHttpClient = new();
+        private readonly HttpClient _httpClient;
 
         public FabrCoreChatClientService(IConfiguration configuration, ILoggerFactory loggerFactory)
+            : this(configuration, loggerFactory, SharedHttpClient)
+        {
+        }
+
+        internal FabrCoreChatClientService(
+            IConfiguration configuration,
+            ILoggerFactory loggerFactory,
+            HttpClient httpClient)
         {
             _configuration = configuration;
             _loggerFactory = loggerFactory;
             _logger = loggerFactory.CreateLogger<FabrCoreChatClientService>();
+            _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
 
             _logger.LogDebug("FabrCoreChatClientService created");
         }
@@ -85,7 +95,7 @@ namespace FabrCore.Sdk
                 _logger.LogInformation("Creating chat client - Provider: {Provider}, Model: {Model}",
                     modelConfig.Provider, modelConfig.Model);
 
-                OpenAIClient openAiClient;
+                IChatClient chatClient;
                 switch (modelConfig.Provider.ToLowerInvariant())
                 {
                     case "openai":
@@ -109,10 +119,11 @@ namespace FabrCore.Sdk
                         }
 #pragma warning restore OPENAI001
 
-                        openAiClient = new OpenAIClient(
-                            new ApiKeyCredential(apiKey),
-                            openAiClientOptions
-                        );
+                        chatClient = new OpenAIClient(
+                                new ApiKeyCredential(apiKey),
+                                openAiClientOptions)
+                            .GetChatClient(modelConfig.Model)
+                            .AsIChatClient();
                         break;
 
                     case "azure":
@@ -134,18 +145,15 @@ namespace FabrCore.Sdk
                             }
                         );
 
-                        ChatClientsCreatedCounter.Add(1,
-                            new KeyValuePair<string, object?>("provider", "azure"),
-                            new KeyValuePair<string, object?>("model", modelConfig.Model));
-
-                        _logger.LogInformation("Azure OpenAI chat client created successfully for model: {Model}", modelConfig.Model);
-                        activity?.SetStatus(ActivityStatusCode.Ok);
-                        return azureClient.GetChatClient(modelConfig.Model).AsIChatClient();
+                        chatClient = azureClient.GetChatClient(modelConfig.Model).AsIChatClient();
+                        break;
 
                     case "openrouter":
                     case "grok":
                     case "gemini":
-                        openAiClient = CreateOpenAICompatibleClient(apiKey, modelConfig.Uri, timeoutSeconds);
+                        chatClient = CreateOpenAICompatibleClient(apiKey, modelConfig.Uri, timeoutSeconds)
+                            .GetChatClient(modelConfig.Model)
+                            .AsIChatClient();
                         break;
 
                     default:
@@ -164,8 +172,6 @@ namespace FabrCore.Sdk
                 _logger.LogInformation("{Provider} chat client created successfully for model: {Model}", modelConfig.Provider, modelConfig.Model);
                 activity?.SetStatus(ActivityStatusCode.Ok);
 
-                IChatClient chatClient = openAiClient.GetChatClient(modelConfig.Model).AsIChatClient();
-
                 // Wrap with provider sanitizer for non-OpenAI providers that reject
                 // the "name" field on non-user messages (e.g., Grok, Gemini)
                 if (NeedsAuthorNameSanitization(modelConfig.Provider))
@@ -174,7 +180,7 @@ namespace FabrCore.Sdk
                     _logger.LogDebug("Added AuthorName sanitization for provider: {Provider}", modelConfig.Provider);
                 }
 
-                return chatClient;
+                return ModelDefaultsChatClient.Apply(chatClient, modelConfig);
             }
             catch (Exception ex)
             {
@@ -450,6 +456,7 @@ namespace FabrCore.Sdk
                     ApiKeyAlias = result.ApiKeyAlias,
                     TimeoutSeconds = result.TimeoutSeconds,
                     MaxOutputTokens = result.MaxOutputTokens,
+                    ReasoningEffort = result.ReasoningEffort,
                     ContextWindowTokens = result.ContextWindowTokens,
                     CompactionEnabled = result.CompactionEnabled,
                     CompactionKeepLastN = result.CompactionKeepLastN,
@@ -542,6 +549,7 @@ namespace FabrCore.Sdk
             public required string ApiKeyAlias { get; set; }
             public int TimeoutSeconds { get; set; }
             public int? MaxOutputTokens { get; set; }
+            public string? ReasoningEffort { get; set; }
             public int? ContextWindowTokens { get; set; }
             public bool? CompactionEnabled { get; set; }
             public int? CompactionKeepLastN { get; set; }
