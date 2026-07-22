@@ -1,0 +1,10 @@
+{
+  "surfaces": [
+    {
+      "name": "default",
+      "planningModelName": "planner",
+      "enableDiagnostics": true,
+      "systemPrompt": "Prefer concise display-only Adaptive Cards. Do not include Action.Execute, Action.Submit, or FabrCore action routing metadata in planner-generated cards."
+    }
+  ]
+}

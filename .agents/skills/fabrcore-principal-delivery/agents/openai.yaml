@@ -1,0 +1,4 @@
+interface:
+  display_name: "FabrCore Principal Delivery"
+  short_description: "Build durable proactive delivery providers"
+  default_prompt: "Use $fabrcore-principal-delivery to add or troubleshoot durable proactive principal messaging in FabrCore."

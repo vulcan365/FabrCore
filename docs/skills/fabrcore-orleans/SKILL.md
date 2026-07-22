@@ -1,15 +1,14 @@
 ---
 name: fabrcore-orleans
 description: >
-  Configure Orleans for FabrCore — clustering modes, advanced Orleans configuration with UseOrleans,
-  required providers (FabrCoreOrleansConstants), persistence, streaming, reminders, TimeProvider, multi-silo deployment,
-  and connection resilience.
-  Triggers on: "Orleans", "clustering", "silo", "grain", "UseOrleans", "AddFabrCore",
+  Configure Orleans for FabrCore: Host clustering providers, persistence, streams, reminders,
+  TimeProvider, multi-silo deployment, provider-neutral client gateway discovery, Orleans mTLS,
+  and connection resilience. Use for "Orleans", "UseOrleans", "AddFabrCoreServer",
   "FabrCoreOrleansConstants", "ClusteringMode", "SqlServer clustering", "AzureStorage clustering",
-  "Orleans configuration", "multi-silo", "Orleans persistence", "Orleans streaming",
-  "AddFabrCoreServices", "StorageProviderName", "PubSubStoreName", "StreamProviderName",
-  "OrleansClusterOptions", "TimeProvider", "UseTimeProvider", "ConnectionRetryCount", "GatewayListRefreshPeriod",
-  "IFabrCoreStorageProvider", "typed entity storage".
+  "OrleansClusterOptions", "UseTimeProvider", "FabrCore.Client.Orleans",
+  "AddFabrCoreOrleansClientAsync", "UseFabrCoreHostClustering", "FabrCoreGatewayDiscoveryClient",
+  "FabrCoreHostGatewayListProvider", "FabrCoreHostUrl", "IGatewayListProvider", "IClusterClient",
+  "Orleans TLS", or "typed entity storage".
   Do NOT use for: FabrCore server setup (AddFabrCoreServer, REST API) — use fabrcore-server.
   Do NOT use for: general Orleans unrelated to FabrCore.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
@@ -66,6 +65,24 @@ builder.AddFabrCoreServer(new FabrCoreServerOptions
 Use this for demo/test clocks that need to fast-forward Orleans reminders. `UseTimeProvider(...)` overrides prior `TimeProvider` registrations. Without it, FabrCore preserves an app-registered `TimeProvider`; if none exists, it registers `TimeProvider.System`.
 
 The custom provider is for Orleans runtime scheduling only. FabrCore.Host timestamps, health timestamps, file TTLs, diagnostics timestamps, and cleanup services continue to use real UTC time.
+
+### Post-Provider Orleans Configuration
+
+Use `FabrCoreServerOptions.ConfigureOrleans(...)` when the simple Host path needs provider-neutral
+Orleans customization after FabrCore configures Localhost, SQL Server, or Azure Storage. The main
+use case is transport mTLS:
+
+```csharp
+builder.AddFabrCoreServer(new FabrCoreServerOptions
+{
+    AdditionalAssemblies = [typeof(MyAgent).Assembly]
+}
+.ConfigureOrleans(orleans =>
+    orleans.UseTls(/* Host certificate and client-certificate validation */)));
+```
+
+Do not call `UseOrleans` separately when using `AddFabrCoreServer`; the callback exists so the
+simple path still invokes `UseOrleans` exactly once.
 
 ## Clustering Modes
 
@@ -161,23 +178,79 @@ Optional tuning via the `Orleans:AzureStorage` section (all defaults are sensibl
 }
 ```
 
-### Client appsettings.json
+### Provider-Neutral Client Configuration
+
+Trusted server-side clients that need grain references, object-reference observers, streams, and
+the rest of Orleans use `FabrCore.Client.Orleans`. They remain normal Orleans clients, but they do
+not reference the Host's clustering package or copy its cluster identity and connection string.
+
+```xml
+<PackageReference Include="FabrCore.Client.Orleans" Version="*" />
+```
 
 ```json
 {
-  "Orleans": {
-    "ClusterId": "string",              // Must match server
-    "ServiceId": "string",              // Must match server
-    "ClusteringMode": "string",         // Must match server
-    "ConnectionString": "string",       // Must match server
-    "ConnectionRetryCount": 5,          // Max connection retries (default 5)
-    "ConnectionRetryDelay": "00:00:03", // Base retry delay (default 3s)
-    "GatewayListRefreshPeriod": "00:00:30" // Gateway refresh interval (default 30s)
-  }
+  "FabrCoreHostUrl": "https://fabrcore.internal.example"
 }
 ```
 
-**Important:** The `Orleans` section must match between server and client exactly (same ClusterId, ServiceId, and ClusteringMode).
+```csharp
+using FabrCore.Client.Orleans;
+
+var discoveryHttpClient = CreateAuthenticatedDiscoveryClient();
+
+await builder.AddFabrCoreOrleansClientAsync(
+    discoveryHttpClient,
+    options =>
+    {
+        options.FabrCoreHostUrl = builder.Configuration["FabrCoreHostUrl"]!;
+    },
+    orleans =>
+    {
+        orleans.UseTls(/* application certificate configuration */);
+    });
+```
+
+`AddFabrCoreOrleansClientAsync` performs authenticated discovery before Orleans registration,
+configures `ClusterOptions`, installs `FabrCoreHostGatewayListProvider`, applies the caller's
+Orleans configuration, and calls `UseOrleansClient`. Application services continue to inject the
+standard `IClusterClient`:
+
+```csharp
+public sealed class ClientService(IClusterClient clusterClient)
+{
+    // Grain references, observers, streams, serialization, routing, and retries remain available.
+}
+```
+
+For custom startup composition, fetch and validate the document explicitly, then pass it to the
+lower-level extension:
+
+```csharp
+var clientOptions = new FabrCoreOrleansClientOptions
+{
+    FabrCoreHostUrl = builder.Configuration["FabrCoreHostUrl"]
+};
+var discoveryClient = new FabrCoreGatewayDiscoveryClient(
+    discoveryHttpClient,
+    clientOptions);
+var discovery = await discoveryClient.GetGatewayDiscoveryAsync();
+
+builder.UseOrleansClient(orleans =>
+{
+    orleans.UseFabrCoreHostClustering(discoveryClient, discovery);
+    orleans.UseTls(/* application certificate configuration */);
+});
+```
+
+The application owns the discovery `HttpClient`, including bearer-token acquisition, certificate
+configuration, and identity-provider secrets. Keep it alive for periodic refreshes. Initial
+authentication, retrieval, validation, or TLS-policy failures fail startup with a
+`FabrCoreGatewayDiscoveryException`.
+
+When the Host advertises `requireOrleansTls: false`, the client still rejects insecure Orleans
+transport by default. Set `AllowInsecureOrleansTransport = true` only on a trusted Development
+network. Browsers and untrusted public clients should use the Host HTTP/WebSocket APIs instead.
 
 ## Advanced Path: Direct Orleans Configuration
 
@@ -308,17 +381,21 @@ Pitfalls:
 
 ## Connection Resilience
 
-External applications should connect through the Host HTTP/WebSocket APIs. Orleans gateway retry settings apply to server-side Orleans client usage:
+`FabrCoreHostGatewayListProvider` refreshes through the authenticated Host endpoint at the interval
+in the discovery document. A transient refresh failure logs a warning and returns the last valid
+gateway list, so a Host API restart does not by itself disconnect an established Orleans client.
+A later successful refresh replaces the cached list. Orleans continues to own gateway selection,
+connection recovery, grain routing, observer references, serialization, and call retries.
 
-```json
-{
-  "Orleans": {
-    "ConnectionRetryCount": 10,
-    "ConnectionRetryDelay": "00:00:05",
-    "GatewayListRefreshPeriod": "00:00:30"
-  }
-}
-```
+The discovered `clusterId` and `serviceId` cannot change after client startup. A refresh that
+reports different identity is rejected and the last-known-good gateways remain in use. Restart the
+client intentionally when moving it to a different cluster.
+
+HTTP discovery authorization does not secure the subsequent Orleans TCP connection. Direct
+Orleans access is for trusted backend applications on private networking, with mTLS required in
+production. The Host alone references `FabrCore.Host.SqlServer` or
+`FabrCore.Host.AzureStorage`; client projects do not reference those packages or receive their
+connection strings.
 
 ## Data Flow
 

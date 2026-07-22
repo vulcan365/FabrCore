@@ -5,6 +5,7 @@ description: >
   REST APIs, WebSocket, system agents, Blueprint provisioning, storage, custom providers, and deployment.
   Use for: "FabrCore server", "AddFabrCoreServer", "AddFabrCoreServices", "UseFabrCoreServer",
   "FabrCoreServerOptions", "TimeProvider", "fabrcore.json", "REST API", "/fabrcoreapi",
+  "GatewayDiscovery", "cluster/gateways", "AdvertisedGateways", "ConfigureOrleans",
   "Blueprint", "AgentBlueprintRequest", "EnsureBlueprintAgentsAsync", "agent/blueprint",
   "ConfigureSystemAgentAsync", "IFabrCoreAgentService", "AgentManagementProvider",
   "AdditionalAssemblies", "WebSocket", "server setup", "LLM provider", "Storage API",
@@ -144,6 +145,59 @@ Registration precedence:
 
 For instance-based registration, FabrCore registers both `TimeProvider` and the concrete provider type, so a demo API can resolve `DemoTimeProvider` directly. The custom provider is intended for Orleans runtime scheduling only; FabrCore.Host timestamps, file TTLs, health timestamps, diagnostics timestamps, and registry cleanup still use real UTC time.
 
+### Provider-Neutral Gateway Discovery and Orleans TLS
+
+Enable gateway discovery only for trusted server-side applications that need a normal Orleans
+`IClusterClient`. The endpoint is disabled by default and requires a named ASP.NET Core
+authorization policy when enabled:
+
+```json
+{
+  "FabrCore": {
+    "Host": {
+      "GatewayDiscovery": {
+        "Enabled": true,
+        "AuthorizationPolicy": "FabrCoreGatewayDiscovery",
+        "RefreshPeriod": "00:00:30",
+        "AdvertisedGateways": [
+          "gwy.tcp://silo-1.internal.example:30000/0"
+        ],
+        "RequireOrleansTls": true
+      }
+    }
+  }
+}
+```
+
+- `AuthorizationPolicy` is required when `Enabled` is `true`. The application owns
+  authentication, policy registration, bearer-token validation, and client-certificate rules.
+- Register authentication and authorization middleware before `UseFabrCoreServer()`.
+- `RefreshPeriod` defaults to 30 seconds.
+- `AdvertisedGateways`, when non-empty, take precedence over membership-derived addresses. Use
+  them for NAT, containers, reverse routing, or any topology where silo membership addresses are
+  not reachable by clients.
+- Without overrides, FabrCore advertises only active Orleans members, using the configured
+  gateway port. It returns `503` if no usable gateway exists.
+- `RequireOrleansTls` defaults to `true` outside Development and `false` in Development.
+
+Configure Orleans transport mTLS after the selected clustering provider without calling
+`UseOrleans` a second time:
+
+```csharp
+builder.AddFabrCoreServer(new FabrCoreServerOptions
+{
+    AdditionalAssemblies = [typeof(MyAgent).Assembly]
+}
+.ConfigureOrleans(orleans =>
+{
+    orleans.UseTls(/* Host certificate and client-certificate validation */);
+}));
+```
+
+Discovery authentication protects only the HTTP document. It does not authenticate or encrypt
+the subsequent Orleans TCP connection. Production deployments should keep gateway ports on a
+private network and require Orleans mTLS.
+
 ## What AddFabrCoreServer Configures
 
 1. **Orleans Silo** — Clustering, persistence, reminders, streaming, and registered `TimeProvider` based on `OrleansClusterOptions`
@@ -153,6 +207,7 @@ For instance-based registration, FabrCore registers both `TimeProvider` and the 
 5. **Background Services** — `AgentRegistryCleanupService`, `FileCleanupService`
 6. **Assembly Discovery** — Scans `AdditionalAssemblies` for agent, plugin, and tool types
 7. **ACL & Security Audit** — Loads `Acl` and `FabrCore:Audit` sections from `fabrcore.json`, registers the ACL evaluator/enforcer, the `AclRegistryGrain`-backed entity store, and the audit provider (see fabrcore-acl)
+8. **Gateway Discovery** — Binds and validates `FabrCore:Host:GatewayDiscovery`, and registers provider-neutral active-gateway discovery (disabled by default)
 
 ## What UseFabrCoreServer Configures
 
@@ -338,6 +393,34 @@ Base path: `/fabrcoreapi/`. All agent-scoped endpoints require the `x-user-handl
 Compatibility naming: several REST and SDK surfaces still use `user`/`users` in the route, header, or parameter name. Treat `x-user-handle`, `x-fabrcore-userhandle`, `userhandle`, and diagnostics `users` routes as compatibility names for **principal** handles/entries.
 
 > **Typed C# client:** `IFabrCoreHostApiClient` in `FabrCore.Sdk` wraps the common endpoint groups below (Agent, Storage, Discovery, Embeddings, File, ModelConfig, Diagnostics). Most agent-scoped methods take a fully-qualified `"principalHandle:agentHandle"` handle and the client extracts the principal handle into the `x-user-handle` header automatically. Blueprint ensure and storage methods take an explicit principal handle. If a newly added endpoint is not yet surfaced by the typed client, call its REST route directly.
+
+### Cluster Gateway Discovery API (`/fabrcoreapi/cluster/gateways`)
+
+`GET /fabrcoreapi/cluster/gateways` returns the cluster identity and currently advertised Orleans
+gateway URIs for `FabrCore.Client.Orleans`. It is not part of `IFabrCoreHostApiClient`; clients use
+`FabrCoreGatewayDiscoveryClient` or `AddFabrCoreOrleansClientAsync` with an application-configured,
+authenticated `HttpClient`.
+
+The endpoint returns `404` while disabled, `401` for an unauthenticated caller, `403` when the
+configured policy denies access, and `503` when no gateway can be advertised.
+
+**Response** `200 OK`:
+
+```json
+{
+  "version": 1,
+  "clusterId": "production",
+  "serviceId": "fabrcore",
+  "gateways": [
+    "gwy.tcp://silo-1.internal.example:30000/0"
+  ],
+  "refreshPeriodSeconds": 30,
+  "requireOrleansTls": true
+}
+```
+
+The response never includes clustering mode, provider names, SQL/Azure connection strings,
+storage settings, credentials, or identity-provider secrets.
 
 ## Blueprint Provisioning
 
@@ -991,6 +1074,7 @@ public static WebApplication UseFabrCoreServer(
 public FabrCoreServerOptions UseTimeProvider(TimeProvider provider)
 public FabrCoreServerOptions UseTimeProvider<TTimeProvider>()
     where TTimeProvider : TimeProvider
+public FabrCoreServerOptions ConfigureOrleans(Action<ISiloBuilder> configure)
 ```
 
 ## Deployment Considerations
@@ -1012,3 +1096,9 @@ public FabrCoreServerOptions UseTimeProvider<TTimeProvider>()
 1. Verify `[PluginAlias]` matches the name in `AgentConfiguration.Plugins`
 2. Ensure plugin assembly is included in `AdditionalAssemblies`
 3. Check that tool methods have `[Description]` attributes
+
+**Gateway discovery fails:**
+1. `404` means discovery is disabled; set `FabrCore:Host:GatewayDiscovery:Enabled` to `true`
+2. `401/403` means the discovery `HttpClient` lacks valid credentials or the named policy denied it
+3. `503` means no explicit advertised gateway exists and no active membership address is usable
+4. A successful HTTP response does not prove the Orleans gateway port or mTLS identity is reachable

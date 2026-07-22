@@ -1,0 +1,27 @@
+{
+  "version": "2.0",
+  "id": "documentation-link-card",
+  "card": {
+    "type": "AdaptiveCard",
+    "version": "1.6",
+    "body": [
+      {
+        "type": "TextBlock",
+        "text": "Adaptive Cards Reference",
+        "weight": "Bolder"
+      },
+      {
+        "type": "TextBlock",
+        "text": "Open the official schema explorer.",
+        "wrap": true
+      }
+    ],
+    "actions": [
+      {
+        "type": "Action.OpenUrl",
+        "title": "Open",
+        "url": "https://adaptivecards.io/explorer/"
+      }
+    ]
+  }
+}

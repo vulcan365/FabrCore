@@ -1,0 +1,24 @@
+{
+  "ModelConfigurations": [
+    {
+      "Name": "default",
+      "Provider": "OpenAI",
+      "Model": "gpt-4o-mini",
+      "ApiKeyAlias": "openai"
+    }
+  ],
+  "ApiKeys": [
+    {
+      "Alias": "openai",
+      "Value": "replace-with-api-key"
+    }
+  ],
+  "Microsoft365Copilot": {
+    "TokenValidation": { "Enabled": false },
+    "Agent": {
+      "AgentType": "replace-with-your-agent-alias",
+      "Handle": "copilot",
+      "Models": "default"
+    }
+  }
+}

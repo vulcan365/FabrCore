@@ -10,6 +10,7 @@ $solutionDir = Join-Path $PSScriptRoot "..\src"
 $packages = @(
     "FabrCore.Core",
     "FabrCore.Sdk",
+    "FabrCore.Client.Orleans",
     "FabrCore.Host",
     "FabrCore.Host.SqlServer",
     "FabrCore.Host.AzureStorage",

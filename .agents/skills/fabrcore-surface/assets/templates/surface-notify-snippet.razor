@@ -1,0 +1,10 @@
+@using FabrCore.Surface.Components
+
+@* Place this in an app header or toolbar after AddFabrCoreSurface/AddFabrCoreSurfaceComponents registration. *@
+<SurfaceNotify SurfacePath="/surface"
+               Icon="bi bi-bell"
+               Tooltip="Open Surface"
+               MaxVisibleItems="6" />
+
+@* SurfaceNotify shows the total unread Surface count. Left click opens /surface.
+   Right click opens the unread menu. Outside click closes it without clearing unread state. *@
