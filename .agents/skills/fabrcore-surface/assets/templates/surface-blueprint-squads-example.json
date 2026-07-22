@@ -1,0 +1,36 @@
+{
+  "name": "support-workspace",
+  "version": "2026-06-08",
+  "agents": [],
+  "surface": {
+    "squads": [
+      {
+        "squadType": "task",
+        "name": "Ops Desk",
+        "description": "Coordinates operational support work.",
+        "orchestratorModel": "default",
+        "plannerModel": "default",
+        "forceReconfigure": false,
+        "taskOptions": {
+          "fastModelName": "default",
+          "workerModelName": "default",
+          "plannerModelName": "default",
+          "delegationTimeoutSeconds": 120,
+          "maxTaskAttempts": 2,
+          "maxValidationAttempts": 2
+        },
+        "agents": [
+          {
+            "name": "data-intel",
+            "agentType": "data-intel-agent",
+            "models": "default",
+            "description": "Answers data questions for the squad.",
+            "role": "executor",
+            "plugins": [],
+            "tools": []
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,999 @@
+---
+name: fabrcore-testing
+description: >
+  Test and evaluate FabrCore agents with the in-memory test host, mock/live LLM modes,
+  MSTest patterns, Host lifecycle checks, and Microsoft.Extensions.AI.Evaluation metrics.
+  Use for: "test FabrCore", "FabrCoreTestHarness", "TestFabrCoreAgentHost", "FakeChatClient",
+  "mock LLM", "agent test", "integration test agent", "test harness", "WithTextResponse",
+  "CreateMockAgent", "CreateLiveAgent", "Blueprint test", "agent blueprint", "MSTest FabrCore",
+  "LLM eval", "evaluation", "evaluator", "RelevanceEvaluator", "GroundednessEvaluator",
+  "EvaluationResult", "ReportingConfiguration", "quality eval", "safety eval", "BLEU",
+  "typed storage", "storage test", "TryGetStateAsync", "custom state test", or "malformed state".
+  Do NOT use for: agent development — use fabrcore-agent.
+  Do NOT use for: server setup — use fabrcore-server.
+allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
+---
+
+# FabrCore Testing Skill
+
+Test FabrCore agents and libraries using MSTest with a lightweight in-memory test host — no Orleans silo required.
+
+## Quick Reference
+
+| Component | Purpose |
+|-----------|---------|
+| `TestFabrCoreAgentHost` | In-memory `IFabrCoreAgentHost` — replaces Orleans grain for testing |
+| `FakeChatClient` | Deterministic `IChatClient` with sequential response support |
+| `TestChatClientService` | Dual-mode `IFabrCoreChatClientService` (mock or live LLM) |
+| `FabrCoreTestHarness` | Wires DI, creates agents, provides `InitializeAgent`/`SendMessage` helpers |
+
+## Architecture
+
+```
+┌─────────────────────────────────┐
+│  Test (MSTest)                  │
+│  FabrCoreTestHarness            │
+├─────────────────────────────────┤
+│  Your Agent (FabrCoreAgentProxy)│  ← Same production code
+├─────────────────────────────────┤
+│  TestFabrCoreAgentHost          │  ← Replaces AgentGrain/Orleans
+│  TestChatClientService          │  ← Mock or live IChatClient
+│  FakeChatClient                 │  ← Deterministic responses
+└─────────────────────────────────┘
+```
+
+## Two Testing Modes
+
+### Mock Mode (Unit/Deterministic)
+- Uses `FakeChatClient` — no LLM calls, fast, offline
+- Tests routing logic, JSON parsing, error handling
+- Run with: `dotnet test`
+
+### Live Mode (Integration/Eval)
+- Uses real LLM via `fabrcore.json` configuration
+- **No FabrCore Host API required** — reads model configs and API keys directly from fabrcore.json
+- Creates chat clients locally (Azure, OpenAI, Grok, Gemini, OpenRouter)
+- Tests actual agent behavior with real AI responses
+- Tagged with `[TestCategory("Integration")]`
+- Run with: `dotnet test --filter TestCategory=Integration`
+- Skips gracefully if no API key: `Assert.Inconclusive()`
+
+## Setting Up a Test Project
+
+### 1. Create Project
+
+```xml
+<!-- FabrCore.Tests.csproj -->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="MSTest" Version="3.*" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
+    <PackageReference Include="NSubstitute" Version="5.*" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.*" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\YourAgentProject\YourAgentProject.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="fabrcore.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+</Project>
+```
+
+### 2. Copy Infrastructure Files
+
+Copy these from the `assets/` directory into your test project's `Infrastructure/` folder:
+- `TestFabrCoreAgentHost.cs` — In-memory `IFabrCoreAgentHost`
+- `FakeChatClient.cs` — Deterministic `IChatClient` for mock tests
+- `TestChatClientService.cs` — Dual-mode `IFabrCoreChatClientService` (mock or live)
+- `FabrCoreTestHarness.cs` — DI wiring and agent creation helpers
+- `CustomEvaluator.cs` (optional) — Example custom `IEvaluator` implementation for LLM evals
+
+### 3. Add InternalsVisibleTo (Optional)
+
+To test internal methods, add to the agent project's `.csproj`:
+```xml
+<ItemGroup>
+  <InternalsVisibleTo Include="YourTestProject" />
+</ItemGroup>
+```
+
+## Writing Agent Tests
+
+### Mock Mode Test
+
+```csharp
+[TestClass]
+public class MyAgentTests
+{
+    [TestMethod]
+    public async Task OnMessage_ReturnsExpectedResponse()
+    {
+        using var harness = new FabrCoreTestHarness();
+
+        // Configure sequential LLM responses
+        var chatClient = FakeChatClient.WithSequentialResponses(
+            """{"effort": "small", "reasoning": "Simple question"}""",
+            "The answer is 42."
+        );
+
+        var agent = harness.CreateMockAgent<MyAgent>(chatClient);
+        await harness.InitializeAgent(agent);
+
+        var response = await harness.SendMessage(agent, "What is the answer?");
+
+        Assert.IsNotNull(response.Message);
+        Assert.IsTrue(response.Message.Contains("42"));
+    }
+}
+```
+
+### Live Integration Test
+
+```csharp
+[TestClass]
+[TestCategory("Integration")]
+public class MyAgentIntegrationTests
+{
+    [TestMethod]
+    public async Task OnMessage_ProducesCoherentResponse()
+    {
+        using var harness = new FabrCoreTestHarness();
+        var agent = harness.CreateLiveAgent<MyAgent>();
+
+        if (agent is null)
+        {
+            Assert.Inconclusive("Requires fabrcore.json with valid API keys.");
+            return;
+        }
+
+        await harness.InitializeAgent(agent);
+        var response = await harness.SendMessage(agent, "What is the capital of France?");
+
+        Assert.IsNotNull(response.Message);
+        Assert.IsTrue(response.Message.Contains("Paris", StringComparison.OrdinalIgnoreCase));
+    }
+}
+```
+
+### Testing OnMessageBusy
+
+```csharp
+[TestClass]
+public class MyAgentBusyTests
+{
+    [TestMethod]
+    public async Task OnMessageBusy_ReturnsDefaultBusyResponse()
+    {
+        using var harness = new FabrCoreTestHarness();
+        var chatClient = FakeChatClient.WithTextResponse("ok");
+        var agent = harness.CreateMockAgent<MyAgent>(chatClient);
+        await harness.InitializeAgent(agent);
+
+        var response = await harness.SendBusyMessage(agent, "Are you there?");
+
+        Assert.IsNotNull(response.Message);
+        Assert.IsTrue(response.Message.Contains("currently processing",
+            StringComparison.OrdinalIgnoreCase));
+    }
+
+    [TestMethod]
+    public async Task OnMessageBusy_CustomOverride_ReturnsExpected()
+    {
+        using var harness = new FabrCoreTestHarness();
+        var chatClient = FakeChatClient.WithTextResponse("ok");
+        var agent = harness.CreateMockAgent<MyCustomBusyAgent>(chatClient);
+        await harness.InitializeAgent(agent);
+
+        var response = await harness.SendBusyMessage(agent, "Urgent request");
+
+        // Assert your custom busy behavior
+        Assert.IsNotNull(response.Message);
+    }
+}
+```
+
+### Testing System Messages
+
+`AgentMessage.IsSystemMessage` is the preferred way to test whether a full `AgentMessage` is FabrCore system/control traffic. It returns true for underscore-prefixed `MessageType` values such as `_status`, `_thinking`, and `_error`.
+
+```csharp
+[TestMethod]
+public void AgentMessage_IsSystemMessage_DetectsControlTraffic()
+{
+    var progress = new AgentMessage
+    {
+        MessageType = SystemMessageTypes.Thinking,
+        Message = "Searching documents.."
+    };
+
+    var domain = new AgentMessage
+    {
+        MessageType = "order-status",
+        Message = "Check order ORD-123"
+    };
+
+    Assert.IsTrue(progress.IsSystemMessage);
+    Assert.IsFalse(domain.IsSystemMessage);
+}
+```
+
+The in-memory harness calls `OnMessage`/`OnMessageBusy` directly, so it does not emulate `AgentGrain.ReceivedChatMessage` filtering system messages before dispatch. If a test uses monitor snapshots or other DTOs that only expose `MessageType`, use `SystemMessageTypes.IsSystemMessage(messageType)` instead.
+
+### Testing Trace Propagation
+
+If you're verifying that your agent preserves W3C TraceContext across `OnMessage`, assert on the response's `TraceId`/`SpanId`/`ParentSpanId`. The harness's `SendMessage(agent, text, ...)` only takes a text message, so for trace tests call `agent.OnMessage(...)` directly with a pre-stamped `AgentMessage`. Note that calling `OnMessage` directly bypasses the `AgentGrain` ingress, so no `FabrCore.Host.AgentGrain` Activity is created — the test is exercising only what your agent code does with the trace fields it receives.
+
+```csharp
+using System.Diagnostics;
+using FabrCore.Core;
+
+[TestMethod]
+public async Task OnMessage_PreservesTraceIdAcrossResponse()
+{
+    using var source = new ActivitySource("Test.MyAgent");
+    using var listener = new ActivityListener
+    {
+        ShouldListenTo = s => s.Name == "Test.MyAgent",
+        Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+    };
+    ActivitySource.AddActivityListener(listener);
+
+    using var harness = new FabrCoreTestHarness();
+    var agent = harness.CreateMockAgent<MyAgent>(FakeChatClient.WithTextResponse("ok"));
+    await harness.InitializeAgent(agent);
+
+    using var activity = source.StartActivity("test");
+    var request = new AgentMessage
+    {
+        FromHandle = "test-principal",
+        ToHandle = harness.AgentHost.GetHandle(),
+        Message = "hi",
+        Kind = MessageKind.Request
+    };
+    request.StampFromActivity(Activity.Current);
+
+    var response = await agent.OnMessage(request);
+
+    Assert.AreEqual(request.TraceId, response.TraceId);   // Response() copies TraceId
+}
+```
+
+For end-to-end `SpanId`/`ParentSpanId` propagation checks you need the grain ingress path — run against a real `AgentGrain` (integration test against a running host) rather than the in-process harness. See **fabrcore-messaging → Correlation and Tracing** for the telemetry surface and helper reference.
+
+## FakeChatClient Factory Methods
+
+| Method | Use Case |
+|--------|----------|
+| `WithTextResponse(text)` | Always returns the same text |
+| `WithJsonResponse(json)` | Always returns JSON (alias for WithTextResponse) |
+| `WithSequentialResponses(r1, r2, ...)` | Returns r1 on first call, r2 on second, etc. |
+
+## FabrCoreTestHarness API
+
+| Method | Description |
+|--------|-------------|
+| `CreateMockAgent<T>(chatClient, config?)` | Creates agent with mock LLM |
+| `CreateLiveAgent<T>(config?, jsonPath?)` | Creates agent with real LLM (returns null if unavailable) |
+| `InitializeAgent(agent)` | Calls `OnInitialize()` |
+| `SendMessage(agent, text, fromHandle?)` | Calls `OnMessage()` with a properly formed `AgentMessage` |
+| `InitializeAndMessage(agent, text)` | Convenience: init + send in one call |
+| `SendBusyMessage(agent, text, fromHandle?)` | Calls `OnMessageBusy()` to test busy-state handling |
+| `AgentHost` | Access the `TestFabrCoreAgentHost` for assertions |
+
+## TestFabrCoreAgentHost Handle Methods
+
+`TestFabrCoreAgentHost` implements all handle methods from `IFabrCoreAgentHost`:
+
+Compatibility naming: `GetUserHandle()`, `HasUserHandle()`, and `UserHandle` tuple fields are legacy contract names. In tests, assert them as principal handles.
+
+```csharp
+// Default handle is "test-agent" (no principal handle)
+var harness = new FabrCoreTestHarness();
+var host = harness.AgentHost;
+host.GetHandle();        // "test-agent"
+host.GetUserHandle();   // ""
+host.GetAgentHandle();   // "test-agent"
+host.HasUserHandle();         // false
+
+// With principal-handle-scoped handle
+var harness2 = new FabrCoreTestHarness(new() { Handle = "principal1:my-agent" });
+var host2 = harness2.AgentHost;
+host2.GetUserHandle();  // "principal1"
+host2.GetAgentHandle();  // "my-agent"
+host2.HasUserHandle();        // true
+```
+
+## TestFabrCoreAgentHost Assertions
+
+```csharp
+// Check messages sent by the agent to other agents
+Assert.AreEqual(1, harness.AgentHost.SentMessages.Count);
+
+// Check events sent
+Assert.AreEqual(0, harness.AgentHost.SentEvents.Count);
+
+// Check timers/reminders registered
+CollectionAssert.Contains(harness.AgentHost.RegisteredTimers, "my-timer");
+
+// Check status message set by agent or plugins
+Assert.AreEqual("Processing..", harness.AgentHost.CurrentStatusMessage);
+```
+
+## Testing Agent Eviction
+
+Agent eviction is a Host/Orleans lifecycle feature, so cover it with integration-style tests or manual Host API verification rather than only `FabrCoreTestHarness` unit tests.
+
+Verify these scenarios against a running Host:
+
+- `DELETE /fabrcoreapi/Agent/{handle}` with `x-user-handle` returns `AgentEvictionResult`; the header value is the principal handle.
+- Persisted chat/custom state is gone after eviction; a later health call reactivates the virtual grain as `NotConfigured`.
+- Registered timers are disposed and persistent reminders are unregistered, including reminders restored from Orleans storage.
+- Stream subscriptions are removed; publishing to the former agent chat/event streams does not invoke the evicted agent.
+- Diagnostics registry and `GetTrackedAgents()` no longer include the evicted agent.
+- `/fabrcoreapi/Discovery` still lists the agent type/alias, because discovery is assembly metadata rather than created-agent state.
+- Deleting while `OnMessage` is actively processing returns `409 Conflict`; retry after the agent is idle.
+- Deleting the same agent twice is idempotent and returns success with `Existed = false` if no traces remain.
+
+## Testing Blueprint Agent Ensure
+
+Blueprint processing is also a Host/Orleans lifecycle feature. Cover it with integration-style tests or manual Host API verification against `POST /fabrcoreapi/Agent/blueprint` rather than only `FabrCoreTestHarness` unit tests.
+
+Blueprints are caller-driven: a Host restart does not apply them automatically. In an integration test, arrange the principal by posting the Blueprint, then assert the tracked/configured results. Read `../fabrcore-server/references/blueprints.md` when the test also needs the full request contract or SDK bootstrap pattern.
+
+Verify these scenarios against a running Host:
+
+- Missing or empty `x-user-handle` returns `400 Bad Request`; the header value is the principal handle.
+- Missing or empty `agents` returns `400 Bad Request`.
+- Bare blueprint handles are scoped to the `x-user-handle` principal.
+- Fully-qualified handles are accepted only when their principal prefix matches `x-user-handle`.
+- Cross-principal fully-qualified handles return `400 Bad Request`.
+- Existing tracked and configured agents return health without reconfiguration.
+- Existing configured agents in `Healthy`, `Degraded`, or `Unhealthy` state are not intentionally reconfigured.
+- Tracked but `NotConfigured` agents are configured from the blueprint.
+- New agents are configured and added to the principal's tracked-agent list.
+- Incoming `ForceReconfigure = true` in a blueprint config is ignored; use `/fabrcoreapi/Agent/create` for intentional reconfiguration.
+- Invalid handle or cross-principal entries are rejected before any agent is processed; a per-agent configuration failure instead yields an unhealthy result and processing continues with the remaining entries.
+
+## Testing Custom State Resilience
+
+Use an in-memory `IFabrCoreAgentHost` to seed custom state before agent initialization or message handling. Cover private state keys that may survive restarts, package updates, or schema changes:
+
+- Missing, `JsonValueKind.Null`, and `JsonValueKind.Undefined` values should read as `default` through `GetStateAsync<T>`.
+- Malformed or incompatible JSON should be tested through `TryGetStateAsync<T>` when the agent is expected to self-heal, migrate, or reset its own private state.
+- If the agent intentionally calls `GetStateAsync<T>` on unreadable state, assert the thrown `InvalidOperationException` includes the state key, agent handle/type, target type, and stored value kind.
+- Built-in agents that own private state should remove only their own bad key, initialize fresh state, and continue unless required runtime configuration is invalid.
+
+When the test needs to call protected state APIs directly, expose a tiny test subclass:
+
+```csharp
+private sealed class TestAgentProxy : MyAgent
+{
+    public TestAgentProxy(
+        AgentConfiguration config,
+        IServiceProvider services,
+        IFabrCoreAgentHost host)
+        : base(config, services, host) { }
+
+    public Task<StateReadResult<T>> TryRead<T>(string key) => TryGetStateAsync<T>(key);
+    public Task<T?> Read<T>(string key) => GetStateAsync<T>(key);
+}
+```
+
+## Testing Typed Entity Storage
+
+Typed entity storage should be tested at two levels:
+
+1. Unit-test consumers against an in-memory fake `IFabrCoreStorageProvider`.
+2. Integration-test the Host API when you need to verify principal handle partitioning and the configured Orleans provider.
+
+### In-memory fake provider
+
+Use this shape for agent/plugin unit tests that only need CRUD behavior:
+
+```csharp
+public sealed class FakeFabrCoreStorageProvider : IFabrCoreStorageProvider
+{
+    private readonly Dictionary<(string Container, string Key), string> _values = new();
+    private readonly JsonSerializerOptions _json = new(JsonSerializerDefaults.Web);
+
+    public Task<T?> GetAsync<T>(string container, string entityKey, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(_values.TryGetValue((container, entityKey), out var json)
+            ? JsonSerializer.Deserialize<T>(json, _json)
+            : default);
+    }
+
+    public Task UpsertAsync<T>(string container, string entityKey, T value, CancellationToken cancellationToken = default)
+    {
+        _values[(container, entityKey)] = JsonSerializer.Serialize(value, _json);
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> DeleteAsync(string container, string entityKey, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(_values.Remove((container, entityKey)));
+    }
+}
+```
+
+Register it in a test service collection for plugins or services that consume `IFabrCoreStorageProvider`.
+
+### Integration checklist
+
+Verify these behaviors against a running Host when storage is part of the feature:
+
+- POCOs, primitives, dictionaries, and arrays round-trip through `UpsertStorageEntityAsync<T>` and `GetStorageEntityAsync<T>`.
+- Missing reads return `default`/`null`.
+- Deletes return `true` only when a value existed.
+- Non-success upserts surface the response body in the SDK exception message; assert this when testing client diagnostics for validation failures.
+- The same `container/entityKey` is isolated across different principal handles (`x-user-handle` values).
+- The behavior follows the configured Orleans storage provider: localhost memory is non-persistent, SQL/Azure/custom providers persist according to their configuration.
+- No public SDK or client API exposes Orleans storage types such as `IGrainStorage`, `GrainId`, or `IGrainState<T>`.
+
+Pitfalls:
+- Do not assert against the internal envelope shape from consumer tests. `ValueJson`, `ValueType`, and timestamps are Host implementation details.
+- Do not assume query/list support. Storage v1 is CRUD-only.
+- Do not write tests that depend on ETags or optimistic concurrency; upsert is last-writer-wins.
+
+## Running Tests
+
+```bash
+# All mock tests (fast, no API key needed)
+dotnet test --filter "TestCategory!=Integration"
+
+# Integration tests only (requires fabrcore.json with API key)
+dotnet test --filter "TestCategory=Integration"
+
+# All tests
+dotnet test
+```
+
+## fabrcore.json for Live Tests
+
+Place in test project root (copied to output via `<CopyToOutputDirectory>`).
+The test harness reads this file directly — **no FabrCore Host API needs to be running**.
+
+Supported providers: `Azure`, `OpenAI`, `OpenRouter`, `Grok`, `Gemini`.
+
+```json
+{
+  "ModelConfigurations": [
+    {
+      "Name": "default",
+      "Provider": "Azure",
+      "Uri": "https://your-resource.cognitiveservices.azure.com/",
+      "Model": "gpt-4o",
+      "ApiKeyAlias": "default-key",
+      "TimeoutSeconds": 180,
+      "MaxOutputTokens": null,
+      "ContextWindowTokens": 128000
+    }
+  ],
+  "ApiKeys": [
+    { "Alias": "default-key", "Value": "your-api-key-here" }
+  ]
+}
+```
+
+**Important:** If the file contains `REPLACE_WITH` or `YOUR_API_KEY`, live tests skip with `Assert.Inconclusive()`.
+
+## Testing Data.Intelligence Specifications
+
+For projects using FabrCore.Data.Intelligence, create test entities and specifications:
+
+```csharp
+// Test entity
+public class Product { public int Id { get; set; } public string Name { get; set; } = ""; }
+
+// Test specification
+[SpecificationFor<Product>]
+public class ProductByNameSpec : ByStringSpecification<Product>
+{
+    public ProductByNameSpec(string name) : base(name, p => p.Name) { }
+}
+
+// Test
+[TestMethod]
+public void Spec_FiltersByName()
+{
+    var spec = new ProductByNameSpec("Widget");
+    var product = new Product { Name = "Widget" };
+    Assert.IsTrue(spec.Criteria.Compile()(product));
+}
+```
+
+Use `Microsoft.EntityFrameworkCore.InMemory` for `SpecificationEvaluator` tests:
+```csharp
+var options = new DbContextOptionsBuilder<TestDbContext>()
+    .UseInMemoryDatabase(Guid.NewGuid().ToString())
+    .Options;
+var db = new TestDbContext(options);
+// Seed and query with SpecificationEvaluator<T>.GetQuery()
+```
+
+---
+
+## LLM Evaluation with Microsoft.Extensions.AI.Evaluation
+
+Use the `Microsoft.Extensions.AI.Evaluation.*` libraries to evaluate the quality, safety, and accuracy of your agent's LLM responses. These evaluators score real LLM output using AI-judged or algorithmic metrics — no manual review needed.
+
+### NuGet Packages
+
+| Package | Purpose |
+|---------|---------|
+| `Microsoft.Extensions.AI.Evaluation` | Core abstractions (`IEvaluator`, `EvaluationResult`, `EvaluationMetric`) |
+| `Microsoft.Extensions.AI.Evaluation.Quality` | Quality evaluators (Relevance, Coherence, Fluency, Groundedness, etc.) |
+| `Microsoft.Extensions.AI.Evaluation.Safety` | Content safety evaluators (Hate, Violence, Self-Harm, Sexual) |
+| `Microsoft.Extensions.AI.Evaluation.NLP` | Algorithmic NLP metrics (BLEU, GLEU, F1) |
+| `Microsoft.Extensions.AI.Evaluation.Reporting` | Result storage, response caching, HTML/JSON report generation |
+
+Add to your test project:
+```xml
+<PackageReference Include="Microsoft.Extensions.AI.Evaluation" Version="*" />
+<PackageReference Include="Microsoft.Extensions.AI.Evaluation.Quality" Version="*" />
+<PackageReference Include="Microsoft.Extensions.AI.Evaluation.Reporting" Version="*" />
+<!-- Optional: -->
+<PackageReference Include="Microsoft.Extensions.AI.Evaluation.Safety" Version="*" />
+<PackageReference Include="Microsoft.Extensions.AI.Evaluation.NLP" Version="*" />
+```
+
+### Core Concepts
+
+| Type | Purpose |
+|------|---------|
+| `IEvaluator` | Interface for all evaluators — takes messages + response, returns `EvaluationResult` |
+| `EvaluationResult` | Dictionary of named `EvaluationMetric` values |
+| `NumericMetric` | Score (e.g., 1-5 for quality, 0-1 for NLP) |
+| `BooleanMetric` | Pass/fail result |
+| `StringMetric` | Free-text result |
+| `ChatConfiguration` | Wraps an `IChatClient` used by LLM-based evaluators to judge responses |
+| `EvaluationContext` | Additional context passed to evaluators (grounding text, retrieved chunks, ground truth) |
+| `CompositeEvaluator` | Runs multiple evaluators concurrently in a single call |
+
+### Available Quality Evaluators
+
+All quality evaluators are LLM-based (require a `ChatConfiguration` with a chat client, optimized for GPT-4o) and return `NumericMetric` scores on a 1-5 scale:
+
+| Evaluator | Metric Name | What It Measures | Required Context |
+|-----------|-------------|------------------|------------------|
+| `RelevanceEvaluator` | `"Relevance"` | How well the response addresses the question | None |
+| `FluencyEvaluator` | `"Fluency"` | Grammar, vocabulary, sentence structure | None |
+| `CoherenceEvaluator` | `"Coherence"` | Logical flow, readability, idea organization | None |
+| `GroundednessEvaluator` | `"Groundedness"` | Whether response is grounded in provided context | `GroundednessEvaluatorContext` |
+| `RetrievalEvaluator` | `"Retrieval"` | Relevance and ranking of retrieved chunks (RAG) | `RetrievalEvaluatorContext` |
+| `EquivalenceEvaluator` | `"Equivalence"` | Similarity to a ground truth reference answer | `EquivalenceEvaluatorContext` |
+| `CompletenessEvaluator` | `"Completeness"` | Whether all aspects of the question are addressed | None |
+| `TaskAdherenceEvaluator` | `"Task Adherence"` | Whether the response follows task instructions | None |
+| `ToolCallAccuracyEvaluator` | `"Tool Call Accuracy"` | Whether the correct tools were called | None |
+| `IntentResolutionEvaluator` | `"Intent Resolution"` | AI system's effectiveness at identifying user intent (agent-focused) | None |
+| `RelevanceTruthAndCompletenessEvaluator` | `"Relevance (RTC)"`, `"Truth (RTC)"`, `"Completeness (RTC)"` | Combined multi-metric evaluator (experimental) | None |
+
+### Available NLP Evaluators
+
+Algorithmic (no LLM needed), return `NumericMetric` scores 0.0-1.0:
+
+| Evaluator | Metric Name | What It Measures | Required Context |
+|-----------|-------------|------------------|------------------|
+| `BLEUEvaluator` | `"BLEU"` | N-gram overlap with reference texts | `BLEUEvaluatorContext` |
+| `GLEUEvaluator` | `"GLEU"` | Google BLEU variant | Similar to BLEU |
+| `F1Evaluator` | `"F1"` | Token-level F1 score vs reference | Similar to BLEU |
+
+### Available Safety Evaluators
+
+Require Azure AI Foundry, return `NumericMetric` severity scores (0-7, lower is safer):
+
+| Evaluator | Metric Name |
+|-----------|-------------|
+| `HateAndUnfairnessEvaluator` | `"Hate and Unfairness"` |
+| `ViolenceEvaluator` | `"Violence"` |
+| `SelfHarmEvaluator` | `"Self Harm"` |
+| `SexualEvaluator` | `"Sexual"` |
+| `GroundednessProEvaluator` | `"Groundedness Pro"` — fine-tuned model for grounding checks |
+| `ProtectedMaterialEvaluator` | `"Protected Material"` — copyrighted/licensed content detection |
+| `UngroundedAttributesEvaluator` | `"Ungrounded Attributes"` — detects hallucinated human attributes |
+| `CodeVulnerabilityEvaluator` | `"Code Vulnerability"` — code security issues |
+| `IndirectAttackEvaluator` | `"Indirect Attack"` — indirect prompt injection detection |
+| `ContentHarmEvaluator` | Single-shot evaluation for all four harm metrics above |
+
+### Basic Evaluation (No Reporting)
+
+The simplest way to evaluate a single response — use evaluators directly:
+
+```csharp
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.AI.Evaluation;
+using Microsoft.Extensions.AI.Evaluation.Quality;
+
+[TestClass]
+[TestCategory("Evaluation")]
+public class MyAgentEvalTests
+{
+    [TestMethod]
+    public async Task Agent_Response_MeetsQualityThresholds()
+    {
+        // 1. Set up a chat client for the evaluator to use as the AI judge
+        //    (this is the evaluator's LLM, not your agent's LLM)
+        using var harness = new FabrCoreTestHarness();
+        var agent = harness.CreateLiveAgent<MyAgent>();
+        if (agent is null)
+        {
+            Assert.Inconclusive("Requires fabrcore.json with valid API keys.");
+            return;
+        }
+
+        // 2. Get a real response from the agent
+        await harness.InitializeAgent(agent);
+        var response = await harness.SendMessage(agent, "Explain how photosynthesis works.");
+
+        // 3. Create evaluators
+        var evaluatorChatClient = await harness.GetChatClient("default");
+        var chatConfig = new ChatConfiguration(evaluatorChatClient);
+
+        var evaluator = new CompositeEvaluator(
+            new RelevanceEvaluator(),
+            new FluencyEvaluator(),
+            new CoherenceEvaluator());
+
+        // 4. Run evaluation
+        var result = await evaluator.EvaluateAsync(
+            "Explain how photosynthesis works.",  // user request
+            response.Message!,                     // model response
+            chatConfig);
+
+        // 5. Assert quality thresholds
+        Assert.IsTrue(result.Get<NumericMetric>("Relevance").Value >= 3.0,
+            $"Relevance: {result.Get<NumericMetric>("Relevance").Value} (reason: {result.Get<NumericMetric>("Relevance").Reason})");
+        Assert.IsTrue(result.Get<NumericMetric>("Fluency").Value >= 3.0,
+            $"Fluency: {result.Get<NumericMetric>("Fluency").Value}");
+        Assert.IsTrue(result.Get<NumericMetric>("Coherence").Value >= 3.0,
+            $"Coherence: {result.Get<NumericMetric>("Coherence").Value}");
+    }
+}
+```
+
+### Evaluation with Grounding Context (RAG Scenarios)
+
+When your agent uses retrieval-augmented generation, evaluate whether the response is grounded in the retrieved context:
+
+```csharp
+[TestMethod]
+public async Task Agent_Response_IsGroundedInContext()
+{
+    // ... set up agent and get response ...
+
+    var groundingContext = """
+        Photosynthesis is a process used by plants to convert light energy
+        into chemical energy. It occurs primarily in chloroplasts using
+        chlorophyll. The process converts CO2 and water into glucose and oxygen.
+        """;
+
+    var evaluator = new GroundednessEvaluator();
+    var chatConfig = new ChatConfiguration(evaluatorChatClient);
+
+    var result = await evaluator.EvaluateAsync(
+        "Explain how photosynthesis works.",
+        response.Message!,
+        chatConfig,
+        additionalContext: [new GroundednessEvaluatorContext(groundingContext)]);
+
+    var groundedness = result.Get<NumericMetric>("Groundedness");
+    Assert.IsTrue(groundedness.Value >= 3.0,
+        $"Groundedness: {groundedness.Value}/5 — {groundedness.Reason}");
+}
+```
+
+### Evaluation with Ground Truth (Equivalence)
+
+Compare the agent's response against a known-good reference answer:
+
+```csharp
+[TestMethod]
+public async Task Agent_Response_MatchesExpectedAnswer()
+{
+    // ... set up agent and get response ...
+
+    var evaluator = new EquivalenceEvaluator();
+    var chatConfig = new ChatConfiguration(evaluatorChatClient);
+
+    var groundTruth = "Paris is the capital of France.";
+
+    var result = await evaluator.EvaluateAsync(
+        "What is the capital of France?",
+        response.Message!,
+        chatConfig,
+        additionalContext: [new EquivalenceEvaluatorContext(groundTruth)]);
+
+    Assert.IsTrue(result.Get<NumericMetric>("Equivalence").Value >= 4.0);
+}
+```
+
+### Evaluation with Reporting Pipeline
+
+For systematic evals across multiple scenarios with result storage, response caching, and HTML report generation. Use `DiskBasedReportingConfiguration.Create()` for the simplest setup:
+
+```csharp
+using Microsoft.Extensions.AI.Evaluation;
+using Microsoft.Extensions.AI.Evaluation.Quality;
+using Microsoft.Extensions.AI.Evaluation.Reporting;
+using Microsoft.Extensions.AI.Evaluation.Reporting.Storage;
+
+[TestClass]
+[TestCategory("Evaluation")]
+public class AgentEvalSuite
+{
+    public TestContext? TestContext { get; set; }
+
+    private string ScenarioName =>
+        $"{TestContext!.FullyQualifiedTestClassName}.{TestContext.TestName}";
+
+    private static readonly string s_executionName =
+        $"{DateTime.Now:yyyyMMddTHHmmss}";
+
+    private static readonly ReportingConfiguration s_reportingConfig =
+        DiskBasedReportingConfiguration.Create(
+            storageRootPath: Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "FabrCoreEvals"),
+            evaluators: [
+                new RelevanceEvaluator(),
+                new FluencyEvaluator(),
+                new CoherenceEvaluator(),
+                new GroundednessEvaluator()
+            ],
+            chatConfiguration: GetEvalChatConfiguration(),
+            enableResponseCaching: true,
+            executionName: s_executionName,
+            tags: ["nightly", "quality"]);
+
+    private static ChatConfiguration GetEvalChatConfiguration()
+    {
+        // Use the same fabrcore.json approach to create a chat client for the AI judge
+        // Or create directly:
+        // var client = new AzureOpenAIClient(new Uri(endpoint), new ApiKeyCredential(key))
+        //     .GetChatClient("gpt-4o").AsIChatClient();
+        // return new ChatConfiguration(client);
+
+        // Example using FabrCore's TestChatClientService:
+        var jsonPath = "fabrcore.json";
+        var json = File.ReadAllText(jsonPath);
+        var config = JsonSerializer.Deserialize<FabrCoreConfiguration>(json,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+        var service = new TestChatClientService(config,
+            LoggerFactory.Create(b => b.AddConsole()));
+        var client = service.GetChatClient("default").Result;
+        return new ChatConfiguration(client);
+    }
+
+    [TestMethod]
+    public async Task Scenario_PhotosynthesisQuestion()
+    {
+        // 1. Create a scenario run (use await using to auto-persist results on dispose)
+        await using var scenarioRun = await s_reportingConfig.CreateScenarioRunAsync(
+            ScenarioName);
+
+        // 2. Get response from your FabrCore agent
+        using var harness = new FabrCoreTestHarness();
+        var agent = harness.CreateLiveAgent<MyAgent>();
+        if (agent is null) { Assert.Inconclusive("No API key"); return; }
+
+        await harness.InitializeAgent(agent);
+        var agentResponse = await harness.SendMessage(agent,
+            "Explain how photosynthesis works.");
+
+        // 3. Build chat messages and model response for the evaluator
+        var messages = new ChatMessage[]
+        {
+            new(ChatRole.User, "Explain how photosynthesis works.")
+        };
+        var modelResponse = new ChatResponse(
+            new ChatMessage(ChatRole.Assistant, agentResponse.Message));
+
+        // 4. Evaluate with optional grounding context
+        var result = await scenarioRun.EvaluateAsync(
+            messages, modelResponse,
+            additionalContext: [
+                new GroundednessEvaluatorContext(
+                    "Photosynthesis converts CO2 and water into glucose and oxygen using sunlight.")
+            ]);
+
+        // 5. Assert using interpretation
+        var relevance = result.Get<NumericMetric>("Relevance");
+        Assert.IsFalse(relevance.Interpretation!.Failed, relevance.Reason);
+        Assert.IsTrue(relevance.Interpretation.Rating
+            is EvaluationRating.Good or EvaluationRating.Exceptional);
+
+        // ScenarioRun.DisposeAsync() automatically persists results to disk
+    }
+}
+```
+
+### Generating HTML Reports
+
+After running evaluation tests, generate a report using the `dotnet aieval` CLI tool:
+
+```bash
+# Install the tool (once)
+dotnet tool install --local Microsoft.Extensions.AI.Evaluation.Console
+
+# Generate HTML report from stored results
+dotnet tool run aieval report --path <path/to/your/storage> --output report.html
+
+# Open the report
+start report.html
+```
+
+The report shows all scenarios, metrics, scores, and trends across executions.
+
+### Evaluation with NLP Metrics (No LLM Required)
+
+Use algorithmic evaluators for fast, deterministic scoring against reference texts:
+
+```csharp
+using Microsoft.Extensions.AI.Evaluation.NLP;
+
+[TestMethod]
+public async Task Agent_Response_HasHighBLEUScore()
+{
+    // ... get agent response ...
+
+    var evaluator = new BLEUEvaluator();
+
+    var references = new BLEUEvaluatorContext(
+    [
+        "Paris is the capital of France.",
+        "The capital city of France is Paris."
+    ]);
+
+    var result = await evaluator.EvaluateAsync(
+        "What is the capital of France?",
+        response.Message!,
+        additionalContext: [references]);
+
+    var bleu = result.Get<NumericMetric>("BLEU");
+    Assert.IsTrue(bleu.Value >= 0.5, $"BLEU: {bleu.Value}");
+}
+```
+
+### Accessing Evaluation Results
+
+```csharp
+var result = await evaluator.EvaluateAsync(...);
+
+// Get a specific metric (throws if not found)
+var relevance = result.Get<NumericMetric>("Relevance");
+Console.WriteLine($"Score: {relevance.Value}/5");
+Console.WriteLine($"Reason: {relevance.Reason}");
+Console.WriteLine($"Rating: {relevance.Interpretation?.Rating}"); // EvaluationRating enum
+Console.WriteLine($"Failed: {relevance.Interpretation?.Failed}");
+
+// Try-get pattern (safe)
+if (result.TryGet<NumericMetric>("Fluency", out var fluency))
+{
+    Console.WriteLine($"Fluency: {fluency.Value}");
+}
+
+// Iterate all metrics
+foreach (var (name, metric) in result.Metrics)
+{
+    Console.WriteLine($"{name}: {metric}");
+}
+
+// Check diagnostics for errors
+if (metric.Diagnostics?.Any() == true)
+{
+    foreach (var diag in metric.Diagnostics)
+        Console.WriteLine($"Diagnostic: {diag}");
+}
+```
+
+### Metric Interpretation
+
+Metrics carry an `EvaluationMetricInterpretation` with a `Rating`, `Failed` flag, and `Reason`:
+
+```csharp
+public enum EvaluationRating
+{
+    Unknown,        // Value is unknown
+    Inconclusive,   // Cannot interpret conclusively
+    Unacceptable,   // Unacceptable result
+    Poor,           // Below expectations
+    Average,        // Meets minimum bar
+    Good,           // Meets expectations
+    Exceptional     // Exceeds expectations
+}
+```
+
+```csharp
+// Check interpretation
+var relevance = result.Get<NumericMetric>("Relevance");
+Assert.IsFalse(relevance.Interpretation!.Failed, relevance.Reason);
+Assert.IsTrue(relevance.Interpretation.Rating is EvaluationRating.Good or EvaluationRating.Exceptional);
+```
+
+Built-in default thresholds:
+
+| Evaluator Type | Good/Exceptional | Unacceptable/Poor |
+|---------------|------------------|-------------------|
+| Quality (1-5) | >= 3.0 | < 3.0 |
+| NLP (0-1) | >= 0.5 | < 0.5 |
+| Safety (0-7) | 0-2 (safe) | 3+ (unsafe) |
+
+### Running Evaluation Tests
+
+```bash
+# All eval tests
+dotnet test --filter "TestCategory=Evaluation"
+
+# Specific scenario
+dotnet test --filter "FullyQualifiedName~Scenario_PhotosynthesisQuestion"
+```
+
+### Writing a Custom Evaluator
+
+Implement `IEvaluator` for domain-specific metrics. See `assets/custom-evaluator.cs` for a complete example:
+
+```csharp
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.AI.Evaluation;
+
+public class MyCustomEvaluator : IEvaluator
+{
+    public const string MetricName = "MyMetric";
+    public IReadOnlyCollection<string> EvaluationMetricNames => [MetricName];
+
+    public ValueTask<EvaluationResult> EvaluateAsync(
+        IEnumerable<ChatMessage> messages,
+        ChatResponse modelResponse,
+        ChatConfiguration? chatConfiguration = null,
+        IEnumerable<EvaluationContext>? additionalContext = null,
+        CancellationToken cancellationToken = default)
+    {
+        // Your evaluation logic here
+        double score = /* compute score */;
+
+        var metric = new NumericMetric(MetricName, value: score,
+            reason: "Explanation of the score");
+
+        // Attach interpretation
+        metric.Interpretation = new EvaluationMetricInterpretation(
+            score >= 0.8 ? EvaluationRating.Good : EvaluationRating.Poor,
+            failed: score < 0.5,
+            reason: $"Score was {score:F2}");
+
+        return new ValueTask<EvaluationResult>(new EvaluationResult(metric));
+    }
+}
+```
+
+Use custom evaluators alongside built-in ones via `CompositeEvaluator` or in `ReportingConfiguration`.
+
+### Tips for FabrCore Agent Evals
+
+1. **Evaluator LLM vs Agent LLM** — The `ChatConfiguration` for evaluators is the *judge* LLM (typically GPT-4o). This is separate from your agent's LLM configured via `fabrcore.json`. You can use the same model or a different one.
+
+2. **Use `CompositeEvaluator`** — Run multiple evaluators in a single call for efficiency. They execute concurrently.
+
+3. **Tag with `[TestCategory("Evaluation")]`** — Keep evals separate from unit tests since they require real LLM calls and are slower.
+
+4. **Response caching** — Use `DiskBasedResponseCacheProvider` in the reporting pipeline to avoid re-calling the LLM judge on repeated test runs with the same inputs.
+
+5. **Use the test harness** — `FabrCoreTestHarness.CreateLiveAgent<T>()` handles all the wiring. Get the response via `SendMessage()`, then pass it to the evaluator pipeline.
+
+6. **Grounding context for RAG agents** — If your agent retrieves context before answering, pass that context to `GroundednessEvaluator` via `GroundednessEvaluatorContext` to evaluate whether the response stays grounded in the retrieved data.
+
+### References
+
+- [Microsoft.Extensions.AI.Evaluation docs](https://learn.microsoft.com/en-us/dotnet/ai/evaluation/libraries)
+- [Evaluate with reporting tutorial](https://learn.microsoft.com/en-us/dotnet/ai/evaluation/evaluate-with-reporting)
+- [API usage examples (dotnet/ai-samples)](https://github.com/dotnet/ai-samples/blob/main/src/microsoft-extensions-ai-evaluation/api/)
+- NuGet: [Microsoft.Extensions.AI.Evaluation](https://www.nuget.org/packages/Microsoft.Extensions.AI.Evaluation)
+- NuGet: [Microsoft.Extensions.AI.Evaluation.Quality](https://www.nuget.org/packages/Microsoft.Extensions.AI.Evaluation.Quality)
+- NuGet: [Microsoft.Extensions.AI.Evaluation.Reporting](https://www.nuget.org/packages/Microsoft.Extensions.AI.Evaluation.Reporting)

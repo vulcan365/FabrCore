@@ -15,6 +15,7 @@ builder.AddFabrCoreServer(new FabrCoreServerOptions
 // .UseAclEvaluator<MyAclEvaluator>()          // custom access-control decisions (see fabrcore-acl)
 // .UseAuditProvider<MySiemAuditProvider>()    // durable security audit sink (see fabrcore-acl)
 // .UseTimeProvider(new DemoTimeProvider()) // Orleans scheduling/timers/reminders only
+// .ConfigureOrleans(orleans => orleans.UseTls(configureTls)) // post-provider Orleans mTLS
 );
 
 // ── Advanced path: full Orleans control ──

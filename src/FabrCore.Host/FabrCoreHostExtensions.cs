@@ -12,6 +12,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Orleans.Hosting;
 using OpenTelemetry.Trace;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
@@ -62,6 +63,14 @@ namespace FabrCore.Host
         /// auto-discovers a provider matching <see cref="OrleansClusterOptions.ClusteringMode"/> by convention.
         /// </summary>
         internal IFabrCoreOrleansProvider? OrleansProvider { get; private set; }
+
+        /// <summary>
+        /// Gets or sets an Orleans silo configuration callback which runs after FabrCore's
+        /// selected clustering provider and before FabrCore grain registration. Use this to
+        /// configure transport TLS and other provider-independent Orleans features without
+        /// calling <c>UseOrleans</c> a second time.
+        /// </summary>
+        public Action<ISiloBuilder>? PostConfigureOrleans { get; set; }
 
         /// <summary>
         /// Options controlling LLM call capture behavior. Registered as a singleton and consumed
@@ -187,6 +196,14 @@ namespace FabrCore.Host
         {
             ArgumentNullException.ThrowIfNull(provider);
             OrleansProvider = provider;
+            return this;
+        }
+
+        /// <summary>Sets <see cref="PostConfigureOrleans"/>.</summary>
+        public FabrCoreServerOptions ConfigureOrleans(Action<ISiloBuilder> configure)
+        {
+            ArgumentNullException.ThrowIfNull(configure);
+            PostConfigureOrleans = configure;
             return this;
         }
 
@@ -380,6 +397,10 @@ namespace FabrCore.Host
                     .AddApplicationPart(typeof(FabrCoreServerOptions).Assembly);
                 logger.LogDebug("FabrCore API controllers registered");
 
+                // Gateway discovery performs policy authorization dynamically because the
+                // required policy name is host configuration rather than controller metadata.
+                builder.Services.AddAuthorization();
+
                 builder.Services.AddSingleton<FabrCore.Sdk.IFabrCoreChatClientService, FabrCore.Sdk.FabrCoreChatClientService>();
                 logger.LogDebug("FabrCoreChatClientService added");
 
@@ -450,6 +471,15 @@ namespace FabrCore.Host
                 // Bind tunable options (see FabrCoreHostOptions / AgentGrainOptions / PrincipalGrainOptions).
                 builder.Services.Configure<Configuration.FabrCoreHostOptions>(
                     builder.Configuration.GetSection(Configuration.FabrCoreHostOptions.SectionName));
+                builder.Services.AddOptions<Configuration.GatewayDiscoveryOptions>()
+                    .Configure(discovery =>
+                        discovery.RequireOrleansTls = !builder.Environment.IsDevelopment())
+                    .Bind(builder.Configuration.GetSection(Configuration.GatewayDiscoveryOptions.SectionName))
+                    .ValidateOnStart();
+                builder.Services.TryAddEnumerable(
+                    ServiceDescriptor.Singleton<Microsoft.Extensions.Options.IValidateOptions<Configuration.GatewayDiscoveryOptions>,
+                        Configuration.GatewayDiscoveryOptionsValidator>());
+                builder.Services.TryAddSingleton<Services.IGatewayDiscoverySource, Services.GatewayDiscoverySource>();
                 builder.Services.Configure<Configuration.AgentGrainOptions>(
                     builder.Configuration.GetSection(Configuration.AgentGrainOptions.SectionName));
                 builder.Services.Configure<Configuration.PrincipalGrainOptions>(
@@ -611,20 +641,45 @@ namespace FabrCore.Host
                     orleansProvider.Initialize(orleansOptions, builder.Configuration, logger);
                 }
 
-                builder.UseOrleans(siloBuilder =>
+                try
                 {
-                    using var orleansActivity = ActivitySource.StartActivity("ConfigureOrleans", ActivityKind.Internal);
-                    logger.LogInformation("Configuring Orleans silo");
+                    builder.UseOrleans(siloBuilder =>
+                    {
+                        using var orleansActivity = ActivitySource.StartActivity("ConfigureOrleans", ActivityKind.Internal);
+                        logger.LogInformation("Configuring Orleans silo");
 
-                    orleansProvider.ConfigureSilo(siloBuilder, orleansOptions, builder.Configuration, logger);
+                        orleansProvider.ConfigureSilo(siloBuilder, orleansOptions, builder.Configuration, logger);
 
-                    logger.LogInformation("Orleans clustering, persistence, reminders, and streaming configured");
+                        // Provider-neutral Orleans configuration (notably transport mTLS) must
+                        // be applied after the provider and before the silo is finalized.
+                        options.PostConfigureOrleans?.Invoke(siloBuilder);
 
-                    // Register FabrCore grain assemblies
-                    siloBuilder.AddFabrCore(options.AdditionalAssemblies);
+                        logger.LogInformation("Orleans clustering, persistence, reminders, and streaming configured");
 
-                    orleansActivity?.SetStatus(ActivityStatusCode.Ok);
-                });
+                        // Register FabrCore grain assemblies
+                        siloBuilder.AddFabrCore(options.AdditionalAssemblies);
+
+                        orleansActivity?.SetStatus(ActivityStatusCode.Ok);
+                    });
+                }
+                catch (System.IO.FileNotFoundException ex) when (ex.FileName?.StartsWith("Orleans.", StringComparison.Ordinal) == true)
+                {
+                    // Orleans application-part discovery expands [assembly: ApplicationPart("...")]
+                    // attributes with AssemblyLoadContext.LoadFromAssemblyName and no error handling.
+                    // The Orleans source generator bakes those attributes into every assembly compiled
+                    // while a provider assembly was in its compile closure — so assemblies built against
+                    // FabrCore.Host 1.0.x (which bundled the SQL Server and Azure Storage providers)
+                    // permanently demand those assemblies even though this deployment no longer ships them.
+                    throw new InvalidOperationException(
+                        $"Orleans failed to load assembly '{ex.FileName}' while configuring the silo. " +
+                        "This usually means an assembly in this application (or one of its NuGet dependencies) was " +
+                        "compiled against FabrCore.Host 1.0.x, which bundled the Orleans SQL Server and Azure Storage " +
+                        "providers. Orleans bakes ApplicationPart references to those provider assemblies into every " +
+                        "consuming assembly at compile time. Fix: rebuild all FabrCore-dependent projects and packages " +
+                        "against FabrCore.Host 1.1.0 or later. Workaround: reference the provider package that supplies " +
+                        "the missing assembly (FabrCore.Host.SqlServer for AdoNet, FabrCore.Host.AzureStorage for Azure).",
+                        ex);
+                }
 
                 ServerConfiguredCounter.Add(1,
                     new KeyValuePair<string, object?>("environment", builder.Environment.EnvironmentName),

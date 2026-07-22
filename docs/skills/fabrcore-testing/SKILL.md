@@ -9,6 +9,9 @@ description: >
   "LLM eval", "evaluation", "evaluator", "RelevanceEvaluator", "GroundednessEvaluator",
   "EvaluationResult", "ReportingConfiguration", "quality eval", "safety eval", "BLEU",
   "typed storage", "storage test", "TryGetStateAsync", "custom state test", or "malformed state".
+  Also use for: "gateway discovery", "provider-neutral Orleans client",
+  "AddFabrCoreOrleansClientAsync", "IGatewayListProvider", "IClusterClient integration",
+  "Orleans observer", or "Orleans mTLS".
   Do NOT use for: agent development — use fabrcore-agent.
   Do NOT use for: server setup — use fabrcore-server.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
@@ -442,6 +445,58 @@ Pitfalls:
 - Do not assert against the internal envelope shape from consumer tests. `ValueJson`, `ValueType`, and timestamps are Host implementation details.
 - Do not assume query/list support. Storage v1 is CRUD-only.
 - Do not write tests that depend on ETags or optimistic concurrency; upsert is last-writer-wins.
+
+## Testing Provider-Neutral Orleans Connectivity
+
+Test gateway discovery separately from the in-memory agent harness. The feature crosses ASP.NET
+Core authentication, Host membership, HTTP discovery, and a real Orleans client, so use unit tests
+for contract behavior and a Localhost Host integration test for the end-to-end path.
+
+### Host endpoint and source tests
+
+- Verify discovery is disabled by default and returns `404`.
+- Verify unauthenticated and policy-denied requests return `401` and `403`.
+- Assert the versioned response contains only `clusterId`, `serviceId`, gateway URIs, refresh
+  seconds, and the TLS requirement; serialized output must not contain provider configuration,
+  connection strings, storage settings, or credentials.
+- Verify explicit `AdvertisedGateways` take precedence over membership-derived addresses.
+- Include only active silos with usable addresses and return `503` for an empty gateway set.
+- Validate configuration startup failures for missing authorization policy, non-positive refresh
+  period, and malformed `gwy.tcp://host:port/0` overrides.
+
+### Client unit tests
+
+- Reject unsupported document versions, missing identity, empty gateways, malformed gateway URIs,
+  invalid refresh periods, and an insecure TLS policy unless explicitly allowed; verify duplicate
+  gateway URIs are deduplicated.
+- Verify `AddFabrCoreOrleansClientAsync` configures the discovered `ClusterOptions`, resolves the
+  normal DI `IClusterClient`, and requires the TLS callback when the Host requires TLS.
+- Verify refresh success replaces the cache and interval, while transient HTTP/auth/JSON failures
+  return the last-known-good list and log a warning.
+- Reject a later `clusterId` or `serviceId` change without replacing the cached list.
+
+### Real Localhost integration test
+
+Start a FabrCore Host with authenticated discovery and an explicit reachable Localhost gateway,
+then register a separate client through `AddFabrCoreOrleansClientAsync`. Assert all of these through
+the resulting `IClusterClient`:
+
+1. The client connects using only `FabrCoreHostUrl` plus discovery authentication.
+2. A grain request/response succeeds.
+3. `CreateObjectReference` creates an observer, a grain subscribes it, and the client receives a
+   callback.
+4. A later gateway refresh is accepted and Orleans can reconnect after a gateway change.
+
+Add production-only infrastructure coverage for Host/client mTLS (approved certificate accepted,
+unapproved certificate rejected). Run the same connectivity test against SQL Server and Azure
+Storage Hosts when those services are available; the client test project must remain unchanged.
+
+### Dependency boundary test
+
+Inspect the resolved package graph or packed `.nuspec` and fail if `FabrCore.Client.Orleans`
+depends on `Microsoft.Orleans.Clustering.AdoNet`, `Microsoft.Orleans.Clustering.AzureStorage`,
+`FabrCore.Host.SqlServer`, or `FabrCore.Host.AzureStorage`. Only the corresponding Host provider
+projects should reference those provider packages.
 
 ## Running Tests
 

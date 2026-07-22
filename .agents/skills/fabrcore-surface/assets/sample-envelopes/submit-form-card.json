@@ -1,0 +1,45 @@
+{
+  "version": "2.0",
+  "id": "work-order-submit-card",
+  "card": {
+    "type": "AdaptiveCard",
+    "version": "1.6",
+    "body": [
+      {
+        "type": "TextBlock",
+        "text": "Create Work Order",
+        "weight": "Bolder",
+        "size": "Medium"
+      },
+      {
+        "type": "Input.Text",
+        "id": "summary",
+        "label": "Summary",
+        "isRequired": true,
+        "errorMessage": "Summary is required."
+      },
+      {
+        "type": "Input.ChoiceSet",
+        "id": "priority",
+        "label": "Priority",
+        "value": "normal",
+        "choices": [
+          { "title": "Low", "value": "low" },
+          { "title": "Normal", "value": "normal" },
+          { "title": "High", "value": "high" }
+        ]
+      }
+    ],
+    "actions": [
+      {
+        "type": "Action.Submit",
+        "title": "Create",
+        "data": {
+          "actionId": "work-order.create",
+          "routeTo": "app",
+          "source": "surface"
+        }
+      }
+    ]
+  }
+}

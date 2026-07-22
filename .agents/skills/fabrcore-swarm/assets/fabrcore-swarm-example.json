@@ -1,0 +1,93 @@
+{
+  // fabrcore-swarm.json — Swarm definition file
+  // Place in your server root (or set SwarmOptions.SwarmDefinitionFilePath)
+  // Each definition scopes an orchestrator to a set of pre-existing client agents.
+  // Reference a definition by name in AgentConfiguration.Args["SwarmDefinition"].
+  //
+  // The JSON carries ONLY agent handles — no description, plugins, tools,
+  // or notes. The swarm discovers all of that at runtime:
+  //   - IFabrCoreRegistry — class-level [Description], [FabrCoreCapabilities],
+  //     and [FabrCoreNote] attributes on the client's agent classes.
+  //   - IFabrCoreAgentHost.GetAgentHealth — runtime-configured plugins, tools,
+  //     model, and system prompt on the live grain.
+
+  "SwarmDefinitions": [
+    {
+      // Definition name — referenced in Args["SwarmDefinition"] = "jobops"
+      "Name": "jobops",
+      "Description": "JobOps manufacturing workflow swarm",
+
+      // Optional: override the planner's system prompt for this swarm
+      "PlannerSystemPrompt": "You plan JobOps manufacturing workflows. Delegate each task to the right specialist agent. Follow the status gates (pipes must be in Planning to design, plates must be allocated before cans can be defined, etc).",
+
+      // Optional: override the LLM model for the planner (must match a name in fabrcore.json ModelConfigurations)
+      "PlannerModelName": "default",
+
+      // Optional: override the LLM model for worker agents (1:1 with each client agent)
+      "WorkerModelName": "default",
+
+      // AGENT HANDLES: Bare aliases of the client-created agents the planner
+      // may assign tasks to in this scope. These are the agent-side of the
+      // handle only (no "owner:" prefix — the swarm prefixes each with the
+      // caller's owner at dispatch time).
+      //
+      // The client is responsible for bringing each listed agent online at
+      // startup via IFabrCoreAgentService.ConfigureAgentAsync BEFORE any swarm
+      // is created. Agents not configured at startup are skipped with a
+      // warning in the planner's ListAvailableAgents output.
+      "AgentHandles": [
+        "jobops-job-planning-agent",
+        "jobops-pipe-design-agent",
+        "jobops-plate-allocation-agent",
+        "jobops-can-optimization-agent"
+      ],
+
+      // SUBJECT MATTER EXPERTS: Client agents designated as domain knowledge
+      // sources. The swarm consults them BEFORE escalating to the human when
+      // workers, the planner, or the orchestrator encounter roadblocks or
+      // ambiguities. Bare aliases, resolved at runtime like AgentHandles.
+      // NOT task executors — cannot be assigned tasks.
+      "SubjectMatterExperts": [
+        "jobops-knowledge-agent"
+      ],
+
+      // AGENT DIRECTORY: Pre-existing helper agents that client agents can
+      // query mid-task (knowledge bases, ERP lookups). NOT task executors —
+      // the planner cannot assign tasks to these. Listed so client agents
+      // that need reference information know where to look.
+      "AgentDirectory": [
+        {
+          "Handle": "system:jobops-knowledge-agent",
+          "Description": "Answers reference questions about JobOps business rules, status gates, plate allocation algorithms, and can definitions."
+        }
+      ],
+
+      // Optional: override max tasks dispatched per supervisor wave
+      "MaxTasksPerSupervisor": 10,
+
+      // Optional: override termination policy for this swarm.
+      // MaxTaskTime and MaxTaskRetries are enforced by the drive loop.
+      "Termination": {
+        "MaxTotalIterations": 200,
+        "MaxTaskRetries": 3,
+        "MaxWallClockTime": "04:00:00",
+        "MaxTaskTime": "00:30:00",
+        "MaxRoadblocks": 10,
+        "MaxReplanAttempts": 5
+      }
+    },
+
+    {
+      "Name": "quality-inspection",
+      "Description": "Swarm for quality inspection workflows",
+      "PlannerSystemPrompt": "You plan quality inspection workflows for manufactured pipe.",
+      "AgentHandles": [
+        "inspector-agent",
+        "report-writer"
+      ],
+      "SubjectMatterExperts": [],
+      "AgentDirectory": []
+      // No Termination override — uses SwarmOptions defaults
+    }
+  ]
+}

@@ -1,0 +1,127 @@
+{
+  // fabrcore-taskagent.json — TaskAgent definition file
+  //
+  // Place at the path declared by TaskAgentOptions.DefinitionFilePath
+  // (default: "fabrcore-taskagent.json" in the working directory).
+  //
+  // Each entry under "agents" is a themed scope. Reference one by name in
+  // AgentConfiguration.Args["TaskAgentDefinition"] when configuring a TaskAgent
+  // grain.
+  //
+  // The host is responsible for bringing each listed clientAgentHandle and
+  // SME online via IFabrCoreAgentService.ConfigureAgentAsync at startup. The
+  // TaskAgent discovers each agent's capabilities at runtime by combining:
+  //   - IFabrCoreRegistry — class-level [Description], [FabrCoreCapabilities],
+  //     [FabrCoreNote] attributes on the agent class.
+  //   - IFabrCoreAgentHost.GetAgentHealth — runtime-configured plugins, tools,
+  //     model, and system prompt on the live grain.
+
+  "agents": [
+    {
+      // Definition name — the value referenced in
+      // Args["TaskAgentDefinition"] when configuring a TaskAgent grain.
+      "name": "ops-agent",
+
+      // Free-text description for documentation; not consumed by the runtime.
+      "description": "Operations supervisor — handles job lookups, status changes, and cross-system reconciliation.",
+
+      // CLIENT AGENT HANDLES.
+      // Bare aliases of the executor agents the planner can delegate tasks to.
+      // The owner is auto-prefixed by FabrCore at dispatch time. To target a
+      // cross-owner agent explicitly, use a fully-qualified "owner:alias".
+      "clientAgentHandles": [
+        "job-execution-agent",
+        "data-fetcher"
+      ],
+
+      // SUBJECT MATTER EXPERTS.
+      // Bare aliases of agents the TaskAgent consults for "how do I…",
+      // "what does the user mean…", or roadblock-help questions. SMEs are NOT
+      // task executors — the planner cannot assign work to them.
+      // Wire-format MessageType is "swarm-sme-consultation" (compatible with
+      // SMEs written for fabrcore-swarm).
+      "subjectMatterExperts": [
+        "job-policy-sme"
+      ],
+
+      // OPTIONAL: helper agents listed in the planner's available-agents
+      // context but never delegated to — these are knowledge bases or lookup
+      // services that client agents query mid-task. Useful for "you have X,
+      // Y, Z available to help" hints in the planner's prompt.
+      "agentDirectory": [
+        {
+          "alias": "erp-lookup",
+          "description": "Read-only ERP record lookup",
+          "capabilities": ["fetch_record", "list_records"]
+        }
+      ],
+
+      // THREE MODEL TIERS.
+      // Each name must match a key in fabrcore.json ModelConfigurations.
+      // Leave any of these null to fall back to TaskAgentOptions.Default*ModelName.
+
+      // Fast: intent triage, JSON classification, learning extraction.
+      // Pick a small, cheap model — gpt-4o-mini, claude-haiku-4-5.
+      "fastModelName": "gpt-4o-mini",
+
+      // Worker: conversational answers (GeneralQuestion), final synthesis on
+      // CompletePlan. Pick a mid-size model — gpt-4o, sonnet.
+      "workerModelName": "gpt-4o",
+
+      // Planner: initial planning + every replan trigger + goal check. Pick
+      // a reasoning model when budget allows — o3-mini, opus, sonnet-thinking.
+      "plannerModelName": "o3-mini",
+
+      // Persona / system-prompt overlay for the agent's own LLM calls.
+      // Adds personality/style guidance on top of the built-in role prompts.
+      "personaPrompt": "You are an operations supervisor. Be terse and decisive.",
+
+      // Forwarded to client agents in every delegation as a leading line in
+      // the prompt's "Upstream context" section. Use it to set delegation
+      // behavior expectations (NOT the client's domain instructions — those
+      // live in the client agent's own SystemPrompt).
+      "clientAgentOverlay": "Execute the task using your domain tools. Follow your standard EXECUTION WORKFLOW.",
+
+      // Whitelist of memory categories this scope is allowed to write.
+      // If a Teaching message is classified as a category outside this list,
+      // it falls back to "Observation". Set to null (or omit) to allow all
+      // five: Rule, Instruction, Observation, Fact, Procedural.
+      "memoryAllowedTypes": ["Rule", "Instruction", "Observation"],
+
+      // v1 only supports 1; reserved for future wave-parallel execution.
+      "maxConcurrentTasks": 1,
+
+      // Replan-loop safety threshold. After this many replans within
+      // TaskAgentOptions.ReplanLoopWindowSeconds (default 60), all triggered
+      // by user-message OR all yielding needs_adjustment, the agent flips
+      // IsStuck=true and asks the user to clarify. Null = use the global default (3).
+      "replanLoopThreshold": 3,
+
+      // Per-task delegation timeout. Defaults to TaskAgentOptions
+      // .DefaultDelegationTimeout (4 minutes). Pick a value under FabrCore's
+      // 5-minute stale-message threshold, otherwise long delegations may be
+      // re-routed as fresh primary OnMessages instead of busy-routed.
+      "delegationTimeout": "00:04:00"
+    },
+
+    {
+      "name": "research-agent",
+      "description": "Research and writing assistant — gathers, synthesizes, drafts.",
+
+      "clientAgentHandles": [
+        "web-search-agent",
+        "writer-agent"
+      ],
+      "subjectMatterExperts": [
+        "research-style-sme"
+      ],
+
+      "fastModelName": "gpt-4o-mini",
+      "workerModelName": "gpt-4o",
+      "plannerModelName": "gpt-4o",
+
+      "personaPrompt": "You are a research lead. Plan thoroughly, then delegate.",
+      "memoryAllowedTypes": ["Rule", "Instruction", "Observation", "Fact"]
+    }
+  ]
+}

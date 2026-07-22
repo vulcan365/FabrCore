@@ -1,0 +1,37 @@
+{
+  "version": "2.0",
+  "id": "approval-card",
+  "card": {
+    "type": "AdaptiveCard",
+    "version": "1.6",
+    "body": [
+      {
+        "type": "TextBlock",
+        "text": "Approve ${requestName}?",
+        "weight": "Bolder"
+      },
+      {
+        "type": "TextBlock",
+        "text": "Amount: ${amount}",
+        "wrap": true
+      }
+    ],
+    "actions": [
+      {
+        "type": "Action.Execute",
+        "title": "Approve",
+        "verb": "approve",
+        "data": {
+          "routeTo": "both",
+          "messageTemplate": "approved {requestId}",
+          "requestId": "${requestId}"
+        }
+      }
+    ]
+  },
+  "data": {
+    "requestId": "REQ-1001",
+    "requestName": "Purchase request REQ-1001",
+    "amount": "$1,250.00"
+  }
+}

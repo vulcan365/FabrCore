@@ -1,0 +1,110 @@
+{
+  // Named Worker definitions. A host agent picks one via:
+  //   config.Args["WorkerDefinition"] = "<Name>"
+  // Missing arg → empty "(default)" definition (warning logged). Unknown name → same.
+  "Workers": [
+    {
+      "Name": "default",
+      "Description": "Safe default worker — no peer SMEs, advisor only on validate gaps, clean tool-less analysis agents.",
+      "SubjectMatterExperts": [],
+
+      // SME relevance routing is auto-bypassed when SMEs = 0 or 1, or when no
+      // SME has Description / GoodFor metadata. Leave true for sane defaults.
+      "RouteSmesByRelevance": true,
+
+      "ConsultSmesOnPreProcess": false,
+      "ConsultSmesOnValidate": true,
+      "SkipSmesForConfirmationOnlyGaps": true,
+
+      // Internal advisor — LLM-driven self-consultation using the analysis model.
+      // Plays the same role an SME would when none are available or helpful.
+      "InternalAdvisorOnPreProcess": false,
+      "InternalAdvisorOnValidate": true,
+      "AdvisorMode": "OnlyWhenSmesProduceNothing",
+      // Modes: Disabled | OnlyWhenNoSmes | OnlyWhenSmesProduceNothing | Always
+
+      "AutoRetryOnValidationFailure": true,
+      "MaxRetries": 1,
+
+      // Best practice: set model names so WorkerAgentFactory creates clean,
+      // tool-less analysis agents. If you only have one model entry, use
+      // "default" for every field rather than null.
+      "TaskExtractionModelName": "fast",
+      "ValidationModelName": "planner",
+      "SmeRouterModelName": "fast",
+      "InternalAdvisorModelName": "planner"
+    },
+
+    {
+      "Name": "compliance-flavored",
+      "Description": "Curated SMEs + advisor diversity signal + tiered models.",
+      "SubjectMatterExperts": [
+        // Bare-string shorthand — no routing metadata. Router auto-bypasses.
+        "general-knowledge-sme",
+
+        // Object form — explicit routing metadata.
+        // Description: what the SME is. GoodFor: concrete topics covered.
+        {
+          "Alias": "compliance-sme",
+          "Description": "Internal compliance officer agent",
+          "GoodFor": "regulatory limits, KYC rules, sanctions screening, data-retention policy"
+        },
+
+        // Cross-owner alias — fully qualified.
+        {
+          "Alias": "owner:cross-domain-sme",
+          "Description": "Shared cross-team architect agent",
+          "GoodFor": "system integration questions, deprecation timelines, API contract changes"
+        }
+      ],
+
+      "RouteSmesByRelevance": true,
+      "ConsultSmesOnPreProcess": true,
+      "ConsultSmesOnValidate": true,
+      "SkipSmesForConfirmationOnlyGaps": true,
+      "InternalAdvisorOnPreProcess": true,
+      "InternalAdvisorOnValidate": true,
+
+      // Always = run advisor in parallel with SMEs every time. Diversity signal.
+      "AdvisorMode": "Always",
+
+      "AutoRetryOnValidationFailure": true,
+      "MaxRetries": 1,
+
+      // Tiered models — extraction & router are cheap, validation & advisor are load-bearing.
+      // Model names must match entries in fabrcore.json.
+      "TaskExtractionModelName": "fast",
+      "ValidationModelName": "planner",
+      "SmeRouterModelName": "fast",
+      "InternalAdvisorModelName": "planner"
+    },
+
+    {
+      "Name": "advisor-only",
+      "Description": "No peer SMEs available; advisor fills the SME role at every stage.",
+      "SubjectMatterExperts": [],
+      "ConsultSmesOnPreProcess": false,
+      "ConsultSmesOnValidate": false,
+      "SkipSmesForConfirmationOnlyGaps": true,
+      "InternalAdvisorOnPreProcess": true,
+      "InternalAdvisorOnValidate": true,
+      "AdvisorMode": "Always",
+      "AutoRetryOnValidationFailure": true,
+      "MaxRetries": 1
+    },
+
+    {
+      "Name": "silent-validator",
+      "Description": "Task tracking + validation only. No advice, no retries. Host inspects result and decides.",
+      "SubjectMatterExperts": [],
+      "ConsultSmesOnPreProcess": false,
+      "ConsultSmesOnValidate": false,
+      "SkipSmesForConfirmationOnlyGaps": true,
+      "InternalAdvisorOnPreProcess": false,
+      "InternalAdvisorOnValidate": false,
+      "AdvisorMode": "Disabled",
+      "AutoRetryOnValidationFailure": false,
+      "MaxRetries": 0
+    }
+  ]
+}
