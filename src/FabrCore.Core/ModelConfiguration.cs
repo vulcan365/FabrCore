@@ -20,6 +20,12 @@ namespace FabrCore.Core
         public int? MaxOutputTokens { get; set; }
 
         /// <summary>
+        /// Default reasoning effort for chat requests. Supported values are none, low,
+        /// medium, high, and xhigh (or ExtraHigh). Null uses the provider default.
+        /// </summary>
+        public string? ReasoningEffort { get; set; }
+
+        /// <summary>
         /// Total context window size in tokens for this model. Default is null (unknown).
         /// Used by compaction to determine when to summarize conversation history.
         /// </summary>

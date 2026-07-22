@@ -41,6 +41,7 @@ namespace FabrCore.Host.Api.Controllers
                     modelConfig.ApiKeyAlias,
                     modelConfig.TimeoutSeconds,
                     modelConfig.MaxOutputTokens,
+                    modelConfig.ReasoningEffort,
                     modelConfig.ContextWindowTokens,
                     modelConfig.CompactionEnabled,
                     modelConfig.CompactionKeepLastN,

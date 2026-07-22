@@ -226,6 +226,7 @@ Place `fabrcore.json` in the server project root. **Add to .gitignore** (contain
       "ApiKeyAlias": "string",       // Required: references an entry in ApiKeys
       "TimeoutSeconds": 120,         // Optional: HTTP timeout (default 120)
       "MaxOutputTokens": 16384,      // Optional: max tokens in response
+      "ReasoningEffort": "none",    // Optional: none | low | medium | high | xhigh
       "ContextWindowTokens": 128000, // Optional: total context window size
       "CompactionEnabled": true,     // Optional: enable compaction (default true)
       "CompactionKeepLastN": 20,     // Optional: messages to keep (default 20)
@@ -257,6 +258,8 @@ Place `fabrcore.json` in the server project root. **Add to .gitignore** (contain
 
 Any OpenAI-compatible endpoint can be used by setting `Provider: "OpenAI"` and a custom `Uri`.
 
+`MaxOutputTokens` and `ReasoningEffort` are model-level defaults for every chat client resolved by configuration name, including direct tool-free `IChatClient.GetResponseAsync` calls. Explicit per-call `ChatOptions` values take precedence.
+
 ### OpenAI Configuration
 
 ```json
@@ -269,6 +272,7 @@ Any OpenAI-compatible endpoint can be used by setting `Provider: "OpenAI"` and a
       "ApiKeyAlias": "openai-key",
       "TimeoutSeconds": 120,
       "MaxOutputTokens": 16384,
+      "ReasoningEffort": "none",
       "ContextWindowTokens": 128000
     }
   ],
@@ -818,6 +822,7 @@ Read model configuration and API keys from `fabrcore.json`. Useful for clients t
   "ApiKeyAlias": "openai-key",
   "TimeoutSeconds": 120,
   "MaxOutputTokens": 16384,
+  "ReasoningEffort": "none",
   "ContextWindowTokens": 128000
 }
 ```

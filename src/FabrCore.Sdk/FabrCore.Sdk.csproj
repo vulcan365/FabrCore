@@ -25,6 +25,9 @@
 		<AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
 			<_Parameter1>FabrCore.Host</_Parameter1>
 		</AssemblyAttribute>
+		<AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+			<_Parameter1>FabrCore.Sdk.Tests</_Parameter1>
+		</AssemblyAttribute>
 
 	</ItemGroup>
 
