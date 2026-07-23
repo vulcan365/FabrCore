@@ -1,4 +1,5 @@
 using FabrCore.Host.Api.Controllers;
+using FabrCore.Host.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.FileProviders;
@@ -37,9 +38,12 @@ public sealed class ModelConfigControllerTests
                 """);
 
             var environment = new TestWebHostEnvironment(contentRoot);
+            var store = new LocalFileConfigurationStore(
+                NullLogger<LocalFileConfigurationStore>.Instance,
+                environment);
             var controller = new ModelConfigController(
                 NullLogger<ModelConfigController>.Instance,
-                environment);
+                store);
 
             var result = await controller.GetModelConfig("graphrag");
 
