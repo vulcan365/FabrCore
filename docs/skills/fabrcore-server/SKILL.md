@@ -353,6 +353,55 @@ The `IEmbeddings` service (auto-registered by `AddFabrCoreServer()`) looks up a 
 
 Supported providers for embeddings: `OpenAI`, `Azure`, `OpenRouter`, `Gemini`. Grok does not support embeddings.
 
+## Cloud Server Configuration (remote fabrcore.json)
+
+Instead of a local `fabrcore.json`, a host can pull its model/API-key configuration from a
+remote **cloud server** (any server implementing `docs/cloud-server-protocol.md`; FabrCore
+Forge is the first-party implementation). Enable it purely via appsettings — `fabrcore.json`
+becomes unnecessary:
+
+```json
+{
+  "FabrCore": {
+    "CloudServer": {
+      "Enabled": true,
+      "Url": "https://forge.vulcan365.ai",
+      "ApiKey": "<per-cluster API key>",
+      "ClusterId": null,
+      "Environment": null,
+      "RefreshInterval": "00:05:00",
+      "RequestTimeout": "00:00:30",
+      "CacheLastKnownGood": true,
+      "CacheFilePath": null,
+      "StartupFailureBehavior": "Fail",
+      "Heartbeat": { "Enabled": true, "Interval": "00:01:00" }
+    }
+  }
+}
+```
+
+- **Defaults**: `Enabled` is false (existing hosts unchanged). `Url` defaults to the hosted
+  Forge endpoint. `ClusterId` falls back to Orleans `ClusterOptions.ClusterId`; `Environment`
+  falls back to `IHostEnvironment.EnvironmentName`, enabling appsettings-style per-environment
+  configuration layering on the server.
+- **Secrets**: securing `ApiKey` (user secrets, env vars, vault-backed config providers) is
+  the operator's responsibility.
+- **Startup**: the initial fetch blocks before the host serves traffic. On failure the host
+  falls back to the last-known-good cache (`fabrcore.cloud-cache.json` in the content root —
+  same plaintext-secrets profile as `fabrcore.json`; disable with `CacheLastKnownGood:
+  false`). With no cache, `Fail` (default) stops startup with an actionable error;
+  `StartDegraded` starts with an empty configuration (model lookups 404 until a sync
+  succeeds).
+- **While running**: a background refresh loop polls with `If-None-Match` (cheap 304s) and
+  never drops the last-known-good snapshot on failure. Heartbeats report cluster/silo status;
+  a heartbeat response can request an immediate refresh.
+- **Custom sources**: `FabrCoreServerOptions.UseConfigurationStore<T>()` plugs in any
+  `IFabrCoreConfigurationStore` implementation, overriding both the local file and cloud
+  modes.
+- **Note**: the local `/fabrcoreapi/ModelConfig/apikey/{alias}` endpoint remains
+  unauthenticated by design (authN is the hosting layer's responsibility) and serves
+  cloud-delivered keys in cloud mode — same trust model as the local file.
+
 ## System Agents
 
 System agents are shared agents under principal handle `"system"` that multiple authenticated identities can access. Create them server-side using `IFabrCoreAgentService`:

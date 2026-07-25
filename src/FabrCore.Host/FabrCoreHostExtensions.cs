@@ -59,6 +59,13 @@ namespace FabrCore.Host
         internal VerifiableExecutionOptions VerifiableExecutionOptions { get; } = new();
 
         /// <summary>
+        /// Explicitly registered <see cref="IFabrCoreConfigurationStore"/> implementation type.
+        /// Null selects by configuration: the cloud server store when
+        /// <c>FabrCore:CloudServer:Enabled</c> is true, otherwise the local fabrcore.json store.
+        /// </summary>
+        internal Type? ConfigurationStoreType { get; private set; }
+
+        /// <summary>
         /// Explicitly registered Orleans provider. When null, <see cref="FabrCoreHostExtensions.AddFabrCoreServer"/>
         /// auto-discovers a provider matching <see cref="OrleansClusterOptions.ClusteringMode"/> by convention.
         /// </summary>
@@ -109,6 +116,18 @@ namespace FabrCore.Host
         public FabrCoreServerOptions UseAuditProvider<T>() where T : class, IAuditProvider
         {
             AuditProviderType = typeof(T);
+            return this;
+        }
+
+        /// <summary>
+        /// Configures a custom <see cref="IFabrCoreConfigurationStore"/> implementation as the
+        /// source of model/API-key configuration, overriding both the local fabrcore.json store
+        /// and the built-in Cloud Server feature.
+        /// </summary>
+        /// <typeparam name="T">The store implementation type.</typeparam>
+        public FabrCoreServerOptions UseConfigurationStore<T>() where T : class, IFabrCoreConfigurationStore
+        {
+            ConfigurationStoreType = typeof(T);
             return this;
         }
 
@@ -400,6 +419,35 @@ namespace FabrCore.Host
                 builder.Services.AddSingleton<FabrCore.Sdk.IFabrCoreChatClientService, FabrCore.Sdk.FabrCoreChatClientService>();
                 logger.LogDebug("FabrCoreChatClientService added");
 
+                // Model/API-key configuration store: local fabrcore.json by default, a remote
+                // cloud server when FabrCore:CloudServer:Enabled is set (see the Cloud Server
+                // feature in docs/cloud-server-protocol.md), or an explicit custom store via
+                // FabrCoreServerOptions.UseConfigurationStore<T>().
+                if (options.ConfigurationStoreType is not null)
+                {
+                    builder.Services.TryAddSingleton(typeof(IFabrCoreConfigurationStore), options.ConfigurationStoreType);
+                    logger.LogInformation("FabrCore configuration store: {StoreType}", options.ConfigurationStoreType.Name);
+                }
+                else if (builder.Configuration.GetValue<bool>($"{Configuration.CloudServerOptions.SectionName}:Enabled"))
+                {
+                    builder.Services.AddHttpClient(Services.CloudServer.CloudServerApiClient.HttpClientName);
+                    builder.Services.AddSingleton<Services.CloudServer.CloudServerApiClient>();
+                    builder.Services.AddSingleton<Services.CloudServer.CloudConfigurationDiskCache>();
+                    builder.Services.AddSingleton<Services.CloudServer.CloudServerConfigurationStore>();
+                    builder.Services.TryAddSingleton<IFabrCoreConfigurationStore>(sp =>
+                        sp.GetRequiredService<Services.CloudServer.CloudServerConfigurationStore>());
+                    builder.Services.AddHostedService<Services.CloudServer.CloudServerSyncService>();
+                    logger.LogInformation(
+                        "FabrCore configuration store: Cloud Server ({Url})",
+                        builder.Configuration[$"{Configuration.CloudServerOptions.SectionName}:Url"]
+                            ?? Configuration.CloudServerOptions.DefaultUrl);
+                }
+                else
+                {
+                    builder.Services.TryAddSingleton<IFabrCoreConfigurationStore, LocalFileConfigurationStore>();
+                    logger.LogDebug("FabrCore configuration store: local fabrcore.json");
+                }
+
                 builder.Services.AddSingleton<FabrCore.Sdk.FabrCoreToolRegistry>();
                 logger.LogDebug("FabrCoreToolRegistry added");
 
@@ -476,6 +524,12 @@ namespace FabrCore.Host
                     ServiceDescriptor.Singleton<Microsoft.Extensions.Options.IValidateOptions<Configuration.GatewayDiscoveryOptions>,
                         Configuration.GatewayDiscoveryOptionsValidator>());
                 builder.Services.TryAddSingleton<Services.IGatewayDiscoverySource, Services.GatewayDiscoverySource>();
+                builder.Services.AddOptions<Configuration.CloudServerOptions>()
+                    .Bind(builder.Configuration.GetSection(Configuration.CloudServerOptions.SectionName))
+                    .ValidateOnStart();
+                builder.Services.TryAddEnumerable(
+                    ServiceDescriptor.Singleton<Microsoft.Extensions.Options.IValidateOptions<Configuration.CloudServerOptions>,
+                        Configuration.CloudServerOptionsValidator>());
                 builder.Services.Configure<Configuration.AgentGrainOptions>(
                     builder.Configuration.GetSection(Configuration.AgentGrainOptions.SectionName));
                 builder.Services.Configure<Configuration.PrincipalGrainOptions>(
