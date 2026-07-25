@@ -1,8 +1,6 @@
-using FabrCore.Core;
-using Microsoft.AspNetCore.Hosting;
+using FabrCore.Host.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
-using System.Text.Json;
 
 namespace FabrCore.Host.Api.Controllers
 {
@@ -11,12 +9,12 @@ namespace FabrCore.Host.Api.Controllers
     public class ModelConfigController : Controller
     {
         private readonly ILogger<ModelConfigController> logger;
-        private readonly string configFilePath;
+        private readonly IFabrCoreConfigurationStore configurationStore;
 
-        public ModelConfigController(ILogger<ModelConfigController> logger, IWebHostEnvironment env)
+        public ModelConfigController(ILogger<ModelConfigController> logger, IFabrCoreConfigurationStore configurationStore)
         {
             this.logger = logger;
-            this.configFilePath = Path.Combine(env.ContentRootPath, "fabrcore.json");
+            this.configurationStore = configurationStore;
         }
 
         [HttpGet("model/{name}")]
@@ -24,9 +22,9 @@ namespace FabrCore.Host.Api.Controllers
         {
             try
             {
-                var config = await LoadConfiguration();
+                var config = await configurationStore.GetConfigurationAsync();
                 var modelConfig = config.ModelConfigurations.FirstOrDefault(m => m.Name == name);
-                
+
                 if (modelConfig == null)
                 {
                     return NotFound($"Model configuration '{name}' not found.");
@@ -65,9 +63,9 @@ namespace FabrCore.Host.Api.Controllers
         {
             try
             {
-                var config = await LoadConfiguration();
+                var config = await configurationStore.GetConfigurationAsync();
                 var apiKey = config.ApiKeys.FirstOrDefault(k => k.Alias == alias);
-                
+
                 if (apiKey == null)
                 {
                     return NotFound($"API key with alias '{alias}' not found.");
@@ -80,29 +78,6 @@ namespace FabrCore.Host.Api.Controllers
                 logger.LogError(ex, "Error getting API key for alias {Alias}", alias);
                 return StatusCode(500, "Internal server error");
             }
-        }
-
-        private async Task<FabrCoreConfiguration> LoadConfiguration()
-        {
-            if (!System.IO.File.Exists(configFilePath))
-            {
-                logger.LogWarning("Configuration file {Path} not found. Creating default configuration.", configFilePath);
-                var defaultConfig = new FabrCoreConfiguration();
-                await SaveConfiguration(defaultConfig);
-                return defaultConfig;
-            }
-
-            var json = await System.IO.File.ReadAllTextAsync(configFilePath);
-            return JsonSerializer.Deserialize<FabrCoreConfiguration>(json) ?? new FabrCoreConfiguration();
-        }
-
-        private async Task SaveConfiguration(FabrCoreConfiguration config)
-        {
-            var json = JsonSerializer.Serialize(config, new JsonSerializerOptions 
-            { 
-                WriteIndented = true 
-            });
-            await System.IO.File.WriteAllTextAsync(configFilePath, json);
         }
     }
 }
