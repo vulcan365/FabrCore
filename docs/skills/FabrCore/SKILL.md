@@ -110,6 +110,9 @@ The client discovers cluster identity and gateways from the Host. Only the Host 
 configuration or credentials.
 
 Create `fabrcore.json` in the server project root with your LLM provider configuration.
+Alternatively, a host can skip `fabrcore.json` entirely and pull the same configuration from a
+remote **cloud server** (e.g. FabrCore Forge) via the `FabrCore:CloudServer` appsettings
+section — see fabrcore-server ("Cloud Server Configuration") and `docs/cloud-server-protocol.md`.
 
 ## Required Using Directives
 

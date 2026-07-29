@@ -266,7 +266,7 @@ WHERE NOT EXISTS
 INSERT INTO orlns.OrleansQuery(QueryKey, QueryText)
 SELECT
 	'DeleteMembershipTableEntriesKey',
-	'DELETE FROM OrleansMembershipTable
+	'DELETE FROM orlns.OrleansMembershipTable
 	WHERE DeploymentId = @DeploymentId AND @DeploymentId IS NOT NULL;
 	DELETE FROM orlns.OrleansMembershipVersionTable
 	WHERE DeploymentId = @DeploymentId AND @DeploymentId IS NOT NULL;
@@ -283,7 +283,7 @@ WHERE NOT EXISTS
 INSERT INTO orlns.OrleansQuery(QueryKey, QueryText)
 SELECT
 	'CleanupDefunctSiloEntriesKey',
-	'DELETE FROM OrleansMembershipTable
+	'DELETE FROM orlns.OrleansMembershipTable
 	WHERE DeploymentId = @DeploymentId
 		AND @DeploymentId IS NOT NULL
 		AND IAmAliveTime < @IAmAliveTime
@@ -295,3 +295,15 @@ WHERE NOT EXISTS
     FROM orlns.OrleansQuery oqt
     WHERE oqt.[QueryKey] = 'CleanupDefunctSiloEntriesKey'
 );
+
+-- BEGIN FabrCore legacy schema repair
+-- Repair query definitions created before the membership tables were schema-qualified.
+-- REPLACE only changes the known malformed table reference and is idempotent.
+UPDATE orlns.OrleansQuery
+SET QueryText = REPLACE(
+	QueryText,
+	'DELETE FROM OrleansMembershipTable',
+	'DELETE FROM orlns.OrleansMembershipTable')
+WHERE QueryKey IN ('DeleteMembershipTableEntriesKey', 'CleanupDefunctSiloEntriesKey')
+	AND QueryText LIKE '%DELETE FROM OrleansMembershipTable%';
+-- END FabrCore legacy schema repair

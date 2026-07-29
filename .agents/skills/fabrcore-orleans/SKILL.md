@@ -108,6 +108,36 @@ Configure in `appsettings.json`:
 - Streams use the in-memory provider (Orleans has no SQL Server streaming provider)
 - `StorageConnectionString` optional (falls back to `ConnectionString`)
 
+FabrCore creates its Orleans SQL objects in the `orlns` schema. When
+`AutoInitDatabase` is `true`, startup also applies idempotent repairs to FabrCore-managed
+query definitions from older package versions. When it is `false`, database administrators
+must apply package upgrade SQL manually before restarting the silos; the runtime identity
+does not need schema-migration permissions in that mode.
+
+For databases created with an affected package version, apply this repair when automatic
+initialization is disabled, then restart or roll all silos so Orleans reloads the query definitions:
+
+```sql
+UPDATE orlns.OrleansQuery
+SET QueryText = REPLACE(
+    QueryText,
+    'DELETE FROM OrleansMembershipTable',
+    'DELETE FROM orlns.OrleansMembershipTable')
+WHERE QueryKey IN ('DeleteMembershipTableEntriesKey', 'CleanupDefunctSiloEntriesKey')
+    AND QueryText LIKE '%DELETE FROM OrleansMembershipTable%';
+
+UPDATE orlns.OrleansQuery
+SET QueryText = REPLACE(
+    QueryText,
+    'DELETE FROM OrleansRemindersTable',
+    'DELETE FROM orlns.OrleansRemindersTable')
+WHERE QueryKey IN ('DeleteReminderRowKey', 'DeleteReminderRowsKey')
+    AND QueryText LIKE '%DELETE FROM OrleansRemindersTable%';
+```
+
+The repair requires `UPDATE` permission on `orlns.OrleansQuery`. It does not require changing
+the database user's default schema or creating `dbo` synonyms for the physical Orleans tables.
+
 ### AzureStorage (Cloud)
 
 ```json

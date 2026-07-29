@@ -150,7 +150,7 @@ WHERE NOT EXISTS
 INSERT INTO orlns.OrleansQuery(QueryKey, QueryText)
 SELECT
 	'DeleteReminderRowKey',
-	'DELETE FROM OrleansRemindersTable
+	'DELETE FROM orlns.OrleansRemindersTable
 	WHERE
 		ServiceId = @ServiceId AND @ServiceId IS NOT NULL
 		AND GrainId = @GrainId AND @GrainId IS NOT NULL
@@ -168,7 +168,7 @@ WHERE NOT EXISTS
 INSERT INTO orlns.OrleansQuery(QueryKey, QueryText)
 SELECT
 	'DeleteReminderRowsKey',
-	'DELETE FROM OrleansRemindersTable
+	'DELETE FROM orlns.OrleansRemindersTable
 	WHERE
 		ServiceId = @ServiceId AND @ServiceId IS NOT NULL;
 	'
@@ -177,4 +177,16 @@ WHERE NOT EXISTS
     SELECT 1 
     FROM orlns.OrleansQuery oqt
     WHERE oqt.[QueryKey] = 'DeleteReminderRowsKey'
-);  
+);
+
+-- BEGIN FabrCore legacy schema repair
+-- Repair query definitions created before the reminder table was schema-qualified.
+-- REPLACE only changes the known malformed table reference and is idempotent.
+UPDATE orlns.OrleansQuery
+SET QueryText = REPLACE(
+	QueryText,
+	'DELETE FROM OrleansRemindersTable',
+	'DELETE FROM orlns.OrleansRemindersTable')
+WHERE QueryKey IN ('DeleteReminderRowKey', 'DeleteReminderRowsKey')
+	AND QueryText LIKE '%DELETE FROM OrleansRemindersTable%';
+-- END FabrCore legacy schema repair

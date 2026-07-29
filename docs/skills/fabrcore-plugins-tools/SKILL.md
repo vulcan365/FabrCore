@@ -401,7 +401,7 @@ public async Task<string> Search(string q, int n = 20)
 
 ## Using IEmbeddings in Plugins
 
-`IEmbeddings` (FabrCore.Sdk) is auto-registered by `AddFabrCoreServer()` and available via DI. It generates vector embeddings using the `"embeddings"` model entry in `fabrcore.json`.
+`IEmbeddings` (FabrCore.Sdk) is auto-registered by `AddFabrCoreServer()` and available via DI. It generates vector embeddings using the `"embeddings"` entry in the host's model configuration (`fabrcore.json`, or the cloud server when enabled).
 
 ```csharp
 public interface IEmbeddings
@@ -433,7 +433,7 @@ public class SemanticPlugin : IFabrCorePlugin
 }
 ```
 
-**Requires** a `"embeddings"` entry in `fabrcore.json` `ModelConfigurations` (see fabrcore-server skill).
+**Requires** a `"embeddings"` entry in the host's `ModelConfigurations` — `fabrcore.json` or cloud-server config (see fabrcore-server skill).
 
 ## Using Typed Entity Storage in Plugins
 
