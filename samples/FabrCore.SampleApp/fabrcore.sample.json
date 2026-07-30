@@ -1,0 +1,52 @@
+{
+  "ModelConfigurations": [
+    {
+      "Name": "default",
+      "Provider": "OpenAI",
+      "Model": "gpt-4o",
+      "ApiKeyAlias": "openai"
+    },
+    {
+      "Name": "embeddings",
+      "Provider": "OpenAI",
+      "Model": "text-embedding-3-small",
+      "ApiKeyAlias": "openai"
+    }
+  ],
+  "ApiKeys": [
+    {
+      "Alias": "openai",
+      "Value": "replace-with-api-key"
+    }
+  ],
+  "Microsoft365Copilot": {
+    "TenantId": "replace-with-entra-tenant-id",
+    "ClientId": "replace-with-bot-app-registration-client-id",
+    "ClientSecret": "<set-with-user-secrets-or-key-vault>",
+    "WelcomeMessage": "Hello! I'm the FabrCore Surface CRM demo agent. Ask me about the Contoso CRM data.",
+    "Agent": {
+      "AgentType": "crm-demo-agent",
+      "Handle": "copilot",
+      "Models": "default"
+    },
+    "Proactive": {
+      "Enabled": true,
+      "AllowedConversationTypes": [ "personal" ]
+    },
+    "Manifest": {
+      "Name": "FabrCore Surface Demo",
+      "FullName": "FabrCore SurfaceApp CRM Demo Agent",
+      "Description": "Chat with the FabrCore SurfaceApp CRM demo agent.",
+      "FullDescription": "Custom engine agent that bridges Microsoft 365 Copilot and Teams to the FabrCore SurfaceApp CRM demo agents running on Orleans.",
+      "DeveloperName": "Vulcan365",
+      "WebsiteUrl": "https://vulcan365.com",
+      "PrivacyUrl": "https://vulcan365.com",
+      "TermsOfUseUrl": "https://vulcan365.com",
+      "PublicHostName": "replace-with-public-host",
+      "ConversationStarters": [
+        { "Title": "Browse accounts", "Description": "What CRM accounts do we have?" },
+        { "Title": "Pipeline check", "Description": "Summarize the current sales opportunities." }
+      ]
+    }
+  }
+}

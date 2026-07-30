@@ -1,4 +1,4 @@
-# FabrCore Cloud Server Protocol (v1)
+# FabrCore Cloud Server Protocol (configuration v1 + connect v2)
 
 The **Cloud Server** feature lets a FabrCore host pull its model/API-key configuration (the
 `fabrcore.json` payload) from a remote server instead of the local file, and report periodic
@@ -18,12 +18,22 @@ The host enables the feature purely through `appsettings.json` — no `fabrcore.
 ```json
 {
   "FabrCore": {
+    "AdminAuthentication": {
+      "ApiKey": "<separate loopback admin key>"
+    },
     "CloudServer": {
       "Enabled": true,
       "Url": "https://forge.vulcan365.ai",
       "ApiKey": "<per-cluster API key>",
       "ClusterId": null,
-      "Environment": null
+      "Environment": null,
+      "Connect": {
+        "Enabled": true,
+        "LocalAdminUrl": "http://127.0.0.1:5000",
+        "LocalAdminApiKey": "<same loopback admin key>",
+        "PollWait": "00:00:20",
+        "MaxBodyBytes": 4194304
+      }
     }
   }
 }
@@ -34,6 +44,9 @@ The host enables the feature purely through `appsettings.json` — no `fabrcore.
 - `Environment` defaults to `IHostEnvironment.EnvironmentName` (`ASPNETCORE_ENVIRONMENT`).
 - Securing `ApiKey` (user secrets, environment variables, vault-backed configuration
   providers) is the operator's responsibility.
+- Connect is disabled by default. Its local target must be an HTTP loopback URL; the host
+  rejects non-loopback targets and requests outside `/fabrcoreapi/`. Use a separate local
+  admin key rather than reusing the Forge cluster key.
 
 See the `fabrcore-server` skill for the full option list (refresh interval, disk cache,
 startup failure behavior, heartbeat settings).
@@ -100,7 +113,19 @@ Response envelope:
       { "alias": "openai", "value": "sk-…" }
     ]
   },
-  "settings": null
+  "settings": null,
+  "blueprints": [
+    {
+      "principalId": "operations",
+      "applyOnRefresh": true,
+      "blueprint": {
+        "name": "ops-agents",
+        "version": "7",
+        "agents": [],
+        "swarm": { "squads": [] }
+      }
+    }
+  ]
 }
 ```
 
@@ -109,6 +134,11 @@ Response envelope:
 - `settings` is a **reserved** optional map of flat IConfiguration keys (for example
   `"FabrCore:Host:WebSocketPath": "/ws"`). Current hosts ignore it; servers may omit it or
   populate it without breaking compatibility.
+- `blueprints` is an optional list of principal-scoped canonical `FabrCoreBlueprint`
+  deployments. On a new configuration version the host stores each blueprint and, when
+  `applyOnRefresh` is true, applies it through the same host-side expander pipeline used by
+  `/fabrcoreapi/Blueprint`. This is the fleet rollout path; omitting the field is backward
+  compatible.
 - `configurationVersion` must change whenever the effective configuration changes — including
   when only an environment overlay changed. A content hash of the merged document is a good
   implementation.
@@ -131,9 +161,19 @@ Request body:
   "hostVersion": "1.3.0",
   "appliedConfigurationVersion": "5b3e…9c",
   "activeGatewayCount": 2,
+  "capabilities": {
+    "host": "1.5.0",
+    "memory.admin": "1",
+    "graphrag.admin": "1",
+    "blueprint.swarm": "1"
+  },
   "timestamp": "2026-07-23T18:00:00Z"
 }
 ```
+
+`capabilities` is an additive service/API-version map. Forge uses it to avoid rendering
+features a cluster does not have. Authenticated operators can obtain the richer feature
+document directly from `GET /fabrcoreapi/capabilities`.
 
 Response — `200` with an optional body; an empty object (or empty body) is valid:
 
@@ -152,6 +192,74 @@ Response — `200` with an optional body; an empty object (or empty body) is val
 - Future protocol versions may add response members (for example a command list) additively.
   Hosts ignore unknown members.
 
+## Outbound admin connect channel (v2)
+
+The optional connect channel lets a hosted console administer a cluster without exposing
+inbound network ports. Every network connection originates at the FabrCore host:
+
+1. Forge (or another server implementation) durably queues an admin request.
+2. A cluster silo receives it through a long poll.
+3. The silo validates the command, sends it to its loopback `/fabrcoreapi/` endpoint using
+   the separately configured admin key, and captures the response.
+4. The silo posts that response back to the server. The server completes the waiting console
+   request.
+
+The cluster API key and standard cluster/environment headers authenticate both v2 endpoints.
+
+### GET /fabrcore-cloud/v2/connect
+
+Query parameters:
+
+- `waitSeconds`: requested long-poll duration, from 1 to 25 seconds.
+- `hostInstanceId`: the polling silo identifier used for command leasing and diagnostics.
+
+Returns `204` when no command arrives during the poll, or `200` with:
+
+```json
+{
+  "commandId": "3f84f4fc-9cb8-4f68-a6ab-c8e41f840a6e",
+  "method": "GET",
+  "pathAndQuery": "/fabrcoreapi/capabilities",
+  "headers": {
+    "accept": ["application/json"],
+    "x-user-handle": ["operator@example.com"]
+  },
+  "body": null,
+  "expiresAt": "2026-07-29T18:00:45Z"
+}
+```
+
+Normative host safety rules:
+
+- Only `GET`, `POST`, `PUT`, `PATCH`, and `DELETE` are accepted.
+- `pathAndQuery` must begin with `/fabrcoreapi/`; absolute URLs, scheme-relative URLs, and
+  backslashes are rejected.
+- `Authorization`, `Host`, and `Content-Length` from the command are discarded. The host sets
+  its own loopback admin bearer key.
+- Request and response bodies are bounded by `Connect:MaxBodyBytes`.
+- Expired commands are not executed.
+
+### POST /fabrcore-cloud/v2/connect/{commandId}/response
+
+The cluster returns:
+
+```json
+{
+  "commandId": "3f84f4fc-9cb8-4f68-a6ab-c8e41f840a6e",
+  "statusCode": 200,
+  "headers": {
+    "content-type": ["application/json"]
+  },
+  "body": "eyJzZXJ2aWNlcyI6W119",
+  "error": null
+}
+```
+
+`body` is a JSON base64 string because the channel also supports multipart uploads and other
+binary admin payloads. Servers must bind a response to the authenticated cluster and command
+id, accept at most one completion, expire abandoned commands, and use a durable/distributed
+lease when more than one server replica can answer long polls.
+
 ## Host behavior summary (normative for host implementations)
 
 1. **Startup**: fetch configuration before serving traffic (a few quick attempts). On failure,
@@ -162,7 +270,10 @@ Response — `200` with an optional body; an empty object (or empty body) is val
 3. **Cache**: after every successful fetch, persist the envelope to
    `fabrcore.cloud-cache.json` (opt out with `CacheLastKnownGood: false`). The cache stores
    API keys in plaintext — the same exposure profile as `fabrcore.json`.
-4. **Key rotation**: servers rotate cluster API keys by allowing multiple active keys per
+4. **Blueprint rollout**: on a changed configuration version, store each delivered canonical
+   blueprint under its declared principal and apply entries marked `applyOnRefresh`. A failed
+   blueprint must be logged without discarding an otherwise valid model configuration.
+5. **Key rotation**: servers rotate cluster API keys by allowing multiple active keys per
    cluster; servers rotate *provider* keys by publishing a new configuration version — hosts
    pick it up on the next refresh (or immediately via `refreshRequested`).
 

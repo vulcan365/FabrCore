@@ -1,0 +1,972 @@
+@inject ISurfacePrincipalContextProvider PrincipalContextProvider
+@inject SurfaceWorkspaceService Workspace
+@inject ISurfaceFileUploadClient FileUploadClient
+@inject Microsoft.Extensions.Options.IOptions<SurfaceOptions> SurfaceOptions
+@inject IJSRuntime JSRuntime
+@inject ILogger<SurfaceChatLink> Logger
+@implements IAsyncDisposable
+
+<button type="button"
+        class="@ButtonClass"
+        title="@IconTooltip"
+        aria-label="@IconTooltip"
+        aria-expanded="@(_isExpanded ? "true" : "false")"
+        aria-haspopup="dialog"
+        @onclick="ToggleAsync">
+    <i class="@Icon"></i>
+    @if (HasUnread)
+    {
+        <span class="surface-chat-link-badge" aria-label="Unread messages"></span>
+    }
+</button>
+
+<div class="@PanelClass"
+     role="dialog"
+     aria-labelledby="@_titleId">
+    <header class="surface-chat-link-header">
+        <div class="surface-chat-link-title" id="@_titleId">
+            <i class="@Icon"></i>
+            <span>@DisplayTitle</span>
+        </div>
+        <div class="surface-chat-link-actions">
+            @if (!string.IsNullOrWhiteSpace(TargetHandle))
+            {
+                <button type="button"
+                        class="@SurfacePinButtonClass"
+                        title="@SurfacePinTooltip"
+                        aria-label="@SurfacePinTooltip"
+                        aria-pressed="@IsSurfacePinned"
+                        disabled="@_pinUpdating"
+                        @onclick="ToggleSurfaceAgentAsync">
+                    <i class="@SurfacePinIcon"></i>
+                </button>
+            }
+            <button type="button"
+                    class="surface-chat-link-panel-button"
+                    title="@SizeTooltip"
+                    aria-label="@SizeTooltip"
+                    @onclick="CycleSizeAsync">
+                <i class="@SizeIcon"></i>
+            </button>
+            <button type="button"
+                    class="surface-chat-link-panel-button"
+                    title="Clear chat history in this panel"
+                    aria-label="Clear chat history in this panel"
+                    @onclick="ClearMessages">
+                <i class="bi bi-trash"></i>
+            </button>
+            <button type="button"
+                    class="surface-chat-link-panel-button"
+                    title="Minimize"
+                    aria-label="Minimize"
+                    @onclick="ToggleAsync">
+                <i class="bi bi-dash-lg"></i>
+            </button>
+        </div>
+    </header>
+
+    <section class="surface-chat-link-timeline" @ref="_timelineRef" aria-live="polite">
+        @if (!_initialized)
+        {
+            <div class="surface-chat-link-empty">@LoadingMessage</div>
+        }
+        else if (string.IsNullOrWhiteSpace(TargetHandle))
+        {
+            <div class="surface-chat-link-empty">@NoAgentMessage</div>
+        }
+        else if (!VisibleTimelineItems.Any())
+        {
+            <div class="surface-chat-link-empty">@WelcomeMessage</div>
+        }
+        else
+        {
+            @foreach (var item in VisibleTimelineItems)
+            {
+                <article class="@MessageClass(item)" data-surface-timeline-item>
+                    <span class="surface-chat-link-message-avatar">
+                        @if (item.Kind == SurfaceTimelineItemKind.Principal)
+                        {
+                            <i class="bi bi-person-fill"></i>
+                        }
+                        else
+                        {
+                            <i class="@Icon"></i>
+                        }
+                    </span>
+                    <div class="surface-chat-link-message-content">
+                        <div class="surface-message-meta">
+                            <span>@MessageAuthor(item)</span>
+                            <time>@FormatMessageTimestamp(item.TimestampUtc.ToLocalTime())</time>
+                        </div>
+
+                        @if (item.Kind == SurfaceTimelineItemKind.AdaptiveCard && item.Envelope is not null && SurfaceOptions.Value.EnableAdaptiveCards)
+                        {
+                            <SurfaceAdaptiveCardHost Envelope="item.Envelope"
+                                                     SourceMessage="item.SourceMessage"
+                                                     PrincipalContext="Workspace.PrincipalContext" />
+                        }
+                        else
+                        {
+                            <div class="surface-chat-link-message-text">@RenderMarkdown(item.Text)</div>
+                        }
+                    </div>
+                </article>
+            }
+        }
+
+        @if (!string.IsNullOrWhiteSpace(ActivityText))
+        {
+            <div class="surface-system-activity" data-surface-timeline-activity>
+                <span class="surface-system-pulse"></span>
+                <span>@ActivityText</span>
+            </div>
+        }
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="surface-chat-link-error">@_error</div>
+    }
+
+    <footer class="surface-chat-link-compose">
+        @if (ShowLifecycleControls)
+        {
+            <div class="surface-chat-link-lifecycle" aria-live="polite">
+                <span class="@LifecycleStatusClass">
+                    <i class="@LifecycleStatusIcon"></i>
+                    <span>@LifecycleStatusText</span>
+                </span>
+                <div class="surface-chat-link-lifecycle-actions">
+                    @if (ShowCreateButton)
+                    {
+                        <button type="button"
+                                class="surface-chat-link-lifecycle-button is-primary"
+                                disabled="@(_lifecycleBusy || !CanInvokeCreate)"
+                                @onclick="CreateAgentFromLinkAsync">
+                            @CreateButtonText
+                        </button>
+                    }
+                    @if (ShowResetButton)
+                    {
+                        <button type="button"
+                                class="surface-chat-link-lifecycle-button"
+                                disabled="@(_lifecycleBusy || !CanInvokeReset)"
+                                @onclick="ResetAgentFromLinkAsync">
+                            @ResetButtonText
+                        </button>
+                    }
+                </div>
+            </div>
+        }
+        @if (_pendingAttachments.Count > 0)
+        {
+            <div class="surface-attachment-list" aria-label="Attached files">
+                @foreach (var attachment in _pendingAttachments)
+                {
+                    <span class="surface-attachment-chip @(attachment.Error is null ? string.Empty : "is-error")" @key="attachment.Id">
+                        <i class="bi bi-paperclip"></i>
+                        <span>@attachment.Name</span>
+                        @if (attachment.IsUploading)
+                        {
+                            <small>Uploading</small>
+                        }
+                        else if (!string.IsNullOrWhiteSpace(attachment.Error))
+                        {
+                            <small>@attachment.Error</small>
+                        }
+                        <button type="button"
+                                title="Remove file"
+                                aria-label="@($"Remove {attachment.Name}")"
+                                @onclick="() => RemoveAttachmentAsync(attachment.Id)">
+                            <i class="bi bi-x"></i>
+                        </button>
+                    </span>
+                }
+            </div>
+        }
+        <div class="surface-chat-link-input-wrapper">
+            <label class="surface-file-button"
+                   title="Add files"
+                   aria-label="Add files">
+                <i class="bi bi-paperclip"></i>
+                <InputFile class="surface-file-input"
+                           OnChange="HandleFilesSelectedAsync"
+                           multiple
+                           disabled="@(!CanAttachFiles)" />
+            </label>
+            <textarea @ref="_composerRef"
+                      value="@_draft"
+                      @oninput="HandleInput"
+                      data-surface-mention-open="false"
+                      placeholder="@Placeholder"
+                      disabled="@(!CanSend)"
+                      rows="1"></textarea>
+            <button type="button"
+                    class="surface-chat-link-send-button"
+                    title="Send"
+                    aria-label="Send"
+                    disabled="@(!CanSend || (string.IsNullOrWhiteSpace(_draft) && ReadyAttachmentFileIds().Count == 0))"
+                    @onclick="SendAsync">
+                <i class="bi bi-send-fill"></i>
+            </button>
+        </div>
+    </footer>
+</div>
+
+@code {
+    [Parameter]
+    public string? AgentHandle { get; set; }
+
+    [Parameter]
+    public string? Title { get; set; }
+
+    [Parameter]
+    public string Icon { get; set; } = "bi bi-chat-dots";
+
+    [Parameter]
+    public string Tooltip { get; set; } = "Open chat";
+
+    [Parameter]
+    public string WelcomeMessage { get; set; } = "How can I help you today?";
+
+    [Parameter]
+    public string LoadingMessage { get; set; } = "Connecting...";
+
+    [Parameter]
+    public string NoAgentMessage { get; set; } = "Select an agent in Surface to start chatting.";
+
+    [Parameter]
+    public string Placeholder { get; set; } = "Type a message...";
+
+    [Parameter]
+    public SurfaceChatLinkPosition Position { get; set; } = SurfaceChatLinkPosition.BottomRight;
+
+    [Parameter]
+    public SurfaceChatLinkSize InitialSize { get; set; } = SurfaceChatLinkSize.Medium;
+
+    [Parameter]
+    public EventCallback<string> OnMessageSent { get; set; }
+
+    [Parameter]
+    public Func<AgentMessage, Task<bool>>? OnMessageReceived { get; set; }
+
+    [Parameter]
+    public Func<SurfaceChatLinkCreateAgentContext, Task<AgentHealthStatus>>? CreateAgent { get; set; }
+
+    [Parameter]
+    public bool AllowExternalAgent { get; set; } = true;
+
+    [Parameter]
+    public bool AllowReset { get; set; }
+
+    [Parameter]
+    public string CreateButtonText { get; set; } = "Create assistant";
+
+    [Parameter]
+    public string ResetButtonText { get; set; } = "Reset";
+
+    [Parameter]
+    public string NotCreatedMessage { get; set; } = "Assistant is not created yet.";
+
+    [Parameter]
+    public string NotReadyMessage { get; set; } = "Assistant is not ready.";
+
+    [Parameter]
+    public string ReadyMessage { get; set; } = "Assistant is ready.";
+
+    private const string DefaultNotCreatedMessage = "Assistant is not created yet.";
+    private const string DefaultNotReadyMessage = "Assistant is not ready.";
+    private const string DefaultReadyMessage = "Assistant is ready.";
+
+    private readonly string _titleId = $"surface-chat-link-title-{Guid.NewGuid():N}";
+    private readonly HashSet<string> _processedCallbackItemIds = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _suppressedItemIds = new(StringComparer.Ordinal);
+    private readonly List<SurfacePendingAttachment> _pendingAttachments = [];
+    private FabrCore.Surface.Identity.SurfacePrincipalContext? _principalContext;
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<SurfaceChatLink>? _dotNetRef;
+    private ElementReference _timelineRef;
+    private ElementReference _composerRef;
+    private string _draft = string.Empty;
+    private string? _error;
+    private bool _initialized;
+    private bool _isExpanded;
+    private bool _localUnread;
+    private bool _lifecycleBusy;
+    private bool _agentTracked;
+    private bool _agentReady;
+    private string? _lifecycleMessage;
+    private bool _pinUpdating;
+    private SurfaceChatLinkSize _currentSize;
+    private int _seenTimelineCount;
+    private bool _scrollRequested;
+    private bool _focusRequested;
+
+    private string? TargetHandle => string.IsNullOrWhiteSpace(AgentHandle)
+        ? Workspace.SelectedAgent?.Handle
+        : NormalizeHandle(AgentHandle);
+
+    private SurfaceAgentSummary? TargetAgent => string.IsNullOrWhiteSpace(TargetHandle)
+        ? Workspace.SelectedAgent
+        : Workspace.AllAgents.FirstOrDefault(agent => string.Equals(agent.Handle, TargetHandle, StringComparison.OrdinalIgnoreCase));
+
+    private string DisplayTitle => Title
+                                   ?? TargetAgent?.DisplayName
+                                   ?? DisplayHandle(TargetHandle)
+                                   ?? "Assistant";
+
+    private string LifecycleAgentLabel => DisplayTitle;
+
+    private IReadOnlyList<SurfaceTimelineItem> TimelineItems => string.IsNullOrWhiteSpace(TargetHandle)
+        ? []
+        : Workspace.GetTimelineForAgent(TargetHandle).ToList();
+
+    private IReadOnlyList<SurfaceTimelineItem> VisibleTimelineItems
+        => TimelineItems
+            .Where(item => item.DisplayInChat && !_suppressedItemIds.Contains(item.Id))
+            .ToList();
+
+    private bool HasUnread => _localUnread;
+
+    private bool IsSurfacePinned => TargetAgent?.IsSurfaceAgent == true;
+
+    private string SurfacePinIcon => IsSurfacePinned
+        ? "bi bi-pin-angle-fill"
+        : "bi bi-pin-angle";
+
+    private string SurfacePinTooltip => IsSurfacePinned
+        ? "Remove from Surface"
+        : "Show in Surface";
+
+    private string SurfacePinButtonClass => "surface-chat-link-panel-button surface-chat-link-pin-button"
+                                            + (IsSurfacePinned ? " is-pinned" : string.Empty);
+
+    private bool ManualCreateEnabled => CreateAgent is not null;
+
+    private bool ShowLifecycleControls => ManualCreateEnabled || AllowReset;
+
+    private bool ShowCreateButton => ManualCreateEnabled && !_agentReady;
+
+    private bool ShowResetButton => AllowReset && _agentTracked;
+
+    private bool CanInvokeCreate => CreateAgent is not null
+                                    && Workspace.PrincipalContext is not null
+                                    && _principalContext?.IsResolved == true
+                                    && !string.IsNullOrWhiteSpace(TargetHandle);
+
+    private bool CanInvokeReset => Workspace.PrincipalContext is not null
+                                   && !string.IsNullOrWhiteSpace(TargetHandle)
+                                   && _agentTracked;
+
+    private string LifecycleStatusText
+        => _lifecycleMessage
+           ?? (!_initialized ? LoadingMessage
+               : _agentReady ? FormatLifecycleMessage(ReadyMessage, DefaultReadyMessage, "{0} is ready.")
+               : !_agentTracked ? FormatLifecycleMessage(NotCreatedMessage, DefaultNotCreatedMessage, "{0} is not created yet.")
+               : FormatLifecycleMessage(NotReadyMessage, DefaultNotReadyMessage, "{0} is not ready."));
+
+    private string LifecycleStatusIcon
+        => _lifecycleBusy ? "bi bi-arrow-repeat"
+            : _agentReady ? "bi bi-check-circle"
+            : !_agentTracked ? "bi bi-exclamation-circle"
+            : "bi bi-hourglass-split";
+
+    private string LifecycleStatusClass
+        => "surface-chat-link-lifecycle-status"
+           + (_lifecycleBusy ? " is-busy"
+               : _agentReady ? " is-ready"
+               : !_agentTracked ? " is-missing"
+               : " is-not-ready");
+
+    private bool CanSend => _initialized
+                            && SurfaceOptions.Value.EnableAgentChat
+                            && !string.IsNullOrWhiteSpace(TargetHandle)
+                            && (!ManualCreateEnabled || _agentReady)
+                            && !HasUploadingAttachments
+                            && !HasFailedAttachments;
+
+    private bool CanAttachFiles => _initialized
+                                   && SurfaceOptions.Value.EnableAgentChat
+                                   && (!ManualCreateEnabled || _agentReady)
+                                   && !string.IsNullOrWhiteSpace(TargetHandle);
+
+    private bool HasUploadingAttachments
+        => _pendingAttachments.Any(attachment => attachment.IsUploading);
+
+    private bool HasFailedAttachments
+        => _pendingAttachments.Any(attachment => !string.IsNullOrWhiteSpace(attachment.Error));
+
+    private string? ActivityText => TargetAgent is { IsWorking: true } agent
+        ? string.IsNullOrWhiteSpace(agent.StatusText) ? "Agent is working" : agent.StatusText
+        : null;
+
+    private string ButtonClass
+    {
+        get
+        {
+            var classes = $"surface-chat-link-button {PositionClass}";
+            if (_isExpanded)
+            {
+                classes += " is-open";
+            }
+            else if (HasUnread)
+            {
+                classes += " has-unread";
+            }
+            else if (_initialized)
+            {
+                classes += " is-connected";
+            }
+
+            return classes;
+        }
+    }
+
+    private string PanelClass => $"surface-chat-link-panel {PositionClass} {SizeClass} {(_isExpanded ? "" : "is-hidden")}";
+
+    private string PositionClass => Position switch
+    {
+        SurfaceChatLinkPosition.BottomLeft => "is-bottom-left",
+        SurfaceChatLinkPosition.Right => "is-right",
+        SurfaceChatLinkPosition.Left => "is-left",
+        _ => "is-bottom-right"
+    };
+
+    private string IconTooltip => _isExpanded
+        ? "Minimize chat"
+        : HasUnread
+            ? "New message available"
+            : Tooltip;
+
+    private string SizeClass => _currentSize switch
+    {
+        SurfaceChatLinkSize.Medium => "is-size-md",
+        SurfaceChatLinkSize.Large => "is-size-lg",
+        _ => "is-size-sm"
+    };
+
+    private string SizeIcon => _currentSize switch
+    {
+        SurfaceChatLinkSize.Small => "bi bi-arrows-angle-expand",
+        SurfaceChatLinkSize.Medium => "bi bi-arrows-fullscreen",
+        SurfaceChatLinkSize.Large => "bi bi-arrows-angle-contract",
+        _ => "bi bi-arrows-angle-expand"
+    };
+
+    private string SizeTooltip => _currentSize switch
+    {
+        SurfaceChatLinkSize.Small => "Expand to medium",
+        SurfaceChatLinkSize.Medium => "Expand to large",
+        SurfaceChatLinkSize.Large => "Shrink to small",
+        _ => "Resize"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _currentSize = InitialSize;
+        Workspace.Changed += OnWorkspaceChanged;
+        _principalContext = await PrincipalContextProvider.GetCurrentAsync();
+        if (_principalContext.IsResolved)
+        {
+            await Workspace.InitializeAsync(_principalContext);
+        }
+
+        await RefreshTargetAgentStateAsync();
+        _initialized = true;
+        foreach (var item in TimelineItems.Where(IsIncomingCallbackCandidate))
+        {
+            _processedCallbackItemIds.Add(item.Id);
+        }
+
+        _seenTimelineCount = VisibleTimelineItems.Count;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_isExpanded)
+        {
+            return;
+        }
+
+        _module ??= await JSRuntime.InvokeAsync<IJSObjectReference>(
+            "import",
+            "./_content/FabrCore.Surface/adaptiveCardsSurface.js");
+        _dotNetRef ??= DotNetObjectReference.Create(this);
+        await _module.InvokeVoidAsync("bindSurfaceComposer", _composerRef, _dotNetRef);
+
+        if (_scrollRequested)
+        {
+            _scrollRequested = false;
+            await _module.InvokeVoidAsync("scrollSurfaceTimelineToLatest", _timelineRef);
+        }
+
+        if (_focusRequested)
+        {
+            _focusRequested = false;
+            await _module.InvokeVoidAsync("focusSurfaceComposer", _composerRef);
+        }
+    }
+
+    private async Task CreateAgentFromLinkAsync()
+    {
+        if (!CanInvokeCreate || CreateAgent is null || Workspace.PrincipalContext is null || _principalContext is null || TargetHandle is not { Length: > 0 } targetHandle)
+        {
+            return;
+        }
+
+        _lifecycleBusy = true;
+        _error = null;
+        _lifecycleMessage = $"Creating {LifecycleAgentLabel}...";
+
+        try
+        {
+            var context = new SurfaceChatLinkCreateAgentContext
+            {
+                Principal = _principalContext,
+                PrincipalContext = Workspace.PrincipalContext,
+                AgentAlias = DisplayHandle(targetHandle) ?? targetHandle,
+                AgentHandle = targetHandle,
+                Workspace = Workspace
+            };
+
+            var health = await CreateAgent(context);
+            _agentTracked = true;
+            _agentReady = SurfaceChatLinkLifecycle.IsHealthy(health);
+            _lifecycleMessage = _agentReady
+                ? FormatLifecycleMessage(ReadyMessage, DefaultReadyMessage, "{0} is ready.")
+                : FormatLifecycleMessage(NotReadyMessage, DefaultNotReadyMessage, "{0} is not ready.");
+
+            await Workspace.RefreshAgentsAsync();
+            await RefreshTargetAgentStateAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Create failed: {ex.Message}";
+            _lifecycleMessage = FormatLifecycleMessage(NotCreatedMessage, DefaultNotCreatedMessage, "{0} is not created yet.");
+            Logger.LogWarning(ex, "SurfaceChatLink create failed for {AgentHandle}.", targetHandle);
+        }
+        finally
+        {
+            _lifecycleBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task ResetAgentFromLinkAsync()
+    {
+        if (!CanInvokeReset || Workspace.PrincipalContext is null || TargetHandle is not { Length: > 0 } targetHandle)
+        {
+            return;
+        }
+
+        _lifecycleBusy = true;
+        _error = null;
+        _lifecycleMessage = $"Resetting {LifecycleAgentLabel}...";
+
+        try
+        {
+            var health = await Workspace.PrincipalContext.ResetAgent(targetHandle);
+            _agentTracked = true;
+            _agentReady = SurfaceChatLinkLifecycle.IsHealthy(health);
+            _lifecycleMessage = _agentReady
+                ? FormatLifecycleMessage(ReadyMessage, DefaultReadyMessage, "{0} is ready.")
+                : FormatLifecycleMessage(NotReadyMessage, DefaultNotReadyMessage, "{0} is not ready.");
+
+            await Workspace.RefreshAgentsAsync();
+            await RefreshTargetAgentStateAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Reset failed: {ex.Message}";
+            Logger.LogWarning(ex, "SurfaceChatLink reset failed for {AgentHandle}.", targetHandle);
+        }
+        finally
+        {
+            _lifecycleBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task RefreshTargetAgentStateAsync()
+    {
+        if (!ShowLifecycleControls || Workspace.PrincipalContext is null || TargetHandle is not { Length: > 0 } targetHandle)
+        {
+            return;
+        }
+
+        try
+        {
+            var state = await SurfaceChatLinkLifecycle.ResolveAsync(
+                Workspace.PrincipalContext,
+                targetHandle,
+                AllowExternalAgent);
+            _agentTracked = state.IsTracked;
+            _agentReady = state.IsReady;
+            _lifecycleMessage = _agentReady
+                ? FormatLifecycleMessage(ReadyMessage, DefaultReadyMessage, "{0} is ready.")
+                : !_agentTracked
+                    ? FormatLifecycleMessage(NotCreatedMessage, DefaultNotCreatedMessage, "{0} is not created yet.")
+                    : FormatLifecycleMessage(NotReadyMessage, DefaultNotReadyMessage, "{0} is not ready.");
+        }
+        catch (Exception ex)
+        {
+            _agentReady = false;
+            _lifecycleMessage = FormatLifecycleMessage(NotReadyMessage, DefaultNotReadyMessage, "{0} is not ready.");
+            Logger.LogDebug(ex, "SurfaceChatLink failed to refresh lifecycle state for {AgentHandle}.", targetHandle);
+        }
+    }
+
+    private async Task ToggleAsync()
+    {
+        _isExpanded = !_isExpanded;
+        if (_isExpanded)
+        {
+            MarkCurrentTimelineSeen();
+            _scrollRequested = true;
+            _focusRequested = true;
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SendAsync()
+    {
+        var fileIds = ReadyAttachmentFileIds();
+        if (!CanSend || string.IsNullOrWhiteSpace(TargetHandle) || (string.IsNullOrWhiteSpace(_draft) && fileIds.Count == 0))
+        {
+            return;
+        }
+
+        var message = _draft.Trim();
+        _draft = string.Empty;
+        _pendingAttachments.Clear();
+        _error = null;
+        try
+        {
+            await Workspace.SendChatAsync(message, TargetHandle, fileIds);
+            MarkCurrentTimelineSeen();
+            _scrollRequested = true;
+            if (OnMessageSent.HasDelegate)
+            {
+                await OnMessageSent.InvokeAsync(message);
+            }
+
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            _error = $"Send failed: {ex.Message}";
+            Logger.LogWarning(ex, "SurfaceChatLink send failed for {AgentHandle}.", TargetHandle);
+        }
+    }
+
+    [JSInvokable]
+    public Task SendComposerMessageAsync()
+        => SendAsync();
+
+    [JSInvokable]
+    public Task HandleComposerMentionKeyAsync(string key)
+        => Task.CompletedTask;
+
+    private void HandleInput(ChangeEventArgs args)
+        => _draft = args.Value?.ToString() ?? string.Empty;
+
+    private async Task HandleFilesSelectedAsync(InputFileChangeEventArgs args)
+    {
+        foreach (var file in args.GetMultipleFiles())
+        {
+            var attachment = new SurfacePendingAttachment(file.Name, file.Size, file.ContentType);
+            _pendingAttachments.Add(attachment);
+            await InvokeAsync(StateHasChanged);
+
+            try
+            {
+                await using var stream = file.OpenReadStream(SurfaceOptions.Value.MaxChatAttachmentBytes);
+                var uploaded = await FileUploadClient.UploadAsync(
+                    stream,
+                    file.Name,
+                    file.ContentType,
+                    SurfaceOptions.Value.ChatFileUploadTtl);
+                attachment.FileId = uploaded.FileId;
+                if (attachment.DeleteWhenUploaded)
+                {
+                    await DeleteUploadedAttachmentAsync(attachment);
+                }
+            }
+            catch (Exception ex)
+            {
+                if (!attachment.DeleteWhenUploaded)
+                {
+                    attachment.Error = ex.Message;
+                }
+            }
+            finally
+            {
+                attachment.IsUploading = false;
+                if (!attachment.DeleteWhenUploaded)
+                {
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+        }
+    }
+
+    private async Task RemoveAttachmentAsync(string id)
+    {
+        var attachment = _pendingAttachments.FirstOrDefault(attachment => string.Equals(attachment.Id, id, StringComparison.Ordinal));
+        if (attachment is null)
+        {
+            return;
+        }
+
+        _pendingAttachments.Remove(attachment);
+        attachment.DeleteWhenUploaded = true;
+
+        if (!string.IsNullOrWhiteSpace(attachment.FileId))
+        {
+            await DeleteUploadedAttachmentAsync(attachment);
+        }
+    }
+
+    private async Task DeleteUploadedAttachmentAsync(SurfacePendingAttachment attachment)
+    {
+        try
+        {
+            await FileUploadClient.DeleteAsync(attachment.FileId!);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "SurfaceChatLink failed to delete abandoned file {FileId}.", attachment.FileId);
+        }
+    }
+
+    private List<string> ReadyAttachmentFileIds()
+        => _pendingAttachments
+            .Where(attachment => attachment.IsReady && !string.IsNullOrWhiteSpace(attachment.FileId))
+            .Select(attachment => attachment.FileId!)
+            .ToList();
+
+    private async Task CycleSizeAsync()
+    {
+        _currentSize = _currentSize switch
+        {
+            SurfaceChatLinkSize.Small => SurfaceChatLinkSize.Medium,
+            SurfaceChatLinkSize.Medium => SurfaceChatLinkSize.Large,
+            SurfaceChatLinkSize.Large => SurfaceChatLinkSize.Small,
+            _ => SurfaceChatLinkSize.Small
+        };
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ToggleSurfaceAgentAsync()
+    {
+        if (string.IsNullOrWhiteSpace(TargetHandle) || _pinUpdating)
+        {
+            return;
+        }
+
+        _pinUpdating = true;
+        _error = null;
+
+        try
+        {
+            await Workspace.SetSurfaceAgentAsync(TargetHandle, !IsSurfacePinned);
+        }
+        catch (Exception ex)
+        {
+            _error = $"Surface visibility update failed: {ex.Message}";
+            Logger.LogWarning(ex, "SurfaceChatLink failed to update Surface visibility for {AgentHandle}.", TargetHandle);
+        }
+        finally
+        {
+            _pinUpdating = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void ClearMessages()
+    {
+        foreach (var item in TimelineItems)
+        {
+            _suppressedItemIds.Add(item.Id);
+        }
+
+        _localUnread = false;
+        _seenTimelineCount = 0;
+        Workspace.MarkAgentSeen(TargetHandle);
+        StateHasChanged();
+    }
+
+    private void OnWorkspaceChanged()
+        => _ = InvokeAsync(OnWorkspaceChangedAsync);
+
+    private async Task OnWorkspaceChangedAsync()
+    {
+        await ProcessNewIncomingMessagesAsync();
+
+        var currentCount = VisibleTimelineItems.Count;
+        var previousCount = _seenTimelineCount;
+        if (_isExpanded)
+        {
+            MarkCurrentTimelineSeen();
+            _scrollRequested = currentCount > previousCount;
+        }
+        else if (currentCount > _seenTimelineCount && LastTimelineItemIsIncoming())
+        {
+            _localUnread = true;
+        }
+
+        _seenTimelineCount = currentCount;
+        StateHasChanged();
+    }
+
+    private void MarkCurrentTimelineSeen()
+    {
+        _localUnread = false;
+        _seenTimelineCount = VisibleTimelineItems.Count;
+        Workspace.MarkAgentSeen(TargetHandle);
+    }
+
+    private bool LastTimelineItemIsIncoming()
+    {
+        var last = VisibleTimelineItems.LastOrDefault();
+        return last is not null && last.Kind != SurfaceTimelineItemKind.Principal;
+    }
+
+    private async Task ProcessNewIncomingMessagesAsync()
+    {
+        if (OnMessageReceived is null)
+        {
+            return;
+        }
+
+        foreach (var item in TimelineItems.Where(IsIncomingCallbackCandidate))
+        {
+            if (!_processedCallbackItemIds.Add(item.Id) || item.SourceMessage is null)
+            {
+                continue;
+            }
+
+            try
+            {
+                var showInLink = await OnMessageReceived(item.SourceMessage);
+                if (!showInLink)
+                {
+                    _suppressedItemIds.Add(item.Id);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(
+                    ex,
+                    "SurfaceChatLink OnMessageReceived callback failed for message type {MessageType} from {FromHandle}.",
+                    item.SourceMessage.MessageType,
+                    item.SourceMessage.FromHandle);
+            }
+        }
+    }
+
+    private static bool IsIncomingCallbackCandidate(SurfaceTimelineItem item)
+        => item.Kind != SurfaceTimelineItemKind.Principal
+           && item.SourceMessage is not null;
+
+    private string? NormalizeHandle(string? handle)
+    {
+        if (string.IsNullOrWhiteSpace(handle))
+        {
+            return null;
+        }
+
+        if (handle.Contains(':', StringComparison.Ordinal) || _principalContext?.PrincipalId is not { Length: > 0 } principalId)
+        {
+            return handle;
+        }
+
+        return HandleUtilities.EnsurePrefix(handle, $"{principalId}:");
+    }
+
+    private static string MessageClass(SurfaceTimelineItem item)
+        => "surface-chat-link-message " + (item.Kind switch
+        {
+            SurfaceTimelineItemKind.Principal => "is-principal",
+            SurfaceTimelineItemKind.Status => "is-status",
+            SurfaceTimelineItemKind.Error => "is-error",
+            SurfaceTimelineItemKind.AdaptiveCard => "is-card",
+            _ => "is-agent"
+        });
+
+    private string MessageAuthor(SurfaceTimelineItem item)
+        => item.Kind == SurfaceTimelineItemKind.Principal
+            ? _principalContext?.DisplayName ?? _principalContext?.PrincipalId ?? "Principal"
+            : DisplayHandle(GetMessageFrom(item.SourceMessage) ?? item.Author ?? "Agent") ?? "Agent";
+
+    private static string MessageInitials(SurfaceTimelineItem item)
+        => Initials(DisplayHandle(GetMessageFrom(item.SourceMessage) ?? item.Author ?? "Agent"));
+
+    private static MarkupString RenderMarkdown(string? text)
+        => new(SurfaceMarkdownRenderer.Render(text));
+
+    private static string? GetMessageFrom(AgentMessage? message)
+        => message is null
+            ? null
+            : GetMessageArg(message, SurfaceSquadArgs.OriginalFromHandle) ?? message.FromHandle;
+
+    private static string? GetMessageArg(AgentMessage message, string key)
+        => message.Args is not null && message.Args.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value)
+            ? value
+            : null;
+
+    private static string? DisplayHandle(string? handle)
+    {
+        if (string.IsNullOrWhiteSpace(handle))
+        {
+            return null;
+        }
+
+        var colon = handle.IndexOf(':', StringComparison.Ordinal);
+        return colon >= 0 && colon + 1 < handle.Length ? handle[(colon + 1)..] : handle;
+    }
+
+    private string FormatLifecycleMessage(string configuredMessage, string defaultMessage, string defaultTemplate)
+    {
+        if (string.IsNullOrWhiteSpace(configuredMessage)
+            || string.Equals(configuredMessage, defaultMessage, StringComparison.Ordinal))
+        {
+            return string.Format(defaultTemplate, LifecycleAgentLabel);
+        }
+
+        return configuredMessage
+            .Replace("{Agent}", LifecycleAgentLabel, StringComparison.Ordinal)
+            .Replace("{0}", LifecycleAgentLabel, StringComparison.Ordinal);
+    }
+
+    private static string Initials(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "A";
+        }
+
+        var parts = value.Split([' ', '-', '_', ':'], StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 1)
+        {
+            return parts[0][..Math.Min(2, parts[0].Length)].ToUpperInvariant();
+        }
+
+        return string.Concat(parts.Take(2).Select(p => char.ToUpperInvariant(p[0])));
+    }
+
+    private static string FormatMessageTimestamp(DateTime localTimestamp)
+        => localTimestamp.ToString("h:mm tt");
+
+    public async ValueTask DisposeAsync()
+    {
+        Workspace.Changed -= OnWorkspaceChanged;
+        _dotNetRef?.Dispose();
+        if (_module is not null)
+        {
+            await _module.DisposeAsync();
+        }
+    }
+}

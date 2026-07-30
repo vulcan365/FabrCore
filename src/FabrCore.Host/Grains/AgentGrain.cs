@@ -103,7 +103,7 @@ namespace FabrCore.Host.Grains
         private long _busyMessagesRouted;
         private readonly LatencyReservoir _latencyReservoir;
         private readonly AgentGrainOptions _grainOptions;
-        private readonly AclEnforcer _acl;
+        private readonly FabrCore.Core.Acl.AclEnforcer _acl;
 
         // Cross-principal breadcrumb of the message currently being processed, so chains the
         // agent composes itself (new AgentMessage objects) inherit the lineage host-side.
@@ -119,7 +119,7 @@ namespace FabrCore.Host.Grains
             IFabrCoreAgentService agentService,
             IAgentMessageMonitor messageMonitor,
             VerifiableExecutionRecorder verifiableExecution,
-            AclEnforcer acl,
+            FabrCore.Core.Acl.AclEnforcer acl,
             Microsoft.Extensions.Options.IOptions<AgentGrainOptions> grainOptions,
             [PersistentState("agentMessages", FabrCoreOrleansConstants.StorageProviderName)]
             IPersistentState<AgentGrainState> messageState)

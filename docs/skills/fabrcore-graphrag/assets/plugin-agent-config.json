@@ -1,0 +1,13 @@
+{
+  "GraphRagSearchPlugin": {
+    "ConnectionStringName": "GraphRagDb",
+    "AllowedScopes": "customer-a,customer-b"
+  },
+  "GraphRagIngestPlugin": {
+    "ConnectionStringName": "GraphRagDb"
+  },
+  "GraphRagSearchAgent": {
+    "ConnectionStringName": "GraphRagDb",
+    "AllowedScopes": "customer-a"
+  }
+}

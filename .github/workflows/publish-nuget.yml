@@ -35,8 +35,67 @@ jobs:
       - name: Build
         run: dotnet build src/FabrCore.sln --configuration Release --no-restore
 
-      - name: Pack
-        run: dotnet pack src/FabrCore.sln --configuration Release --no-build --output ./nupkgs
+      - name: Test VSTest projects
+        shell: pwsh
+        run: |
+          $projects = @(
+            'src/FabrCore.Sdk.Tests/FabrCore.Sdk.Tests.csproj',
+            'src/FabrCore.Host.Tests/FabrCore.Host.Tests.csproj',
+            'src/FabrCore.Client.Orleans.Tests/FabrCore.Client.Orleans.Tests.csproj',
+            'src/FabrCore.Services.Microsoft365Copilot.Tests/FabrCore.Services.Microsoft365Copilot.Tests.csproj',
+            'src/FabrCore.Surface.Tests/FabrCore.Surface.Tests.csproj',
+            'samples/FabrCore.SampleApp.Tests/FabrCore.SampleApp.Tests.csproj'
+          )
+
+          foreach ($project in $projects) {
+            dotnet test $project --configuration Release --no-build --no-restore
+            if ($LASTEXITCODE -ne 0) {
+              exit $LASTEXITCODE
+            }
+          }
+
+      - name: Test Microsoft Testing Platform projects
+        shell: pwsh
+        run: |
+          $projects = @(
+            'src/FabrCore.Services.Memory.Tests/FabrCore.Services.Memory.Tests.csproj',
+            'src/FabrCore.Services.GraphRag.Tests/FabrCore.Services.GraphRag.Tests.csproj'
+          )
+
+          foreach ($project in $projects) {
+            dotnet run --project $project --configuration Release --no-build --no-restore
+            if ($LASTEXITCODE -ne 0) {
+              exit $LASTEXITCODE
+            }
+          }
+
+      - name: Pack supported packages
+        shell: pwsh
+        run: |
+          $projects = @(
+            'FabrCore.Core',
+            'FabrCore.Sdk',
+            'FabrCore.Client.Orleans',
+            'FabrCore.Services.Contracts',
+            'FabrCore.Host',
+            'FabrCore.Host.SqlServer',
+            'FabrCore.Host.AzureStorage',
+            'FabrCore.Services.Microsoft365Copilot',
+            'FabrCore.Services.Memory',
+            'FabrCore.Services.GraphRag',
+            'FabrCore.Surface'
+          )
+
+          foreach ($project in $projects) {
+            dotnet pack "src/$project/$project.csproj" `
+              --configuration Release `
+              --no-build `
+              --no-restore `
+              --output ./nupkgs
+            if ($LASTEXITCODE -ne 0) {
+              exit $LASTEXITCODE
+            }
+          }
 
       - name: Push to NuGet.org
         run: >

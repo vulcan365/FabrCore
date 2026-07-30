@@ -1,4 +1,5 @@
 using FabrCore.Core;
+using FabrCore.Core.Blueprints;
 using FabrCore.Host.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -21,16 +22,6 @@ namespace FabrCore.Host.Api.Controllers
     }
 
     /// <summary>
-    /// Request for ensuring a blueprint-defined set of agents exists for a user.
-    /// </summary>
-    public class AgentBlueprintRequest
-    {
-        public string? Name { get; set; }
-        public string? Version { get; set; }
-        public List<AgentConfiguration> Agents { get; set; } = new();
-    }
-
-    /// <summary>
     /// Response for blueprint agent ensure processing.
     /// </summary>
     public class AgentBlueprintResponse
@@ -48,11 +39,16 @@ namespace FabrCore.Host.Api.Controllers
     public class AgentController : Controller
     {
         private readonly IFabrCoreAgentService _agentService;
+        private readonly IFabrCoreBlueprintService _blueprintService;
         private readonly ILogger<AgentController> _logger;
 
-        public AgentController(IFabrCoreAgentService agentService, ILogger<AgentController> logger)
+        public AgentController(
+            IFabrCoreAgentService agentService,
+            IFabrCoreBlueprintService blueprintService,
+            ILogger<AgentController> logger)
         {
             _agentService = agentService;
+            _blueprintService = blueprintService;
             _logger = logger;
         }
 
@@ -83,7 +79,7 @@ namespace FabrCore.Host.Api.Controllers
         [HttpPost("blueprint")]
         public async Task<IActionResult> PostBlueprint(
             [FromHeader(Name = "x-user-handle")] string userHandle,
-            [FromBody] AgentBlueprintRequest request,
+            [FromBody] FabrCoreBlueprint request,
             [FromQuery] HealthDetailLevel detailLevel = HealthDetailLevel.Basic)
         {
             if (string.IsNullOrWhiteSpace(userHandle))
@@ -91,23 +87,22 @@ namespace FabrCore.Host.Api.Controllers
                 return BadRequest("x-user-handle header is required.");
             }
 
-            if (request == null || request.Agents == null || !request.Agents.Any())
+            if (request == null)
             {
-                return BadRequest("Request body must contain an agents list.");
+                return BadRequest("Request body must contain a blueprint.");
             }
 
             try
             {
-                var results = await _agentService.EnsureAgentsAsync(userHandle, request.Agents, detailLevel);
-
+                var result = await _blueprintService.ApplyAsync(userHandle, request, detailLevel);
                 var response = new AgentBlueprintResponse
                 {
-                    Name = request.Name,
-                    Version = request.Version,
-                    TotalRequested = request.Agents.Count,
-                    SuccessCount = results.Count(r => r.State == HealthState.Healthy),
-                    FailureCount = results.Count(r => r.State != HealthState.Healthy),
-                    Results = results
+                    Name = result.Name,
+                    Version = result.Version,
+                    TotalRequested = result.TotalRequested,
+                    SuccessCount = result.SuccessCount,
+                    FailureCount = result.FailureCount,
+                    Results = result.Results
                 };
 
                 return Ok(response);

@@ -9,7 +9,10 @@ description: >
   fabrcore-messaging; durable proactive/out-of-turn delivery and relay providers to
   fabrcore-principal-delivery; authorization/audit to fabrcore-acl; MCP to fabrcore-mcp;
   verifiable execution/SPIFFE to fabrcore-spiffe; Microsoft 365 Copilot/Teams integration to
-  fabrcore-microsoft365copilot; and tests to fabrcore-testing.
+  fabrcore-microsoft365copilot; Memory to fabrcore-services-memory; GraphRAG to
+  fabrcore-graphrag; Surface UI to fabrcore-surface; supervised squads to fabrcore-swarm;
+  tests to fabrcore-testing; and August 2026 OSS/Forge ownership or cross-repo changes to
+  fabrcore-oss-aug2026.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
 metadata:
   author: FabrCore
@@ -26,7 +29,7 @@ Build distributed AI agent systems with FabrCore — an open-source .NET 10 fram
 | Concept | Type | Key Class/Interface | Skill |
 |---------|------|-------------------|-------|
 | Agent | Business logic actor | `FabrCoreAgentProxy`, `TryGetStateAsync` | fabrcore-agent |
-| Agent Blueprint | Admin ensure list for principal-scoped agents | `AgentBlueprintRequest`, `POST /fabrcoreapi/Agent/blueprint` | fabrcore-server |
+| Agent Blueprint | Canonical stored/apply manifest | `FabrCoreBlueprint`, `IBlueprintExpander`, `/fabrcoreapi/Blueprint` | fabrcore-server |
 | Agent Eviction | Hard-delete an agent instance | `AgentEvictionResult`, `DELETE /fabrcoreapi/Agent/{handle}` | fabrcore-server, fabrcore-orleans |
 | Agent Framework | LLM agent runtime | `AIAgent`, `AgentSession` | fabrcore-agentframework |
 | Plugin | Stateful tool collection | `IFabrCorePlugin` | fabrcore-plugins-tools |
@@ -43,15 +46,25 @@ Build distributed AI agent systems with FabrCore — an open-source .NET 10 fram
 | Security Audit | ACL decisions, boundary crossings | `IAuditProvider`, `AuditEvent` | fabrcore-acl |
 | MCP | External tool protocol | `McpServerConfig` | fabrcore-mcp |
 | Microsoft 365 Copilot | Copilot/Teams channel addon | `AddMicrosoft365Copilot()`, `Microsoft365CopilotOptions` | fabrcore-microsoft365copilot |
+| Memory | Durable scoped agent memory | `AddAgentMemoryServices()`, `IAgentMemoryService` | fabrcore-services-memory |
+| GraphRAG | Scoped knowledge ingestion/search | `AddGraphRagServices()`, `IKnowledgeSearchService` | fabrcore-graphrag |
+| Surface | OSS command-center UI | `AddFabrCoreSurface()`, `SurfaceChatLink` | fabrcore-surface |
+| Swarm | Blueprint-defined supervised squads | `SurfaceSquadType.Swarm`, `swarm.squads` | fabrcore-swarm |
 | Configuration | Agent definition | `AgentConfiguration` | fabrcore-server |
 | Telemetry | W3C TraceContext on every message | `AgentMessageTelemetry`, `StampFromActivity`, `StartIngressActivity` | fabrcore-messaging (surface), fabrcore-server (exporter setup) |
 | Verifiable Execution | Signed/tamper-evident agent/event evidence | `IVerifiableExecutionStore`, `IVerifiableExecutionSigner`, `VerifiableExecutionEnvelope` | fabrcore-spiffe |
 
 ## Blueprints
 
-A Blueprint is a caller-supplied, idempotent manifest of agents to ensure for one principal. It is not a Host-startup setting, stored server-side template, or continuous reconciler: the application must call `POST /fabrcoreapi/Agent/blueprint` (or `EnsureBlueprintAgentsAsync`) when it provisions a principal, such as at first sign-in or workspace initialization. Existing configured agents keep their configuration; use `/agent/create` for an intentional reconfiguration.
+A Blueprint is a canonical `FabrCoreBlueprint` manifest containing agent configurations and
+package-owned top-level extensions. Blueprints can be applied directly through
+`POST /fabrcoreapi/Agent/blueprint` or stored per principal through
+`/fabrcoreapi/Blueprint` CRUD and `/{name}/apply`. Registered `IBlueprintExpander`
+implementations expand extensions server-side; Surface owns the top-level `swarm` extension.
 
-Use **fabrcore-server** for the request contract, bootstrap pattern, and manifest asset. Use **fabrcore-testing** to verify lifecycle behavior against a running Host.
+`AgentBlueprintRequest` and `EnsureBlueprintAgentsAsync` remain agents-only SDK compatibility
+surfaces; do not use them for new extension-aware workflows. Use **fabrcore-server** for the
+canonical resource API and **fabrcore-swarm** for squad definitions.
 
 ## Architecture Overview
 
@@ -78,6 +91,10 @@ FabrCore layers on top of Orleans (distributed actor model) and Microsoft.Extens
 - **FabrCore.Core** — Interfaces (`IAgentGrain`, `IPrincipalGrain`), models (`AgentConfiguration`, `AgentMessage`, `EventMessage`, `AgentHealthStatus`, `AgentEvictionResult`), verifiable execution contracts, Orleans surrogates
 - **FabrCore.Sdk** — Agent base class (`FabrCoreAgentProxy`), plugin system, tool registry, chat client factory, MCP integration, compaction, state persistence, Host API client, typed entity storage contracts, blueprint ensure client types, LLM evidence integration
 - **FabrCore.Host** — Orleans grains (`AgentGrain`, `PrincipalGrain`), REST API controllers, streaming, WebSocket, agent service, verifiable execution recording/signing/verification
+- **FabrCore.Services.Contracts** — open Memory, GraphRAG, and cluster-capability transport contracts
+- **FabrCore.Services.Memory** — optional SQL Server 2025-backed durable agent memory
+- **FabrCore.Services.GraphRag** — optional SQL Server 2025-backed scoped knowledge services
+- **FabrCore.Surface** — optional OSS Blazor command center, Adaptive Cards, and Swarm
 
 ## Prerequisites
 

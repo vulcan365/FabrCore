@@ -1,0 +1,2359 @@
+@page "/surface"
+@rendermode InteractiveServer
+@inject ISurfacePrincipalContextProvider PrincipalContextProvider
+@inject SurfaceWorkspaceService Workspace
+@inject ISurfaceFileUploadClient FileUploadClient
+@inject Microsoft.Extensions.Options.IOptions<SurfaceOptions> SurfaceOptions
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Navigation
+@implements IAsyncDisposable
+
+<PageTitle>FabrCore Surface</PageTitle>
+
+<div class="@CommandCenterClass">
+    @if (_loading)
+    {
+        <main class="surface-command-empty">
+            <h1>FabrCore Surface</h1>
+            <p>Loading your agent command center...</p>
+        </main>
+    }
+    else if (_principalContext?.IsResolved != true)
+    {
+        <main class="surface-command-empty">
+            <h1>FabrCore Surface</h1>
+            <p>Surface needs an authenticated principal id before it can connect to your agents.</p>
+        </main>
+    }
+    else
+    {
+        <header class="surface-topbar">
+            <SurfaceTopbarNav />
+            <div class="surface-topbar-user">
+                <span class="surface-agent-avatar-wrap">
+                    <span class="surface-agent-avatar">@Initials(_principalContext.DisplayName ?? _principalContext.PrincipalId)</span>
+                    <span class="surface-avatar-status is-healthy"></span>
+                </span>
+            </div>
+        </header>
+
+        <SurfaceCommandRail />
+
+        <aside class="surface-agent-list" aria-label="Agents">
+            <header class="surface-panel-header">
+                <div>
+                    <h1>Chat</h1>
+                    <span class="surface-panel-eyebrow">@(_principalContext.DisplayName ?? _principalContext.PrincipalId)</span>
+                </div>
+                <div class="surface-panel-actions">
+                    <button class="surface-icon-button" @onclick="RefreshAgentsAsync" title="Refresh agents" aria-label="Refresh agents">⌕</button>
+                    <button class="surface-icon-button"
+                            title="More options"
+                            aria-label="More options"
+                            @onclick="TogglePanelMenu">…</button>
+                    @if (_panelMenuOpen)
+                    {
+                        <div class="surface-panel-menu">
+                            <button type="button" class="surface-panel-menu-item" @onclick="OpenSettings">Settings</button>
+                        </div>
+                    }
+                </div>
+            </header>
+
+            @if (Workspace.Squads.Count > 0)
+            {
+                <div class="@SectionTitleClass(Workspace.SelectedSquad is not null)">Squads</div>
+                <nav class="surface-agent-nav">
+                    @foreach (var squad in Workspace.Squads)
+                    {
+                        <button class="surface-agent-row @(IsSelectedSquad(squad) ? "is-selected" : "")"
+                                @onclick="() => SelectSquad(squad.OrchestratorHandle)">
+                            <span class="surface-agent-avatar-wrap">
+                                <span class="surface-agent-avatar">#</span>
+                                <span class="surface-avatar-status is-healthy"></span>
+                            </span>
+                            <span class="surface-agent-copy">
+                                <span class="surface-agent-name">@squad.Name</span>
+                                <span class="surface-agent-meta">@($"{squad.SquadType} - {squad.Agents.Count} agents")</span>
+                            </span>
+                        </button>
+                    }
+                </nav>
+            }
+
+            <div class="@SectionTitleClass(Workspace.SelectedSquad is null && Workspace.SelectedAgent is not null)">Agents</div>
+
+            @if (!SurfaceOptions.Value.EnableAgentDirectory)
+            {
+                <div class="surface-command-note">Agent directory is disabled.</div>
+            }
+            else if (Workspace.Agents.Count == 0)
+            {
+                <div class="surface-command-note">No agents are available for this principal yet.</div>
+            }
+            else
+            {
+                <nav class="surface-agent-nav">
+                    @foreach (var agent in Workspace.Agents)
+                    {
+                        <button class="@AgentRowClass(agent)"
+                                @onclick="() => SelectAgent(agent.Handle)">
+                            <span class="surface-agent-avatar-wrap">
+                                <span class="surface-agent-avatar">@Initials(agent.DisplayName)</span>
+                                <span class="surface-avatar-status @PresenceClass(agent)" title="@PresenceText(agent)"></span>
+                            </span>
+                            <span class="surface-agent-copy">
+                                <span class="surface-agent-name">@agent.DisplayName</span>
+                                <span class="surface-agent-meta">@AgentMeta(agent)</span>
+                            </span>
+                            @if (agent.HasUnread)
+                            {
+                                <span class="surface-unread-badge" aria-label="@($"{agent.UnreadCount} unread messages")">@agent.UnreadCount</span>
+                            }
+                        </button>
+                    }
+                </nav>
+            }
+
+        </aside>
+
+        <main class="surface-agent-workspace">
+            @if (Workspace.SelectedAgent is null)
+            {
+                <section class="surface-command-empty">
+                    <h2>Select an agent</h2>
+                    <p>Choose an agent to inspect activity and send commands.</p>
+                </section>
+            }
+            else
+            {
+                <header class="surface-chat-header">
+                    <div class="surface-chat-title">
+                        <span class="surface-agent-avatar-wrap">
+                            <span class="surface-agent-avatar is-large">@Initials(Workspace.SelectedAgent.DisplayName)</span>
+                            <span class="surface-avatar-status @PresenceClass(Workspace.SelectedAgent)" title="@PresenceText(Workspace.SelectedAgent)"></span>
+                        </span>
+                        <div>
+                            <h2>@Workspace.SelectedAgent.DisplayName</h2>
+                            <p>@AgentSubtitle(Workspace.SelectedAgent)</p>
+                        </div>
+                    </div>
+                    <div class="surface-chat-tabs">
+                        <span class="is-active">Chat</span>
+                    </div>
+                </header>
+
+                @if (IsSquadSettingsTab)
+                {
+                    @SquadSettingsContent()
+                }
+                else
+                {
+                    <section class="surface-timeline" @ref="_timelineRef" aria-live="polite">
+                        @{
+                            DateOnly? previousDate = null;
+                        }
+                        @foreach (var item in SelectedTimeline())
+                        {
+                            var localTimestamp = item.TimestampUtc.ToLocalTime();
+                            var itemDate = DateOnly.FromDateTime(localTimestamp);
+                            var isAgentToAgent = IsAgentToAgent(item);
+                            var isAgentToAgentExpanded = isAgentToAgent && IsAgentToAgentExpanded(item);
+                            var messageClass = MessageClass(item);
+                            if (isAgentToAgent)
+                            {
+                                messageClass += isAgentToAgentExpanded ? " is-expanded" : " is-collapsed";
+                            }
+
+                            if (previousDate != itemDate)
+                            {
+                                <div class="surface-date-separator">@FormatDateSeparator(localTimestamp)</div>
+                                previousDate = itemDate;
+                            }
+
+                            <article class="surface-message @messageClass" data-surface-timeline-item>
+                                @if (item.Kind != SurfaceTimelineItemKind.Principal)
+                                {
+                                    <span class="surface-message-avatar-wrap">
+                                        <span class="surface-message-avatar">@MessageInitials(item)</span>
+                                        <span class="surface-avatar-status @SelectedPresenceClass()" title="@SelectedPresenceText()"></span>
+                                    </span>
+                                }
+                                <div class="surface-message-body">
+                                    <div class="surface-message-meta">
+                                        <span>@MessageAuthor(item)</span>
+                                        @if (MessageRoute(item) is { Length: > 0 } route)
+                                        {
+                                            <span class="surface-message-route">@route</span>
+                                        }
+                                        <time>@FormatMessageTimestamp(localTimestamp)</time>
+                                    </div>
+
+                                    @if (isAgentToAgent)
+                                    {
+                                        <div class="surface-agent-to-agent">
+                                            <button type="button"
+                                                    class="surface-agent-message-toggle"
+                                                    title="@AgentToAgentToggleTitle(isAgentToAgentExpanded)"
+                                                    aria-label="@AgentToAgentToggleTitle(isAgentToAgentExpanded)"
+                                                    aria-expanded="@isAgentToAgentExpanded"
+                                                    @onclick="() => ToggleAgentToAgentMessage(item.Id)">
+                                                <i class="bi @(isAgentToAgentExpanded ? "bi-chevron-up" : "bi-chevron-down")"></i>
+                                            </button>
+                                            <div class="surface-agent-to-agent-content">
+                                                <div class="surface-agent-to-agent-preview">@AgentToAgentPreview(item)</div>
+                                                @if (isAgentToAgentExpanded)
+                                                {
+                                                    @if (item.Kind == SurfaceTimelineItemKind.AdaptiveCard && item.Envelope is not null && SurfaceOptions.Value.EnableAdaptiveCards)
+                                                    {
+                                                        <SurfaceAdaptiveCardHost Envelope="item.Envelope"
+                                                                                 SourceMessage="item.SourceMessage"
+                                                                                 PrincipalContext="Workspace.PrincipalContext" />
+                                                    }
+                                                    else
+                                                    {
+                                                        <div class="surface-message-markdown">@RenderMarkdown(item.Text)</div>
+                                                    }
+                                                }
+                                            </div>
+                                        </div>
+                                    }
+                                    else if (item.Kind == SurfaceTimelineItemKind.AdaptiveCard && item.Envelope is not null && SurfaceOptions.Value.EnableAdaptiveCards)
+                                    {
+                                        <SurfaceAdaptiveCardHost Envelope="item.Envelope"
+                                                                 SourceMessage="item.SourceMessage"
+                                                                 PrincipalContext="Workspace.PrincipalContext" />
+                                    }
+                                    else
+                                    {
+                                        <div class="surface-message-markdown">@RenderMarkdown(item.Text)</div>
+                                    }
+
+                                    @if (item.Kind != SurfaceTimelineItemKind.Principal)
+                                    {
+                                        <div class="surface-message-actions">
+                                            <button type="button"
+                                                    class="surface-message-action"
+                                                    title="Copy full message"
+                                                    aria-label="Copy full message"
+                                                    @onclick="() => CopyMessageAsync(item)">
+                                                <i class="bi @(IsCopiedMessage(item) ? "bi-check2" : "bi-copy")"></i>
+                                            </button>
+                                            @if (MessageTokenUsageText(item) is { Length: > 0 } tokenUsageText)
+                                            {
+                                                <span class="surface-message-token-usage"
+                                                      title="Actual LLM token usage from AgentMessage.Args.">
+                                                    @tokenUsageText
+                                                </span>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            </article>
+                        }
+
+                        @{
+                            var selectedActivityText = SelectedActivityText();
+                        }
+                        @if (!string.IsNullOrWhiteSpace(selectedActivityText))
+                        {
+                            <div class="surface-system-activity" data-surface-timeline-activity>
+                                <span class="surface-system-pulse"></span>
+                                <span>@selectedActivityText</span>
+                            </div>
+                        }
+                    </section>
+
+                    <footer class="surface-compose">
+                        <div class="surface-compose-field">
+                            @if (MentionPickerOpen)
+                            {
+                                <div class="surface-mention-menu" role="listbox" aria-label="Mention an agent">
+                                    @foreach (var candidate in MentionCandidates().Select((candidate, index) => (candidate, index)))
+                                    {
+                                        <button type="button"
+                                                class="surface-mention-option @(candidate.index == _mentionSelectedIndex ? "is-active" : "")"
+                                                role="option"
+                                                aria-selected="@(candidate.index == _mentionSelectedIndex)"
+                                                @onclick="() => SelectMention(candidate.candidate)">
+                                            <span class="surface-mention-avatar">@Initials(candidate.candidate.DisplayName)</span>
+                                            <span>
+                                                <strong>@candidate.candidate.DisplayName</strong>
+                                                <small>@candidate.candidate.Detail</small>
+                                            </span>
+                                            <code>@($"@{candidate.candidate.Mention}")</code>
+                                        </button>
+                                    }
+                                </div>
+                            }
+                            <textarea @ref="_composerRef"
+                                      value="@_draft"
+                                      @oninput="HandleComposerInput"
+                                      data-surface-mention-open="@MentionPickerOpen.ToString().ToLowerInvariant()"
+                                      placeholder="Send a command to this agent..."
+                                      disabled="@(!SurfaceOptions.Value.EnableAgentChat)"
+                                      rows="2"></textarea>
+                            @if (_pendingAttachments.Count > 0)
+                            {
+                                <div class="surface-attachment-list" aria-label="Attached files">
+                                    @foreach (var attachment in _pendingAttachments)
+                                    {
+                                        <span class="surface-attachment-chip @(attachment.Error is null ? string.Empty : "is-error")" @key="attachment.Id">
+                                            <i class="bi bi-paperclip"></i>
+                                            <span>@attachment.Name</span>
+                                            @if (attachment.IsUploading)
+                                            {
+                                                <small>Uploading</small>
+                                            }
+                                            else if (!string.IsNullOrWhiteSpace(attachment.Error))
+                                            {
+                                                <small>@attachment.Error</small>
+                                            }
+                                            <button type="button"
+                                                    title="Remove file"
+                                                    aria-label="@($"Remove {attachment.Name}")"
+                                                    @onclick="() => RemoveAttachmentAsync(attachment.Id)">
+                                                <i class="bi bi-x"></i>
+                                            </button>
+                                        </span>
+                                    }
+                                </div>
+                            }
+                        </div>
+                        <label class="surface-file-button"
+                               title="Add files"
+                               aria-label="Add files">
+                            <i class="bi bi-paperclip"></i>
+                            <InputFile class="surface-file-input"
+                                       OnChange="HandleFilesSelectedAsync"
+                                       multiple
+                                       disabled="@(!CanAttachFiles)" />
+                        </label>
+                        <button @onclick="SendAsync"
+                                disabled="@(!CanSend)"
+                                title="Send command"
+                                aria-label="Send command">Send</button>
+                    </footer>
+                }
+            }
+        </main>
+
+        <aside class="surface-activity-panel" aria-label="Agent activity">
+            <header class="surface-panel-header">
+                <div>
+                    <span class="surface-panel-eyebrow">Activity</span>
+                    <h2>Live state</h2>
+                </div>
+            </header>
+
+            @if (Workspace.SelectedAgent is not null)
+            {
+                <dl class="surface-facts">
+                    <div>
+                        <dt>Handle</dt>
+                        <dd>@Workspace.SelectedAgent.Handle</dd>
+                    </div>
+                    <div>
+                        <dt>Health</dt>
+                        <dd>@Workspace.SelectedAgent.State</dd>
+                    </div>
+                    <div>
+                        <dt>Messages</dt>
+                        <dd>@(Workspace.SelectedAgent.Health?.MessagesProcessed?.ToString("N0") ?? "0")</dd>
+                    </div>
+                    <div>
+                        <dt>Latency p95</dt>
+                        <dd>@FormatLatency(Workspace.SelectedAgent.Health?.LatencyP95Ms)</dd>
+                    </div>
+                </dl>
+
+                @if (!string.IsNullOrWhiteSpace(Workspace.SelectedAgent.StatusText))
+                {
+                    <div class="surface-status-note">@Workspace.SelectedAgent.StatusText</div>
+                }
+            }
+
+            @if (SurfaceOptions.Value.EnableDiagnosticsPanel)
+            {
+                <div class="surface-command-note">Diagnostics are enabled for this Surface instance.</div>
+            }
+        </aside>
+
+        @if (_settingsOpen)
+        {
+            <div class="surface-create-modal" role="dialog" aria-modal="true" aria-labelledby="surface-settings-title">
+                <div class="surface-create-backdrop" @onclick="CloseSettings"></div>
+                <section class="surface-create-panel surface-settings-panel">
+                    <header class="surface-create-header">
+                        <div>
+                            <span class="surface-panel-eyebrow">Command center</span>
+                            <h2 id="surface-settings-title">Settings</h2>
+                        </div>
+                        <button type="button" class="surface-card-modal-close" @onclick="CloseSettings">Close</button>
+                    </header>
+
+                    <div class="surface-create-body">
+                        <section class="surface-create-section">
+                            <h3>Agent list</h3>
+                            <label class="surface-check-row">
+                                <input type="checkbox"
+                                       checked="@Workspace.ShowHiddenAgents"
+                                       @onchange="OnShowHiddenAgentsChanged" />
+                                <span>Show hidden agents</span>
+                            </label>
+                            <label class="surface-check-row">
+                                <input type="checkbox"
+                                       checked="@Workspace.ShowRunningAgents"
+                                       @onchange="OnShowRunningAgentsChanged" />
+                                <span>Show running agents</span>
+                            </label>
+                        </section>
+                    </div>
+                </section>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter]
+    public SurfaceCommandCenterLayoutMode? LayoutMode { get; set; }
+
+    [SupplyParameterFromQuery(Name = "agent")]
+    public string? AgentQueryHandle { get; set; }
+
+    [SupplyParameterFromQuery(Name = "squad")]
+    public string? SquadQueryHandle { get; set; }
+
+    private FabrCore.Surface.Identity.SurfacePrincipalContext? _principalContext;
+    private PeriodicTimer? _agentTimer;
+    private PeriodicTimer? _healthTimer;
+    private CancellationTokenSource? _timerCts;
+    private IDisposable? _activeView;
+    private IJSObjectReference? _composerModule;
+    private DotNetObjectReference<SurfaceCommandCenter>? _dotNetRef;
+    private ElementReference _composerRef;
+    private ElementReference _timelineRef;
+    private string _draft = string.Empty;
+    private bool _loading = true;
+    private bool _sending;
+    private bool _composerFocusRequested;
+    private bool _timelineScrollRequested;
+    private int _visibleTimelineCount;
+    private string? _lastTimelineAgentHandle;
+    private string? _lastActivityText;
+    private string? _appliedAgentQueryHandle;
+    private string? _appliedSquadQueryHandle;
+    private readonly HashSet<string> _expandedAgentToAgentMessageIds = new(StringComparer.Ordinal);
+    private readonly List<SurfacePendingAttachment> _pendingAttachments = [];
+    private string? _copiedMessageId;
+    private SurfaceAgentConfigurationDraft _createDraft = new();
+    private SurfaceSquadDraft _squadDraft = new();
+    private bool _createBusy;
+    private string? _createError;
+    private bool _squadCreateBusy;
+    private string? _squadCreateError;
+    private bool _panelMenuOpen;
+    private bool _settingsOpen;
+    private SurfaceSquadTab _selectedSquadTab = SurfaceSquadTab.Chat;
+    private string? _squadAgentMode;
+    private bool _squadAgentBusy;
+    private string? _squadAgentError;
+    private string? _squadSettingsError;
+    private string? _removingSquadAgentHandle;
+    private string _existingAgentHandle = string.Empty;
+    private string _existingAgentName = string.Empty;
+    private SurfaceSquadMemberRole _existingAgentRole = SurfaceSquadMemberRole.Executor;
+    private SurfaceSquadAgentDraft _squadAgentDraft = new();
+    private bool _mentionActive;
+    private string _mentionQuery = string.Empty;
+    private int _mentionSelectedIndex;
+
+    private bool CanSend
+        => SurfaceOptions.Value.EnableAgentChat
+           && !_sending
+           && Workspace.SelectedAgent is not null
+           && !HasUploadingAttachments
+           && !HasFailedAttachments
+           && (!string.IsNullOrWhiteSpace(_draft) || ReadyAttachmentFileIds().Count > 0);
+
+    private bool CanAttachFiles
+        => SurfaceOptions.Value.EnableAgentChat
+           && !_sending
+           && Workspace.SelectedAgent is not null;
+
+    private bool HasUploadingAttachments
+        => _pendingAttachments.Any(attachment => attachment.IsUploading);
+
+    private bool HasFailedAttachments
+        => _pendingAttachments.Any(attachment => !string.IsNullOrWhiteSpace(attachment.Error));
+
+    private bool MentionPickerOpen
+        => Workspace.SelectedSquad is not null
+           && _mentionActive
+           && MentionCandidates().Count > 0;
+
+    private string CommandCenterClass
+        => LayoutMode.GetValueOrDefault(SurfaceOptions.Value.CommandCenterLayoutMode) == SurfaceCommandCenterLayoutMode.Embedded
+            ? "surface-command-center surface-command-center-embedded"
+            : "surface-command-center surface-command-center-standalone";
+
+    private bool IsSquadSettingsTab
+        => Workspace.SelectedSquad is not null
+           && _selectedSquadTab == SurfaceSquadTab.Settings;
+
+    private RenderFragment CreateAgentForm() => @<text>
+        <div class="surface-create-body">
+            @if (!string.IsNullOrWhiteSpace(Workspace.DiscoveryError))
+            {
+                <div class="surface-create-alert">@Workspace.DiscoveryError</div>
+            }
+
+            @if (Workspace.Discovery?.Collisions is { Count: > 0 } collisions)
+            {
+                <div class="surface-create-alert is-warning">
+                    Discovery reported @collisions.Count alias collision@(collisions.Count == 1 ? string.Empty : "s").
+                </div>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(_createError))
+            {
+                <div class="surface-create-alert">@_createError</div>
+            }
+
+            <section class="surface-create-section">
+                <h3>Identity</h3>
+                <div class="surface-create-grid">
+                    <label>
+                        <span>Handle</span>
+                        <input @bind="_createDraft.Handle" placeholder="assistant" />
+                    </label>
+                    <label>
+                        <span>Agent type</span>
+                        <input @bind="_createDraft.AgentType" placeholder="agent alias" />
+                    </label>
+                    <label>
+                        <span>Model</span>
+                        <input @bind="_createDraft.Models" placeholder="default" />
+                    </label>
+                    <label class="is-wide">
+                        <span>Description</span>
+                        <input @bind="_createDraft.Description" placeholder="What this agent is for" />
+                    </label>
+                </div>
+
+                @if (Workspace.Discovery?.Agents.Count > 0)
+                {
+                    <div class="surface-discovery-list" aria-label="Discovered agent types">
+                        @foreach (var agentType in Workspace.Discovery.Agents)
+                        {
+                            var alias = PrimaryAlias(agentType);
+                            <button type="button"
+                                    class="surface-discovery-choice @(string.Equals(_createDraft.AgentType, alias, StringComparison.OrdinalIgnoreCase) ? "is-selected" : "")"
+                                    @onclick="() => SelectAgentType(alias)">
+                                <span>@alias</span>
+                                <small>@DiscoverySummary(agentType)</small>
+                            </button>
+                        }
+                    </div>
+                }
+            </section>
+
+            <section class="surface-create-section">
+                <h3>Instructions</h3>
+                <label>
+                    <span>System prompt</span>
+                    <textarea @bind="_createDraft.SystemPrompt" rows="5" placeholder="How should this agent behave?"></textarea>
+                </label>
+            </section>
+
+            <section class="surface-create-section">
+                <h3>Plugins</h3>
+                <textarea @bind="_createDraft.PluginAliases" rows="3" placeholder="One plugin alias per line"></textarea>
+                @if (Workspace.Discovery?.Plugins.Count > 0)
+                {
+                    <div class="surface-discovery-list" aria-label="Discovered plugins">
+                        @foreach (var plugin in Workspace.Discovery.Plugins)
+                        {
+                            var alias = PrimaryAlias(plugin);
+                            <button type="button"
+                                    class="surface-discovery-choice @(_createDraft.HasPluginAlias(alias) ? "is-selected" : "")"
+                                    @onclick="() => TogglePlugin(alias)">
+                                <span>@alias</span>
+                                <small>@DiscoverySummary(plugin)</small>
+                            </button>
+                        }
+                    </div>
+                }
+            </section>
+
+            <section class="surface-create-section">
+                <h3>Tools</h3>
+                <textarea @bind="_createDraft.ToolAliases" rows="3" placeholder="One tool alias per line"></textarea>
+                @if (Workspace.Discovery?.Tools.Count > 0)
+                {
+                    <div class="surface-discovery-list" aria-label="Discovered tools">
+                        @foreach (var tool in Workspace.Discovery.Tools)
+                        {
+                            var alias = PrimaryAlias(tool);
+                            <button type="button"
+                                    class="surface-discovery-choice @(_createDraft.HasToolAlias(alias) ? "is-selected" : "")"
+                                    @onclick="() => ToggleTool(alias)">
+                                <span>@alias</span>
+                                <small>@DiscoverySummary(tool)</small>
+                            </button>
+                        }
+                    </div>
+                }
+            </section>
+
+            <section class="surface-create-section">
+                <h3>Advanced</h3>
+                <label>
+                    <span>Streams</span>
+                    <textarea @bind="_createDraft.Streams" rows="2" placeholder="One stream per line"></textarea>
+                </label>
+                <label class="surface-check-row">
+                    <input type="checkbox" @bind="_createDraft.ForceReconfigure" />
+                    <span>Force reconfigure if the handle already exists</span>
+                </label>
+            </section>
+
+            <section class="surface-create-section">
+                <div class="surface-create-section-title">
+                    <h3>Args</h3>
+                    <button type="button" @onclick="AddArgRow">Add arg</button>
+                </div>
+                <div class="surface-kv-list">
+                    @foreach (var row in _createDraft.Args)
+                    {
+                        <div class="surface-kv-row" @key="row">
+                            <input @bind="row.Key" placeholder="Key" />
+                            <input @bind="row.Value" placeholder="Value" />
+                            <button type="button" @onclick="() => RemoveArgRow(row)" aria-label="Remove arg">x</button>
+                        </div>
+                    }
+                </div>
+            </section>
+
+            <section class="surface-create-section">
+                <div class="surface-create-section-title">
+                    <h3>MCP servers</h3>
+                    <button type="button" @onclick="AddMcpServer">Add server</button>
+                </div>
+                @if (_createDraft.McpServers.Count == 0)
+                {
+                    <div class="surface-command-note">No MCP servers configured.</div>
+                }
+                @foreach (var server in _createDraft.McpServers)
+                {
+                    <div class="surface-mcp-editor" @key="server">
+                        <div class="surface-create-grid">
+                            <label>
+                                <span>Name</span>
+                                <input @bind="server.Name" placeholder="filesystem" />
+                            </label>
+                            <label>
+                                <span>Transport</span>
+                                <select @bind="server.TransportType">
+                                    <option value="@McpTransportType.Stdio">Stdio</option>
+                                    <option value="@McpTransportType.Http">Http</option>
+                                </select>
+                            </label>
+                            <label>
+                                <span>Command</span>
+                                <input @bind="server.Command" placeholder="npx" />
+                            </label>
+                            <label>
+                                <span>URL</span>
+                                <input @bind="server.Url" placeholder="https://tools.example.com/mcp" />
+                            </label>
+                            <label class="is-wide">
+                                <span>Arguments</span>
+                                <textarea @bind="server.Arguments" rows="2" placeholder="One argument per line"></textarea>
+                            </label>
+                        </div>
+
+                        <div class="surface-create-subgrid">
+                            <div>
+                                <div class="surface-create-section-title">
+                                    <h4>Environment</h4>
+                                    <button type="button" @onclick="() => AddKeyValueRow(server.Env)">Add</button>
+                                </div>
+                                @foreach (var row in server.Env)
+                                {
+                                    <div class="surface-kv-row" @key="row">
+                                        <input @bind="row.Key" placeholder="Key" />
+                                        <input @bind="row.Value" placeholder="Value" />
+                                        <button type="button" @onclick="() => RemoveKeyValueRow(server.Env, row)" aria-label="Remove env">x</button>
+                                    </div>
+                                }
+                            </div>
+                            <div>
+                                <div class="surface-create-section-title">
+                                    <h4>Headers</h4>
+                                    <button type="button" @onclick="() => AddKeyValueRow(server.Headers)">Add</button>
+                                </div>
+                                @foreach (var row in server.Headers)
+                                {
+                                    <div class="surface-kv-row" @key="row">
+                                        <input @bind="row.Key" placeholder="Key" />
+                                        <input @bind="row.Value" placeholder="Value" />
+                                        <button type="button" @onclick="() => RemoveKeyValueRow(server.Headers, row)" aria-label="Remove header">x</button>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+
+                        <button type="button" class="surface-secondary-button" @onclick="() => RemoveMcpServer(server)">Remove MCP server</button>
+                    </div>
+                }
+            </section>
+        </div>
+
+        <footer class="surface-create-footer">
+            <button type="button" class="surface-secondary-button" @onclick="CloseCreateAgent" disabled="@_createBusy">Cancel</button>
+            <button type="button" class="surface-create-button" @onclick="CreateAgentAsync" disabled="@_createBusy">
+                @(_createBusy ? "Creating..." : "Create agent")
+            </button>
+        </footer>
+    </text>;
+
+    private RenderFragment CreateSquadForm() => @<text>
+        <div class="surface-create-body">
+            @if (!string.IsNullOrWhiteSpace(Workspace.DiscoveryError))
+            {
+                <div class="surface-create-alert">@Workspace.DiscoveryError</div>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(_squadCreateError))
+            {
+                <div class="surface-create-alert">@_squadCreateError</div>
+            }
+
+            <section class="surface-create-section">
+                <h3>Squad</h3>
+                <div class="surface-create-grid">
+                    <label>
+                        <span>Type</span>
+                        <select @bind="_squadDraft.SquadType">
+                            <option value="@SurfaceSquadType.Swarm">Swarm</option>
+                            <option value="@SurfaceSquadType.Orchestrator">Orchestrator</option>
+                            <option value="@SurfaceSquadType.Task">Task</option>
+                        </select>
+                    </label>
+                    <label>
+                        <span>Name</span>
+                        <input @bind="_squadDraft.Name" placeholder="Operations swarm" />
+                    </label>
+                    <label>
+                        <span>@(_squadDraft.SquadType == SurfaceSquadType.Task ? "Worker model" : "Orchestrator model")</span>
+                        <input @bind="_squadDraft.OrchestratorModel" placeholder="default" />
+                    </label>
+                    @if (_squadDraft.SquadType is SurfaceSquadType.Swarm or SurfaceSquadType.Task)
+                    {
+                        <label>
+                            <span>Planner model</span>
+                            <input @bind="_squadDraft.PlannerModel" placeholder="default" />
+                        </label>
+                    }
+                    @if (_squadDraft.SquadType is SurfaceSquadType.Task or SurfaceSquadType.Swarm)
+                    {
+                        <label>
+                            <span>@(_squadDraft.SquadType == SurfaceSquadType.Swarm ? "Fast model (classifier)" : "Fast model")</span>
+                            <input @bind="_squadDraft.FastModel" placeholder="default" />
+                        </label>
+                        <label>
+                            <span>Task attempts</span>
+                            <input type="number" min="1" @bind="_squadDraft.MaxTaskAttempts" />
+                        </label>
+                        <label>
+                            <span>Validation attempts</span>
+                            <input type="number" min="1" @bind="_squadDraft.MaxValidationAttempts" />
+                        </label>
+                        <label>
+                            <span>Timeout seconds</span>
+                            <input type="number" min="1" @bind="_squadDraft.DelegationTimeoutSeconds" />
+                        </label>
+                    }
+                    <label class="is-wide">
+                        <span>Description</span>
+                        <input @bind="_squadDraft.Description" placeholder="What this squad is for" />
+                    </label>
+                </div>
+                <label class="surface-check-row">
+                    <input type="checkbox" @bind="_squadDraft.ForceReconfigure" />
+                    <span>Force reconfigure if handles already exist</span>
+                </label>
+            </section>
+
+            <section class="surface-create-section">
+                <h3>Instructions</h3>
+                <label>
+                    <span>Orchestrator prompt</span>
+                    <textarea @bind="_squadDraft.OrchestratorSystemPrompt" rows="4" placeholder="@(_squadDraft.SquadType == SurfaceSquadType.Task ? "How should the task runner work this goal?" : "How should the orchestrator coordinate this swarm?")"></textarea>
+                </label>
+                @if (_squadDraft.SquadType == SurfaceSquadType.Swarm)
+                {
+                    <label>
+                        <span>Planner prompt</span>
+                        <textarea @bind="_squadDraft.PlannerSystemPrompt" rows="4" placeholder="How should the planner break down work?"></textarea>
+                    </label>
+                }
+                @if (_squadDraft.SquadType == SurfaceSquadType.Task)
+                {
+                    <label>
+                        <span>Delegation overlay</span>
+                        <textarea @bind="_squadDraft.ClientAgentOverlay" rows="3" placeholder="Guidance sent to each executor with delegated tasks"></textarea>
+                    </label>
+                }
+            </section>
+        </div>
+
+        <footer class="surface-create-footer">
+            <NavLink href="/surface" data-enhance-nav="false" class="surface-secondary-button">Cancel</NavLink>
+            <button type="button" class="surface-create-button" @onclick="CreateSquadAsync" disabled="@_squadCreateBusy">
+                @(_squadCreateBusy ? "Creating..." : "Create squad")
+            </button>
+        </footer>
+    </text>;
+
+    private RenderFragment SquadAgentDialog() => @<text>
+        <div class="surface-create-body">
+            @if (!string.IsNullOrWhiteSpace(_squadAgentError))
+            {
+                <div class="surface-create-alert">@_squadAgentError</div>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(Workspace.DiscoveryError))
+            {
+                <div class="surface-create-alert">@Workspace.DiscoveryError</div>
+            }
+
+            @if (_squadAgentMode == "existing")
+            {
+                <section class="surface-create-section">
+                    <h3>Existing agent</h3>
+                    <label>
+                        <span>Agent</span>
+                        <select @bind="_existingAgentHandle">
+                            <option value="">Select an agent</option>
+                            @foreach (var agent in ExistingAgentsForSelectedSquad())
+                            {
+                                <option value="@agent.Handle">@agent.DisplayName (@agent.AgentType)</option>
+                            }
+                        </select>
+                    </label>
+                    <label>
+                        <span>Squad name</span>
+                        <input @bind="_existingAgentName" placeholder="Optional display name in this swarm" />
+                    </label>
+                    @if (Workspace.SelectedSquad?.SquadType is SurfaceSquadType.Task or SurfaceSquadType.Swarm)
+                    {
+                        <label>
+                            <span>@(Workspace.SelectedSquad?.SquadType == SurfaceSquadType.Swarm ? "Squad role" : "Task role")</span>
+                            <select @bind="_existingAgentRole">
+                                <option value="@SurfaceSquadMemberRole.Executor">Executor</option>
+                                <option value="@SurfaceSquadMemberRole.SubjectMatterExpert">SME</option>
+                                <option value="@SurfaceSquadMemberRole.Helper">Helper</option>
+                            </select>
+                        </label>
+                    }
+                </section>
+            }
+            else
+            {
+                <section class="surface-create-section">
+                    <h3>New agent</h3>
+                    @if (!SwarmMemberAgentTypes().Any())
+                    {
+                        <div class="surface-create-alert is-warning">
+                            No agent types were returned by host discovery. Confirm the FabrCore host references the assemblies containing agent aliases and exposes /fabrcoreapi/Discovery.
+                        </div>
+                    }
+                    @SwarmAgentEditor(_squadAgentDraft)
+                </section>
+            }
+        </div>
+
+        <footer class="surface-create-footer">
+            <button type="button" class="surface-secondary-button" @onclick="CloseSquadAgentDialog" disabled="@_squadAgentBusy">Cancel</button>
+            <button type="button" class="surface-create-button" @onclick="SaveSquadAgentAsync" disabled="@_squadAgentBusy">
+                @(_squadAgentBusy ? "Saving..." : "Save")
+            </button>
+        </footer>
+    </text>;
+
+    private RenderFragment SquadSettingsContent() => @<text>
+        @if (Workspace.SelectedSquad is { } squad)
+        {
+            <section class="surface-squad-settings" aria-label="Squad settings">
+                <div class="surface-squad-settings-inner">
+                    <section class="surface-squad-settings-section">
+                        <div class="surface-squad-settings-heading">
+                            <div>
+                                <span class="surface-panel-eyebrow">Squad</span>
+                                <h3>@squad.Name</h3>
+                            </div>
+                        </div>
+
+                        <dl class="surface-squad-settings-facts">
+                            <div>
+                                <dt>Type</dt>
+                                <dd>@squad.SquadType</dd>
+                            </div>
+                            <div>
+                                <dt>Agents</dt>
+                                <dd>@squad.Agents.Count</dd>
+                            </div>
+                            <div>
+                                <dt>Principal</dt>
+                                <dd>@squad.PrincipalHandle</dd>
+                            </div>
+                            <div>
+                                <dt>Orchestrator</dt>
+                                <dd>@squad.OrchestratorHandle</dd>
+                            </div>
+                            @if (squad.SquadType == SurfaceSquadType.Swarm)
+                            {
+                                <div>
+                                    <dt>Planner</dt>
+                                    <dd>@squad.PlannerHandle</dd>
+                                </div>
+                            }
+                            @if (squad.SquadType == SurfaceSquadType.Swarm)
+                            {
+                                <div>
+                                    <dt>Supervisor</dt>
+                                    <dd>@SurfaceSwarmInterop.SupervisorHandle(squad)</dd>
+                                </div>
+                                <div>
+                                    <dt>Verifier</dt>
+                                    <dd>@SurfaceSwarmInterop.VerifierHandle(squad)</dd>
+                                </div>
+                            }
+                            <div class="is-wide">
+                                <dt>Description</dt>
+                                <dd>@(string.IsNullOrWhiteSpace(squad.Description) ? "No description configured." : squad.Description)</dd>
+                            </div>
+                        </dl>
+                    </section>
+
+                    <section class="surface-squad-settings-section">
+                        <div class="surface-squad-settings-heading">
+                            <div>
+                                <span class="surface-panel-eyebrow">Members</span>
+                                <h3>Current agents</h3>
+                            </div>
+                        </div>
+
+                        @if (!string.IsNullOrWhiteSpace(_squadSettingsError))
+                        {
+                            <div class="surface-create-alert">@_squadSettingsError</div>
+                        }
+
+                        @if (squad.Agents.Count == 0)
+                        {
+                            <div class="surface-squad-agent-empty">
+                                <i class="bi bi-people" aria-hidden="true"></i>
+                                <div>
+                                    <strong>No squad agents yet</strong>
+                                    <span>Squads are provisioned from Surface blueprints.</span>
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="surface-squad-agent-list" aria-label="Current squad agents">
+                                @foreach (var agent in squad.Agents)
+                                {
+                                    <article class="surface-squad-agent-card @(IsRemovingSquadAgent(agent.Handle) ? "is-busy" : "")" @key="agent.Handle">
+                                        <span class="surface-agent-avatar">@Initials(agent.Name)</span>
+                                        <div class="surface-squad-agent-card-main">
+                                            <h4>@agent.Name</h4>
+                                            <dl>
+                                                <div>
+                                                    <dt>Type</dt>
+                                                    <dd>@agent.AgentType</dd>
+                                                </div>
+                                                @if (squad.SquadType is SurfaceSquadType.Task or SurfaceSquadType.Swarm)
+                                                {
+                                                    <div>
+                                                        <dt>Role</dt>
+                                                        <dd>@FormatMemberRole(agent.Role)</dd>
+                                                    </div>
+                                                }
+                                                <div>
+                                                    <dt>Handle</dt>
+                                                    <dd>@agent.Handle</dd>
+                                                </div>
+                                                @if (!string.IsNullOrWhiteSpace(agent.Description))
+                                                {
+                                                    <div>
+                                                        <dt>Description</dt>
+                                                        <dd>@agent.Description</dd>
+                                                    </div>
+                                                }
+                                            </dl>
+                                        </div>
+                                    </article>
+                                }
+                            </div>
+                        }
+                    </section>
+                </div>
+            </section>
+        }
+    </text>;
+
+    private RenderFragment SwarmAgentEditor(SurfaceSquadAgentDraft swarmAgent) => @<text>
+        <div class="surface-mcp-editor">
+            <div class="surface-create-grid">
+                <label>
+                    <span>Name</span>
+                    <input @bind="swarmAgent.Name" placeholder="researcher" />
+                </label>
+                <label>
+                    <span>Agent type</span>
+                    <select @bind="swarmAgent.AgentType">
+                        <option value="">Select an agent type</option>
+                        @foreach (var agentType in SwarmMemberAgentTypes())
+                        {
+                            var alias = PrimaryAlias(agentType);
+                            <option value="@alias">@alias</option>
+                        }
+                    </select>
+                </label>
+                <label>
+                    <span>Model</span>
+                    <input @bind="swarmAgent.Models" placeholder="default" />
+                </label>
+                <label class="is-wide">
+                    <span>Description</span>
+                    <input @bind="swarmAgent.Description" placeholder="What this agent contributes" />
+                </label>
+                @if (_squadDraft.SquadType is SurfaceSquadType.Task or SurfaceSquadType.Swarm
+                    || Workspace.SelectedSquad?.SquadType is SurfaceSquadType.Task or SurfaceSquadType.Swarm)
+                {
+                    <label>
+                        <span>Squad role</span>
+                        <select @bind="swarmAgent.Role">
+                            <option value="@SurfaceSquadMemberRole.Executor">Executor</option>
+                            <option value="@SurfaceSquadMemberRole.SubjectMatterExpert">SME</option>
+                            <option value="@SurfaceSquadMemberRole.Helper">Helper</option>
+                        </select>
+                    </label>
+                }
+                <label class="is-wide">
+                    <span>System prompt</span>
+                    <textarea @bind="swarmAgent.SystemPrompt" rows="3"></textarea>
+                </label>
+                <label>
+                    <span>Plugins</span>
+                    <select @onchange="args => SelectSwarmPlugin(swarmAgent, args.Value?.ToString() ?? string.Empty)">
+                        <option value="">Add plugin</option>
+                        @foreach (var plugin in AvailablePlugins(swarmAgent))
+                        {
+                            var alias = PrimaryAlias(plugin);
+                            <option value="@alias">@alias</option>
+                        }
+                    </select>
+                </label>
+                <label>
+                    <span>Tools</span>
+                    <select @onchange="args => SelectSwarmTool(swarmAgent, args.Value?.ToString() ?? string.Empty)">
+                        <option value="">Add tool</option>
+                        @foreach (var tool in AvailableTools(swarmAgent))
+                        {
+                            var alias = PrimaryAlias(tool);
+                            <option value="@alias">@alias</option>
+                        }
+                    </select>
+                </label>
+            </div>
+
+            @if (swarmAgent.PluginList.Count > 0)
+            {
+                <div class="surface-discovery-list" aria-label="Selected plugins">
+                    @foreach (var alias in swarmAgent.PluginList)
+                    {
+                        <button type="button"
+                                class="surface-discovery-choice is-selected"
+                                @onclick="() => swarmAgent.RemovePlugin(alias)">
+                            <span>@alias</span>
+                            <small>Selected plugin</small>
+                        </button>
+                    }
+                </div>
+            }
+
+            @if (swarmAgent.ToolList.Count > 0)
+            {
+                <div class="surface-discovery-list" aria-label="Selected tools">
+                    @foreach (var alias in swarmAgent.ToolList)
+                    {
+                        <button type="button"
+                                class="surface-discovery-choice is-selected"
+                                @onclick="() => swarmAgent.RemoveTool(alias)">
+                            <span>@alias</span>
+                            <small>Selected tool</small>
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+    </text>;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Workspace.Changed += OnWorkspaceChanged;
+        _activeView = Workspace.ActivateSelectedTargetView();
+        _principalContext = await PrincipalContextProvider.GetCurrentAsync();
+
+        if (_principalContext.IsResolved)
+        {
+            await Workspace.InitializeAsync(_principalContext);
+            ApplyTargetQuery();
+            StartRefreshLoops();
+        }
+
+        _loading = false;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_loading && Workspace.IsInitialized)
+        {
+            ApplyTargetQuery();
+        }
+
+        await Task.CompletedTask;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Workspace.SelectedAgent is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _composerModule ??= await LoadSurfaceModuleAsync();
+            _dotNetRef ??= DotNetObjectReference.Create(this);
+            await _composerModule.InvokeVoidAsync("bindSurfaceComposer", _composerRef, _dotNetRef);
+        }
+        catch (JSDisconnectedException)
+        {
+            return;
+        }
+        catch (JSException ex)
+        {
+            Console.Error.WriteLine($"Surface composer binding failed: {ex.Message}");
+            return;
+        }
+
+        if (_timelineScrollRequested)
+        {
+            _timelineScrollRequested = false;
+            await _composerModule.InvokeVoidAsync("scrollSurfaceTimelineToLatest", _timelineRef);
+        }
+
+        if (_composerFocusRequested)
+        {
+            _composerFocusRequested = false;
+            await _composerModule.InvokeVoidAsync("focusSurfaceComposer", _composerRef);
+        }
+    }
+
+    private void StartRefreshLoops()
+    {
+        _timerCts = new CancellationTokenSource();
+        _agentTimer = new PeriodicTimer(TimeSpan.FromSeconds(30));
+        _healthTimer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        _ = RunAgentRefreshLoopAsync(_timerCts.Token);
+        _ = RunHealthRefreshLoopAsync(_timerCts.Token);
+    }
+
+    private async ValueTask<IJSObjectReference> LoadSurfaceModuleAsync()
+        => _composerModule ??= await JSRuntime.InvokeAsync<IJSObjectReference>(
+            "import",
+            "./_content/FabrCore.Surface/adaptiveCardsSurface.js");
+
+    private async Task CopyMessageAsync(SurfaceTimelineItem item)
+    {
+        var module = await LoadSurfaceModuleAsync();
+        await module.InvokeVoidAsync("copyTextToClipboard", MessageCopyText(item));
+
+        _copiedMessageId = item.Id;
+        await InvokeAsync(StateHasChanged);
+        await Task.Delay(1200);
+
+        if (string.Equals(_copiedMessageId, item.Id, StringComparison.Ordinal))
+        {
+            _copiedMessageId = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private bool IsCopiedMessage(SurfaceTimelineItem item)
+        => string.Equals(_copiedMessageId, item.Id, StringComparison.Ordinal);
+
+    private static string MessageCopyText(SurfaceTimelineItem item)
+    {
+        if (!string.IsNullOrWhiteSpace(item.Text))
+        {
+            return item.Text;
+        }
+
+        if (item.Envelope is not null)
+        {
+            return System.Text.Json.JsonSerializer.Serialize(item.Envelope, SurfaceJson.Options);
+        }
+
+        if (item.SourceMessage?.Data is { Length: > 0 } data)
+        {
+            return System.Text.Encoding.UTF8.GetString(data);
+        }
+
+        return item.MessageType ?? string.Empty;
+    }
+
+    private static string? MessageTokenUsageText(SurfaceTimelineItem item)
+    {
+        if (!TryGetMessageTokenUsage(item.SourceMessage, out var inputTokens, out var outputTokens))
+        {
+            return null;
+        }
+
+        return $"tokens: {FormatTokenCount(inputTokens)}/{FormatTokenCount(outputTokens)} in/out";
+    }
+
+    private static bool TryGetMessageTokenUsage(AgentMessage? message, out long inputTokens, out long outputTokens)
+    {
+        inputTokens = 0;
+        outputTokens = 0;
+        if (message is null)
+        {
+            return false;
+        }
+
+        var hasInput = TryGetLongMetadata(
+            message,
+            out inputTokens,
+            "_tokens_input",
+            "inputTokens",
+            "InputTokens",
+            "inputTokenCount",
+            "InputTokenCount",
+            "promptTokens",
+            "PromptTokens",
+            "ChatInputTokens");
+        var hasOutput = TryGetLongMetadata(
+            message,
+            out outputTokens,
+            "_tokens_output",
+            "outputTokens",
+            "OutputTokens",
+            "outputTokenCount",
+            "OutputTokenCount",
+            "completionTokens",
+            "CompletionTokens",
+            "ChatOutputTokens");
+
+        return hasInput || hasOutput;
+    }
+
+    private static bool TryGetLongMetadata(AgentMessage message, out long value, params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            if (TryGetLong(message.Args, key, out value))
+            {
+                return true;
+            }
+        }
+
+        value = 0;
+        return false;
+    }
+
+    private static bool TryGetLong(IReadOnlyDictionary<string, string>? metadata, string key, out long value)
+    {
+        value = 0;
+        if (metadata is null)
+        {
+            return false;
+        }
+
+        if (!metadata.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw))
+        {
+            return false;
+        }
+
+        return long.TryParse(raw, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out value);
+    }
+
+    private static string FormatTokenCount(long value)
+        => value.ToString("0", System.Globalization.CultureInfo.InvariantCulture);
+
+    private async Task RunAgentRefreshLoopAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (_agentTimer is not null && await _agentTimer.WaitForNextTickAsync(cancellationToken))
+            {
+                await Workspace.RefreshAgentsAsync(cancellationToken);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task RunHealthRefreshLoopAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (_healthTimer is not null && await _healthTimer.WaitForNextTickAsync(cancellationToken))
+            {
+                await Workspace.RefreshSelectedHealthAsync(cancellationToken);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task RefreshAgentsAsync()
+    {
+        await Workspace.RefreshFromStorageAsync();
+    }
+
+    private void TogglePanelMenu()
+        => _panelMenuOpen = !_panelMenuOpen;
+
+    private void ClosePanelMenu()
+        => _panelMenuOpen = false;
+
+    private string SquadTabClass(SurfaceSquadTab tab)
+        => _selectedSquadTab == tab ? "is-active" : string.Empty;
+
+    private void SelectSquadTab(SurfaceSquadTab tab)
+    {
+        if (Workspace.SelectedSquad is null)
+        {
+            _selectedSquadTab = SurfaceSquadTab.Chat;
+            return;
+        }
+
+        CloseMentionPicker();
+        _selectedSquadTab = tab;
+    }
+
+    private async Task OpenAddExistingAgentAsync()
+    {
+        await Workspace.RefreshAgentsAsync();
+        _squadAgentMode = "existing";
+        _squadAgentError = null;
+        _squadSettingsError = null;
+        _existingAgentHandle = ExistingAgentsForSelectedSquad().FirstOrDefault()?.Handle ?? string.Empty;
+        _existingAgentName = string.Empty;
+        _existingAgentRole = SurfaceSquadMemberRole.Executor;
+    }
+
+    private async Task OpenCreateSquadAgentAsync()
+    {
+        await Workspace.LoadDiscoveryAsync(forceRefresh: true);
+        _squadAgentMode = "create";
+        _squadAgentError = null;
+        _squadSettingsError = null;
+        _squadAgentDraft = new SurfaceSquadAgentDraft();
+        _squadAgentDraft.Role = SurfaceSquadMemberRole.Executor;
+        if (SwarmMemberAgentTypes().FirstOrDefault() is { } firstAgent)
+        {
+            _squadAgentDraft.AgentType = PrimaryAlias(firstAgent);
+        }
+    }
+
+    private void CloseSquadAgentDialog()
+    {
+        if (_squadAgentBusy)
+        {
+            return;
+        }
+
+        _squadAgentMode = null;
+        _squadAgentError = null;
+        _existingAgentHandle = string.Empty;
+        _existingAgentName = string.Empty;
+        _existingAgentRole = SurfaceSquadMemberRole.Executor;
+    }
+
+    private async Task SaveSquadAgentAsync()
+    {
+        _squadAgentBusy = true;
+        _squadAgentError = null;
+
+        try
+        {
+            if (_squadAgentMode == "existing")
+            {
+                await Workspace.AddExistingAgentToSelectedSquadAsync(_existingAgentHandle, _existingAgentName, _existingAgentRole);
+            }
+            else
+            {
+                await Workspace.CreateAgentForSelectedSquadAsync(_squadAgentDraft.Build());
+            }
+
+            CloseSquadAgentDialog();
+        }
+        catch (Exception ex)
+        {
+            _squadAgentError = ex.Message;
+        }
+        finally
+        {
+            _squadAgentBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private bool IsRemovingSquadAgent(string handle)
+        => string.Equals(_removingSquadAgentHandle, handle, StringComparison.OrdinalIgnoreCase);
+
+    private async Task RemoveSquadAgentAsync(SurfaceSquadAgent agent)
+    {
+        if (_removingSquadAgentHandle is not null)
+        {
+            return;
+        }
+
+        var confirmed = await JSRuntime.InvokeAsync<bool>(
+            "confirm",
+            $"Remove {agent.Name} from this squad?");
+        if (!confirmed)
+        {
+            return;
+        }
+
+        _squadSettingsError = null;
+        _removingSquadAgentHandle = agent.Handle;
+
+        try
+        {
+            await Workspace.RemoveAgentFromSelectedSquadAsync(agent.Handle);
+        }
+        catch (Exception ex)
+        {
+            _squadSettingsError = ex.Message;
+        }
+        finally
+        {
+            _removingSquadAgentHandle = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task OpenCreateAgentAsync()
+    {
+        _createError = null;
+        await Workspace.LoadDiscoveryAsync();
+
+        if (string.IsNullOrWhiteSpace(_createDraft.AgentType)
+            && Workspace.Discovery?.Agents.FirstOrDefault() is { } firstAgent)
+        {
+            _createDraft.AgentType = PrimaryAlias(firstAgent);
+        }
+    }
+
+    private void CloseCreateAgent()
+    {
+        if (_createBusy)
+        {
+            return;
+        }
+
+        _createError = null;
+
+        if (IsCreateRoute)
+        {
+            Navigation.NavigateTo("/surface", forceLoad: true);
+        }
+    }
+
+    private async Task CreateAgentAsync()
+    {
+        _createBusy = true;
+        _createError = null;
+
+        try
+        {
+            var config = _createDraft.Build();
+            await Workspace.CreateAgentAsync(config);
+            _createDraft = new SurfaceAgentConfigurationDraft();
+            _composerFocusRequested = true;
+            if (IsCreateRoute)
+            {
+                Navigation.NavigateTo("/surface", forceLoad: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            _createError = ex.Message;
+        }
+        finally
+        {
+            _createBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task OnShowHiddenAgentsChanged(ChangeEventArgs args)
+    {
+        var value = args.Value is bool boolValue
+            ? boolValue
+            : bool.TryParse(args.Value?.ToString(), out var parsed) && parsed;
+
+        await Workspace.SetShowHiddenAgentsAsync(value);
+    }
+
+    private async Task OnShowRunningAgentsChanged(ChangeEventArgs args)
+    {
+        var value = args.Value is bool boolValue
+            ? boolValue
+            : bool.TryParse(args.Value?.ToString(), out var parsed) && parsed;
+
+        await Workspace.SetShowRunningAgentsAsync(value);
+    }
+
+    private void OpenSettings()
+    {
+        _settingsOpen = true;
+        ClosePanelMenu();
+    }
+
+    private void CloseSettings()
+        => _settingsOpen = false;
+
+    private void SelectAgent(string handle)
+    {
+        CloseMentionPicker();
+        _selectedSquadTab = SurfaceSquadTab.Chat;
+        Workspace.SelectAgent(handle);
+        _ = Workspace.RefreshSelectedHealthAsync();
+    }
+
+    private void SelectSquad(string orchestratorHandle)
+    {
+        CloseMentionPicker();
+        _selectedSquadTab = SurfaceSquadTab.Chat;
+        Workspace.SelectSquad(orchestratorHandle);
+        _ = Workspace.RefreshSelectedHealthAsync();
+    }
+
+    private void ApplyTargetQuery()
+    {
+        if (!string.IsNullOrWhiteSpace(SquadQueryHandle)
+            && !string.Equals(SquadQueryHandle, _appliedSquadQueryHandle, StringComparison.OrdinalIgnoreCase))
+        {
+            _appliedSquadQueryHandle = SquadQueryHandle;
+            _appliedAgentQueryHandle = null;
+            SelectSquad(SquadQueryHandle);
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(AgentQueryHandle)
+            && !string.Equals(AgentQueryHandle, _appliedAgentQueryHandle, StringComparison.OrdinalIgnoreCase))
+        {
+            _appliedAgentQueryHandle = AgentQueryHandle;
+            _appliedSquadQueryHandle = null;
+            SelectAgent(AgentQueryHandle);
+        }
+    }
+
+    private void SelectAgentType(string alias)
+        => _createDraft.AgentType = alias;
+
+    private void TogglePlugin(string alias)
+        => _createDraft.TogglePluginAlias(alias);
+
+    private void ToggleTool(string alias)
+        => _createDraft.ToggleToolAlias(alias);
+
+    private void SelectSwarmPlugin(SurfaceSquadAgentDraft swarmAgent, string alias)
+    {
+        if (string.IsNullOrWhiteSpace(alias))
+        {
+            return;
+        }
+
+        swarmAgent.AddPlugin(alias);
+        swarmAgent.PendingPluginAlias = string.Empty;
+    }
+
+    private void SelectSwarmTool(SurfaceSquadAgentDraft swarmAgent, string alias)
+    {
+        if (string.IsNullOrWhiteSpace(alias))
+        {
+            return;
+        }
+
+        swarmAgent.AddTool(alias);
+        swarmAgent.PendingToolAlias = string.Empty;
+    }
+
+    private void AddArgRow()
+        => _createDraft.Args.Add(new SurfaceKeyValueDraftRow());
+
+    private void RemoveArgRow(SurfaceKeyValueDraftRow row)
+    {
+        _createDraft.Args.Remove(row);
+        if (_createDraft.Args.Count == 0)
+        {
+            AddArgRow();
+        }
+    }
+
+    private void AddMcpServer()
+        => _createDraft.McpServers.Add(new SurfaceMcpServerDraft());
+
+    private void RemoveMcpServer(SurfaceMcpServerDraft server)
+        => _createDraft.McpServers.Remove(server);
+
+    private async Task CreateSquadAsync()
+    {
+        _squadCreateBusy = true;
+        _squadCreateError = null;
+
+        try
+        {
+            var definition = _squadDraft.Build();
+            await Workspace.CreateSquadAsync(definition);
+            _squadDraft = new SurfaceSquadDraft();
+            _composerFocusRequested = true;
+            Navigation.NavigateTo("/surface", forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            _squadCreateError = ex.Message;
+        }
+        finally
+        {
+            _squadCreateBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private static void AddKeyValueRow(List<SurfaceKeyValueDraftRow> rows)
+        => rows.Add(new SurfaceKeyValueDraftRow());
+
+    private static void RemoveKeyValueRow(List<SurfaceKeyValueDraftRow> rows, SurfaceKeyValueDraftRow row)
+    {
+        rows.Remove(row);
+        if (rows.Count == 0)
+        {
+            rows.Add(new SurfaceKeyValueDraftRow());
+        }
+    }
+
+    private async Task SendAsync()
+    {
+        if (!CanSend)
+        {
+            return;
+        }
+
+        _sending = true;
+        var message = _draft;
+        var fileIds = ReadyAttachmentFileIds();
+        _draft = string.Empty;
+        _pendingAttachments.Clear();
+        CloseMentionPicker();
+
+        try
+        {
+            await Workspace.SendChatAsync(message, fileIds);
+        }
+        finally
+        {
+            _sending = false;
+            _composerFocusRequested = true;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    [JSInvokable]
+    public Task SendComposerMessageAsync()
+        => SendAsync();
+
+    [JSInvokable]
+    public Task HandleComposerMentionKeyAsync(string key)
+    {
+        if (!MentionPickerOpen)
+        {
+            return Task.CompletedTask;
+        }
+
+        var candidates = MentionCandidates();
+        switch (key)
+        {
+            case "ArrowDown":
+                _mentionSelectedIndex = (_mentionSelectedIndex + 1) % candidates.Count;
+                break;
+            case "ArrowUp":
+                _mentionSelectedIndex = (_mentionSelectedIndex + candidates.Count - 1) % candidates.Count;
+                break;
+            case "Enter":
+            case "Tab":
+                SelectMention(candidates[Math.Clamp(_mentionSelectedIndex, 0, candidates.Count - 1)]);
+                break;
+            case "Escape":
+                CloseMentionPicker();
+                break;
+        }
+
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private void HandleComposerInput(ChangeEventArgs args)
+    {
+        _draft = args.Value?.ToString() ?? string.Empty;
+        UpdateMentionPicker();
+    }
+
+    private async Task HandleFilesSelectedAsync(InputFileChangeEventArgs args)
+    {
+        foreach (var file in args.GetMultipleFiles())
+        {
+            var attachment = new SurfacePendingAttachment(file.Name, file.Size, file.ContentType);
+            _pendingAttachments.Add(attachment);
+            await InvokeAsync(StateHasChanged);
+
+            try
+            {
+                await using var stream = file.OpenReadStream(SurfaceOptions.Value.MaxChatAttachmentBytes);
+                var uploaded = await FileUploadClient.UploadAsync(
+                    stream,
+                    file.Name,
+                    file.ContentType,
+                    SurfaceOptions.Value.ChatFileUploadTtl,
+                    _timerCts?.Token ?? CancellationToken.None);
+                attachment.FileId = uploaded.FileId;
+                if (attachment.DeleteWhenUploaded)
+                {
+                    await DeleteUploadedAttachmentAsync(attachment);
+                }
+            }
+            catch (Exception ex)
+            {
+                if (!attachment.DeleteWhenUploaded)
+                {
+                    attachment.Error = ex.Message;
+                }
+            }
+            finally
+            {
+                attachment.IsUploading = false;
+                if (!attachment.DeleteWhenUploaded)
+                {
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+        }
+    }
+
+    private async Task RemoveAttachmentAsync(string id)
+    {
+        var attachment = _pendingAttachments.FirstOrDefault(attachment => string.Equals(attachment.Id, id, StringComparison.Ordinal));
+        if (attachment is null)
+        {
+            return;
+        }
+
+        _pendingAttachments.Remove(attachment);
+        attachment.DeleteWhenUploaded = true;
+
+        if (!string.IsNullOrWhiteSpace(attachment.FileId))
+        {
+            await DeleteUploadedAttachmentAsync(attachment);
+        }
+    }
+
+    private async Task DeleteUploadedAttachmentAsync(SurfacePendingAttachment attachment)
+    {
+        try
+        {
+            await FileUploadClient.DeleteAsync(attachment.FileId!);
+        }
+        catch
+        {
+            // The pending attachment is no longer part of a message; TTL cleanup remains the fallback.
+        }
+    }
+
+    private List<string> ReadyAttachmentFileIds()
+        => _pendingAttachments
+            .Where(attachment => attachment.IsReady && !string.IsNullOrWhiteSpace(attachment.FileId))
+            .Select(attachment => attachment.FileId!)
+            .ToList();
+
+    private void UpdateMentionPicker()
+    {
+        if (TryGetMentionQuery(out var query))
+        {
+            _mentionActive = true;
+            _mentionQuery = query;
+            var count = MentionCandidates().Count;
+            _mentionSelectedIndex = count == 0 ? 0 : Math.Clamp(_mentionSelectedIndex, 0, count - 1);
+            return;
+        }
+
+        CloseMentionPicker();
+    }
+
+    private bool TryGetMentionQuery(out string query)
+    {
+        query = string.Empty;
+        if (Workspace.SelectedSquad is null || !_draft.StartsWith('@'))
+        {
+            return false;
+        }
+
+        var splitAt = _draft.IndexOfAny([' ', '\t', '\r', '\n']);
+        if (splitAt >= 0)
+        {
+            return false;
+        }
+
+        query = _draft.Length > 1 ? _draft[1..] : string.Empty;
+        return true;
+    }
+
+    private IReadOnlyList<SurfaceMentionCandidate> MentionCandidates()
+    {
+        var squad = Workspace.SelectedSquad;
+        if (squad is null)
+        {
+            return [];
+        }
+
+        var query = _mentionQuery.Trim();
+        var candidates = new List<SurfaceMentionCandidate>();
+
+        if (squad.SquadType != SurfaceSquadType.Task)
+        {
+            candidates.AddRange(squad.Agents.Select(agent =>
+            {
+                var displayName = string.IsNullOrWhiteSpace(agent.Name) ? DisplayHandle(agent.Handle) : agent.Name;
+                var mention = string.IsNullOrWhiteSpace(agent.Name) || agent.Name.Any(char.IsWhiteSpace)
+                    ? DisplayHandle(agent.Handle)
+                    : agent.Name;
+                var detail = string.IsNullOrWhiteSpace(agent.Description)
+                    ? agent.AgentType
+                    : agent.Description!;
+                return new SurfaceMentionCandidate(mention, displayName, detail, agent.Handle, 0);
+            }));
+        }
+
+        if (squad.SquadType == SurfaceSquadType.Swarm)
+        {
+            candidates.Add(new("planner", "Planner", "Swarm planner", squad.PlannerHandle, 1));
+        }
+
+        candidates.Add(new("swarm", squad.Name, "Squad orchestrator", squad.OrchestratorHandle, 2));
+        candidates.Add(new("orchestrator", "Orchestrator", "Squad orchestrator", squad.OrchestratorHandle, 3));
+
+        return candidates
+            .Where(candidate => string.IsNullOrWhiteSpace(query)
+                                || candidate.Mention.Contains(query, StringComparison.OrdinalIgnoreCase)
+                                || candidate.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase)
+                                || candidate.Detail.Contains(query, StringComparison.OrdinalIgnoreCase)
+                                || candidate.Handle.Contains(query, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(candidate => candidate.SortRank)
+            .ThenBy(candidate => candidate.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private void SelectMention(SurfaceMentionCandidate candidate)
+    {
+        _draft = $"@{candidate.Mention} ";
+        CloseMentionPicker();
+        _composerFocusRequested = true;
+    }
+
+    private void CloseMentionPicker()
+    {
+        _mentionActive = false;
+        _mentionQuery = string.Empty;
+        _mentionSelectedIndex = 0;
+    }
+
+    private IEnumerable<SurfaceTimelineItem> SelectedTimeline()
+    {
+        if (Workspace.SelectedAgent is null)
+        {
+            return [];
+        }
+
+        return Workspace.GetVisibleTimelineForAgent(Workspace.SelectedAgent.Handle);
+    }
+
+    private bool IsSelected(SurfaceAgentSummary agent)
+        => string.Equals(Workspace.SelectedAgent?.Handle, agent.Handle, StringComparison.OrdinalIgnoreCase);
+
+    private string AgentRowClass(SurfaceAgentSummary agent)
+    {
+        var classes = "surface-agent-row";
+        if (IsSelected(agent))
+        {
+            classes += " is-selected";
+        }
+
+        if (agent.IsWorking)
+        {
+            classes += " is-working";
+        }
+
+        if (agent.HasUnread)
+        {
+            classes += " has-unread";
+        }
+
+        return classes;
+    }
+
+    private bool IsSelectedSquad(SurfaceSquad squad)
+        => string.Equals(Workspace.SelectedSquad?.OrchestratorHandle, squad.OrchestratorHandle, StringComparison.OrdinalIgnoreCase);
+
+    private static string SectionTitleClass(bool isActive)
+        => isActive ? "surface-nav-group-title is-active" : "surface-nav-group-title";
+
+    private static string AgentMeta(SurfaceAgentSummary agent)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(agent.AgentType))
+        {
+            parts.Add(agent.AgentType);
+        }
+
+        if (agent.IsShared)
+        {
+            parts.Add("shared");
+        }
+
+        if (agent.IsSurfaceAgent)
+        {
+            parts.Add("surface");
+        }
+
+        if (agent.IsHidden)
+        {
+            parts.Add("hidden");
+        }
+
+        return string.Join(" ", parts);
+    }
+
+    private static string FormatMemberRole(SurfaceSquadMemberRole role)
+        => role == SurfaceSquadMemberRole.SubjectMatterExpert
+            ? "SME"
+            : role.ToString();
+
+    private static string AgentSubtitle(SurfaceAgentSummary agent)
+    {
+        if (agent.IsWorking)
+        {
+            return string.IsNullOrWhiteSpace(agent.StatusText)
+                ? "Working"
+                : agent.StatusText;
+        }
+
+        return agent.AgentType;
+    }
+
+    private static string PrimaryAlias(SurfaceDiscoveryRegistryEntry entry)
+        => entry.Aliases.FirstOrDefault(alias => !string.IsNullOrWhiteSpace(alias))
+           ?? entry.TypeName;
+
+    private static string DiscoverySummary(SurfaceDiscoveryRegistryEntry entry)
+    {
+        if (!string.IsNullOrWhiteSpace(entry.Description))
+        {
+            return entry.Description;
+        }
+
+        if (!string.IsNullOrWhiteSpace(entry.Capabilities))
+        {
+            return entry.Capabilities;
+        }
+
+        if (entry.Methods.Count > 0)
+        {
+            return string.Join(", ", entry.Methods.Take(3).Select(method => method.Name));
+        }
+
+        return entry.TypeName;
+    }
+
+    private IEnumerable<SurfaceDiscoveryRegistryEntry> SwarmMemberAgentTypes()
+        => Workspace.Discovery?.Agents
+               .Where(entry =>
+               {
+                   var alias = PrimaryAlias(entry);
+                   return !string.Equals(alias, SurfaceSwarmAgentTypes.Orchestrator, StringComparison.OrdinalIgnoreCase)
+                          && !string.Equals(alias, SurfaceSwarmAgentTypes.Planner, StringComparison.OrdinalIgnoreCase)
+                          && !string.Equals(alias, SurfaceOrchestrationAgentTypes.SquadOrchestrator, StringComparison.OrdinalIgnoreCase);
+               })
+           ?? [];
+
+    private IEnumerable<SurfaceDiscoveryRegistryEntry> AvailablePlugins(SurfaceSquadAgentDraft swarmAgent)
+        => AvailableDiscoveryEntries(Workspace.Discovery?.Plugins ?? [], swarmAgent.PluginList);
+
+    private IEnumerable<SurfaceDiscoveryRegistryEntry> AvailableTools(SurfaceSquadAgentDraft swarmAgent)
+        => AvailableDiscoveryEntries(Workspace.Discovery?.Tools ?? [], swarmAgent.ToolList);
+
+    private static IEnumerable<SurfaceDiscoveryRegistryEntry> AvailableDiscoveryEntries(
+        IEnumerable<SurfaceDiscoveryRegistryEntry> entries,
+        IReadOnlyCollection<string> selected)
+        => entries
+            .Where(entry => !selected.Contains(PrimaryAlias(entry), StringComparer.OrdinalIgnoreCase))
+            .OrderBy(entry => PrimaryAlias(entry), StringComparer.OrdinalIgnoreCase);
+
+    private IEnumerable<SurfaceAgentSummary> ExistingAgentsForSelectedSquad()
+    {
+        var selected = Workspace.SelectedSquad;
+        if (selected is null)
+        {
+            return [];
+        }
+
+        var existingHandles = selected.Agents.Select(agent => agent.Handle).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        existingHandles.Add(selected.OrchestratorHandle);
+        existingHandles.Add(selected.PlannerHandle);
+
+        return Workspace.AllAgents
+            .Where(agent => !agent.IsHidden
+                            && !existingHandles.Contains(agent.Handle)
+                            && !string.Equals(agent.AgentType, SurfaceSwarmAgentTypes.Orchestrator, StringComparison.OrdinalIgnoreCase)
+                            && !string.Equals(agent.AgentType, SurfaceSwarmAgentTypes.Planner, StringComparison.OrdinalIgnoreCase)
+                            && !string.Equals(agent.AgentType, SurfaceOrchestrationAgentTypes.SquadOrchestrator, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(agent => agent.DisplayName, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static string PresenceClass(SurfaceAgentSummary agent)
+        => agent.IsWorking ? "is-working" : agent.State switch
+        {
+            HealthState.Healthy => "is-healthy",
+            HealthState.Degraded => "is-degraded",
+            HealthState.Unhealthy => "is-unhealthy",
+            _ => "is-idle"
+        };
+
+    private static string PresenceText(SurfaceAgentSummary agent)
+        => agent.IsWorking ? "Working" : agent.State switch
+        {
+            HealthState.Healthy => "Ready",
+            HealthState.Degraded => "Needs attention",
+            HealthState.Unhealthy => "Unavailable",
+            HealthState.NotConfigured => "Starting",
+            _ => "Unknown"
+        };
+
+    private string MessageClass(SurfaceTimelineItem item)
+    {
+        var classes = item.Kind switch
+        {
+            SurfaceTimelineItemKind.Principal => "is-principal",
+            SurfaceTimelineItemKind.Status => "is-status",
+            SurfaceTimelineItemKind.Error => "is-error",
+            SurfaceTimelineItemKind.AdaptiveCard => "is-card",
+            _ => "is-agent"
+        };
+
+        if (IsSwarmMirror(item))
+        {
+            classes += " is-swarm-mirror";
+        }
+
+        if (IsAgentToAgent(item))
+        {
+            classes += " is-agent-to-agent";
+        }
+
+        if (IsAgentToUser(item))
+        {
+            classes += " is-agent-to-user";
+        }
+
+        return classes;
+    }
+
+    private bool IsAgentToAgentExpanded(SurfaceTimelineItem item)
+        => _expandedAgentToAgentMessageIds.Contains(item.Id);
+
+    private void ToggleAgentToAgentMessage(string itemId)
+    {
+        if (!_expandedAgentToAgentMessageIds.Add(itemId))
+        {
+            _expandedAgentToAgentMessageIds.Remove(itemId);
+        }
+    }
+
+    private static string AgentToAgentToggleTitle(bool isExpanded)
+        => isExpanded ? "Collapse agent message" : "Expand agent message";
+
+    private static string AgentToAgentPreview(SurfaceTimelineItem item)
+    {
+        var text = string.IsNullOrWhiteSpace(item.Text)
+            ? item.MessageType ?? "Agent message"
+            : CompactWhitespace(item.Text);
+
+        const int maxLength = 180;
+        return text.Length <= maxLength
+            ? text
+            : $"{text[..maxLength].TrimEnd()}...";
+    }
+
+    private static string CompactWhitespace(string value)
+        => string.Join(" ", value.Split([' ', '\r', '\n', '\t'], StringSplitOptions.RemoveEmptyEntries));
+
+    private string SelectedPresenceClass()
+        => Workspace.SelectedAgent is null ? "is-idle" : PresenceClass(Workspace.SelectedAgent);
+
+    private string SelectedPresenceText()
+        => Workspace.SelectedAgent is null ? "Unknown" : PresenceText(Workspace.SelectedAgent);
+
+    private string? SelectedActivityText()
+    {
+        if (Workspace.SelectedAgent is not { IsWorking: true } agent)
+        {
+            return null;
+        }
+
+        return string.IsNullOrWhiteSpace(agent.StatusText)
+            ? "Agent is working"
+            : agent.StatusText;
+    }
+
+    private string MessageAuthor(SurfaceTimelineItem item)
+        => item.Kind == SurfaceTimelineItemKind.Principal
+            ? _principalContext?.DisplayName ?? _principalContext?.PrincipalId ?? "Principal"
+            : DisplayHandle(GetMessageFrom(item.SourceMessage) ?? item.Author ?? "Agent");
+
+    private string MessageRoute(SurfaceTimelineItem item)
+    {
+        var message = item.SourceMessage;
+        if (message is null)
+        {
+            if (item.Kind == SurfaceTimelineItemKind.Principal && !string.IsNullOrWhiteSpace(item.AgentHandle))
+            {
+                return $"to {DisplayHandle(item.AgentHandle)}";
+            }
+
+            return string.Empty;
+        }
+
+        var from = DisplayHandle(GetMessageFrom(message));
+        var to = DisplayHandle(GetMessageTo(message));
+        if (string.IsNullOrWhiteSpace(from) || string.IsNullOrWhiteSpace(to))
+        {
+            return string.Empty;
+        }
+
+        if (item.Kind == SurfaceTimelineItemKind.Principal)
+        {
+            return $"to {to}";
+        }
+
+        return $"{from} -> {to}";
+    }
+
+    private string MessageInitials(SurfaceTimelineItem item)
+        => item.Kind == SurfaceTimelineItemKind.Principal
+            ? Initials(_principalContext?.DisplayName ?? _principalContext?.PrincipalId ?? "Principal")
+            : Initials(DisplayHandle(GetMessageFrom(item.SourceMessage) ?? item.Author ?? "Agent"));
+
+    private static MarkupString RenderMarkdown(string? text)
+        => new(SurfaceMarkdownRenderer.Render(text));
+
+    private static bool IsSwarmMirror(SurfaceTimelineItem item)
+        => item.SourceMessage?.Args is not null
+           && item.SourceMessage.Args.TryGetValue(SurfaceSquadArgs.Mirror, out var mirror)
+           && string.Equals(mirror, "true", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsAgentToAgent(SurfaceTimelineItem item)
+    {
+        var message = item.SourceMessage;
+        var from = GetMessageFrom(message);
+        var to = GetMessageTo(message);
+        return from?.Contains(':', StringComparison.Ordinal) == true
+               && to?.Contains(':', StringComparison.Ordinal) == true
+               && message?.Args?.ContainsKey(SurfaceSquadArgs.SquadHandle) == true
+               && !string.Equals(from, to, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool IsAgentToUser(SurfaceTimelineItem item)
+    {
+        var message = item.SourceMessage;
+        var from = GetMessageFrom(message);
+        var to = GetMessageTo(message);
+        return from?.Contains(':', StringComparison.Ordinal) == true
+               && !string.IsNullOrWhiteSpace(to)
+               && (string.Equals(to, _principalContext?.PrincipalId, StringComparison.OrdinalIgnoreCase)
+                   || !to.Contains(':', StringComparison.Ordinal));
+    }
+
+    private static string? GetMessageFrom(AgentMessage? message)
+        => message is null
+            ? null
+            : GetMessageArg(message, SurfaceSquadArgs.OriginalFromHandle) ?? message.FromHandle;
+
+    private static string? GetMessageTo(AgentMessage? message)
+        => message is null
+            ? null
+            : GetMessageArg(message, SurfaceSquadArgs.OriginalToHandle) ?? message.ToHandle;
+
+    private static string DisplayHandle(string? handle)
+    {
+        if (string.IsNullOrWhiteSpace(handle))
+        {
+            return string.Empty;
+        }
+
+        var colon = handle.IndexOf(':', StringComparison.Ordinal);
+        return colon >= 0 && colon + 1 < handle.Length ? handle[(colon + 1)..] : handle;
+    }
+
+    private static string? GetMessageArg(AgentMessage message, string key)
+        => message.Args is not null && message.Args.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value)
+            ? value
+            : null;
+
+    private static string Initials(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "A";
+        }
+
+        var parts = value.Split([' ', '-', '_', ':'], StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 1)
+        {
+            return parts[0][..Math.Min(2, parts[0].Length)].ToUpperInvariant();
+        }
+
+        return string.Concat(parts.Take(2).Select(p => char.ToUpperInvariant(p[0])));
+    }
+
+    private static string FormatDateSeparator(DateTime localTimestamp)
+    {
+        var today = DateTime.Today;
+        if (localTimestamp.Date == today)
+        {
+            return "Today";
+        }
+
+        if (localTimestamp.Date == today.AddDays(-1))
+        {
+            return "Yesterday";
+        }
+
+        return localTimestamp.ToString("dddd");
+    }
+
+    private static string FormatMessageTimestamp(DateTime localTimestamp)
+        => localTimestamp.ToString("dddd h:mm tt");
+
+    private static string FormatLatency(double? milliseconds)
+        => milliseconds.HasValue ? $"{milliseconds.Value:N0} ms" : "-";
+
+    private void OnWorkspaceChanged()
+    {
+        if (Workspace.SelectedSquad is null)
+        {
+            _selectedSquadTab = SurfaceSquadTab.Chat;
+        }
+
+        var selectedHandle = Workspace.SelectedAgent?.Handle;
+        var selectedChanged = !string.Equals(selectedHandle, _lastTimelineAgentHandle, StringComparison.OrdinalIgnoreCase);
+        var visibleTimelineCount = CountSelectedTimeline();
+        var activityText = SelectedActivityText();
+        var activityChanged = !string.Equals(activityText, _lastActivityText, StringComparison.Ordinal);
+        if (selectedChanged || visibleTimelineCount > _visibleTimelineCount || (activityChanged && !string.IsNullOrWhiteSpace(activityText)))
+        {
+            _timelineScrollRequested = true;
+        }
+
+        _lastTimelineAgentHandle = selectedHandle;
+        _visibleTimelineCount = visibleTimelineCount;
+        _lastActivityText = activityText;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private int CountSelectedTimeline()
+    {
+        if (Workspace.SelectedAgent is null)
+        {
+            return 0;
+        }
+
+        return SelectedTimeline().Count();
+    }
+
+    private bool IsCreateRoute
+    {
+        get
+        {
+            var path = Navigation.ToBaseRelativePath(Navigation.Uri).TrimEnd('/');
+            return string.Equals(path, "surface/create", StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    private bool IsCreateSquadRoute
+    {
+        get
+        {
+            var path = Navigation.ToBaseRelativePath(Navigation.Uri).TrimEnd('/');
+            return string.Equals(path, "surface/create-squad", StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    private sealed record SurfaceMentionCandidate(
+        string Mention,
+        string DisplayName,
+        string Detail,
+        string Handle,
+        int SortRank);
+
+    private enum SurfaceSquadTab
+    {
+        Chat,
+        Settings
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Workspace.Changed -= OnWorkspaceChanged;
+        _activeView?.Dispose();
+        _timerCts?.Cancel();
+        _agentTimer?.Dispose();
+        _healthTimer?.Dispose();
+        _timerCts?.Dispose();
+        _dotNetRef?.Dispose();
+        if (_composerModule is not null)
+        {
+            try
+            {
+                await _composerModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
+    }
+}

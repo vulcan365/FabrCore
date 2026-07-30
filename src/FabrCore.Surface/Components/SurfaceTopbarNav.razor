@@ -1,0 +1,16 @@
+@using Microsoft.Extensions.Options
+@inject IOptions<SurfaceNavigationOptions> NavigationOptions
+
+<div class="surface-topbar-nav">
+    @if (NavigationOptions.Value.SurfaceLoaded)
+    {
+        <NavLink href="/surface" data-enhance-nav="false" class="surface-topbar-link" ActiveClass="is-active" Match="NavLinkMatch.All">Chat</NavLink>
+    }
+    @if (NavigationOptions.Value.AdminLoaded)
+    {
+        <NavLink href="/surface/management" data-enhance-nav="false" class="surface-topbar-link" ActiveClass="is-active" Match="NavLinkMatch.Prefix">Management</NavLink>
+        <NavLink href="/surface/knowledge" data-enhance-nav="false" class="surface-topbar-link" ActiveClass="is-active" Match="NavLinkMatch.Prefix">Knowledge</NavLink>
+        <NavLink href="/surface/memory" data-enhance-nav="false" class="surface-topbar-link" ActiveClass="is-active" Match="NavLinkMatch.Prefix">Memory</NavLink>
+        <NavLink href="/surface/execution" data-enhance-nav="false" class="surface-topbar-link" ActiveClass="is-active" Match="NavLinkMatch.Prefix">Execution</NavLink>
+    }
+</div>

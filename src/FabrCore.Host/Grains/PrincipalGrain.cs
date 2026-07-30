@@ -81,7 +81,7 @@ namespace FabrCore.Host.Grains
         private readonly IClusterClient clusterClient;
         private readonly ILogger<PrincipalGrain> logger;
         private readonly IFabrCoreAgentService _agentService;
-        private readonly AclEnforcer _acl;
+        private readonly FabrCore.Core.Acl.AclEnforcer _acl;
         private readonly IAgentMessageMonitor _messageMonitor;
         private readonly VerifiableExecutionRecorder _verifiableExecution;
         private readonly ObserverManager<IPrincipalGrainObserver> observerManager;
@@ -98,7 +98,7 @@ namespace FabrCore.Host.Grains
             IClusterClient clusterClient,
             ILoggerFactory loggerFactory,
             IFabrCoreAgentService agentService,
-            AclEnforcer acl,
+            FabrCore.Core.Acl.AclEnforcer acl,
             IAgentMessageMonitor messageMonitor,
             VerifiableExecutionRecorder verifiableExecution,
             Microsoft.Extensions.Options.IOptions<PrincipalGrainOptions> grainOptions,

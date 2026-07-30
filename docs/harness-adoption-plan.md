@@ -1,6 +1,8 @@
 # FabrCore × Microsoft Agent Framework Harness — Analysis & Adoption Plan
 
 > Status: **Proposal** (2026-07-28; commercial-layer analysis added 2026-07-29). Analysis verified against `C:\repos\Microsoft\agent-framework` (Microsoft.Agents.AI.Harness **1.15.0**, stable), this repo (the **open-source** runtime — FabrCore.Sdk on Microsoft.Agents.AI **1.15.0**), and `C:\repos\FabrCore-V365` (the **commercial** offerings — `FabrCore.Services.Memory` v0.5.0 and the `FabrCore.Surface` squads/SwarmV2 orchestration, on FabrCore.Sdk 1.4.1 / Microsoft.Agents.AI 1.15.0 transitive). Every claim below cites a file path so it can be re-verified as the framework evolves.
+>
+> **Decisions to date:** (1) compaction is **hybrid** — framework-style in-run windowing + FabrCore storage summarization (§3.2); (2) **no file surfaces** — file memory and file access are rejected; `fabrcore.host` storage / MCP cover genuine file needs, and durable memory comes from the Services.Memory socket (§4.1, §5.3); (3) FabrCore ships a **native harness** (`FabrCoreHarnessAgent`) composed directly from the framework's providers, with Microsoft's `AsHarnessAgent` kept as a supported escape hatch (§5.1); (4) **open-core boundary** — memory abstractions, tool-result compression, and the capability roster move OSS (§8); **superseded in part on 2026-07-29**: the full Services.Memory and Services.GraphRag engines now also move OSS as optional SQL-backed packages — see [memory-graphrag-oss-plan.md](memory-graphrag-oss-plan.md).
 
 Blog references:
 - [Microsoft Agent Framework at Build 2026](https://devblogs.microsoft.com/agent-framework/microsoft-agent-framework-at-build-2026-announce/)
@@ -19,21 +21,25 @@ FabrCore already references `Microsoft.Agents.AI` 1.15.0, the exact version the 
 
 | Harness gives the model | FabrCore makes it production-grade |
 | --- | --- |
-| Todo lists, modes, file memory in session state | Orleans-durable session snapshots that survive silo restarts and scale-out |
-| File memory / file access on local disk | Grain/blob/SQL-backed `AgentFileStore` — no silo-local disk, quota-enforced |
+| Todo lists, modes, approval rules in session state | Orleans-durable session snapshots that survive silo restarts and scale-out |
+| Flat-file memory / file access on local disk (default-on) | **Rejected** — no file surfaces in the runtime; durable memory via the `FabrCore.Services.Memory` socket instead (§4.1, §5.3) |
 | Tool approval requests surfaced in the response | Delivery over WebSocket / REST / Teams Adaptive Cards with the durable principal outbox |
 | In-run loops (`LoopAgent`, max 10 iterations) | Durable recurrence via Orleans reminders + `ChatRunSafetyScope` spend kill-switch |
 | Background agents as in-process `AIAgent`s | Fan-out onto real, ACL-governed, monitored FabrCore agents via `A2AAgentProxy` |
 | Token-estimate compaction | Compaction informed by provider-actual token usage + storage-side map-reduce summarization |
 | Code-only `HarnessAgentOptions` (30 properties, partly `[Experimental]`) | Zero-code blueprint JSON (`_Harness*` args) with the existing 3-tier config cascade |
 
-The analysis spans both halves of the product: the open-source runtime (this repo) and the commercial layer (`FabrCore-V365` — `FabrCore.Services.Memory` and the Surface squads/SwarmV2 orchestration). §4.1–4.2 cover how the commercial services compose with the harness rather than compete with it.
+**Architecture decision — native harness.** Microsoft's harness *package* is only a thin assembler (4 files); every capability lives in the core `Microsoft.Agents.AI` package FabrCore already references. FabrCore therefore ships its **own assembler** — `FabrCoreHarnessAgent` — composing those same providers (keeping Microsoft's tool names, so prompts stay portable) with FabrCore's pipeline, server-safe defaults, and the Services.Memory socket. The FabrCore glue (session snapshots, approvals, injection) is agent-agnostic, so devs who prefer Microsoft's stock `AsHarnessAgent` can still use it with full platform support — an escape hatch, not a second product (§5.1).
 
-The rest of this document is the capability reference, the compaction deep-dive, a feature-by-feature verdict matrix (plus two commercial-layer deep-dives), the integration architecture, ranked opportunities, risks, and a 4-phase roadmap.
+The analysis spans both halves of the product: the open-source runtime (this repo) and the commercial layer (`FabrCore-V365` — `FabrCore.Services.Memory` and the Surface squads/SwarmV2 orchestration). §4.1–4.2 cover how the commercial services compose with the harness rather than compete with it; §8 defines what moves across the open-core boundary.
+
+The rest of this document is the capability reference, the compaction deep-dive, a feature-by-feature verdict matrix (plus two commercial-layer deep-dives), the integration architecture, ranked opportunities, risks, the open-core boundary, and a 4-phase roadmap.
 
 ---
 
 ## 2. Harness capability reference (.NET, 1.15.0)
+
+> **Reading note:** this section documents *Microsoft's* harness as shipped — the upstream baseline FabrCore tracks and the behavior the escape hatch provides. Per the native-harness decision (§5.1), FabrCore composes the underlying **providers** (core `Microsoft.Agents.AI` package) directly and does not use the thin assembler package at runtime.
 
 ### 2.1 Packages and entry point
 
@@ -121,6 +127,8 @@ FabrCore's context management is its most mature subsystem — and the area wher
 
 ### 3.2 Ownership decision (approved): hybrid with a hard boundary per layer
 
+Under the native assembler (§5.1) this wiring is direct — FabrCore instantiates the `CompactionProvider`/strategy itself rather than steering Microsoft's assembler with off-switches. The §3.3 matrix still applies verbatim to escape-hatch agents. "Harness" in the table below means the framework's in-run compaction machinery, whichever assembler composed it.
+
 | Layer | Owner | Detail |
 | --- | --- | --- |
 | In-run context windowing | **Harness** | `CompactionProvider` with `ContextWindowCompactionStrategy` fed from `ModelConfiguration.ContextWindowTokens` / `MaxOutputTokens`. FabrCore **validates both are configured** for harness agents — otherwise the agent silently runs uncapped (correction #1) |
@@ -151,14 +159,14 @@ FabrCore's context management is its most mature subsystem — and the area wher
 
 | Feature | Harness | FabrCore today | Verdict | Rationale |
 | --- | --- | --- | --- | --- |
-| **File memory** | ON; 7 tools; `memories.md` index; pluggable `AgentFileStore`; default = local disk | None (HTTP artifact `FileController` only) | **ADOPT with durable backing** | Highest-value net-new capability and the model-facing insurance against compaction loss. Default is server-hostile twice: local disk dies on redeploy, and without session persistence the working-folder factory mints a fresh folder per activation. Ship `GrainBackedAgentFileStore`; sequence after session snapshots |
-| **Memory service** | File memory only (session-scoped, lexical grep) | Commercial `FabrCore.Services.Memory` (FabrCore-V365): scoped SQL knowledge graph with an LLM-managed lifecycle — source-verified deep-dive in **§4.1**. OSS in-repo SQL-vector memory stays excluded from compilation (`FabrCore.Sdk.csproj:15`) | **HYBRID — position both, then bridge** | Zero overlap by construction: Services.Memory has no file/path abstraction at all (no `AgentFileStore`, no `ls`/`grep` analogue — §4.1), so harness file memory is purely additive. Positioning: file memory = in-session scratchpad the *model* manages; Services.Memory = durable cross-session knowledge the *platform* manages. Bridge via `ExtractMemoriesAsync` (§4.1) |
+| **File memory** | ON; 7 tools; `memories.md` index; pluggable `AgentFileStore`; default = local disk | None (HTTP artifact `FileController` only) | **REJECT (decision 2026-07-29)** | No file surfaces in the runtime — a multi-tenant server doesn't want model-managed flat files, and `fabrcore.host` storage / MCP already cover genuine file needs. File memory's two jobs are covered better elsewhere: compaction insurance by FabrCore's storage-side summarization (§3.2), durable notes by the Services.Memory socket (§4.1, §5.3). One prompt fix required: override the plan-mode instruction that says "write the plan to a memory file" (§5.1) |
+| **Memory service** | File memory only (session-scoped, lexical grep) | Commercial `FabrCore.Services.Memory` (FabrCore-V365): scoped SQL knowledge graph with an LLM-managed lifecycle — source-verified deep-dive in **§4.1**. OSS in-repo SQL-vector memory stays excluded from compilation (`FabrCore.Sdk.csproj:15`) | **ADOPT as *the* memory story (socket OSS, engine commercial)** | With file memory rejected, Services.Memory is FabrCore's only memory layer — a strength, not a gap: durable, scoped, graph-linked, and richer than anything the .NET framework offers (which has **no durable memory at all**; Python-only). Move the abstractions OSS so the native harness gets a first-class memory socket (§5.3, §8); bridge conversation → memory via `ExtractMemoriesAsync` (§4.1) |
 | **Todo** | ON; `todos_*` tools; host-readable state | OSS: `TaskWorkingAgent` (plan/replan, dependency graphs) — not agent-callable, plan not persisted. Commercial: SwarmV2 `TaskLedger`/`ProgressLedger` — persisted, but **host-owned; nothing model-callable** (§4.2) | **HYBRID — different altitudes** | TodoProvider = in-run checklist for one agent; TaskWorkingAgent/squad ledgers = orchestration above it. Adopt TodoProvider for every harness agent — it also fills the squads' model-callable gap (§4.2). Let orchestrators *read* member checklists via `GetAllTodosAsync` surfaced through monitoring — fleet-level progress visibility no competitor has |
-| **Agent modes** | ON; plan/execute; plan mode writes plan to memory + asks approval | None | **ADOPT** | Cheap, high perceived value. Plan-mode approval routes naturally through FabrCore's multi-channel delivery. Needs durable file memory first (the plan is written to a memory file) |
+| **Agent modes** | ON; plan/execute; plan mode writes plan to memory + asks approval | None | **ADOPT (with instruction override)** | Cheap, high perceived value. Plan-mode approval routes naturally through FabrCore's multi-channel delivery. The built-in plan-mode instruction targets memory files (rejected) — the native assembler overrides it to target the **todo list**, which is durable via session snapshots (§5.2) and arguably the better home for a plan anyway |
 | **Loops** | Opt-in `LoopAgent` + 5 evaluators; in-process only | No in-run loop (defers to `ChatClientAgent` tool loop, bounded by run safety); Orleans `RegisterTimer` (volatile) + `RegisterReminder` (durable, ≥ 1 min) | **HYBRID — combine** | Two different loops: `LoopAgent` = in-run iteration ("keep going until todos done"); reminders = durable recurrence surviving restarts. The composition is the differentiator: a reminder tick starts a harness run whose `TodoCompletionLoopEvaluator` drives it to completion, with `ChatRunSafetyScope` bounding the spend |
 | **Background agents** | Opt-in; 6 tools over `IEnumerable<AIAgent>`; volatile tracking | OSS: `SendAndReceiveMessage`/streams/registry/ACL; `A2AAgentProxy : AIAgent` (`src\FabrCore.Sdk\A2AAgentProxy.cs:14`). Commercial: SwarmV2 squads — host-driven wave dispatch; the model's only delegation tools are *blocking* `ask_agent`/`consult_sme` (§4.2) | **ADOPT via A2AAgentProxy** | Zero-cost synergy: hand the provider `A2AAgentProxy` instances and the model gets `start_task` ergonomics while work runs in durable, ACL-governed, monitored FabrCore grains. Fix required: `A2AAgentProxy.Name` is null and the provider requires non-empty unique names. Volatile task tracking is acceptable v1; note as durability gap. Sharpest commercial synergy: give the SwarmV2 orchestrator/planner these tools (§4.2) |
-| **File access** | Opt-in; approval-gated; read-only tier auto-approvable | None (MCP escape hatch) | **EXPOSE opt-in, durable store** | Blueprint-enabled only, grain-backed store, read-only tier auto-approved, writes through channel approvals. Never silo-local disk |
-| **Skills** | ON; **CWD `SKILL.md` discovery**; approval-gated tools; composable sources; MCP skills | None at runtime (`SystemPrompt` string only; the 34 skills in `.agents\skills\` are developer tooling, not runtime) | **ADOPT via custom `AgentSkillsSource`; never CWD** | CWD on a silo is the shared process directory — wrong tenant boundary and a supply-chain risk. Build a file-store/config-backed source (per-agent skill sets, centrally versioned); compose MCP skills from existing `McpServerConfig`. Keep `run_skill_script` unwired until the shell posture is decided |
+| **File access** | Opt-in; approval-gated; read-only tier auto-approvable | None (MCP escape hatch) | **REJECT (decision 2026-07-29)** | Same decision as file memory: no file surfaces. Agents that genuinely need files use `fabrcore.host` storage services (`IFileStorageService`, `fabrcoreapi/File`) or a scoped MCP server — both already governed by FabrCore's tool pipeline and approvals |
+| **Skills** | ON; **CWD `SKILL.md` discovery**; approval-gated tools; composable sources; MCP skills | None at runtime (`SystemPrompt` string only; the 34 skills in `.agents\skills\` are developer tooling, not runtime) | **ADOPT via custom `AgentSkillsSource`; never CWD** | CWD on a silo is the shared process directory — wrong tenant boundary and a supply-chain risk. Build a config/blueprint-backed source (per-agent skill sets, centrally versioned); compose MCP skills from existing `McpServerConfig`. Keep `run_skill_script` unwired until the shell posture is decided |
 | **Tool approval** | ON; standing rules; auto-approval heuristics; anti-forgery response binding; run ends on pending approval | Approval semantics live in channels/host; `VerifiableExecutionAIFunction` signs tool executions | **ADOPT middleware; FabrCore owns delivery + durability** | The rule engine and binding are genuinely good. The "run ends" design fits the grain model perfectly (no held calls). FabrCore adds what it can't: delivery over WebSocket/Teams/outbox and durable pending-approval state |
 | **Shell** | Manual, preview package; Local/Docker executors + `ShellPolicy` | None | **DEFAULT OFF; Docker-only if ever** | A shared server runtime must never run `LocalShellExecutor` in the silo process (shared filesystem/env/identity across agents and tenants). If offered: `DockerShellExecutor` only, non-root, network-none default, denyList, approval-required, per-agent opt-in, every command monitored |
 | **Web search** | ON (`HostedWebSearchTool`) | None | **ADOPT, default OFF, gate by provider** | Hosted tools fail on providers that don't support them; key off model-capability config rather than inheriting the harness default |
@@ -196,10 +204,11 @@ Source: `C:\repos\FabrCore-V365\src\FabrCore.Services.Memory` (v0.5.0, ~7,900 LO
 **The .NET framework has no durable-memory provider at all** — the Python `MemoryContextProvider` was never ported. FabrCore.Services.Memory already *is* the .NET counterpart, and is richer on lifecycle (taxonomy, merge, contradiction, audit). What it lacks vs Python is the trigger model: extraction fires only on compaction pressure (`Services\MemoryAwareCompactionService.cs` — Tier 1 tool-result compression → Tier 2 `ExtractMemoriesAsync(olderMessages)` → Tier 3 structured handover summary), and consolidation has no schedule.
 
 **Bridge design (the §6 opportunity, grounded):**
-1. **Compaction boundary (exists today):** `MemoryCompactionHandler.CompactAsync` already implements "session → durable memory" inside `OnCompaction`. Under the harness ownership model (§3.2) the same hook moves to FabrCore's post-turn storage compaction — unchanged mechanism, new position.
-2. **File-memory promotion (new):** at session end (or on `ConsolidateMemories`), run `ExtractMemoriesAsync` over the session's `file_memory_*` contents so model-curated notes become taxonomy-typed, deduplicated, graph-linked durable memories. The dead OSS `MemoryToolFactory` (`src\FabrCore.Sdk\Memory\`, excluded from compilation) is a useful design seed here — it already sketched the path-keyed `MEMORY.md`/`memory/{date}.md` convention the harness file layer now provides for real.
-3. **Recall into harness turns (new):** inject `FormatRecallContext` output (or the hot index) as an `AIContextProvider` via `HarnessAgentOptions.AIContextProviders` — reusing the existing `<memory-context>` marker protocol to keep extraction loops safe. This gives harness agents durable recall the stock harness cannot offer on .NET.
-4. **Consolidation scheduling (gap):** neither the service nor the harness schedules consolidation; Orleans reminders are the natural supplier (a nightly `ConsolidateMemories` tick per scope).
+1. **Compaction boundary (exists today):** `MemoryCompactionHandler.CompactAsync` already implements "conversation → durable memory" inside `OnCompaction`. Under the compaction ownership model (§3.2) the same hook moves to FabrCore's post-turn storage compaction — unchanged mechanism, new position.
+2. **Recall into harness turns (new):** inject `FormatRecallContext` output (or the hot index) as an `AIContextProvider` through the native harness's memory socket (§5.3) — reusing the existing `<memory-context>` marker protocol to keep extraction loops safe. This gives harness agents durable recall the stock harness cannot offer on .NET.
+3. **Consolidation scheduling (gap):** neither the service nor the harness schedules consolidation; Orleans reminders are the natural supplier (a nightly `ConsolidateMemories` tick per scope).
+
+(A fourth hop — promoting harness file-memory contents into the graph — was considered and dropped with the no-file-surfaces decision: the model's durable write path is `SaveMemory` directly, which is stronger than flat files anyway. The dead OSS `MemoryToolFactory` in `src\FabrCore.Sdk\Memory\` is deleted under §8 rather than revived.)
 
 ### 4.2 Commercial deep-dive: Squads / SwarmV2 vs harness background agents & loops
 
@@ -222,7 +231,7 @@ Source: `C:\repos\FabrCore-V365\src\FabrCore.Surface\Ai\` (`Swarm\`, `SwarmV2\`,
 **Verdict: compose, don't compete.** Squads own cross-agent runs; the harness upgrades what happens *inside* them:
 
 1. **Async fan-out for the orchestrator/planner** — wrap squad members as `A2AAgentProxy`-backed `BackgroundAgents` so the model gets real `start_task`/`wait_for_first_completion` instead of blocking one-at-a-time `ask_agent` and waiting on the host's 5-second drive tick. This is the sharpest gap the harness closes.
-2. **Members as harness agents** — executors gain todos, file memory, and modes; the supervisor reads member `GetAllTodosAsync` into its status mirror for live sub-task visibility.
+2. **Members as harness agents** — executors gain todos and modes; the supervisor reads member `GetAllTodosAsync` into its status mirror for live sub-task visibility.
 3. **TodoProvider fills the model-callable work-list gap** — inside member turns immediately; potentially for supervisor-adjacent ledger updates later.
 4. **Budget reconciliation required** — squads + run-safety + harness would stack **three** budget layers (`SurfaceSwarmV2Budgets` per run, `ChatRunSafetyScope` per turn, `LoopAgent`/`MaximumIterationsPerRequest` per harness run). Squad budgets own the run, run-safety owns the turn, harness loop caps stay at defaults unless the squad sets them.
 
@@ -232,9 +241,17 @@ Source: `C:\repos\FabrCore-V365\src\FabrCore.Surface\Ai\` (`Swarm\`, `SwarmV2\`,
 
 ## 5. Integration architecture
 
-### 5.1 Dev-facing API
+### 5.1 Dev-facing API — the native assembler
 
-One new SDK entry point, a drop-in sibling of `CreateChatClientAgent` (`src\FabrCore.Sdk\FabrCoreAgentProxy.cs:313` is the template). Make `FabrCoreAgentProxy` partial; add `src\FabrCore.Sdk\Harness\FabrCoreAgentProxy.Harness.cs`:
+**FabrCore ships its own harness.** `FabrCoreHarnessAgent` is FabrCore's assembler over the framework's *providers* (all in the core `Microsoft.Agents.AI` package already referenced — the thin `Microsoft.Agents.AI.Harness` package is not used at runtime, so no new dependency). Why native rather than wrapping `AsHarnessAgent`:
+
+- **Server-safe by construction** — nothing is composed unless FabrCore composes it; a future upstream default-on feature (the way file memory shipped default-on with a local-disk store) can never reach tenants.
+- **Narrower `[Experimental]` contact surface** — dependency on the individual providers actually used, not the 30-property options bag.
+- **FabrCore-authored instructions** — replaces the CLI-flavored upstream preamble; plan mode targets the **todo list** instead of memory files.
+- **Full governance** — FabrCore owns function invocation, so provider tools (`todos_*`, `mode_*`) are wrapped in `VerifiableExecutionAIFunction` like every other tool; impossible under the upstream assembler.
+- **Tool names stay Microsoft's** (`todos_add`, `mode_set`, …) so prompts, samples, and community knowledge remain portable.
+
+The dev-facing entry point is unchanged — a drop-in sibling of `CreateChatClientAgent` (`src\FabrCore.Sdk\FabrCoreAgentProxy.cs:313` is the template). Make `FabrCoreAgentProxy` partial; add `src\FabrCore.Sdk\Harness\FabrCoreAgentProxy.Harness.cs`:
 
 ```csharp
 protected Task<HarnessAgentResult> CreateHarnessAgent(
@@ -244,9 +261,11 @@ protected Task<HarnessAgentResult> CreateHarnessAgent(
     Action<FabrCoreHarnessOptions>? configure = null);
 ```
 
-Internally: build `FabrCoreHarnessOptions` from the 3-tier cascade → get the chat client via existing `GetChatClient` (so `TokenTrackingChatClient → ModelDefaults → ProviderSanitizing → provider` is the harness's inner `IChatClient` and run-safety sees every call) → pass `FabrCoreChatHistoryProvider` as `HarnessAgentOptions.ChatHistoryProvider` → `chatClient.AsHarnessAgent(options, loggerFactory, serviceProvider)` → FabrCore OTel wrap → restore session from snapshot or `CreateSessionAsync()` → register the history provider for compaction/projection as today.
+Internally: build `FabrCoreHarnessOptions` from the 3-tier cascade → get the chat client via existing `GetChatClient` (so `TokenTrackingChatClient → ModelDefaults → ProviderSanitizing → provider` is the innermost `IChatClient` and run-safety sees every call) → assemble the FabrCore pipeline **mirroring Microsoft's tested ordering** (chat-client: approval-response binding → approval bypass → function invocation w/ verifiable-execution tool wrapping → message injection → per-service-call persistence into `FabrCoreChatHistoryProvider` → `CompactionProvider` per §3.2; agent decorators: `LoopAgent` (if configured) → `ToolApprovalAgent` → FabrCore OTel → `ChatClientAgent`) → restore session from snapshot or `CreateSessionAsync()` → register the history provider for storage compaction/projection as today. Conformance tests assert behavioral parity with upstream `HarnessAgent` on shared scenarios (§9 P1).
 
-**FabrCore server-grade defaults** (each overridable): harness compaction ON from `ModelConfiguration` (§3.2), web search OFF, skills OFF (until a FabrCore source is configured), file memory ON with `GrainBackedAgentFileStore` (never `FileSystemAgentFileStore`), file access OFF, todos + modes ON, tool auto-approval ON, harness OTel OFF (FabrCore wraps instead), `MaximumIterationsPerRequest = 40`.
+**Composition (all FabrCore-chosen; nothing else exists in the pipeline):** todos + modes ON (plan-mode instructions overridden per above), tool approval ON with binding, message injection ON, per-service-call persistence ON (buffered), compaction per §3.2 from `ModelConfiguration`, **no file memory and no file access — not even as options** (decision; `fabrcore.host` storage / MCP for genuine file needs), skills OFF (config/MCP source when enabled), web search OFF (capability-gated opt-in), memory socket inert until an `IAgentMemoryService` is registered (§5.3), `MaximumIterationsPerRequest = 40`.
+
+**Escape hatch:** the FabrCore glue is **agent-agnostic** — `HarnessAgentResult`, session snapshots, approval extraction, and injection operate on plain `AIAgent` + `AgentSession`. A dev who wants Microsoft's stock harness calls `chatClient.AsHarnessAgent(...)` and passes the result through the same helpers, with §3.3's off-switches and §2's defaults forced by the platform. Documented as a supported escape hatch and used internally as the conformance baseline — not a second product surface.
 
 The complete agent a dev writes:
 
@@ -281,7 +300,7 @@ public class ResearcherAgent : FabrCoreAgentProxy
 }
 ```
 
-Todos, modes, file memory, approvals, session durability, compaction safety, and heartbeat status all come from the platform.
+Todos, modes, approvals, session durability, compaction safety, and heartbeat status all come from the platform.
 
 **Zero-code path:** ship a registered `[AgentAlias("harness")]` agent type implementing exactly the class above plus Args-driven wiring, so a blueprint alone yields a full harness agent:
 
@@ -294,7 +313,7 @@ Todos, modes, file memory, approvals, session durability, compaction safety, and
   "Tools": ["sendEmail", "createTask"],
   "McpServers": [{ "Name": "github", "TransportType": "Http", "Url": "https://..." }],
   "Args": {
-    "_HarnessFileAccess": "true",
+    "_HarnessMemory": "true",
     "_HarnessLoop": "todo",
     "_HarnessLoopMaxIterations": "8",
     "_HarnessBackgroundAgents": "eric:researcher,eric:writer"
@@ -311,19 +330,19 @@ Today `OnInitialize` runs on every grain activation and always calls `CreateSess
 Design: persist `agent.SerializeSessionAsync(session)` into grain `CustomState` under `"_harness_session:{threadId}"` (envelope: version, threadId, timestamp, harness package version, `JsonElement` payload) using the existing `SetState`/`FlushStateAsync` → `MergeCustomStateAsync` path.
 
 - **When:** post-turn (inside `RunAsync`) + on-deactivate backstop. One grain change: flush pending custom state in `HandlePrimaryMessage`'s `finally`, next to the existing `FlushAllChatHistoryProvidersAsync()` (`src\FabrCore.Host\Grains\AgentGrain.cs:979`).
-- **Restore:** in `CreateHarnessAgent` — `TryGetStateAsync` → `DeserializeSessionAsync`; on corruption, archive the bad payload under `"_harness_session_corrupt:{threadId}"`, log, fall back to a fresh session. Worst case: todos/mode/standing approvals reset; **conversation continuity survives** because history lives in `MessageThreads`, not the snapshot (that's why `FabrCoreChatHistoryProvider` must be passed as the harness `ChatHistoryProvider` — snapshots stay KB-scale).
+- **Restore:** in `CreateHarnessAgent` — `TryGetStateAsync` → `DeserializeSessionAsync`; on corruption, archive the bad payload under `"_harness_session_corrupt:{threadId}"`, log, fall back to a fresh session. Worst case: todos/mode/standing approvals reset; **conversation continuity survives** because history lives in `MessageThreads`, not the snapshot (that's why `FabrCoreChatHistoryProvider` is the pipeline's `ChatHistoryProvider` — snapshots stay KB-scale).
+- **Scope note:** this requirement is independent of every other decision in this document — even the minimal native harness (todos/modes/approvals, no files, no memory) is broken without it.
 - **Size guard:** warn > 256 KB, refuse + keep last good > 1 MB (whole-blob `WriteStateAsync` makes this matter).
 - **Cleanup:** `RemoveState` on `OnReset`/`ClearThread`.
 
-### 5.3 Durable `AgentFileStore`
+### 5.3 Memory socket (no file stores)
 
-`AgentFileStore` is a 7-method abstract class (`WriteAsync`, `ReadAsync`, `DeleteAsync`, `ListChildrenAsync`, `FileExistsAsync`, `SearchAsync(dir, regex, glob, recursive)`, `CreateDirectoryAsync`). Implement:
+The file-store workstream (`IFileStoreGrain` / `GrainBackedAgentFileStore`) is **deleted** with the no-file-surfaces decision. In its place, the native harness exposes a **memory socket**:
 
-- `IFileStoreGrain` (key `"{principal}:{agent}:{storeName}"`, or `"{principal}:shared:{name}"` for cross-agent workspaces) + `FileStoreGrain` with its own state (file payloads never inflate the agent's blob). Uses generic Orleans grain storage — **works on AzureStorage/SqlServer/Localhost providers with zero provider changes**.
-- `GrainBackedAgentFileStore : AgentFileStore` in the SDK, reaching the grain through new default-interface members on `IFabrCoreAgentHost` (old host implementations keep compiling).
-- Quotas enforced in the grain (defaults: 256 KB/file, 16 MB/store, 1000 files), surfaced as tool-visible error messages.
-- Assignment: `FileMemoryStore` → `"file-memory"` store; `FileAccessStore` → `"workspace"` (or shared); skills source → `"skills"`.
-- Later option (deferred): direct Azure Blob store for large workspaces.
+- The abstraction is `IAgentMemoryService` (+ the models its signature needs), moved OSS from `FabrCore.Services.Contracts`-style splitting (§8).
+- When an implementation is registered in DI (the commercial `FabrCore.Services.Memory`), `_HarnessMemory=true` adds the `agent-memory` plugin tools (`SaveMemory`, `RecallMemories`, …) to the agent and an `AIContextProvider` that injects `FormatRecallContext` / hot-index content using the existing `<memory-context>` marker protocol (§4.1).
+- Without an implementation the socket is inert — the OSS harness runs with todos/modes/approvals only, and the blueprint key is a no-op with a startup log line.
+- Agents that genuinely need file storage use the existing `fabrcore.host` storage services (`IFileStorageService`, `fabrcoreapi/File` endpoints) or a scoped MCP server — both governed by the standard tool pipeline, `VerifiableExecutionAIFunction`, and approvals.
 
 ### 5.4 Tool approval over FabrCore channels
 
@@ -343,8 +362,7 @@ The harness *ends the run* when approval is needed and surfaces `ToolApprovalReq
 | --- | --- |
 | `_Harness` (false) | zero-code agent type / template switch |
 | `_HarnessInstructions` (null) | `HarnessInstructions` override; `""` = no preamble |
-| `_HarnessFileMemory` (true, P2+) | file memory; always grain-backed |
-| `_HarnessFileAccess` (false) / `_HarnessFileAccessStore` ("workspace") | file access; `shared:{name}` for shared workspaces |
+| `_HarnessMemory` (false) / `_HarnessMemoryScope` (agent handle) | memory socket: registers `agent-memory` tools + recall context provider when an `IAgentMemoryService` implementation is installed (§5.3); no-op otherwise |
 | `_HarnessTodo` (true) / `_HarnessMode` (true) | todo / mode providers |
 | `_HarnessSkills` (false) / `_HarnessSkillsMcpServers` (null) | skills via FabrCore source; MCP skills from named `McpServers` |
 | `_HarnessWebSearch` (false) | hosted web search |
@@ -352,13 +370,13 @@ The harness *ends the run* when approval is needed and surfaces `ToolApprovalReq
 | `_HarnessLoop` (none: todo\|marker\|judge\|background, csv) / `_HarnessLoopMaxIterations` (10) / `_HarnessLoopJudgePrompt` | loop evaluators |
 | `_HarnessMaxIterationsPerRequest` (40) | function-invocation cap |
 | `_HarnessBackgroundAgents` (null, csv of handles) | A2A-backed background agents |
-| `_HarnessCompaction` (true for harness agents) | harness in-run compaction per §3.2; turning it off reverts full FabrCore ownership |
+| `_HarnessCompaction` (true for harness agents) | in-run compaction (framework `CompactionProvider`, wired by the native assembler) per §3.2; turning it off reverts full FabrCore ownership |
 | `_HarnessFlushPerServiceCall` (false) | per-model-call history flush for crash-critical agents |
 
 ### 5.6 One full turn (with deactivation mid-approval)
 
 1. **In:** WebSocket → `AgentGrain.OnMessage` → `HandlePrimaryMessage` (heartbeat, monitoring) → `InternalOnMessage` (LlmUsageScope + ChatRunSafetyScope begin; FabrCore preflight storage compaction may run) → dev `OnMessage` → `harness.RunAsync(message)`.
-2. **Run:** LoopAgent → ToolApprovalAgent → FabrCore OTel → ChatClientAgent → pipeline: approval binding/bypass → function invocation → message injection (drains anything `OnMessageBusy` enqueued) → per-service-call persistence (buffers into `FabrCoreChatHistoryProvider`) → **harness CompactionProvider (in-run windowing)** → `TokenTrackingChatClient` (run-safety checkpoints, budget kill-switch) → provider. Provider tools (todos/file-memory/modes) mutate session-bag state; status updates flow out on the 3s `_status` heartbeat.
+2. **Run:** LoopAgent → ToolApprovalAgent → FabrCore OTel → ChatClientAgent → FabrCore-assembled pipeline: approval binding/bypass → function invocation (provider tools wrapped in `VerifiableExecutionAIFunction`) → message injection (drains anything `OnMessageBusy` enqueued) → per-service-call persistence (buffers into `FabrCoreChatHistoryProvider`) → **CompactionProvider (in-run windowing)** → `TokenTrackingChatClient` (run-safety checkpoints, budget kill-switch) → provider. Provider tools (todos/modes, memory-socket tools if enabled) mutate session-bag state; status updates flow out on the 3s `_status` heartbeat.
 3. **Approval needed:** run ends with `ToolApprovalRequestContent` → `RunAsync` records evidence, persists pending approvals + session snapshot (`SetState` → `FlushStateAsync`), grain flushes history → `_approval_request` goes out over WebSocket / Teams card / principal outbox.
 4. **Idle:** grain deactivates. Nothing lost — history in `MessageThreads`, harness state + pending approvals in `CustomState`.
 5. **Resume:** approval reply re-activates the grain → `OnInitialize` → `CreateHarnessAgent` restores the snapshot → `TryBuildApprovalResponseMessagesAsync` builds the response content → `RunAsync` → binding validates → tool executes (standing rule stored if "always") → post-turn FabrCore storage compaction if over threshold → snapshot + flush → answer out.
@@ -367,16 +385,16 @@ The harness *ends the run* when approval is needed and surfaces `ToolApprovalReq
 
 ## 6. Net-new opportunities, ranked by dev-experience impact
 
-1. **Batteries-included agents via blueprint** — one JSON flag turns a FabrCore agent into a full harness agent (todos + modes + file memory + approvals pre-wired). Config-driven construction of a 30-property, partly-experimental options object is exactly the DX moat vs hand-assembly.
-2. **Durable file memory** — harness tools + grain-backed store = session memory that survives restarts and scale-out; the stock harness cannot do this (local disk, session-stamped folders).
+1. **Batteries-included agents via blueprint** — one JSON flag turns a FabrCore agent into a full native-harness agent (todos + modes + approvals + memory socket pre-wired, server-safe by construction). Config-driven composition vs hand-assembling Microsoft's 30-property, partly-experimental options object is exactly the DX moat.
+2. **Durable memory socket** — the native harness's memory slot backed by the commercial Services.Memory graph: durable, scoped recall and save tools no .NET harness can match (the framework's durable memory is Python-only). OSS ships the socket; V365 sells the brain (§5.3, §8).
 3. **Multi-channel tool approvals with standing rules** — harness anti-forgery + "don't ask again", delivered over Teams/WebSocket/REST with the durable outbox. No competing runtime has the combination.
 4. **Fleet-level observability** — `GetAllTodosAsync`, mode state, and loop iteration surfaced through monitoring APIs and the 3s heartbeat: a live dashboard of what every agent is planning and doing, plus per-agent cost from `TokenTrackingChatClient`.
 5. **Durable autonomous loops** — Orleans reminders (survive restarts) triggering `LoopAgent` runs (todo/judge evaluators), bounded by run-safety budgets: "Ralph loops" with an SLA and a spending cap.
 6. **Background-agent fan-out over A2A** — model-driven `start_task` delegation onto durable, ACL'd, monitored FabrCore agents rather than in-proc tasks. Commercial follow-on: the SwarmV2 orchestrator/planner today delegate through *blocking* `ask_agent` calls and wait on the host's 5-second drive tick — wrapping squad members with `BackgroundAgentsProvider` gives them true async `start_task`/`wait_for_first_completion` semantics (§4.2).
 7. **Mid-turn steering** — message injection exposed via `OnMessageBusy` and as a channel verb, paired with heartbeat status: see progress, redirect the run.
-8. **Skills as managed platform content** — file-store/config-server-versioned `AgentSkillsSource` with per-agent assignment and MCP skills; no CWD scanning, centrally auditable.
+8. **Skills as managed platform content** — config-server-versioned `AgentSkillsSource` with per-agent assignment and MCP skills; no CWD scanning, centrally auditable.
 9. **Provider-actual-informed compaction** — the `ChatRunSafetyScope`-aware trigger + real tokenizer (§3.2): "compaction that knows your real token bill," unreachable through the stock harness.
-10. **Session→durable memory bridge (commercial)** — harness file memory feeding `FabrCore.Services.Memory` through `ExtractMemoriesAsync` (§4.1): session notes become taxonomy-typed, deduplicated, graph-linked durable memories at compaction boundaries, with the hot index injected into harness turns as an `AIContextProvider`. The .NET framework has **no durable-memory provider at all** (the Python `MemoryContextProvider` was never ported) — this is a capability the stock harness cannot match on .NET, and it's already built.
+10. **Conversation→durable memory bridge (commercial)** — compaction summaries and session content feeding `FabrCore.Services.Memory` through `ExtractMemoriesAsync` (§4.1): conversation overflow becomes taxonomy-typed, deduplicated, graph-linked durable memories at compaction boundaries, with the hot index injected into harness turns via the memory socket. The .NET framework has **no durable-memory provider at all** (the Python `MemoryContextProvider` was never ported) — a capability the stock harness cannot match on .NET, and it's already built.
 
 ---
 
@@ -384,13 +402,14 @@ The harness *ends the run* when approval is needed and surfaces `ToolApprovalReq
 
 | Risk | Mitigation |
 | --- | --- |
-| **Session bag not persisted (prerequisite)** — until snapshots land, todos/mode/approval rules/compaction groups/file-memory pointers reset every activation; harness features *appear* amnesiac | Sequence §5.2 into Phase 1 before defaulting any harness feature on |
+| **Session bag not persisted (prerequisite)** — until snapshots land, todos/mode/approval rules/compaction groups reset every activation; harness features *appear* amnesiac | Sequence §5.2 into Phase 1 before defaulting any harness feature on |
 | **Double compaction** — harness `CompactionProvider` + FabrCore `CompactionService`/mid-turn checkpoint fighting over the same thread | Ownership boundary + off-switch matrix (§3.2–3.3); `MidTurnCompactionEnabled` forced off under harness mode |
 | **Uncapped harness agents** — no token params ⇒ no compaction at all (silent) | `CreateHarnessAgent` validates `ContextWindowTokens`/`MaxOutputTokens` are configured (or an explicit strategy/disable) |
 | **Per-service-call persistence write amplification** — whole-blob `WriteStateAsync` per flush | Non-issue by default (provider buffers; durable writes stay at existing flush points). `_HarnessFlushPerServiceCall` opt-in; long-term delta-append thread storage |
-| **Server-hostile defaults** — `FileSystemAgentFileStore` (silo-local disk), CWD skills discovery, web search always on | Never construct the defaults: grain-backed stores only; skills off until a FabrCore source is set; web search off, capability-gated |
-| **`[Experimental]` API churn** across harness options and the Compaction namespace | Isolate behind `FabrCoreHarnessOptions` + blueprint schema; contain `#pragma warning disable` in the SDK `Harness\` folder (same pattern as existing `MEAI001` suppressions) |
-| **VerifiableExecution bypass** — provider-built tools (`file_memory_*`, `todos_*`, `mode_*`, skills) never pass through `VerifiableExecutionAIFunction` | Post-run evidence recorder walking `FunctionCallContent`/`FunctionResultContent` from the response into `IVerifiableExecutionContext`/`IAgentMessageMonitor`; document the boundary |
+| **Server-hostile upstream defaults** — local-disk file store, CWD skills discovery, web search always on | Structurally eliminated by the native assembler: nothing is composed unless FabrCore composes it. Applies only to escape-hatch agents, where the platform forces the same off-switches |
+| **`[Experimental]` API churn** across framework providers and the Compaction namespace | The native assembler narrows the contact surface to the individual providers actually composed; isolate behind `FabrCoreHarnessOptions` + blueprint schema; contain `#pragma warning disable` in the SDK `Harness\` folder (same pattern as existing `MEAI001` suppressions) |
+| **Assembler drift** — owning the pipeline means Microsoft's tested wiring (decorator order, binding flags, persistence requirements) must be tracked release-over-release | Conformance tests asserting parity with upstream `HarnessAgent` on shared scenarios; diff `HarnessAgent.cs` each framework release — this is the "stay on top of the framework" activity, made concrete |
+| **VerifiableExecution bypass (escape hatch only)** — under the *upstream* assembler, provider-built tools (`todos_*`, `mode_*`, skills) never pass through `VerifiableExecutionAIFunction` | Closed by the native assembler (FabrCore owns function invocation and wraps provider tools directly). For escape-hatch agents: post-run evidence recorder walking `FunctionCallContent`/`FunctionResultContent` from the response; document the boundary |
 | **Shell security** | Default off; if ever: Docker-only, non-root, network-none, denyList, approval-required, fully monitored |
 | **Summarizer prompt injection** — summaries persist as trusted history (harness `SummarizationCompactionStrategy` docs flag it; FabrCore's `[Compacted History]` is a *system* message — higher privilege) | Hardening pass on the summary role/labeling regardless of layer |
 | **`A2AAgentProxy.Name` is null** — `BackgroundAgentsProvider` requires non-empty unique names | One-line override (`Name => handle`) + validation with a clear error in `CreateHarnessAgent` |
@@ -400,18 +419,36 @@ The harness *ends the run* when approval is needed and surfaces `ToolApprovalReq
 
 ---
 
-## 8. Phased roadmap (each phase independently shippable)
+## 8. Open-core boundary: what moves from FabrCore-V365 into OSS
+
+**Principle: OSS the contracts, seams, and commodity utilities; keep the engines and operational surfaces commercial.** The open-source runtime is the adoption funnel being compared against "just hand-wire Microsoft's harness" — it needs the *sockets*. The commercial layer sells the *machinery that plugs into them*.
+
+**Move to OSS (this repo):**
+
+1. **Memory abstractions, not the engine** — `IAgentMemoryService` / `IAgentMemoryProvider` + the models the interface needs (`MemoryRecallResult`, `MemoryIndex`, `MemoryTemperature`, `MemoryType`) into the SDK (or a small `FabrCore.Memory.Abstractions`). Required by the native harness's memory socket (§5.3): the interface must live where the harness lives. Mechanically cheap — V365 already practices this split (`FabrCore.Services.Contracts` + type forwarders), and it's Microsoft's own pattern (capabilities in core, assembler thin). **Includes deleting the dead `src\FabrCore.Sdk\Memory\` folder** (excluded from compilation at `FabrCore.Sdk.csproj:15`, superseded).
+2. **`ToolResultCompressor`** — static, no-LLM head/tail tool-result compression currently sitting in the commercial memory service as "Tier 1" but having nothing to do with memory. Moves into `CompactionService` as a pre-summarization tier (compress bulky tool results before spending LLM tokens on map-reduce). Commodity; zero commercial leakage; improves the free product at the exact point the harness comparison is fought.
+3. **The capability roster** — generalize `SurfaceSquadAgentCapability` / `SurfaceSwarmV2CapabilityRegistry` into an SDK `AgentRosterBuilder`: `IFabrCoreRegistry` metadata + live `GetAgentHealth` → prompt-ready roster. Both data sources are already OSS — the commercial code only assembles them. Feeds harness `BackgroundAgents` (names/descriptions for `A2AAgentProxy` members), any community orchestrator, and lets SwarmV2 delete its near-duplicate of the V1 projection.
+
+**Consider (strategic calls, not blockers):** generic multi-agent group provisioning (the squad *shape* — "N agents from one definition" — is runtime-level scaffolding; the SwarmV2 *engine* is the moat); A2A transcript mirroring as a host option (observability, already args-based).
+
+**Stays commercial:** ~~the Services.Memory engine~~ — **superseded 2026-07-29 (twice; final state in [oss-platform-plan.md](oss-platform-plan.md))**: the Memory *and* GraphRag engines move OSS ([memory-graphrag-oss-plan.md](memory-graphrag-oss-plan.md)), and `FabrCore.Surface` — **including the SwarmV2 execution engine, renamed to plain "Swarm" on import (v1 retired)** — moves OSS as well. The commercial boundary is now: **Forge** (cloud config server + the hosted admin console — `FabrCore.Surface.Admin` migrates into the Forge product) plus the Vulcan365 markdown-conversion service. Boundary principle: develop/create/chat = OSS; operate/govern/fleet = Forge; admin APIs open, console commercial. The memory socket design (§5.3) is unchanged and binds to the OSS implementation.
+
+**V365 hygiene (same workstream):** remove the dangling `ProjectReference`s in `FabrCore.Tests.csproj` to the deleted `FabrCore.Experimental.Swarm` / `FabrCore.Agents.TaskAgent` projects; mark `docs\swarm-plan.md` and the `fabrcore-swarm` skill as historical; write the missing SwarmV2 design/skill doc (§4.2 is currently its only prose spec); have Services.Memory consume the OSS abstractions via type forwarders.
+
+---
+
+## 9. Phased roadmap (each phase independently shippable)
 
 | Phase | Contents | Size |
 | --- | --- | --- |
-| **P1 — Minimal viable harness** | `Microsoft.Agents.AI.Harness` package ref; partial `FabrCoreAgentProxy` + `CreateHarnessAgent` + `FabrCoreHarnessOptions` + `HarnessAgentResult` (run, approval extraction as raw content, injection); **session snapshot persist/restore** (§5.2) incl. the grain post-turn custom-state flush; compaction ownership switches (§3.3). Defaults: todos/modes/approvals/injection/loops functional; file memory OFF (no durable store yet), skills OFF, web search OFF | ~3–5 dev-days |
-| **P2 — Durable file stores** | `IFileStoreGrain` + `FileStoreGrain` + host default-interface members + `GrainBackedAgentFileStore`; flip file memory ON; file access opt-in; quotas; store admin endpoints | ~1 wk |
+| **P1 — Native harness core** | `FabrCoreHarnessAgent` assembler over core-package providers (no new package ref) + `FabrCoreHarnessOptions` + agent-agnostic `HarnessAgentResult` (run, approval extraction as raw content, injection, snapshot); **session snapshot persist/restore** (§5.2) incl. the grain post-turn custom-state flush; compaction wiring per §3.2 + off-switches (§3.3); plan-mode instruction override (todo list, not memory files); provider-tool `VerifiableExecutionAIFunction` wrapping; conformance tests vs upstream `HarnessAgent`; escape-hatch support documented | ~1 wk |
+| **P2 — Open-core moves + memory socket** | Memory abstractions into OSS + delete dead `Sdk\Memory` (§8); `ToolResultCompressor` into `CompactionService`; `AgentRosterBuilder`; memory socket live in the native harness + commercial `Services.Memory` plug-in verified end-to-end (§5.3) | ~1 wk |
 | **P3 — Channel-grade approvals + zero-code** | `_approval_request`/`_approval_response` message types; WebSocket JSON contract; Teams Adaptive Cards in the M365 bridge; pending-approval persistence + plain-text fallback; shipped `[AgentAlias("harness")]` agent type + full `_Harness*` Args surface | ~1 wk |
-| **P4 — Skills, background agents, polish** | File-store `AgentSkillsSource` + MCP skills; `A2AAgentProxy.Name` fix + background agents; loop evaluators from config; reminder-driven durable-loop template + docs; evidence recorder; heartbeat status tracker (todo/mode/file-memory → `SetStatusMessage`); the `ChatRunSafetyScope`-aware compaction trigger (§6.9) | ~1 wk |
+| **P4 — Skills, background agents, polish** | Config/MCP `AgentSkillsSource`; `A2AAgentProxy.Name` fix + background agents (roster-fed descriptions); loop evaluators from config; reminder-driven durable-loop template + docs; heartbeat status tracker (todo/mode → `SetStatusMessage`); the `ChatRunSafetyScope`-aware compaction trigger (§6.9) | ~1 wk |
 
-**Back-compat guarantees:** `CreateChatClientAgent`, `ForkAsync`/`TaskWorkingAgent`, existing compaction/projection/run-safety paths untouched; the harness path is purely additive; blueprints without `_Harness*` args behave identically; `IFabrCoreAgentHost` grows only default interface members.
+**Back-compat guarantees:** `CreateChatClientAgent`, `ForkAsync`/`TaskWorkingAgent`, existing compaction/projection/run-safety paths untouched; the harness path is purely additive; blueprints without `_Harness*` args behave identically; `IFabrCoreAgentHost` unchanged (the file-store surface it would have grown is deleted with the no-file decision).
 
-**Commercial-layer follow-ups (FabrCore-V365 workstream, sequenced after P2):** wire `BackgroundAgentsProvider` into the SwarmV2 orchestrator/planner via `A2AAgentProxy`-wrapped members (§4.2); run squad executors as harness agents (todos + file memory + modes) and surface member `GetAllTodosAsync` into the supervisor's status mirror; land the `ExtractMemoriesAsync` bridge from harness file memory / compaction summaries into `FabrCore.Services.Memory` plus an `AIContextProvider` for durable recall (§4.1); schedule memory consolidation via Orleans reminders; reconcile the three budget layers; consider moving the `swarm2-drive` tick to a durable reminder.
+**Commercial-layer follow-ups (FabrCore-V365 workstream, sequenced after P2):** wire `BackgroundAgentsProvider` into the SwarmV2 orchestrator/planner via `A2AAgentProxy`-wrapped members (§4.2); run squad executors as native harness agents (todos + modes) and surface member `GetAllTodosAsync` into the supervisor's status mirror; land the `ExtractMemoriesAsync` bridge from compaction summaries into `FabrCore.Services.Memory` plus the recall context provider (§4.1); schedule memory consolidation via Orleans reminders; reconcile the three budget layers; consider moving the `swarm2-drive` tick to a durable reminder; execute the §8 hygiene list.
 
 ---
 
@@ -421,4 +458,4 @@ The harness *ends the run* when approval is needed and surfaces `ToolApprovalReq
 
 **FabrCore** (this repo, open source): `src\FabrCore.Sdk\FabrCoreAgentProxy.cs:313` (`CreateChatClientAgent` — the template), `src\FabrCore.Sdk\{CompactionService.cs, ChatRunSafetyScope.cs, TokenTrackingChatClient.cs, FabrCoreChatMessageStore.cs, A2AAgentProxy.cs, IFabrCoreAgentHost.cs}`, `src\FabrCore.Core\{ModelConfiguration.cs, AgentGrainState.cs}`, `src\FabrCore.Host\Grains\AgentGrain.cs`.
 
-**FabrCore-V365** (commercial, `C:\repos\FabrCore-V365`): `src\FabrCore.Services.Memory\{Abstractions\IAgentMemoryService.cs, Services\AgentMemoryService.cs, Services\MemoryAwareCompactionService.cs, Services\MemorySchemaInitializer.cs, Plugin\AgentMemoryPlugin.cs, Configuration\MemoryScopeResolver.cs}`; `src\FabrCore.Surface\Ai\SwarmV2\{SurfaceSwarmV2OrchestratorAgent.cs, SurfaceSwarmV2SupervisorAgent.cs, SurfaceSwarmV2PlannerAgent.cs, SurfaceSwarmV2VerifierAgent.cs, SurfaceSwarmV2Ledgers.cs, SurfaceSwarmV2BudgetGuard.cs, SurfaceSwarmV2PlanValidation.cs}`, `src\FabrCore.Surface\Ai\{Swarm\, Orchestration\, Tasks\SurfaceTaskRunnerAgent.cs}`, `src\FabrCore.Surface\CommandCenter\SurfaceBlueprintProvisioner.cs`, tests `src\FabrCore.Surface.Tests\SurfaceSwarmV2Tests.cs`.
+**FabrCore-V365** (commercial, `C:\repos\FabrCore-V365`): `src\FabrCore.Services.Memory\{Abstractions\IAgentMemoryService.cs, Services\AgentMemoryService.cs, Services\MemoryAwareCompactionService.cs, Services\MemorySchemaInitializer.cs, Services\ToolResultCompressor.cs, Plugin\AgentMemoryPlugin.cs, Configuration\MemoryScopeResolver.cs}`; `src\FabrCore.Surface\Ai\SwarmV2\{SurfaceSwarmV2OrchestratorAgent.cs, SurfaceSwarmV2SupervisorAgent.cs, SurfaceSwarmV2PlannerAgent.cs, SurfaceSwarmV2VerifierAgent.cs, SurfaceSwarmV2Ledgers.cs, SurfaceSwarmV2BudgetGuard.cs, SurfaceSwarmV2PlanValidation.cs, SurfaceSwarmV2CapabilityRegistry.cs}`, `src\FabrCore.Surface\Ai\{Swarm\, Orchestration\, Tasks\SurfaceTaskRunnerAgent.cs}`, `src\FabrCore.Surface\CommandCenter\SurfaceBlueprintProvisioner.cs`, tests `src\FabrCore.Surface.Tests\SurfaceSwarmV2Tests.cs`.

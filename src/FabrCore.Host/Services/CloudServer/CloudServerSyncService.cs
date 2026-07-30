@@ -1,9 +1,13 @@
 using FabrCore.Core.CloudServer;
+using FabrCore.Core.Blueprints;
+using FabrCore.Services.GraphRag.Administration;
+using FabrCore.Services.Memory.Administration;
 using FabrCore.Host.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Net.Http.Headers;
 using System.Reflection;
 
 namespace FabrCore.Host.Services.CloudServer;
@@ -20,6 +24,7 @@ namespace FabrCore.Host.Services.CloudServer;
 /// </summary>
 internal sealed class CloudServerSyncService : BackgroundService
 {
+    internal const string LocalAdminHttpClientName = "FabrCore.CloudServer.LocalAdmin";
     private const int StartupFetchAttempts = 3;
     private static readonly TimeSpan StartupRetryDelay = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan MaxRefreshBackoff = TimeSpan.FromMinutes(30);
@@ -29,6 +34,7 @@ internal sealed class CloudServerSyncService : BackgroundService
     private readonly CloudConfigurationDiskCache diskCache;
     private readonly CloudServerOptions options;
     private readonly IServiceProvider serviceProvider;
+    private readonly IHttpClientFactory httpClientFactory;
     private readonly ILogger<CloudServerSyncService> logger;
     private readonly string hostInstanceId;
     private readonly string hostVersion;
@@ -39,6 +45,7 @@ internal sealed class CloudServerSyncService : BackgroundService
         CloudConfigurationDiskCache diskCache,
         IOptions<CloudServerOptions> options,
         IServiceProvider serviceProvider,
+        IHttpClientFactory httpClientFactory,
         ILogger<CloudServerSyncService> logger)
     {
         this.apiClient = apiClient;
@@ -46,6 +53,7 @@ internal sealed class CloudServerSyncService : BackgroundService
         this.diskCache = diskCache;
         this.options = options.Value;
         this.serviceProvider = serviceProvider;
+        this.httpClientFactory = httpClientFactory;
         this.logger = logger;
         this.hostInstanceId = $"{Environment.MachineName}:{Guid.NewGuid():N}";
         this.hostVersion = typeof(CloudServerSyncService).Assembly
@@ -64,7 +72,7 @@ internal sealed class CloudServerSyncService : BackgroundService
             var result = await apiClient.FetchConfigurationAsync(currentVersion: null, cancellationToken);
             if (result.Status == CloudConfigurationFetchStatus.Success)
             {
-                store.ApplySnapshot(result.Envelope!);
+                await ApplySnapshotAsync(result.Envelope!, cancellationToken);
                 await diskCache.WriteAsync(result.Envelope!, cancellationToken);
                 fetched = true;
                 break;
@@ -85,7 +93,7 @@ internal sealed class CloudServerSyncService : BackgroundService
             var cached = await diskCache.TryReadAsync(cancellationToken);
             if (cached is not null)
             {
-                store.ApplySnapshot(cached);
+                await ApplySnapshotAsync(cached, cancellationToken);
                 logger.LogWarning(
                     "Cloud server unreachable — running on cached configuration version {Version} issued {IssuedAt:u} " +
                     "from {Path}. Background sync will keep retrying.",
@@ -115,6 +123,10 @@ internal sealed class CloudServerSyncService : BackgroundService
         if (options.Heartbeat.Enabled)
         {
             loops.Add(RunHeartbeatLoopAsync(stoppingToken));
+        }
+        if (options.Connect.Enabled)
+        {
+            loops.Add(RunConnectLoopAsync(stoppingToken));
         }
 
         await Task.WhenAll(loops);
@@ -161,7 +173,7 @@ internal sealed class CloudServerSyncService : BackgroundService
         switch (result.Status)
         {
             case CloudConfigurationFetchStatus.Success:
-                store.ApplySnapshot(result.Envelope!);
+                await ApplySnapshotAsync(result.Envelope!, cancellationToken);
                 await diskCache.WriteAsync(result.Envelope!, cancellationToken);
                 return true;
             case CloudConfigurationFetchStatus.NotModified:
@@ -209,8 +221,276 @@ internal sealed class CloudServerSyncService : BackgroundService
         HostVersion = hostVersion,
         AppliedConfigurationVersion = store.CurrentConfigurationVersion,
         ActiveGatewayCount = TryGetActiveGatewayCount(),
+        Capabilities = BuildCapabilities(),
         Timestamp = DateTimeOffset.UtcNow
     };
+
+    private Dictionary<string, string> BuildCapabilities()
+    {
+        var capabilities = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["host"] = hostVersion
+        };
+
+        if (serviceProvider.GetService<IMemoryAdminService>() is not null)
+        {
+            capabilities["memory.admin"] = MemoryAdminCapability.CurrentApiVersion;
+        }
+
+        if (serviceProvider.GetService<IGraphRagAdminService>() is not null)
+        {
+            capabilities["graphrag.admin"] = GraphRagAdminCapability.CurrentApiVersion;
+        }
+
+        foreach (var expander in serviceProvider.GetServices<IBlueprintExpander>())
+        {
+            capabilities[$"blueprint.{expander.ExtensionKey}"] = "1";
+        }
+
+        return capabilities;
+    }
+
+    private async Task ApplySnapshotAsync(
+        CloudConfigurationEnvelope envelope,
+        CancellationToken cancellationToken)
+    {
+        store.ApplySnapshot(envelope);
+        if (envelope.Blueprints.Count == 0)
+        {
+            return;
+        }
+
+        var blueprintService =
+            serviceProvider.GetRequiredService<FabrCore.Host.Services.IFabrCoreBlueprintService>();
+        foreach (var deployment in envelope.Blueprints)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (string.IsNullOrWhiteSpace(deployment.PrincipalId) ||
+                string.IsNullOrWhiteSpace(deployment.Blueprint?.Name))
+            {
+                logger.LogWarning(
+                    "Skipping cloud blueprint deployment with a missing principal id or blueprint name");
+                continue;
+            }
+
+            try
+            {
+                await blueprintService.SaveAsync(
+                    deployment.PrincipalId,
+                    deployment.Blueprint,
+                    cancellationToken);
+                if (deployment.ApplyOnRefresh)
+                {
+                    await blueprintService.ApplyAsync(
+                        deployment.PrincipalId,
+                        deployment.Blueprint,
+                        cancellationToken: cancellationToken);
+                }
+
+                logger.LogInformation(
+                    "Cloud blueprint {Blueprint} version {Version} stored for {Principal} (apply={Apply})",
+                    deployment.Blueprint.Name,
+                    deployment.Blueprint.Version,
+                    deployment.PrincipalId,
+                    deployment.ApplyOnRefresh);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(
+                    ex,
+                    "Cloud blueprint {Blueprint} failed for principal {Principal}; other configuration remains active",
+                    deployment.Blueprint?.Name,
+                    deployment.PrincipalId);
+            }
+        }
+    }
+
+    private async Task RunConnectLoopAsync(CancellationToken stoppingToken)
+    {
+        logger.LogInformation(
+            "Cloud Server outbound admin connect channel enabled for loopback target {LocalAdminUrl}",
+            options.Connect.LocalAdminUrl);
+
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                var command = await apiClient.PollAdminCommandAsync(hostInstanceId, stoppingToken);
+                if (command is null)
+                {
+                    continue;
+                }
+
+                var response = await DispatchAdminCommandAsync(command, stoppingToken);
+                await apiClient.SendAdminCommandResponseAsync(response, stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Cloud Server connect-channel iteration failed");
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+            }
+        }
+    }
+
+    private async Task<CloudAdminCommandResponse> DispatchAdminCommandAsync(
+        CloudAdminCommand command,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(command.CommandId))
+        {
+            return Failed(command.CommandId, 400, "Connect-channel command id is required.");
+        }
+
+        if (command.ExpiresAt <= DateTimeOffset.UtcNow)
+        {
+            return Failed(command.CommandId, 408, "Connect-channel command expired before execution.");
+        }
+
+        if (!command.PathAndQuery.StartsWith("/fabrcoreapi/", StringComparison.OrdinalIgnoreCase) ||
+            command.PathAndQuery.Contains('\\') ||
+            command.PathAndQuery.StartsWith("//", StringComparison.Ordinal))
+        {
+            return Failed(command.CommandId, 400, "Only local /fabrcoreapi/ paths are allowed.");
+        }
+
+        if (command.Body?.Length > options.Connect.MaxBodyBytes)
+        {
+            return Failed(command.CommandId, 413, "Connect-channel request body exceeds the configured limit.");
+        }
+
+        HttpMethod method;
+        try
+        {
+            method = new HttpMethod(command.Method);
+        }
+        catch (FormatException)
+        {
+            return Failed(command.CommandId, 400, "Connect-channel HTTP method is invalid.");
+        }
+
+        if (method != HttpMethod.Get && method != HttpMethod.Post && method != HttpMethod.Put &&
+            method != HttpMethod.Patch && method != HttpMethod.Delete)
+        {
+            return Failed(command.CommandId, 405, $"HTTP method {method} is not allowed.");
+        }
+
+        try
+        {
+            var target = new Uri(
+                $"{options.Connect.LocalAdminUrl.TrimEnd('/')}{command.PathAndQuery}",
+                UriKind.Absolute);
+            using var request = new HttpRequestMessage(method, target);
+            if (command.Body is not null)
+            {
+                request.Content = new ByteArrayContent(command.Body);
+            }
+
+            foreach (var (name, values) in command.Headers)
+            {
+                if (name.Equals("Authorization", StringComparison.OrdinalIgnoreCase) ||
+                    name.Equals("Host", StringComparison.OrdinalIgnoreCase) ||
+                    name.Equals("Content-Length", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (name.Equals("Content-Type", StringComparison.OrdinalIgnoreCase) &&
+                    request.Content is not null)
+                {
+                    request.Content.Headers.TryAddWithoutValidation(name, values);
+                }
+                else if (name.Equals("Accept", StringComparison.OrdinalIgnoreCase) ||
+                         name.Equals("If-Match", StringComparison.OrdinalIgnoreCase) ||
+                         name.Equals("If-None-Match", StringComparison.OrdinalIgnoreCase) ||
+                         name.Equals("x-user-handle", StringComparison.OrdinalIgnoreCase))
+                {
+                    request.Headers.TryAddWithoutValidation(name, values);
+                }
+            }
+
+            request.Headers.Authorization =
+                new AuthenticationHeaderValue("Bearer", options.Connect.LocalAdminApiKey);
+            var client = httpClientFactory.CreateClient(LocalAdminHttpClientName);
+            using var response = await client.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken);
+            var body = await ReadLimitedAsync(
+                response.Content,
+                options.Connect.MaxBodyBytes,
+                cancellationToken);
+
+            var headers = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+            if (response.Content.Headers.ContentType is not null)
+            {
+                headers["Content-Type"] = [response.Content.Headers.ContentType.ToString()];
+            }
+            if (response.Headers.ETag is not null)
+            {
+                headers["ETag"] = [response.Headers.ETag.ToString()];
+            }
+
+            return new CloudAdminCommandResponse
+            {
+                CommandId = command.CommandId,
+                StatusCode = (int)response.StatusCode,
+                Headers = headers,
+                Body = body
+            };
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Failed to execute connect-channel command {CommandId}", command.CommandId);
+            return Failed(command.CommandId, 502, "The cluster could not execute the local admin request.");
+        }
+    }
+
+    private static async Task<byte[]> ReadLimitedAsync(
+        HttpContent content,
+        int maxBytes,
+        CancellationToken cancellationToken)
+    {
+        if (content.Headers.ContentLength > maxBytes)
+        {
+            throw new InvalidOperationException("Connect-channel response body exceeds the configured limit.");
+        }
+
+        await using var source = await content.ReadAsStreamAsync(cancellationToken);
+        using var target = new MemoryStream();
+        var buffer = new byte[81920];
+        while (true)
+        {
+            var read = await source.ReadAsync(buffer, cancellationToken);
+            if (read == 0)
+            {
+                return target.ToArray();
+            }
+            if (target.Length + read > maxBytes)
+            {
+                throw new InvalidOperationException("Connect-channel response body exceeds the configured limit.");
+            }
+            await target.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+        }
+    }
+
+    private static CloudAdminCommandResponse Failed(string commandId, int statusCode, string error) =>
+        new()
+        {
+            CommandId = commandId,
+            StatusCode = statusCode,
+            Error = error
+        };
 
     private int TryGetActiveGatewayCount()
     {

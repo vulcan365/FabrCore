@@ -5,8 +5,8 @@ description: >
   REST APIs, WebSocket, system agents, Blueprint provisioning, storage, custom providers, and deployment.
   Use for: "FabrCore server", "AddFabrCoreServer", "AddFabrCoreServices", "UseFabrCoreServer",
   "FabrCoreServerOptions", "TimeProvider", "fabrcore.json", "REST API", "/fabrcoreapi",
-  "GatewayDiscovery", "cluster/gateways", "AdvertisedGateways", "ConfigureOrleans",
-  "Blueprint", "AgentBlueprintRequest", "EnsureBlueprintAgentsAsync", "agent/blueprint",
+  "Blueprint", "FabrCoreBlueprint", "IBlueprintExpander", "/fabrcoreapi/Blueprint",
+  "AgentBlueprintRequest", "EnsureBlueprintAgentsAsync", "agent/blueprint",
   "ConfigureSystemAgentAsync", "IFabrCoreAgentService", "AgentManagementProvider",
   "AdditionalAssemblies", "WebSocket", "server setup", "LLM provider", "Storage API",
   "typed entity storage", "IFabrCoreStorageProvider", "UseVerifiableExecution",
@@ -145,53 +145,6 @@ Registration precedence:
 
 For instance-based registration, FabrCore registers both `TimeProvider` and the concrete provider type, so a demo API can resolve `DemoTimeProvider` directly. The custom provider is intended for Orleans runtime scheduling only; FabrCore.Host timestamps, file TTLs, health timestamps, diagnostics timestamps, and registry cleanup still use real UTC time.
 
-### Provider-Neutral Gateway Discovery and Orleans TLS
-
-`UseFabrCoreServer()` maps gateway discovery with the other FabrCore API endpoints for applications
-that need a normal Orleans `IClusterClient`. It has no separate enable flag, authentication
-requirement, or authorization policy. Configure only optional discovery behavior:
-
-```json
-{
-  "FabrCore": {
-    "Host": {
-      "GatewayDiscovery": {
-        "RefreshPeriod": "00:00:30",
-        "AdvertisedGateways": [
-          "gwy.tcp://silo-1.internal.example:30000/0"
-        ],
-        "RequireOrleansTls": true
-      }
-    }
-  }
-}
-```
-
-- `RefreshPeriod` defaults to 30 seconds.
-- `AdvertisedGateways`, when non-empty, take precedence over membership-derived addresses. Use
-  them for NAT, containers, reverse routing, or any topology where silo membership addresses are
-  not reachable by clients.
-- Without overrides, FabrCore advertises only active Orleans members, using the configured
-  gateway port. It returns `503` if no usable gateway exists.
-- `RequireOrleansTls` defaults to `true` outside Development and `false` in Development.
-
-Configure Orleans transport mTLS after the selected clustering provider without calling
-`UseOrleans` a second time:
-
-```csharp
-builder.AddFabrCoreServer(new FabrCoreServerOptions
-{
-    AdditionalAssemblies = [typeof(MyAgent).Assembly]
-}
-.ConfigureOrleans(orleans =>
-{
-    orleans.UseTls(/* Host certificate and client-certificate validation */);
-}));
-```
-
-The discovery endpoint does not authenticate or encrypt the subsequent Orleans TCP connection.
-Production deployments should keep gateway ports on a private network and require Orleans mTLS.
-
 ## What AddFabrCoreServer Configures
 
 1. **Orleans Silo** — Clustering, persistence, reminders, streaming, and registered `TimeProvider` based on `OrleansClusterOptions`
@@ -201,7 +154,6 @@ Production deployments should keep gateway ports on a private network and requir
 5. **Background Services** — `AgentRegistryCleanupService`, `FileCleanupService`
 6. **Assembly Discovery** — Scans `AdditionalAssemblies` for agent, plugin, and tool types
 7. **ACL & Security Audit** — Loads `Acl` and `FabrCore:Audit` sections from `fabrcore.json`, registers the ACL evaluator/enforcer, the `AclRegistryGrain`-backed entity store, and the audit provider (see fabrcore-acl)
-8. **Gateway Discovery** — Binds and validates `FabrCore:Host:GatewayDiscovery`, and registers provider-neutral active-gateway discovery
 
 ## What UseFabrCoreServer Configures
 
@@ -353,55 +305,6 @@ The `IEmbeddings` service (auto-registered by `AddFabrCoreServer()`) looks up a 
 
 Supported providers for embeddings: `OpenAI`, `Azure`, `OpenRouter`, `Gemini`. Grok does not support embeddings.
 
-## Cloud Server Configuration (remote fabrcore.json)
-
-Instead of a local `fabrcore.json`, a host can pull its model/API-key configuration from a
-remote **cloud server** (any server implementing `docs/cloud-server-protocol.md`; FabrCore
-Forge is the first-party implementation). Enable it purely via appsettings — `fabrcore.json`
-becomes unnecessary:
-
-```json
-{
-  "FabrCore": {
-    "CloudServer": {
-      "Enabled": true,
-      "Url": "https://forge.vulcan365.ai",
-      "ApiKey": "<per-cluster API key>",
-      "ClusterId": null,
-      "Environment": null,
-      "RefreshInterval": "00:05:00",
-      "RequestTimeout": "00:00:30",
-      "CacheLastKnownGood": true,
-      "CacheFilePath": null,
-      "StartupFailureBehavior": "Fail",
-      "Heartbeat": { "Enabled": true, "Interval": "00:01:00" }
-    }
-  }
-}
-```
-
-- **Defaults**: `Enabled` is false (existing hosts unchanged). `Url` defaults to the hosted
-  Forge endpoint. `ClusterId` falls back to Orleans `ClusterOptions.ClusterId`; `Environment`
-  falls back to `IHostEnvironment.EnvironmentName`, enabling appsettings-style per-environment
-  configuration layering on the server.
-- **Secrets**: securing `ApiKey` (user secrets, env vars, vault-backed config providers) is
-  the operator's responsibility.
-- **Startup**: the initial fetch blocks before the host serves traffic. On failure the host
-  falls back to the last-known-good cache (`fabrcore.cloud-cache.json` in the content root —
-  same plaintext-secrets profile as `fabrcore.json`; disable with `CacheLastKnownGood:
-  false`). With no cache, `Fail` (default) stops startup with an actionable error;
-  `StartDegraded` starts with an empty configuration (model lookups 404 until a sync
-  succeeds).
-- **While running**: a background refresh loop polls with `If-None-Match` (cheap 304s) and
-  never drops the last-known-good snapshot on failure. Heartbeats report cluster/silo status;
-  a heartbeat response can request an immediate refresh.
-- **Custom sources**: `FabrCoreServerOptions.UseConfigurationStore<T>()` plugs in any
-  `IFabrCoreConfigurationStore` implementation, overriding both the local file and cloud
-  modes.
-- **Note**: the local `/fabrcoreapi/ModelConfig/apikey/{alias}` endpoint remains
-  unauthenticated by design (authN is the hosting layer's responsibility) and serves
-  cloud-delivered keys in cloud mode — same trust model as the local file.
-
 ## System Agents
 
 System agents are shared agents under principal handle `"system"` that multiple authenticated identities can access. Create them server-side using `IFabrCoreAgentService`:
@@ -441,33 +344,6 @@ Compatibility naming: several REST and SDK surfaces still use `user`/`users` in 
 
 > **Typed C# client:** `IFabrCoreHostApiClient` in `FabrCore.Sdk` wraps the common endpoint groups below (Agent, Storage, Discovery, Embeddings, File, ModelConfig, Diagnostics). Most agent-scoped methods take a fully-qualified `"principalHandle:agentHandle"` handle and the client extracts the principal handle into the `x-user-handle` header automatically. Blueprint ensure and storage methods take an explicit principal handle. If a newly added endpoint is not yet surfaced by the typed client, call its REST route directly.
 
-### Cluster Gateway Discovery API (`/fabrcoreapi/cluster/gateways`)
-
-`GET /fabrcoreapi/cluster/gateways` returns the cluster identity and currently advertised Orleans
-gateway URIs for `FabrCore.Client.Orleans`. It is not part of `IFabrCoreHostApiClient`; clients use
-`FabrCoreGatewayDiscoveryClient` or `AddFabrCoreOrleansClientAsync` with an application-supplied
-`HttpClient`.
-
-The endpoint returns `503` when no gateway can be advertised.
-
-**Response** `200 OK`:
-
-```json
-{
-  "version": 1,
-  "clusterId": "production",
-  "serviceId": "fabrcore",
-  "gateways": [
-    "gwy.tcp://silo-1.internal.example:30000/0"
-  ],
-  "refreshPeriodSeconds": 30,
-  "requireOrleansTls": true
-}
-```
-
-The response never includes clustering mode, provider names, SQL/Azure connection strings,
-storage settings, credentials, or identity-provider secrets.
-
 ## Blueprint Provisioning
 
 Apply a Blueprint from application-owned provisioning code (for example, first sign-in, tenant creation, or workspace bootstrap). `AddFabrCoreServer` and `UseFabrCoreServer` do **not** discover, store, or automatically apply Blueprints for every principal at Host startup. A Blueprint is a request-time manifest, not a continuous reconciliation service.
@@ -502,19 +378,32 @@ Creates one or more agents for a principal through that principal's `PrincipalGr
 
 #### POST `/agent/blueprint` — Ensure blueprint agents
 
-Ensures the agents listed in an admin-authored blueprint exist for the target principal from `x-user-handle`. Call it from application provisioning code; FabrCore does not invoke it automatically during Host startup. This endpoint is idempotent for already configured agents: it uses the principal's host-side `PrincipalGrain.CreateAgent` path, checks health first for tracked agents, and does not reconfigure healthy/degraded/unhealthy configured agents. Missing or not-configured agents are configured from the blueprint and added to that principal's tracked-agent list.
+Applies a canonical `FabrCoreBlueprint` for the principal from `x-user-handle`. The Host runs
+registered `IBlueprintExpander` implementations, combines their agent configurations with the
+document's `agents`, validates principal scope, and idempotently ensures those agents.
 
 Blueprint processing ignores incoming `ForceReconfigure = true`; use `/agent/create` when an intentional reconfigure is required.
 
-`Name` and `Version` are caller traceability fields echoed in the response. The Host does not persist them, compare versions, or remove agents omitted from a later Blueprint.
+`Name`, `Description`, and `Version` travel with the canonical document. Direct apply does not
+persist it; use `/fabrcoreapi/Blueprint` to store a named resource per principal.
 
 | Parameter | Source | Type | Required | Description |
 |-----------|--------|------|----------|-------------|
 | `x-user-handle` | Header | string | Yes | Target principal whose agents should be ensured |
-| body | Body | `AgentBlueprintRequest` | Yes | Blueprint wrapper with `agents` list |
+| body | Body | `FabrCoreBlueprint` | Yes | Canonical blueprint with `agents` and package-owned extension sections |
 | `detailLevel` | Query | `HealthDetailLevel` | No | `Basic` (default), `Detailed`, or `Full` |
 
 Bare handles are scoped to `x-user-handle`. Fully-qualified handles are accepted only when their principal prefix matches `x-user-handle`; cross-principal blueprint handles return `400 Bad Request`.
+
+Canonical stored-resource routes:
+
+| Method | Route | Purpose |
+|---|---|---|
+| `GET` | `/fabrcoreapi/Blueprint` | List the principal's blueprint names |
+| `GET` | `/fabrcoreapi/Blueprint/{name}` | Read one canonical blueprint |
+| `PUT` | `/fabrcoreapi/Blueprint/{name}` | Save or replace one blueprint |
+| `DELETE` | `/fabrcoreapi/Blueprint/{name}` | Delete one blueprint |
+| `POST` | `/fabrcoreapi/Blueprint/{name}/apply` | Apply a stored blueprint |
 
 **Request**:
 ```json
@@ -953,13 +842,19 @@ External systems should prefer bundle export plus local verification against the
 
 ### Response Models
 
-**`AgentBlueprintRequest`** — posted to `/agent/blueprint`:
+**`FabrCoreBlueprint`** — posted to `/agent/blueprint` or stored through
+`/fabrcoreapi/Blueprint/{name}`:
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `Name` | string? | Optional blueprint name for caller traceability |
+| `Description` | string? | Optional human-readable purpose |
 | `Version` | string? | Optional blueprint version |
 | `Agents` | List\<AgentConfiguration\> | Agent configurations to ensure for the principal named by `x-user-handle` |
+| `Extensions` | Dictionary\<string, JsonElement\> | Top-level package-owned extension data; serialized with `JsonExtensionData` |
+
+`AgentBlueprintRequest` and SDK `EnsureBlueprintAgentsAsync` are agents-only compatibility
+surfaces. Prefer `FabrCoreBlueprint` for new code, especially Swarm or Forge fleet delivery.
 
 **`AgentBlueprintResponse`** — returned by `/agent/blueprint`:
 
@@ -1121,7 +1016,6 @@ public static WebApplication UseFabrCoreServer(
 public FabrCoreServerOptions UseTimeProvider(TimeProvider provider)
 public FabrCoreServerOptions UseTimeProvider<TTimeProvider>()
     where TTimeProvider : TimeProvider
-public FabrCoreServerOptions ConfigureOrleans(Action<ISiloBuilder> configure)
 ```
 
 ## Deployment Considerations
@@ -1143,7 +1037,3 @@ public FabrCoreServerOptions ConfigureOrleans(Action<ISiloBuilder> configure)
 1. Verify `[PluginAlias]` matches the name in `AgentConfiguration.Plugins`
 2. Ensure plugin assembly is included in `AdditionalAssemblies`
 3. Check that tool methods have `[Description]` attributes
-
-**Gateway discovery fails:**
-1. `503` means no explicit advertised gateway exists and no active membership address is usable
-2. A successful HTTP response does not prove the Orleans gateway port or mTLS identity is reachable

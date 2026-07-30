@@ -17,6 +17,16 @@ public static class CloudServerProtocol
     /// <summary>Relative path of the heartbeat endpoint (POST).</summary>
     public const string HeartbeatPath = "/fabrcore-cloud/v1/heartbeat";
 
+    /// <summary>
+    /// Long-poll endpoint used by a cluster to receive an admin request over the outbound-only
+    /// connect channel.
+    /// </summary>
+    public const string ConnectPath = "/fabrcore-cloud/v2/connect";
+
+    /// <summary>Formats the endpoint used to return one connect-channel response.</summary>
+    public static string ConnectResponsePath(string commandId) =>
+        $"/fabrcore-cloud/v2/connect/{Uri.EscapeDataString(commandId)}/response";
+
     /// <summary>Request header carrying the cluster identifier.</summary>
     public const string ClusterIdHeader = "X-FabrCore-Cluster-Id";
 

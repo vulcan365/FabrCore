@@ -5,7 +5,9 @@ using FabrCore.Core.Monitoring;
 using FabrCore.Core.VerifiableExecution;
 using FabrCore.Host.Configuration;
 using FabrCore.Host.Services;
+using FabrCore.Host.Security;
 using FabrCore.Sdk;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -327,6 +329,8 @@ namespace FabrCore.Host
             try
             {
                 // Map FabrCore API controllers
+                app.UseAuthentication();
+                app.UseAuthorization();
                 app.MapControllers();
                 logger.LogInformation("FabrCore API controllers mapped");
 
@@ -409,6 +413,26 @@ namespace FabrCore.Host
                 builder.Services.AddHttpContextAccessor();
                 logger.LogDebug("HttpContextAccessor added");
 
+                builder.Services
+                    .AddAuthentication()
+                    .AddScheme<Configuration.FabrCoreAdminAuthenticationOptions, Security.FabrCoreAdminAuthenticationHandler>(
+                        Security.FabrCoreAdminAuthenticationDefaults.Scheme,
+                        schemeOptions =>
+                        {
+                            builder.Configuration
+                                .GetSection(Configuration.FabrCoreAdminAuthenticationOptions.SectionName)
+                                .Bind(schemeOptions);
+                        });
+                builder.Services.AddAuthorization(authorization =>
+                {
+                    authorization.AddPolicy(
+                        Security.FabrCoreAdminAuthenticationDefaults.Policy,
+                        policy => policy
+                            .AddAuthenticationSchemes(Security.FabrCoreAdminAuthenticationDefaults.Scheme)
+                            .RequireAuthenticatedUser());
+                });
+                logger.LogDebug("FabrCore administration authentication registered");
+
                 ConfigureTimeProvider(builder.Services, options.TimeProviderRegistrationOptions);
                 logger.LogDebug("TimeProvider configured for Orleans");
 
@@ -418,6 +442,8 @@ namespace FabrCore.Host
 
                 builder.Services.AddSingleton<FabrCore.Sdk.IFabrCoreChatClientService, FabrCore.Sdk.FabrCoreChatClientService>();
                 logger.LogDebug("FabrCoreChatClientService added");
+                builder.Services.TryAddSingleton<Services.IFabrCoreBlueprintService, Services.FabrCoreBlueprintService>();
+                logger.LogDebug("FabrCore blueprint service added");
 
                 // Model/API-key configuration store: local fabrcore.json by default, a remote
                 // cloud server when FabrCore:CloudServer:Enabled is set (see the Cloud Server
@@ -431,6 +457,7 @@ namespace FabrCore.Host
                 else if (builder.Configuration.GetValue<bool>($"{Configuration.CloudServerOptions.SectionName}:Enabled"))
                 {
                     builder.Services.AddHttpClient(Services.CloudServer.CloudServerApiClient.HttpClientName);
+                    builder.Services.AddHttpClient(Services.CloudServer.CloudServerSyncService.LocalAdminHttpClientName);
                     builder.Services.AddSingleton<Services.CloudServer.CloudServerApiClient>();
                     builder.Services.AddSingleton<Services.CloudServer.CloudConfigurationDiskCache>();
                     builder.Services.AddSingleton<Services.CloudServer.CloudServerConfigurationStore>();
@@ -491,7 +518,8 @@ namespace FabrCore.Host
                 builder.Services.AddSingleton<IAclSnapshotProvider>(sp => sp.GetRequiredService<GrainBackedAclEntityStore>());
                 builder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<GrainBackedAclEntityStore>());
                 builder.Services.AddSingleton(typeof(IAclEvaluator), options.AclEvaluatorType);
-                builder.Services.AddSingleton<AclEnforcer>();
+                builder.Services.AddSingleton<FabrCore.Core.Acl.AclEnforcer>();
+                builder.Services.AddSingleton<FabrCore.Host.Services.AclEnforcer>();
                 logger.LogDebug("ACL configured: evaluator {EvaluatorType}", options.AclEvaluatorType.Name);
 
                 // The legacy rule-based ACL config shape no longer binds — warn loudly so

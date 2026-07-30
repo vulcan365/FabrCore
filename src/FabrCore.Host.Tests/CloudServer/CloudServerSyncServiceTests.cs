@@ -61,6 +61,7 @@ public sealed class CloudServerSyncServiceTests
                 harness.DiskCache,
                 optionsWrapper,
                 new ServiceCollection().BuildServiceProvider(),
+                new FakeHttpClientFactory(handler),
                 NullLogger<CloudServerSyncService>.Instance);
             return harness;
         }

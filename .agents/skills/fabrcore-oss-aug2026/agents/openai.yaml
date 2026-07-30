@@ -1,0 +1,4 @@
+interface:
+  display_name: "FabrCore OSS August 2026"
+  short_description: "Maintain the OSS and Forge repository boundary"
+  default_prompt: "Use $fabrcore-oss-aug2026 to update FabrCore across the OSS and Forge repositories without crossing product boundaries."

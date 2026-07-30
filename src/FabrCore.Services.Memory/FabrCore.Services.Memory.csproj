@@ -1,0 +1,31 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<IsPackable>true</IsPackable>
+		<Description>Optional SQL-backed agent memory services for FabrCore</Description>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.2" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\FabrCore.Services.Contracts\FabrCore.Services.Contracts.csproj" />
+		<ProjectReference Include="..\FabrCore.Sdk\FabrCore.Sdk.csproj" />
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- README is a documentation asset, excluded from packaging -->
+		<None Remove="README.md" />
+		<None Include="README.md" Pack="false" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<InternalsVisibleTo Include="FabrCore.Services.Memory.Tests" />
+	</ItemGroup>
+
+</Project>

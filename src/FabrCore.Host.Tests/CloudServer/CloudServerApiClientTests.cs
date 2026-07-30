@@ -170,4 +170,81 @@ public sealed class CloudServerApiClientTests
 
         Assert.IsNull(response);
     }
+
+    [TestMethod]
+    public async Task ConnectPoll_Success_ParsesCommand_AndSendsRoutingHeaders()
+    {
+        var commandId = Guid.NewGuid().ToString("N");
+        var handler = new FakeCloudServerHandler(_ =>
+            Task.FromResult(FakeCloudServerHandler.Json(HttpStatusCode.OK, new
+            {
+                commandId,
+                method = "POST",
+                pathAndQuery = "/fabrcoreapi/memory/admin/v1/search?q=hello",
+                headers = new Dictionary<string, string[]> { ["Accept"] = ["application/json"] },
+                body = Convert.ToBase64String("payload"u8.ToArray()),
+                expiresAt = DateTimeOffset.UtcNow.AddMinutes(1)
+            })));
+        var client = CloudServerTestFactory.ApiClient(
+            handler,
+            CloudServerTestFactory.Options(o =>
+            {
+                o.ClusterId = "cluster-1";
+                o.Connect.PollWait = TimeSpan.FromSeconds(7);
+            }),
+            environmentName: "Production");
+
+        var command = await client.PollAdminCommandAsync("silo:1");
+
+        Assert.IsNotNull(command);
+        Assert.AreEqual(commandId, command.CommandId);
+        Assert.AreEqual("POST", command.Method);
+        Assert.AreEqual("/fabrcoreapi/memory/admin/v1/search?q=hello", command.PathAndQuery);
+        CollectionAssert.AreEqual("payload"u8.ToArray(), command.Body);
+
+        var request = handler.Requests[0];
+        Assert.AreEqual(
+            $"https://forge.test{CloudServerProtocol.ConnectPath}?waitSeconds=7&hostInstanceId=silo%3A1",
+            request.RequestUri!.ToString());
+        Assert.AreEqual("frg_test_key", request.Headers.Authorization!.Parameter);
+        Assert.AreEqual("cluster-1", request.Headers.GetValues(CloudServerProtocol.ClusterIdHeader).Single());
+        Assert.AreEqual("Production", request.Headers.GetValues(CloudServerProtocol.EnvironmentHeader).Single());
+    }
+
+    [TestMethod]
+    public async Task ConnectPoll_NoContent_ReturnsNull()
+    {
+        var handler = new FakeCloudServerHandler(_ =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.NoContent)));
+        var client = CloudServerTestFactory.ApiClient(handler, CloudServerTestFactory.Options());
+
+        var command = await client.PollAdminCommandAsync("silo-1");
+
+        Assert.IsNull(command);
+    }
+
+    [TestMethod]
+    public async Task ConnectResponse_PostsResultToCommandPath()
+    {
+        var handler = new FakeCloudServerHandler(_ =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.NoContent)));
+        var client = CloudServerTestFactory.ApiClient(handler, CloudServerTestFactory.Options());
+        var commandId = "command/with spaces";
+
+        await client.SendAdminCommandResponseAsync(new CloudAdminCommandResponse
+        {
+            CommandId = commandId,
+            StatusCode = (int)HttpStatusCode.OK,
+            Headers = new Dictionary<string, string[]> { ["Content-Type"] = ["application/json"] },
+            Body = """{"ok":true}"""u8.ToArray()
+        });
+
+        var request = handler.Requests[0];
+        Assert.AreEqual(
+            $"https://forge.test{CloudServerProtocol.ConnectResponsePath(commandId)}",
+            request.RequestUri!.AbsoluteUri);
+        Assert.AreEqual(HttpMethod.Post, request.Method);
+        Assert.IsTrue(handler.RequestBodies[0]!.Contains("\"commandId\":\"command/with spaces\""));
+        Assert.IsTrue(handler.RequestBodies[0]!.Contains("\"statusCode\":200"));
+    }
 }

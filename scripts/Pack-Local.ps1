@@ -1,9 +1,10 @@
-# scripts/Pack-Local.ps1
-# Packs all FabrCore projects and copies to local NuGet folder
+param(
+    [string]$LocalFeed = "C:\repos\nuget"
+)
 
-$localFeed = "C:\repos\nuget"
-if (-not (Test-Path $localFeed)) {
-    New-Item -ItemType Directory -Path $localFeed | Out-Null
+# Packs the supported FabrCore OSS package set to a local NuGet feed.
+if (-not (Test-Path -LiteralPath $LocalFeed)) {
+    New-Item -ItemType Directory -Path $LocalFeed | Out-Null
 }
 
 $solutionDir = Join-Path $PSScriptRoot "..\src"
@@ -11,10 +12,14 @@ $packages = @(
     "FabrCore.Core",
     "FabrCore.Sdk",
     "FabrCore.Client.Orleans",
+    "FabrCore.Services.Contracts",
     "FabrCore.Host",
     "FabrCore.Host.SqlServer",
     "FabrCore.Host.AzureStorage",
-    "FabrCore.Services.Microsoft365Copilot"
+    "FabrCore.Services.Microsoft365Copilot",
+    "FabrCore.Services.Memory",
+    "FabrCore.Services.GraphRag",
+    "FabrCore.Surface"
 )
 
 # Use the latest git tag (across all branches) to determine the base version,
@@ -24,9 +29,13 @@ if ($latestTag -and $latestTag -match "^v?(\d+)\.(\d+)\.(\d+)$") {
     $major = [int]$Matches[1]
     $minor = [int]$Matches[2]
     $patch = [int]$Matches[3] + 1
-    $baseVersion = "$major.$minor.$patch"
+    $baseVersion = if ($major -lt 1 -or ($major -eq 1 -and $minor -lt 5)) {
+        "1.5.0"
+    } else {
+        "$major.$minor.$patch"
+    }
 } else {
-    $baseVersion = "0.5.1"
+    $baseVersion = "1.5.0"
     Write-Host "Could not determine version from git tags, using fallback: $baseVersion" -ForegroundColor Yellow
 }
 
@@ -38,13 +47,20 @@ Write-Host "Package version: $localVersion" -ForegroundColor Cyan
 Write-Host "Packages: $($packages -join ', ')" -ForegroundColor Cyan
 Write-Host ""
 
-dotnet pack "$solutionDir\FabrCore.sln" `
-    --configuration Release `
-    --output $localFeed `
-    /p:MinVerVersionOverride=$localVersion
+foreach ($package in $packages) {
+    $projectPath = Join-Path $solutionDir "$package\$package.csproj"
+    dotnet pack $projectPath `
+        --configuration Release `
+        --output $LocalFeed `
+        /p:MinVerVersionOverride=$localVersion
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Packing failed: $projectPath"
+        exit $LASTEXITCODE
+    }
+}
 
 foreach ($package in $packages) {
-    $packagePath = Join-Path $localFeed "$package.$localVersion.nupkg"
+    $packagePath = Join-Path $LocalFeed "$package.$localVersion.nupkg"
     if (-not (Test-Path $packagePath)) {
         Write-Error "Expected package was not created: $packagePath"
         exit 1
@@ -52,5 +68,5 @@ foreach ($package in $packages) {
 }
 
 Write-Host ""
-Write-Host "Packages published to $localFeed" -ForegroundColor Green
+Write-Host "Packages published to $LocalFeed" -ForegroundColor Green
 Write-Host "Use version '$localVersion' in PackageReference elements." -ForegroundColor Green

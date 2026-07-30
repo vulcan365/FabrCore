@@ -1,53 +1,65 @@
-# Blueprint Provisioning Reference
+# Canonical Blueprint Reference
 
-Use a Blueprint to idempotently ensure a baseline agent set for one principal. It is an application-supplied request payload, not a persisted Host resource: FabrCore does not enumerate principals or apply Blueprints during startup, and `Name`/`Version` are echoed only for caller traceability.
+Use `FabrCore.Core.Blueprints.FabrCoreBlueprint` as the source-controlled configuration
+document shared by local development, Surface, and Forge fleet delivery.
 
-## Lifecycle
+## Shape
 
-1. Application code chooses the principal and calls `POST /fabrcoreapi/Agent/blueprint`, normally at tenant creation, first sign-in, or workspace initialization.
-2. FabrCore validates every entry's handle and principal scope, then scopes bare agent handles to `x-user-handle`.
-3. New agents are configured and tracked by that principal.
-4. A tracked configured agent returns health without being reconfigured. A tracked `NotConfigured` agent is configured from the Blueprint.
-5. The response contains one `AgentHealthStatus` per requested agent. Continue or retry based on individual results.
-
-The Host does not remove agents absent from a later Blueprint. Treat a changed `version` as an application deployment signal: call `/agent/create` with the desired configuration when a deliberate upgrade is required.
-
-## Handle and reconfiguration rules
-
-- Send `x-user-handle` for the target principal.
-- A bare handle such as `assistant` becomes `principal:assistant`.
-- A fully qualified handle is accepted only when its principal prefix equals `x-user-handle`; cross-principal Blueprint handles return `400 Bad Request`.
-- Blueprint processing overrides `ForceReconfigure` to `false`. Use `POST /fabrcoreapi/Agent/create` to intentionally change an existing agent.
-- Handle/scoping validation occurs before processing agents. Once processing begins, a configuration error for one agent produces an unhealthy result and the remaining agents are still attempted.
-
-## SDK bootstrap
-
-```csharp
-using FabrCore.Core;
-using FabrCore.Sdk;
-
-var blueprint = new AgentBlueprintRequest
+```json
 {
-    Name = "workspace-defaults",
-    Version = "1.0.0",
-    Agents =
-    [
-        new AgentConfiguration
-        {
-            Handle = "assistant",
-            AgentType = "your-agent-alias",
-            Models = "default",
-            SystemPrompt = "Help the principal with their workspace."
-        }
-    ]
-};
-
-var result = await hostApi.EnsureBlueprintAgentsAsync(principalHandle, blueprint, cancellationToken: cancellationToken);
-
-if (result.FailureCount != 0)
-{
-    // Inspect result.Results and retry or surface provisioning failure as appropriate.
+  "name": "workspace-defaults",
+  "description": "Default agents and squads",
+  "version": "1.0.0",
+  "agents": [
+    {
+      "handle": "assistant",
+      "agentType": "your-agent-alias",
+      "models": "default",
+      "systemPrompt": "Help the principal with their workspace."
+    }
+  ],
+  "swarm": {
+    "squads": []
+  }
 }
 ```
 
-Use the same payload with the REST endpoint; `assets/agent-blueprint.json` is a copyable request template. `SuccessCount` counts only `Healthy` results, so a configured `Degraded` or `Unhealthy` agent is reported as a non-success even though Blueprint processing did not reconfigure it.
+`agents` contains normal `AgentConfiguration` records. Other top-level properties are captured
+in `FabrCoreBlueprint.Extensions`. The package that owns an extension registers an
+`IBlueprintExpander`; Surface registers the `swarm` expander.
+
+## Apply or store
+
+Apply without storing:
+
+```http
+POST /fabrcoreapi/Agent/blueprint
+x-user-handle: principal-handle
+```
+
+Store and later apply:
+
+```text
+GET    /fabrcoreapi/Blueprint
+GET    /fabrcoreapi/Blueprint/{name}
+PUT    /fabrcoreapi/Blueprint/{name}
+DELETE /fabrcoreapi/Blueprint/{name}
+POST   /fabrcoreapi/Blueprint/{name}/apply
+```
+
+All resource operations are partitioned by `x-user-handle`. A bare agent handle is scoped to
+that principal. A fully qualified handle must use the same principal prefix.
+
+## Lifecycle rules
+
+- Applying is idempotent for already configured agents.
+- Applying ignores incoming `ForceReconfigure = true`; use `/agent/create` for intentional
+  reconfiguration.
+- Omitted agents are not deleted.
+- One invalid agent produces a failed result while remaining expanded configurations continue.
+- Extension expansion occurs Host-side before agent ensure processing.
+- Forge can deliver the same canonical document with `ApplyOnRefresh`; the Host applies it only
+  when a new cloud configuration version is accepted.
+
+The SDK `AgentBlueprintRequest` and `EnsureBlueprintAgentsAsync` remain agents-only compatibility
+surfaces. They cannot carry extension sections. Use the canonical REST resource for new work.

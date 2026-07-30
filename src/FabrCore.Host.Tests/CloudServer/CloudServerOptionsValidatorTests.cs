@@ -68,4 +68,69 @@ public sealed class CloudServerOptionsValidatorTests
         };
         Assert.IsTrue(Validator.Validate(null, options).Succeeded);
     }
+
+    [TestMethod]
+    public void ConnectEnabled_WithLoopbackUrlAndAdminKey_IsValid()
+    {
+        var options = new CloudServerOptions
+        {
+            Enabled = true,
+            ApiKey = "forge-key",
+            Connect =
+            {
+                Enabled = true,
+                LocalAdminUrl = "http://127.0.0.1:5000",
+                LocalAdminApiKey = "local-admin-key"
+            }
+        };
+
+        Assert.IsTrue(Validator.Validate(null, options).Succeeded);
+    }
+
+    [TestMethod]
+    public void ConnectEnabled_RejectsRemoteOrHttpsAdminUrl()
+    {
+        foreach (var url in new[] { "http://host.internal:5000", "https://127.0.0.1:5000" })
+        {
+            var options = new CloudServerOptions
+            {
+                Enabled = true,
+                ApiKey = "forge-key",
+                Connect =
+                {
+                    Enabled = true,
+                    LocalAdminUrl = url,
+                    LocalAdminApiKey = "local-admin-key"
+                }
+            };
+
+            var result = Validator.Validate(null, options);
+            Assert.IsTrue(result.Failed, $"Expected '{url}' to be rejected.");
+            Assert.IsTrue(result.FailureMessage!.Contains("loopback HTTP"));
+        }
+    }
+
+    [TestMethod]
+    public void ConnectEnabled_RequiresAdminKeyAndSafeLimits()
+    {
+        var options = new CloudServerOptions
+        {
+            Enabled = true,
+            ApiKey = "forge-key",
+            Connect =
+            {
+                Enabled = true,
+                LocalAdminApiKey = null,
+                PollWait = TimeSpan.FromSeconds(56),
+                MaxBodyBytes = 512
+            }
+        };
+
+        var result = Validator.Validate(null, options);
+
+        Assert.IsTrue(result.Failed);
+        Assert.IsTrue(result.FailureMessage!.Contains("LocalAdminApiKey"));
+        Assert.IsTrue(result.FailureMessage.Contains("PollWait"));
+        Assert.IsTrue(result.FailureMessage.Contains("MaxBodyBytes"));
+    }
 }

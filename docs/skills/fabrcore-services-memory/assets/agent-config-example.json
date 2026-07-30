@@ -1,0 +1,15 @@
+{
+  "handle": "user123:my-memory-agent",
+  "agentType": "my-memory-agent",
+  "plugins": ["agent-memory"],
+  "args": {
+    "ConnectionStringName": "MemoryDb"
+  },
+  "models": "default",
+  "systemPrompt": "You are an agent with persistent memory. Use recall_memories before answering questions that may depend on prior context. Use save_memory to store durable knowledge. Memory types: Fact (verified truths), Rule (constraints/policies), Instruction (user directives), Observation (patterns/inferences), Procedural (reusable workflows).",
+
+  "_comment_scope": "Without a MemoryScope setting the agent's memory is isolated to its own handle. To share one memory pool across many agents (e.g. every bank-reconciliation agent), point them all at a named shared scope via the plugin setting below:",
+  "_example_shared_scope_args": {
+    "agent-memory:MemoryScope": "bank-recon"
+  }
+}

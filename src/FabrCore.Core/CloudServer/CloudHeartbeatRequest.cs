@@ -31,6 +31,13 @@ public sealed class CloudHeartbeatRequest
     /// <summary>Gets or sets the number of active Orleans gateways observed by this host.</summary>
     public int ActiveGatewayCount { get; set; }
 
+    /// <summary>
+    /// Gets or sets installed service API versions, keyed by capability name.
+    /// This additive field is safe for schema-v1 servers that ignore unknown members.
+    /// </summary>
+    public Dictionary<string, string> Capabilities { get; set; } =
+        new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Gets or sets when the host produced this heartbeat.</summary>
     public DateTimeOffset Timestamp { get; set; }
 }
