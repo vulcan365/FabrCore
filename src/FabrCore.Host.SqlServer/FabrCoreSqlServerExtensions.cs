@@ -9,7 +9,7 @@ public static class FabrCoreSqlServerExtensions
     /// Uses SQL Server for Orleans clustering, grain persistence, and reminders.
     /// <para>
     /// Calling this is optional — referencing the FabrCore.Host.SqlServer package and setting
-    /// <c>Orleans:ClusteringMode</c> to <c>SqlServer</c> is enough for the provider to be
+    /// <c>FabrCore:Orleans:ClusteringMode</c> to <c>SqlServer</c> is enough for the provider to be
     /// auto-discovered by <see cref="FabrCoreHostExtensions.AddFabrCoreServer"/>.
     /// </para>
     /// </summary>

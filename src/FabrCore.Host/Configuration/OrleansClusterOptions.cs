@@ -6,9 +6,9 @@ namespace FabrCore.Host.Configuration
     public class OrleansClusterOptions
     {
         /// <summary>
-        /// Configuration section name in appsettings.json.
+        /// Configuration section name in appsettings.json (<c>FabrCore:Orleans</c>).
         /// </summary>
-        public const string SectionName = "Orleans";
+        public const string SectionName = FabrCore.Core.FabrCoreConfigurationKeys.OrleansSection;
 
         /// <summary>
         /// The cluster ID used for Orleans membership. All silos in the same cluster must use the same ClusterId.

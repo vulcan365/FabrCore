@@ -53,6 +53,7 @@ namespace FabrCore.Sdk
         private readonly ILogger<FabrCoreChatClientService> _logger;
         private static readonly HttpClient SharedHttpClient = new();
         private readonly HttpClient _httpClient;
+        private readonly bool _emitAttributionHeaders;
 
         public FabrCoreChatClientService(IConfiguration configuration, ILoggerFactory loggerFactory)
             : this(configuration, loggerFactory, SharedHttpClient)
@@ -68,6 +69,8 @@ namespace FabrCore.Sdk
             _loggerFactory = loggerFactory;
             _logger = loggerFactory.CreateLogger<FabrCoreChatClientService>();
             _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+            _emitAttributionHeaders = string.Equals(
+                _configuration[FabrCoreConfigurationKeys.EmitAttributionHeaders], "true", StringComparison.OrdinalIgnoreCase);
 
             _logger.LogDebug("FabrCoreChatClientService created");
         }
@@ -119,6 +122,7 @@ namespace FabrCore.Sdk
                             openAiClientOptions.Endpoint = new Uri(modelConfig.Uri);
                         }
 #pragma warning restore OPENAI001
+                        ApplyAttributionPolicy(openAiClientOptions);
 
                         chatClient = new OpenAIClient(
                                 new ApiKeyCredential(apiKey),
@@ -128,22 +132,25 @@ namespace FabrCore.Sdk
                         break;
 
                     case "azure":
+                        var azureClientOptions = new AzureOpenAIClientOptions
+                        {
+                            EnableDistributedTracing = true,
+                            NetworkTimeout = TimeSpan.FromSeconds(timeoutSeconds),
+                            ClientLoggingOptions = new System.ClientModel.Primitives.ClientLoggingOptions
+                            {
+                                EnableLogging = true,
+                                EnableMessageContentLogging = true,
+                                LoggerFactory = _loggerFactory,
+                                EnableMessageLogging = true
+
+                            }
+                        };
+                        ApplyAttributionPolicy(azureClientOptions);
+
                         var azureClient = new AzureOpenAIClient(
                             new Uri(modelConfig.Uri),
                             new ApiKeyCredential(apiKey),
-                            new AzureOpenAIClientOptions
-                            {
-                                EnableDistributedTracing = true,
-                                NetworkTimeout = TimeSpan.FromSeconds(timeoutSeconds),
-                                ClientLoggingOptions = new System.ClientModel.Primitives.ClientLoggingOptions
-                                {
-                                    EnableLogging = true,
-                                    EnableMessageContentLogging = true,
-                                    LoggerFactory = _loggerFactory,
-                                    EnableMessageLogging = true
-                                    
-                                }
-                            }
+                            azureClientOptions
                         );
 
                         chatClient = azureClient.GetChatClient(modelConfig.Model).AsIChatClient();
@@ -223,20 +230,30 @@ namespace FabrCore.Sdk
                 {
                     case "openai":
                     {
+                        var audioClientOptions = new OpenAIClientOptions
+                        {
+                            EnableDistributedTracing = true,
+                            NetworkTimeout = TimeSpan.FromSeconds(timeoutSeconds),
+                            ClientLoggingOptions = new System.ClientModel.Primitives.ClientLoggingOptions
+                            {
+                                EnableLogging = false,
+                                EnableMessageContentLogging = false,
+                                LoggerFactory = _loggerFactory,
+                                EnableMessageLogging = false
+                            }
+                        };
+
+#pragma warning disable OPENAI001 // OpenAIClientOptions.Endpoint is experimental
+                        if (!string.IsNullOrWhiteSpace(modelConfig.Uri))
+                        {
+                            audioClientOptions.Endpoint = new Uri(modelConfig.Uri);
+                        }
+#pragma warning restore OPENAI001
+                        ApplyAttributionPolicy(audioClientOptions);
+
                         var client = new OpenAIClient(
                             new ApiKeyCredential(apiKey),
-                            new OpenAIClientOptions
-                            {
-                                EnableDistributedTracing = true,
-                                NetworkTimeout = TimeSpan.FromSeconds(timeoutSeconds),
-                                ClientLoggingOptions = new System.ClientModel.Primitives.ClientLoggingOptions
-                                {
-                                    EnableLogging = false,
-                                    EnableMessageContentLogging = false,
-                                    LoggerFactory = _loggerFactory,
-                                    EnableMessageLogging = false
-                                }
-                            }
+                            audioClientOptions
                         );
 
                         ChatClientsCreatedCounter.Add(1,
@@ -250,21 +267,24 @@ namespace FabrCore.Sdk
 
                     case "azure":
                     {
+                        var azureAudioClientOptions = new AzureOpenAIClientOptions
+                        {
+                            EnableDistributedTracing = true,
+                            NetworkTimeout = TimeSpan.FromSeconds(timeoutSeconds),
+                            ClientLoggingOptions = new System.ClientModel.Primitives.ClientLoggingOptions
+                            {
+                                EnableLogging = false,
+                                EnableMessageContentLogging = false,
+                                LoggerFactory = _loggerFactory,
+                                EnableMessageLogging = false
+                            }
+                        };
+                        ApplyAttributionPolicy(azureAudioClientOptions);
+
                         var client = new AzureOpenAIClient(
                             new Uri(modelConfig.Uri),
                             new ApiKeyCredential(apiKey),
-                            new AzureOpenAIClientOptions
-                            {
-                                EnableDistributedTracing = true,
-                                NetworkTimeout = TimeSpan.FromSeconds(timeoutSeconds),
-                                ClientLoggingOptions = new System.ClientModel.Primitives.ClientLoggingOptions
-                                {
-                                    EnableLogging = false,
-                                    EnableMessageContentLogging = false,
-                                    LoggerFactory = _loggerFactory,
-                                    EnableMessageLogging = false
-                                }
-                            }
+                            azureAudioClientOptions
                         );
 
                         ChatClientsCreatedCounter.Add(1,
@@ -320,14 +340,31 @@ namespace FabrCore.Sdk
                 switch (modelConfig.Provider.ToLowerInvariant())
                 {
                     case "openai":
-                        return new OpenAIClient(new ApiKeyCredential(apiKey))
+                    {
+                        var embeddingClientOptions = new OpenAIClientOptions();
+
+#pragma warning disable OPENAI001 // OpenAIClientOptions.Endpoint is experimental
+                        if (!string.IsNullOrWhiteSpace(modelConfig.Uri))
+                        {
+                            embeddingClientOptions.Endpoint = new Uri(modelConfig.Uri);
+                        }
+#pragma warning restore OPENAI001
+                        ApplyAttributionPolicy(embeddingClientOptions);
+
+                        return new OpenAIClient(new ApiKeyCredential(apiKey), embeddingClientOptions)
                             .GetEmbeddingClient(modelConfig.Model)
                             .AsIEmbeddingGenerator();
+                    }
 
                     case "azure":
-                        return new AzureOpenAIClient(new Uri(modelConfig.Uri), new ApiKeyCredential(apiKey))
+                    {
+                        var azureEmbeddingClientOptions = new AzureOpenAIClientOptions();
+                        ApplyAttributionPolicy(azureEmbeddingClientOptions);
+
+                        return new AzureOpenAIClient(new Uri(modelConfig.Uri), new ApiKeyCredential(apiKey), azureEmbeddingClientOptions)
                             .GetEmbeddingClient(modelConfig.Model)
                             .AsIEmbeddingGenerator();
+                    }
 
                     case "openrouter":
                     case "gemini":
@@ -378,31 +415,44 @@ namespace FabrCore.Sdk
             };
         }
 
+        /// <summary>
+        /// Adds the opt-in agent attribution policy (see <see cref="AgentAttributionPipelinePolicy"/>)
+        /// when <c>FabrCore:EmitAttributionHeaders</c> is enabled. No-op otherwise.
+        /// </summary>
+        private void ApplyAttributionPolicy(System.ClientModel.Primitives.ClientPipelineOptions options)
+        {
+            if (_emitAttributionHeaders)
+            {
+                options.AddPolicy(new AgentAttributionPipelinePolicy(), System.ClientModel.Primitives.PipelinePosition.PerCall);
+            }
+        }
+
 #pragma warning disable OPENAI001 // OpenAIClientOptions.Endpoint is experimental
         private OpenAIClient CreateOpenAICompatibleClient(string apiKey, string endpointUri, int timeoutSeconds)
         {
-            return new OpenAIClient(
-                new ApiKeyCredential(apiKey),
-                new OpenAIClientOptions
+            var options = new OpenAIClientOptions
+            {
+                Endpoint = new Uri(endpointUri),
+                EnableDistributedTracing = true,
+                NetworkTimeout = TimeSpan.FromSeconds(timeoutSeconds),
+                ClientLoggingOptions = new System.ClientModel.Primitives.ClientLoggingOptions
                 {
-                    Endpoint = new Uri(endpointUri),
-                    EnableDistributedTracing = true,
-                    NetworkTimeout = TimeSpan.FromSeconds(timeoutSeconds),
-                    ClientLoggingOptions = new System.ClientModel.Primitives.ClientLoggingOptions
-                    {
-                        EnableLogging = false,
-                        EnableMessageContentLogging = false,
-                        LoggerFactory = _loggerFactory,
-                        EnableMessageLogging = false
-                    }
-                });
+                    EnableLogging = false,
+                    EnableMessageContentLogging = false,
+                    LoggerFactory = _loggerFactory,
+                    EnableMessageLogging = false
+                }
+            };
+            ApplyAttributionPolicy(options);
+
+            return new OpenAIClient(new ApiKeyCredential(apiKey), options);
         }
 #pragma warning restore OPENAI001
 
         private async Task<ModelConfiguration> GetModelConfiguration(string name)
         {
             using var activity = ActivitySource.StartActivity("GetModelConfiguration", ActivityKind.Client);
-            var baseUrl = _configuration["FabrCoreHostUrl"] ?? "http://localhost:5000";
+            var baseUrl = _configuration[FabrCore.Core.FabrCoreConfigurationKeys.HostUrl] ?? "http://localhost:5000";
             var url = $"{baseUrl}/fabrcoreapi/ModelConfig/model/{name}";
 
             activity?.SetTag("model.config.name", name);
@@ -484,7 +534,7 @@ namespace FabrCore.Sdk
         private async Task<string> GetApiKey(string alias)
         {
             using var activity = ActivitySource.StartActivity("GetApiKey", ActivityKind.Client);
-            var baseUrl = _configuration["FabrCoreHostUrl"] ?? "http://localhost:5000";
+            var baseUrl = _configuration[FabrCore.Core.FabrCoreConfigurationKeys.HostUrl] ?? "http://localhost:5000";
             var url = $"{baseUrl}/fabrcoreapi/ModelConfig/apikey/{alias}";
 
             activity?.SetTag("api_key.alias", alias);

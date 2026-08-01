@@ -90,12 +90,14 @@ app.Run();
     }
   },
   "AllowedHosts": "*",
-  "Orleans": {
-    "ClusteringMode": "Localhost",
-    "ClusterId": "fabrcore-cluster",
-    "ServiceId": "fabrcore-service"
-  },
-  "FabrCoreHostUrl": "http://localhost:5000"
+  "FabrCore": {
+    "Orleans": {
+      "ClusteringMode": "Localhost",
+      "ClusterId": "fabrcore-cluster",
+      "ServiceId": "fabrcore-service"
+    },
+    "HostUrl": "http://localhost:5000"
+  }
 }
 ```
 

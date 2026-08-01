@@ -38,7 +38,7 @@ observable through a pluggable security audit provider.
   principal (checked again if they cross another boundary) and are audited via a breadcrumb —
   warned, never blocked.
 - **The System principal is unrestricted** and bypasses all checks. Its handle is set in
-  fabrcore.json (`Acl:SystemPrincipal`, default `"system"`).
+  fabrcore.json (`FabrCore:Acl:SystemPrincipal`, default `"system"`).
 - **Zero-config works.** With an empty fabrcore.json you get: secure defaults, an auto-created
   System principal, dynamic groups, in-memory audit, and (by default) a seeded grant letting
   every principal message/read the System principal's agents so the shared-demo experience
@@ -130,7 +130,7 @@ via groups).
 | `AuditOnly` | Would-be denials log a warning + audit event, then proceed. Monitor **read filtering still filters** (data exposure ≠ message flow) |
 | `Disabled` | No evaluation; everything allowed; per-call decisions are not audited |
 
-Configured via `Acl:Mode`; changeable at runtime via `PUT fabrcoreapi/acl/config/enforcement-mode`
+Configured via `FabrCore:Acl:Mode`; changeable at runtime via `PUT fabrcoreapi/acl/config/enforcement-mode`
 (persisted override; cleared by passing null).
 
 ## Cross-Principal Fan-out & the Breadcrumb
@@ -155,28 +155,28 @@ routing metadata and is never trusted for authorization.
 
 ```json
 {
-  "Acl": {
-    "SystemPrincipal": "system",
-    "Mode": "Enforce",
-    "AllPrincipalsGroupId": "all-principals",
-    "AllAgentsGroupId": "all-agents",
-    "CacheTtlSeconds": 30,
-    "SeedDefaultSystemAgentAccess": true,
-    "Seed": {
-      "Principals": [ { "Handle": "alice", "DisplayName": "Alice (dev)", "Roles": [ "ops-reader" ] } ],
-      "Roles": [
-        { "Name": "ops-reader", "Grants": [ { "Permission": "agent.read.allow", "Resource": "*:*" } ] }
-      ],
-      "Groups": [
-        { "Name": "partners", "Members": [ "principal:p1", "agent:p1:agent1" ] }
-      ],
-      "Grants": [
-        { "Subject": "principal:p1", "Permission": "agent.message.allow", "Resource": "p2:*" },
-        { "Subject": "agent:p1:agent1", "Permission": "agent.message.allow", "Resource": "p2:agent3" }
-      ]
-    }
-  },
   "FabrCore": {
+    "Acl": {
+      "SystemPrincipal": "system",
+      "Mode": "Enforce",
+      "AllPrincipalsGroupId": "all-principals",
+      "AllAgentsGroupId": "all-agents",
+      "CacheTtlSeconds": 30,
+      "SeedDefaultSystemAgentAccess": true,
+      "Seed": {
+        "Principals": [ { "Handle": "alice", "DisplayName": "Alice (dev)", "Roles": [ "ops-reader" ] } ],
+        "Roles": [
+          { "Name": "ops-reader", "Grants": [ { "Permission": "agent.read.allow", "Resource": "*:*" } ] }
+        ],
+        "Groups": [
+          { "Name": "partners", "Members": [ "principal:p1", "agent:p1:agent1" ] }
+        ],
+        "Grants": [
+          { "Subject": "principal:p1", "Permission": "agent.message.allow", "Resource": "p2:*" },
+          { "Subject": "agent:p1:agent1", "Permission": "agent.message.allow", "Resource": "p2:agent3" }
+        ]
+      }
+    },
     "Audit": {
       "DefaultLevel": "Failures",
       "Categories": { "AclDecision": "All" },
@@ -186,7 +186,7 @@ routing metadata and is never trusted for authorization.
 }
 ```
 
-The `Acl` section binds at the root or under `FabrCore:Acl`. **Seeds apply on first bootstrap
+The `Acl` section binds under `FabrCore:Acl` (a root-level `Acl` section no longer binds). **Seeds apply on first bootstrap
 only** — after that, manage entities via the API (seed drift logs a warning).
 
 Zero-config defaults: System = `"system"`, `Enforce`, in-memory audit at `Failures` level,
@@ -211,7 +211,7 @@ warning. Mapping: `Message`→`agent.message.*`, `Configure`→`agent.create.*` 
 3. Upsert the dynamic groups.
 4. Upsert the `acl-admin` built-in role.
 5. If the grant store is empty and `SeedDefaultSystemAgentAccess`: seed the system-agent grants.
-6. Apply `Acl:Seed` entities.
+6. Apply `FabrCore:Acl:Seed` entities.
 7. Write the marker **last** (a crash mid-bootstrap re-runs cleanly), emit a `Bootstrap` audit event.
 
 ## Storage Layout

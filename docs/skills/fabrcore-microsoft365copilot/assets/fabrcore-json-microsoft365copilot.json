@@ -16,7 +16,7 @@
   "Microsoft365Copilot": {
     "TenantId": "replace-with-entra-tenant-id",
     "ClientId": "replace-with-bot-app-registration-client-id",
-    "ClientSecret": "replace-with-bot-app-registration-client-secret",
+    "ClientSecret": "<set-with-user-secrets-or-key-vault>",
     "WelcomeMessage": "Hello! Ask me anything.",
     "Agent": {
       "AgentType": "replace-with-your-agent-alias",

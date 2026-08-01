@@ -26,6 +26,9 @@ FabrCore provides the building blocks for creating, hosting, and connecting to A
 - **Real-Time Monitoring** -- Agent message traffic, events, LLM request/response capture, and token tracking
 - **Audio Transcription** -- Azure OpenAI gpt-4o transcription model support
 - **Testing Harness** -- In-memory agent testing with mock and live LLM modes
+- **Blueprint-Driven Development** -- One source-controlled document for agents and supervised Swarm squads
+- **Standalone Surface UI** -- Blazor command center and chat with no Forge account required
+- **Optional Memory and GraphRAG** -- SQL Server 2025-backed durable memory and knowledge services
 
 ## Architecture
 
@@ -57,8 +60,22 @@ FabrCore provides the building blocks for creating, hosting, and connecting to A
 | **[FabrCore.Host.SqlServer](https://www.nuget.org/packages/FabrCore.Host.SqlServer)** | SQL Server clustering, persistence, and reminders for the host, with automatic Orleans table deployment |
 | **[FabrCore.Host.AzureStorage](https://www.nuget.org/packages/FabrCore.Host.AzureStorage)** | Azure Storage clustering (tables), persistence (blob/tables), reminders, and streams (queues) for the host, with automatic resource provisioning |
 | **[FabrCore.Services.Microsoft365Copilot](https://www.nuget.org/packages/FabrCore.Services.Microsoft365Copilot)** | Server addon -- surface FabrCore agents in Microsoft 365 Copilot and Teams (`/api/messages`, Entra auth, app package generation) |
+| **FabrCore.Services.Contracts** | Open Memory and GraphRAG administration protocol used by self-hosted tools and Forge |
+| **FabrCore.Services.Memory** | Optional scoped durable memory, taxonomy, consolidation, and audit services |
+| **FabrCore.Services.GraphRag** | Optional document ingestion, graph retrieval, search, and administration services |
+| **FabrCore.Surface** | Standalone Blazor command center, chat, Adaptive Cards, and supervised Swarm |
+
+Forge is the commercial operations and governance product: hosted or on-prem fleet
+administration, identity/team management, incidents, and configuration distribution.
+Building agents, applying blueprints, and chatting in Surface remain standalone OSS
+capabilities.
 
 ## Quick Start
+
+For the fastest full experience, run `samples/FabrCore.SampleApp`. It hosts FabrCore and
+Surface in one process with localhost Orleans, development fallback identity, and no SQL
+or Forge dependency. Copy `fabrcore.sample.json` to `fabrcore.json`, configure one model,
+then start the sample and open `/surface`.
 
 ### 1. Install packages
 
@@ -147,6 +164,7 @@ Full documentation is available in the [`docs/skills`](docs/skills/) directory:
 | [Orleans Configuration](docs/skills/fabrcore-orleans/SKILL.md) | Clustering, persistence, streaming, reminders, and multi-silo |
 | [Testing](docs/skills/fabrcore-testing/SKILL.md) | In-memory test harness with mock and live LLM modes |
 | [Audio Transcription](docs/skills/fabrcore-transcription/SKILL.md) | Azure OpenAI gpt-4o audio transcription |
+| [Blueprints](docs/blueprints.md) | Canonical agent and Swarm configuration, storage, apply endpoints, and admin authentication |
 
 **Check out the [FabrCore Blog](https://fabrcore.ai/blogs)** for tutorials, architecture deep-dives, integration guides, and best practices.
 

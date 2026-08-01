@@ -1,0 +1,273 @@
+@inject ISurfacePrincipalContextProvider PrincipalContextProvider
+@inject SurfaceWorkspaceService Workspace
+@inject NavigationManager Navigation
+@inject ILogger<SurfaceNotify> Logger
+@rendermode InteractiveServer
+@implements IDisposable
+
+<div class="@WrapperClass" @onkeydown="HandleKeyDown">
+    <button type="button"
+            class="@ButtonClass"
+            title="@ButtonTitle"
+            aria-label="@ButtonTitle"
+            aria-haspopup="menu"
+            aria-expanded="@(_menuOpen ? "true" : "false")"
+            @onclick="OpenSurface"
+            @oncontextmenu="ToggleMenu"
+            @oncontextmenu:preventDefault="true">
+        <i class="@Icon" aria-hidden="true"></i>
+        @if (TotalUnreadCount > 0)
+        {
+            <span class="surface-notify-badge" aria-label="@($"{TotalUnreadCount} unread Surface messages")">
+                @FormatBadge(TotalUnreadCount)
+            </span>
+        }
+    </button>
+
+    @if (_menuOpen)
+    {
+        <div class="surface-notify-backdrop"
+             aria-hidden="true"
+             @onclick="CloseMenu"
+             @oncontextmenu="CloseMenu"
+             @oncontextmenu:preventDefault="true"></div>
+        <div class="surface-notify-menu" role="menu" aria-label="Surface notifications">
+            <header class="surface-notify-menu-header">
+                <span>Surface</span>
+                <strong>@UnreadSummaryText</strong>
+            </header>
+
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <div class="surface-notify-note is-error" role="status">@_error</div>
+            }
+            else if (_principalContext?.IsResolved != true)
+            {
+                <div class="surface-notify-note" role="status">Surface principal unavailable.</div>
+            }
+            else if (UnreadSummaries.Count == 0)
+            {
+                <div class="surface-notify-note" role="status">No unread messages.</div>
+            }
+            else
+            {
+                <div class="surface-notify-list" role="none">
+                    @foreach (var summary in UnreadSummaries.Take(MaxVisibleItems))
+                    {
+                        <div class="surface-notify-row" role="none" @key="summary.Handle">
+                            <button type="button"
+                                    class="surface-notify-target"
+                                    role="menuitem"
+                                    title="@($"Open {summary.DisplayName}")"
+                                    aria-label="@($"Open {summary.DisplayName}")"
+                                    @onclick="() => OpenUnreadTarget(summary)">
+                                <span class="surface-notify-avatar">
+                                    <i class="bi @(summary.IsSquad ? "bi-hash" : "bi-chat-dots")" aria-hidden="true"></i>
+                                </span>
+                                <span class="surface-notify-copy">
+                                    <span>@summary.DisplayName</span>
+                                    <small>@(summary.IsSquad ? "Squad" : "Agent")</small>
+                                </span>
+                                <span class="surface-notify-count">@summary.UnreadCount</span>
+                            </button>
+                            <button type="button"
+                                    class="surface-notify-seen"
+                                    role="menuitem"
+                                    title="@($"Mark {summary.DisplayName} seen")"
+                                    aria-label="@($"Mark {summary.DisplayName} seen")"
+                                    @onclick="() => MarkSeen(summary.Handle)">
+                                <i class="bi bi-check2" aria-hidden="true"></i>
+                            </button>
+                        </div>
+                    }
+                </div>
+
+                @if (UnreadSummaries.Count > MaxVisibleItems)
+                {
+                    <div class="surface-notify-note">
+                        @(UnreadSummaries.Count - MaxVisibleItems) more unread target@(UnreadSummaries.Count - MaxVisibleItems == 1 ? string.Empty : "s")
+                    </div>
+                }
+            }
+
+            <footer class="surface-notify-menu-actions">
+                <button type="button"
+                        role="menuitem"
+                        disabled="@(TotalUnreadCount == 0)"
+                        @onclick="MarkAllSeen">
+                    <i class="bi bi-check2-all" aria-hidden="true"></i>
+                    <span>Mark all seen</span>
+                </button>
+                <button type="button"
+                        role="menuitem"
+                        @onclick="OpenSurface">
+                    <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
+                    <span>Open Surface</span>
+                </button>
+            </footer>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public string SurfacePath { get; set; } = "/surface";
+
+    [Parameter]
+    public string Icon { get; set; } = "bi bi-bell";
+
+    [Parameter]
+    public string Tooltip { get; set; } = "Open Surface";
+
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    [Parameter]
+    public int MaxVisibleItems { get; set; } = 6;
+
+    private FabrCore.Surface.Identity.SurfacePrincipalContext? _principalContext;
+    private bool _initialized;
+    private bool _menuOpen;
+    private string? _error;
+
+    private int TotalUnreadCount => Workspace.TotalUnreadCount;
+
+    private IReadOnlyList<SurfaceUnreadSummary> UnreadSummaries
+        => Workspace.GetUnreadSummaries();
+
+    private string WrapperClass
+        => string.IsNullOrWhiteSpace(CssClass)
+            ? "surface-notify"
+            : $"surface-notify {CssClass}";
+
+    private string ButtonClass
+    {
+        get
+        {
+            var classes = "surface-notify-button";
+            if (TotalUnreadCount > 0)
+            {
+                classes += " has-unread";
+            }
+            else if (_initialized && _principalContext?.IsResolved == true)
+            {
+                classes += " is-connected";
+            }
+
+            if (_menuOpen)
+            {
+                classes += " is-open";
+            }
+
+            return classes;
+        }
+    }
+
+    private string ButtonTitle
+        => TotalUnreadCount > 0
+            ? $"{TotalUnreadCount} unread Surface message{(TotalUnreadCount == 1 ? string.Empty : "s")}"
+            : Tooltip;
+
+    private string UnreadSummaryText
+        => TotalUnreadCount > 0
+            ? $"{TotalUnreadCount} unread"
+            : "All caught up";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Workspace.Changed += OnWorkspaceChanged;
+
+        try
+        {
+            _principalContext = await PrincipalContextProvider.GetCurrentAsync();
+            if (_principalContext.IsResolved)
+            {
+                await Workspace.InitializeAsync(_principalContext);
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = $"Surface unavailable: {ex.Message}";
+            Logger.LogWarning(ex, "SurfaceNotify failed to initialize.");
+        }
+        finally
+        {
+            _initialized = true;
+        }
+    }
+
+    private void ToggleMenu()
+        => _menuOpen = !_menuOpen;
+
+    private void CloseMenu()
+        => _menuOpen = false;
+
+    private void OpenSurface()
+    {
+        _menuOpen = false;
+        Navigation.NavigateTo(SurfacePath, forceLoad: true);
+    }
+
+    private void OpenUnreadTarget(SurfaceUnreadSummary summary)
+    {
+        if (summary.IsSquad)
+        {
+            Workspace.SelectSquad(summary.Handle);
+        }
+        else
+        {
+            Workspace.SelectAgent(summary.Handle);
+        }
+
+        _menuOpen = false;
+        var queryKey = summary.IsSquad ? "squad" : "agent";
+        Navigation.NavigateTo(BuildSurfaceTargetUri(queryKey, summary.Handle), forceLoad: true);
+    }
+
+    private void MarkSeen(string handle)
+    {
+        Workspace.MarkAgentSeen(handle);
+        if (TotalUnreadCount == 0)
+        {
+            _menuOpen = false;
+        }
+    }
+
+    private void MarkAllSeen()
+    {
+        Workspace.MarkAllSeen();
+        _menuOpen = false;
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs args)
+    {
+        if (string.Equals(args.Key, "Escape", StringComparison.Ordinal))
+        {
+            _menuOpen = false;
+        }
+        else if (string.Equals(args.Key, "ContextMenu", StringComparison.Ordinal))
+        {
+            _menuOpen = true;
+        }
+    }
+
+    private void OnWorkspaceChanged()
+        => _ = InvokeAsync(StateHasChanged);
+
+    private static string FormatBadge(int count)
+        => count > 99 ? "99+" : count.ToString();
+
+    private string BuildSurfaceTargetUri(string queryKey, string handle)
+    {
+        var separator = SurfacePath.Contains("?", StringComparison.Ordinal)
+            ? SurfacePath.EndsWith("?", StringComparison.Ordinal) || SurfacePath.EndsWith("&", StringComparison.Ordinal)
+                ? string.Empty
+                : "&"
+            : "?";
+
+        return $"{SurfacePath}{separator}{Uri.EscapeDataString(queryKey)}={Uri.EscapeDataString(handle)}";
+    }
+
+    public void Dispose()
+        => Workspace.Changed -= OnWorkspaceChanged;
+}

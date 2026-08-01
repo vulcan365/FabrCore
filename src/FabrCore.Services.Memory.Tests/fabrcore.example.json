@@ -1,0 +1,26 @@
+{
+  "ModelConfigurations": [
+    {
+      "Name": "default",
+      "Provider": "Azure",
+      "Uri": "https://YOUR_RESOURCE.openai.azure.com/",
+      "Model": "YOUR_CHAT_DEPLOYMENT",
+      "ApiKeyAlias": "default-key",
+      "TimeoutSeconds": 180
+    },
+    {
+      "Name": "embeddings",
+      "Provider": "Azure",
+      "Uri": "https://YOUR_RESOURCE.openai.azure.com/",
+      "Model": "YOUR_EMBEDDING_DEPLOYMENT",
+      "ApiKeyAlias": "default-key",
+      "TimeoutSeconds": 180
+    }
+  ],
+  "ApiKeys": [
+    {
+      "Alias": "default-key",
+      "Value": "REPLACE_WITH_API_KEY"
+    }
+  ]
+}

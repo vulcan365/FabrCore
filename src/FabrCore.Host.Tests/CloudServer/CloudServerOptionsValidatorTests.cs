@@ -68,4 +68,92 @@ public sealed class CloudServerOptionsValidatorTests
         };
         Assert.IsTrue(Validator.Validate(null, options).Succeeded);
     }
+
+    [TestMethod]
+    public void ConnectEnabled_WithLoopbackUrlAndAdminKey_IsValid()
+    {
+        var options = new CloudServerOptions
+        {
+            Enabled = true,
+            ApiKey = "forge-key",
+            Connect =
+            {
+                Enabled = true,
+                LocalAdminUrl = "http://127.0.0.1:5000",
+                LocalAdminApiKey = "local-admin-key"
+            }
+        };
+
+        Assert.IsTrue(Validator.Validate(null, options).Succeeded);
+    }
+
+    [TestMethod]
+    public void ConnectEnabled_AcceptsRemoteAndHttpsAdminUrl()
+    {
+        foreach (var url in new[] { "http://host.internal:5000", "https://127.0.0.1:5000", "http://curia-ai" })
+        {
+            var options = new CloudServerOptions
+            {
+                Enabled = true,
+                ApiKey = "forge-key",
+                Connect =
+                {
+                    Enabled = true,
+                    LocalAdminUrl = url,
+                    LocalAdminApiKey = "local-admin-key"
+                }
+            };
+
+            var result = Validator.Validate(null, options);
+            Assert.IsTrue(result.Succeeded, $"Expected '{url}' to be accepted.");
+        }
+    }
+
+    [TestMethod]
+    public void ConnectEnabled_RejectsMissingOrNonHttpAdminUrl()
+    {
+        foreach (var url in new[] { "", "not a url", "ftp://x" })
+        {
+            var options = new CloudServerOptions
+            {
+                Enabled = true,
+                ApiKey = "forge-key",
+                Connect =
+                {
+                    Enabled = true,
+                    LocalAdminUrl = url,
+                    LocalAdminApiKey = "local-admin-key"
+                }
+            };
+
+            var result = Validator.Validate(null, options);
+            Assert.IsTrue(result.Failed, $"Expected '{url}' to be rejected.");
+            Assert.IsTrue(result.FailureMessage!.Contains("LocalAdminUrl"));
+        }
+    }
+
+    [TestMethod]
+    public void ConnectEnabled_RequiresAdminKeyAndSafeLimits()
+    {
+        var options = new CloudServerOptions
+        {
+            Enabled = true,
+            ApiKey = "forge-key",
+            Connect =
+            {
+                Enabled = true,
+                LocalAdminUrl = "http://127.0.0.1:5000",
+                LocalAdminApiKey = null,
+                PollWait = TimeSpan.FromSeconds(56),
+                MaxBodyBytes = 512
+            }
+        };
+
+        var result = Validator.Validate(null, options);
+
+        Assert.IsTrue(result.Failed);
+        Assert.IsTrue(result.FailureMessage!.Contains("LocalAdminApiKey"));
+        Assert.IsTrue(result.FailureMessage.Contains("PollWait"));
+        Assert.IsTrue(result.FailureMessage.Contains("MaxBodyBytes"));
+    }
 }

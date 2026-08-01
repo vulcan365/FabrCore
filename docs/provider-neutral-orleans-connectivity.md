@@ -49,7 +49,7 @@ await builder.AddFabrCoreOrleansClientAsync(
     discoveryHttpClient,
     options =>
     {
-        options.FabrCoreHostUrl = builder.Configuration["FabrCoreHostUrl"]!;
+        options.FabrCoreHostUrl = builder.Configuration["FabrCore:HostUrl"]!;
     },
     orleans =>
     {

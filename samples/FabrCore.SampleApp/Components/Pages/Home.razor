@@ -1,0 +1,169 @@
+@page "/demo"
+@implements IAsyncDisposable
+@inject ISurfacePrincipalContextFactory ContextFactory
+
+<PageTitle>Surface CRM Demo</PageTitle>
+
+<main class="surface-demo">
+    <section class="chat-panel" aria-label="CRM agent chat">
+        <header class="demo-header">
+            <div>
+                <p class="eyebrow">FabrCore Surface</p>
+                <h1>CRM demo agent</h1>
+            </div>
+            <span class="agent-state">@_status</span>
+        </header>
+
+        <div class="message-list" role="log" aria-live="polite">
+            @foreach (var message in _messages)
+            {
+                <article class="chat-message @message.Role">
+                    <div class="message-author">@message.Author</div>
+                    <div class="message-text">@message.Text</div>
+                </article>
+            }
+        </div>
+
+        <EditForm Model="_composer" OnValidSubmit="SendMessageAsync" class="composer">
+            <InputTextArea @bind-Value="_composer.Text"
+                           class="composer-input"
+                           placeholder="Ask to browse customers, create a contact, or update an account status..." />
+            <button type="submit" disabled="@(!_ready || _sending || string.IsNullOrWhiteSpace(_composer.Text))">
+                @(_sending ? "Sending" : "Send")
+            </button>
+        </EditForm>
+
+        <div class="quick-actions" aria-label="Example prompts">
+            <button type="button" @onclick='() => UsePrompt("Show me active customers")'>Active customers</button>
+            <button type="button" @onclick='() => UsePrompt("Open Northwind Manufacturing")'>Open Northwind</button>
+            <button type="button" @onclick='() => UsePrompt("Render a form to create a new customer")'>New customer</button>
+            <button type="button" @onclick='() => UsePrompt("Add a contact to CUS-1001")'>Add contact</button>
+        </div>
+    </section>
+
+    <section class="surface-panel" aria-label="Rendered Surface UI">
+        <header class="surface-header">
+            <div>
+                <p class="eyebrow">Rendered UI messages</p>
+                <h2>Agent Surface</h2>
+            </div>
+            <span>@PrincipalHandle</span>
+        </header>
+
+        <DynamicAgentSurface PrincipalHandle="@PrincipalHandle" MaxItems="8">
+            <p class="empty-surface">Ask the agent to show customers, contacts, detail cards, or CRM forms.</p>
+        </DynamicAgentSurface>
+    </section>
+</main>
+
+@code {
+    private const string PrincipalHandle = SurfaceDemoBlueprintFactory.PrincipalHandle;
+    private const string AgentHandle = SurfaceDemoBlueprintFactory.CrmAgentHandle;
+    private const string SurfaceAgentHandle = SurfaceDemoBlueprintFactory.SurfaceAgentHandle;
+    private ISurfacePrincipalContext? _context;
+    private readonly Composer _composer = new();
+    private readonly List<ChatEntry> _messages =
+    [
+        new("assistant", "CRM agent", "I can browse demo customers, create customers or contacts, and render Surface UI for CRM workflows.")
+    ];
+    private bool _ready;
+    private bool _sending;
+    private string _status = "Starting";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _context = await ContextFactory.GetOrCreateAsync(PrincipalHandle, CancellationToken.None);
+        _context.AgentMessageReceived += OnAgentMessageReceived;
+
+        try
+        {
+            var surfaceHealth = await _context.GetAgentHealth(SurfaceAgentHandle);
+            var crmHealth = await _context.GetAgentHealth(AgentHandle);
+            if (surfaceHealth.IsConfigured != true || crmHealth.IsConfigured != true)
+            {
+                _ready = false;
+                _status = "Provisioning";
+                _messages.Add(new(
+                    "assistant",
+                    "CRM agent",
+                    "The startup blueprint is still provisioning the demo agents. Refresh this page in a moment, or open /surface to use the Assistant squad once it appears."));
+                return;
+            }
+
+            _ready = true;
+            _status = "Ready";
+        }
+        catch (Exception ex)
+        {
+            _ready = false;
+            _status = "Needs model config";
+            _messages.Add(new(
+                "assistant",
+                "CRM agent",
+                $"The demo UI is running, but the LLM-backed agent could not start. Create src/FabrCore.SampleApp/fabrcore.json from fabrcore.sample.json with a valid default model. Details: {ex.Message}"));
+        }
+    }
+
+    private async Task SendMessageAsync()
+    {
+        if (_context is null || string.IsNullOrWhiteSpace(_composer.Text))
+            return;
+
+        var text = _composer.Text.Trim();
+        _composer.Text = "";
+        _sending = true;
+        _status = "Waiting";
+        _messages.Add(new("user", "You", text));
+
+        await _context.SendMessage(new AgentMessage
+        {
+            ToHandle = AgentHandle,
+            Message = text,
+            Kind = MessageKind.Request
+        });
+    }
+
+    private void OnAgentMessageReceived(object? sender, AgentMessage message)
+    {
+        _ = InvokeAsync(() =>
+        {
+            if (message.MessageType == "_status")
+            {
+                _status = string.IsNullOrWhiteSpace(message.Message) ? "Working" : message.Message;
+                StateHasChanged();
+                return;
+            }
+
+            if (message.MessageType == "ui.render")
+                return;
+
+            if (!string.IsNullOrWhiteSpace(message.Message))
+                _messages.Add(new("assistant", "CRM agent", message.Message));
+
+            _sending = false;
+            _status = "Ready";
+            StateHasChanged();
+        });
+    }
+
+    private void UsePrompt(string prompt)
+    {
+        _composer.Text = prompt;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_context is not null)
+        {
+            _context.AgentMessageReceived -= OnAgentMessageReceived;
+            await ContextFactory.ReleaseAsync(PrincipalHandle);
+        }
+    }
+
+    private sealed class Composer
+    {
+        public string Text { get; set; } = "";
+    }
+
+    private sealed record ChatEntry(string Role, string Author, string Text);
+}

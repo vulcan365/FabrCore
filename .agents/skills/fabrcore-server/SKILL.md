@@ -5,7 +5,8 @@ description: >
   REST APIs, WebSocket, system agents, Blueprint provisioning, storage, custom providers, and deployment.
   Use for: "FabrCore server", "AddFabrCoreServer", "AddFabrCoreServices", "UseFabrCoreServer",
   "FabrCoreServerOptions", "TimeProvider", "fabrcore.json", "REST API", "/fabrcoreapi",
-  "Blueprint", "AgentBlueprintRequest", "EnsureBlueprintAgentsAsync", "agent/blueprint",
+  "Blueprint", "FabrCoreBlueprint", "IBlueprintExpander", "/fabrcoreapi/Blueprint",
+  "AgentBlueprintRequest", "EnsureBlueprintAgentsAsync", "agent/blueprint",
   "ConfigureSystemAgentAsync", "IFabrCoreAgentService", "AgentManagementProvider",
   "AdditionalAssemblies", "WebSocket", "server setup", "LLM provider", "Storage API",
   "typed entity storage", "IFabrCoreStorageProvider", "UseVerifiableExecution",
@@ -377,19 +378,32 @@ Creates one or more agents for a principal through that principal's `PrincipalGr
 
 #### POST `/agent/blueprint` — Ensure blueprint agents
 
-Ensures the agents listed in an admin-authored blueprint exist for the target principal from `x-user-handle`. Call it from application provisioning code; FabrCore does not invoke it automatically during Host startup. This endpoint is idempotent for already configured agents: it uses the principal's host-side `PrincipalGrain.CreateAgent` path, checks health first for tracked agents, and does not reconfigure healthy/degraded/unhealthy configured agents. Missing or not-configured agents are configured from the blueprint and added to that principal's tracked-agent list.
+Applies a canonical `FabrCoreBlueprint` for the principal from `x-user-handle`. The Host runs
+registered `IBlueprintExpander` implementations, combines their agent configurations with the
+document's `agents`, validates principal scope, and idempotently ensures those agents.
 
 Blueprint processing ignores incoming `ForceReconfigure = true`; use `/agent/create` when an intentional reconfigure is required.
 
-`Name` and `Version` are caller traceability fields echoed in the response. The Host does not persist them, compare versions, or remove agents omitted from a later Blueprint.
+`Name`, `Description`, and `Version` travel with the canonical document. Direct apply does not
+persist it; use `/fabrcoreapi/Blueprint` to store a named resource per principal.
 
 | Parameter | Source | Type | Required | Description |
 |-----------|--------|------|----------|-------------|
 | `x-user-handle` | Header | string | Yes | Target principal whose agents should be ensured |
-| body | Body | `AgentBlueprintRequest` | Yes | Blueprint wrapper with `agents` list |
+| body | Body | `FabrCoreBlueprint` | Yes | Canonical blueprint with `agents` and package-owned extension sections |
 | `detailLevel` | Query | `HealthDetailLevel` | No | `Basic` (default), `Detailed`, or `Full` |
 
 Bare handles are scoped to `x-user-handle`. Fully-qualified handles are accepted only when their principal prefix matches `x-user-handle`; cross-principal blueprint handles return `400 Bad Request`.
+
+Canonical stored-resource routes:
+
+| Method | Route | Purpose |
+|---|---|---|
+| `GET` | `/fabrcoreapi/Blueprint` | List the principal's blueprint names |
+| `GET` | `/fabrcoreapi/Blueprint/{name}` | Read one canonical blueprint |
+| `PUT` | `/fabrcoreapi/Blueprint/{name}` | Save or replace one blueprint |
+| `DELETE` | `/fabrcoreapi/Blueprint/{name}` | Delete one blueprint |
+| `POST` | `/fabrcoreapi/Blueprint/{name}/apply` | Apply a stored blueprint |
 
 **Request**:
 ```json
@@ -828,13 +842,19 @@ External systems should prefer bundle export plus local verification against the
 
 ### Response Models
 
-**`AgentBlueprintRequest`** — posted to `/agent/blueprint`:
+**`FabrCoreBlueprint`** — posted to `/agent/blueprint` or stored through
+`/fabrcoreapi/Blueprint/{name}`:
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `Name` | string? | Optional blueprint name for caller traceability |
+| `Description` | string? | Optional human-readable purpose |
 | `Version` | string? | Optional blueprint version |
 | `Agents` | List\<AgentConfiguration\> | Agent configurations to ensure for the principal named by `x-user-handle` |
+| `Extensions` | Dictionary\<string, JsonElement\> | Top-level package-owned extension data; serialized with `JsonExtensionData` |
+
+`AgentBlueprintRequest` and SDK `EnsureBlueprintAgentsAsync` are agents-only compatibility
+surfaces. Prefer `FabrCoreBlueprint` for new code, especially Swarm or Forge fleet delivery.
 
 **`AgentBlueprintResponse`** — returned by `/agent/blueprint`:
 

@@ -168,6 +168,51 @@ internal sealed class CloudServerApiClient
         }
     }
 
+    public async Task<CloudAdminCommand?> PollAdminCommandAsync(
+        string hostInstanceId,
+        CancellationToken cancellationToken = default)
+    {
+        var waitSeconds = Math.Max(1, (int)options.Connect.PollWait.TotalSeconds);
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            BuildUri(
+                $"{CloudServerProtocol.ConnectPath}?waitSeconds={waitSeconds}" +
+                $"&hostInstanceId={Uri.EscapeDataString(hostInstanceId)}"));
+        ApplyHeaders(request);
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(options.Connect.PollWait + TimeSpan.FromSeconds(10));
+        using var response = await SendAsync(request, timeout.Token);
+        if (response.StatusCode == HttpStatusCode.NoContent)
+        {
+            return null;
+        }
+
+        response.EnsureSuccessStatusCode();
+        var command = await response.Content.ReadFromJsonAsync<CloudAdminCommand>(JsonOptions, timeout.Token);
+        return command ?? throw new InvalidOperationException(
+            "Cloud server returned an empty connect-channel command.");
+    }
+
+    public async Task SendAdminCommandResponseAsync(
+        CloudAdminCommandResponse commandResponse,
+        string hostInstanceId = "(unknown)",
+        CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            BuildUri(CloudServerProtocol.ConnectResponsePath(commandResponse.CommandId)))
+        {
+            Content = JsonContent.Create(commandResponse, options: JsonOptions)
+        };
+        ApplyHeaders(request);
+        request.Headers.TryAddWithoutValidation("X-FabrCore-Host-Instance-Id", hostInstanceId);
+
+        using var timeout = CreateTimeout(cancellationToken, out var token);
+        using var response = await SendAsync(request, token);
+        response.EnsureSuccessStatusCode();
+    }
+
     private Uri BuildUri(string relativePath)
     {
         var baseUrl = options.Url.TrimEnd('/');

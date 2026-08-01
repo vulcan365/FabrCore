@@ -57,7 +57,7 @@ Authorization applied by the server per call:
 
 | Caller | Read endpoints (GET, `evaluate`, `check`, audit) | Mutations (PUT/POST/DELETE) |
 |---|---|---|
-| System principal (`Acl:SystemPrincipal`, default `system`) | ✅ bypass | ✅ bypass |
+| System principal (`FabrCore:Acl:SystemPrincipal`, default `system`) | ✅ bypass | ✅ bypass |
 | Holder of `acl.manage.allow` (e.g. via the built-in `acl-admin` role) | ✅ | ✅ |
 | Holder of `acl.read.allow` | ✅ | ❌ 403 |
 | Anyone else | ❌ 403 | ❌ 403 |
@@ -407,7 +407,7 @@ created one innocent form-submit at a time.
    their own filtered view (prefix filter on roles/groups/permission entity) so FabrCore
    built-ins and app policy don't visually blend. Reserved entities: `agent`, `principal`,
    `acl`, `system`, `fabrcore`.
-6. **Seeds are first-boot only.** `Acl:Seed` in fabrcore.json applies once; after bootstrap,
+6. **Seeds are first-boot only.** `FabrCore:Acl:Seed` in fabrcore.json applies once; after bootstrap,
    the API is the source of truth (seed drift only logs a warning). Your UI should state this
    wherever admins might expect config-file edits to take effect.
 

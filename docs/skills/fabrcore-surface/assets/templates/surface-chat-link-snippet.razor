@@ -1,0 +1,66 @@
+@using FabrCore.Core
+@using FabrCore.Surface.Components
+
+@* Place this on any Blazor page or layout after AddFabrCoreSurface/AddFabrCoreSurfaceComponents registration. *@
+<SurfaceChatLink AgentHandle="assistant"
+                 Title="Assistant"
+                 Tooltip="Open assistant"
+                 WelcomeMessage="How can I help?"
+                 OnMessageReceived="HandleSurfaceChatMessageAsync"
+                 InitialSize="SurfaceChatLinkSize.Medium"
+                 Position="SurfaceChatLinkPosition.BottomRight" />
+
+@* Page-owned creation mode. The link shows Create and Reset controls, but only calls
+   CreateAssistantAsync after the principal clicks Create. If this agent already exists
+   and is healthy, chat opens immediately because AllowExternalAgent defaults to true.
+<SurfaceChatLink AgentHandle="assistant"
+                 Title="Assistant"
+                 CreateAgent="CreateAssistantAsync"
+                 AllowReset="true" />
+*@
+
+@* Strict manual-create mode:
+<SurfaceChatLink AgentHandle="assistant"
+                 Title="Assistant"
+                 CreateAgent="CreateAssistantAsync"
+                 AllowExternalAgent="false" />
+*@
+
+@* To follow the currently selected /surface command-center agent in the same circuit, omit AgentHandle:
+<SurfaceChatLink Title="Surface chat" />
+*@
+
+@code {
+    private Task<AgentHealthStatus> CreateAssistantAsync(SurfaceChatLinkCreateAgentContext context)
+        => context.PrincipalContext.CreateAgent(new AgentConfiguration
+        {
+            Handle = context.AgentAlias,
+            AgentType = "assistant-agent",
+            Models = "default",
+            Description = "Page assistant",
+            ForceReconfigure = false
+        });
+
+    private async Task<bool> HandleSurfaceChatMessageAsync(AgentMessage message)
+    {
+        if (string.Equals(message.MessageType, "ui-update", StringComparison.OrdinalIgnoreCase))
+        {
+            await RefreshUiSectionAsync(message.Message);
+            return false;
+        }
+
+        if (string.Equals(message.MessageType, "data-changed", StringComparison.OrdinalIgnoreCase))
+        {
+            await ReloadPageDataAsync();
+            return false;
+        }
+
+        return true;
+    }
+
+    private Task RefreshUiSectionAsync(string? section)
+        => Task.CompletedTask;
+
+    private Task ReloadPageDataAsync()
+        => Task.CompletedTask;
+}

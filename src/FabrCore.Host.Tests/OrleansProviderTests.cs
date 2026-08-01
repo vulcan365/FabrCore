@@ -3,6 +3,7 @@ using FabrCore.Host.AzureStorage;
 using FabrCore.Host.Configuration;
 using FabrCore.Host.SqlServer;
 using System.Reflection;
+using System.Text.RegularExpressions;
 
 namespace FabrCore.Host.Tests;
 
@@ -84,6 +85,72 @@ public class OrleansProviderTests
     }
 
     [TestMethod]
+    public void SqlServerScripts_SchemaQualifyPhysicalOrleansTables()
+    {
+        var assembly = typeof(SqlServerOrleansProvider).Assembly;
+        var scriptNames = assembly.GetManifestResourceNames()
+            .Where(name => name.EndsWith(".sql", StringComparison.Ordinal));
+        var unqualifiedTableReference = new Regex(
+            @"\b(?:DELETE\s+FROM|FROM|JOIN|INTO|REFERENCES|UPDATE|CREATE\s+TABLE)\s+" +
+            @"(?!orlns\.)(?:OrleansMembershipTable|OrleansMembershipVersionTable|" +
+            @"OrleansRemindersTable|OrleansStorage|OrleansStreamMessage|" +
+            @"OrleansStreamDeadLetter|OrleansStreamControl)\b",
+            RegexOptions.IgnoreCase);
+
+        foreach (var scriptName in scriptNames)
+        {
+            var script = ReadEmbeddedSqlScript(assembly, scriptName);
+            var scriptWithoutLegacyRepairs = Regex.Replace(
+                script,
+                @"-- BEGIN FabrCore legacy schema repair.*?-- END FabrCore legacy schema repair",
+                string.Empty,
+                RegexOptions.Singleline);
+            var match = unqualifiedTableReference.Match(scriptWithoutLegacyRepairs);
+
+            Assert.IsFalse(match.Success,
+                $"Script '{scriptName}' contains an unqualified Orleans table reference: '{match.Value}'.");
+        }
+    }
+
+    [TestMethod]
+    public void SqlServerScripts_RepairLegacyUnqualifiedDeleteQueries()
+    {
+        var assembly = typeof(SqlServerOrleansProvider).Assembly;
+        var clustering = ReadEmbeddedSqlScript(
+            assembly,
+            "FabrCore.Host.SqlServer.SqlScripts.SQLServer-Clustering.sql");
+        var reminders = ReadEmbeddedSqlScript(
+            assembly,
+            "FabrCore.Host.SqlServer.SqlScripts.SQLServer-Reminders.sql");
+
+        StringAssert.Matches(
+            clustering,
+            new Regex(
+                @"REPLACE\(\s*QueryText,\s*'DELETE FROM OrleansMembershipTable'," +
+                @"\s*'DELETE FROM orlns\.OrleansMembershipTable'\)",
+                RegexOptions.IgnoreCase));
+        StringAssert.Contains(
+            clustering,
+            "QueryKey IN ('DeleteMembershipTableEntriesKey', 'CleanupDefunctSiloEntriesKey')");
+        StringAssert.Contains(
+            clustering,
+            "QueryText LIKE '%DELETE FROM OrleansMembershipTable%'");
+
+        StringAssert.Matches(
+            reminders,
+            new Regex(
+                @"REPLACE\(\s*QueryText,\s*'DELETE FROM OrleansRemindersTable'," +
+                @"\s*'DELETE FROM orlns\.OrleansRemindersTable'\)",
+                RegexOptions.IgnoreCase));
+        StringAssert.Contains(
+            reminders,
+            "QueryKey IN ('DeleteReminderRowKey', 'DeleteReminderRowsKey')");
+        StringAssert.Contains(
+            reminders,
+            "QueryText LIKE '%DELETE FROM OrleansRemindersTable%'");
+    }
+
+    [TestMethod]
     public void StreamQueueNames_AreDeterministicAndValid()
     {
         var names = AzureStorageOrleansProvider.GetStreamQueueNames("fabrcore-service", 3);
@@ -109,5 +176,13 @@ public class OrleansProviderTests
                 $"Queue name '{name}' is not a valid Azure queue name");
             Assert.IsTrue(name.Length is >= 3 and <= 63, $"Queue name '{name}' length out of range");
         }
+    }
+
+    private static string ReadEmbeddedSqlScript(Assembly assembly, string resourceName)
+    {
+        using var stream = assembly.GetManifestResourceStream(resourceName);
+        Assert.IsNotNull(stream, $"Missing embedded SQL script '{resourceName}'.");
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
     }
 }

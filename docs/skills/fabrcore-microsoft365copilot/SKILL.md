@@ -118,7 +118,7 @@ Minimal production section:
 
 - The addon **adds `fabrcore.json` to `IConfiguration`** (optional, reload-on-change) when the
   `Microsoft365Copilot` section is not already present. FabrCore.Host does not do this itself.
-  Side effect: other sections in fabrcore.json (for example `Acl:Seed`) become visible to the
+  Side effect: other sections in fabrcore.json (for example `FabrCore:Acl:Seed`) become visible to the
   host configuration too.
 - The addon synthesizes the Microsoft 365 Agents SDK configuration
   (`Connections`, `ConnectionsMap`, `AgentApplication`) from the one `Microsoft365Copilot`

@@ -1,3 +1,5 @@
+using FabrCore.Core.Blueprints;
+
 namespace FabrCore.Core.CloudServer;
 
 /// <summary>
@@ -28,4 +30,26 @@ public sealed class CloudConfigurationEnvelope
     /// servers may omit or populate it without breaking compatibility.
     /// </summary>
     public Dictionary<string, string?>? Settings { get; set; }
+
+    /// <summary>
+    /// Gets or sets canonical blueprint deployments distributed with this configuration.
+    /// This additive field is optional for v1 servers and clients: a server may omit it or
+    /// serialize an explicit <c>null</c>, so the setter normalizes null to an empty list and
+    /// consumers always observe a non-null collection.
+    /// </summary>
+    public List<CloudBlueprintDeployment> Blueprints
+    {
+        get => _blueprints;
+        set => _blueprints = value ?? [];
+    }
+
+    private List<CloudBlueprintDeployment> _blueprints = [];
+}
+
+/// <summary>One principal-scoped blueprint delivered by a cloud configuration server.</summary>
+public sealed class CloudBlueprintDeployment
+{
+    public string PrincipalId { get; set; } = string.Empty;
+    public FabrCoreBlueprint Blueprint { get; set; } = new();
+    public bool ApplyOnRefresh { get; set; } = true;
 }

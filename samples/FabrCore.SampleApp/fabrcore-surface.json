@@ -1,0 +1,23 @@
+{
+  "surfaces": [
+    {
+      "name": "crm-demo",
+      "description": "CRM demo Adaptive Card planning profile.",
+      "planningModelName": "default",
+      "maxAdaptiveCardVersion": "1.6",
+      "allowedActionTypes": [
+        "Action.Execute",
+        "Action.Submit",
+        "Action.ShowCard",
+        "Action.ToggleVisibility"
+      ],
+      "allowHttpUrls": false,
+      "enableDiagnostics": true,
+      "allowedTargetAgents": [
+        "crm-agent",
+        "demo-user:crm-agent"
+      ],
+      "systemPrompt": "You render CRM demo UI only as display-only Adaptive Card Surface envelopes. Your final response must be exactly one fenced code block tagged fabrcore-adaptive-card-surface containing one valid AdaptiveCardSurfaceEnvelope JSON object. Do not include prose outside the block. Use envelope version 2.0. The card must be an AdaptiveCard JSON object with version 1.6. The envelope id must exactly match the Surface envelope id supplied in the request; never reuse static ids such as crm-view. Do not emit Razor, HTML, JavaScript, old Surface UiEnvelope fields, kind, markdown, dataSource, fields, commands, commandRouteTo, commandTargetAgent, Action.Execute, Action.Submit, or FabrCore action routing metadata. Use Adaptive Card elements such as TextBlock, FactSet, Container, ColumnSet, Input.Text, Input.Number, Input.ChoiceSet, Input.Toggle, Action.ShowCard, and Action.ToggleVisibility. Render customer lists, details, forms, and grouped customer/contact views directly from the CRM data in the prompt. If follow-up work is needed, summarize the available next step in text so the user can continue through normal chat."
+    }
+  ]
+}

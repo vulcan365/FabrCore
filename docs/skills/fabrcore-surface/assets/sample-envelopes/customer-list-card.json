@@ -1,0 +1,57 @@
+{
+  "version": "2.0",
+  "id": "customer-list-card",
+  "metadata": {
+    "targetHandle": "demo-principal"
+  },
+  "card": {
+    "type": "AdaptiveCard",
+    "version": "1.6",
+    "body": [
+      {
+        "type": "TextBlock",
+        "text": "Customers",
+        "weight": "Bolder",
+        "size": "Medium"
+      },
+      {
+        "type": "Container",
+        "items": [
+          {
+            "type": "TextBlock",
+            "text": "${customerName}",
+            "weight": "Bolder"
+          },
+          {
+            "type": "TextBlock",
+            "text": "Status: ${customerStatus}",
+            "wrap": true
+          },
+          {
+            "type": "ActionSet",
+            "actions": [
+              {
+                "type": "Action.Execute",
+                "title": "View",
+                "verb": "crm.customer.view",
+                "data": {
+                  "actionId": "crm.customer.view",
+                  "routeTo": "agent",
+                  "targetAgent": "crm-agent",
+                  "customerId": "${customerId}",
+                  "messageTemplate": "show me the customer view for customer {customerId}"
+                }
+              }
+            ]
+          }
+        ],
+        "separator": true
+      }
+    ]
+  },
+  "data": {
+    "customerId": "CUS-1001",
+    "customerName": "Northwind Manufacturing",
+    "customerStatus": "Active"
+  }
+}

@@ -22,7 +22,7 @@ FabrCore uses Microsoft Orleans as its distributed runtime. This skill covers cl
 
 `AddFabrCoreServer()` configures Orleans automatically from `appsettings.json`. Use this when Localhost/SqlServer/AzureStorage modes are sufficient.
 
-Localhost mode is built into `FabrCore.Host`. The other modes live in provider packages that are auto-discovered — reference the package and set `Orleans:ClusteringMode`; no code changes needed:
+Localhost mode is built into `FabrCore.Host`. The other modes live in provider packages that are auto-discovered — reference the package and set `FabrCore:Orleans:ClusteringMode`; no code changes needed:
 
 | Mode | NuGet package |
 |------|---------------|
@@ -46,7 +46,7 @@ builder.AddFabrCoreServer(new FabrCoreServerOptions
 });
 ```
 
-Orleans settings are read from the `"Orleans"` section in `appsettings.json`.
+Orleans settings are read from the `FabrCore:Orleans` section in `appsettings.json`.
 
 ### Custom TimeProvider
 
@@ -92,10 +92,12 @@ Configure in `appsettings.json`:
 
 ```json
 {
-  "Orleans": {
-    "ClusterId": "dev",
-    "ServiceId": "fabrcore",
-    "ClusteringMode": "Localhost"
+  "FabrCore": {
+    "Orleans": {
+      "ClusterId": "dev",
+      "ServiceId": "fabrcore",
+      "ClusteringMode": "Localhost"
+    }
   }
 }
 ```
@@ -108,12 +110,14 @@ Configure in `appsettings.json`:
 
 ```json
 {
-  "Orleans": {
-    "ClusterId": "prod",
-    "ServiceId": "fabrcore",
-    "ClusteringMode": "SqlServer",
-    "ConnectionString": "Server=localhost;Database=FabrCore;Trusted_Connection=True;TrustServerCertificate=True;",
-    "StorageConnectionString": "Server=localhost;Database=FabrCoreStorage;Trusted_Connection=True;TrustServerCertificate=True;"
+  "FabrCore": {
+    "Orleans": {
+      "ClusterId": "prod",
+      "ServiceId": "fabrcore",
+      "ClusteringMode": "SqlServer",
+      "ConnectionString": "Server=localhost;Database=FabrCore;Trusted_Connection=True;TrustServerCertificate=True;",
+      "StorageConnectionString": "Server=localhost;Database=FabrCoreStorage;Trusted_Connection=True;TrustServerCertificate=True;"
+    }
   }
 }
 ```
@@ -125,16 +129,48 @@ Configure in `appsettings.json`:
 - Streams use the in-memory provider (Orleans has no SQL Server streaming provider)
 - `StorageConnectionString` optional (falls back to `ConnectionString`)
 
+FabrCore creates its Orleans SQL objects in the `orlns` schema. When
+`AutoInitDatabase` is `true`, startup also applies idempotent repairs to FabrCore-managed
+query definitions from older package versions. When it is `false`, database administrators
+must apply package upgrade SQL manually before restarting the silos; the runtime identity
+does not need schema-migration permissions in that mode.
+
+For databases created with an affected package version, apply this repair when automatic
+initialization is disabled, then restart or roll all silos so Orleans reloads the query definitions:
+
+```sql
+UPDATE orlns.OrleansQuery
+SET QueryText = REPLACE(
+    QueryText,
+    'DELETE FROM OrleansMembershipTable',
+    'DELETE FROM orlns.OrleansMembershipTable')
+WHERE QueryKey IN ('DeleteMembershipTableEntriesKey', 'CleanupDefunctSiloEntriesKey')
+    AND QueryText LIKE '%DELETE FROM OrleansMembershipTable%';
+
+UPDATE orlns.OrleansQuery
+SET QueryText = REPLACE(
+    QueryText,
+    'DELETE FROM OrleansRemindersTable',
+    'DELETE FROM orlns.OrleansRemindersTable')
+WHERE QueryKey IN ('DeleteReminderRowKey', 'DeleteReminderRowsKey')
+    AND QueryText LIKE '%DELETE FROM OrleansRemindersTable%';
+```
+
+The repair requires `UPDATE` permission on `orlns.OrleansQuery`. It does not require changing
+the database user's default schema or creating `dbo` synonyms for the physical Orleans tables.
+
 ### AzureStorage (Cloud)
 
 ```json
 {
-  "Orleans": {
-    "ClusterId": "prod",
-    "ServiceId": "fabrcore",
-    "ClusteringMode": "AzureStorage",
-    "ConnectionString": "DefaultEndpointsProtocol=https;AccountName=...;AccountKey=...;EndpointSuffix=core.windows.net",
-    "StorageConnectionString": "DefaultEndpointsProtocol=https;AccountName=...;AccountKey=...;EndpointSuffix=core.windows.net"
+  "FabrCore": {
+    "Orleans": {
+      "ClusterId": "prod",
+      "ServiceId": "fabrcore",
+      "ClusteringMode": "AzureStorage",
+      "ConnectionString": "DefaultEndpointsProtocol=https;AccountName=...;AccountKey=...;EndpointSuffix=core.windows.net",
+      "StorageConnectionString": "DefaultEndpointsProtocol=https;AccountName=...;AccountKey=...;EndpointSuffix=core.windows.net"
+    }
   }
 }
 ```
@@ -147,16 +183,18 @@ Configure in `appsettings.json`:
 - Multi-silo clustering supported
 - Local development: run [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite) and set `"ConnectionString": "UseDevelopmentStorage=true"`
 
-Optional tuning via the `Orleans:AzureStorage` section (all defaults are sensible):
+Optional tuning via the `FabrCore:Orleans:AzureStorage` section (all defaults are sensible):
 
 ```json
 {
-  "Orleans": {
-    "AzureStorage": {
-      "GrainStorage": "Blob",              // Blob (default) | Table
-      "ContainerName": "fabrcore-grainstate",
-      "Streams": "AzureQueue",             // AzureQueue (default) | Memory
-      "StreamQueueCount": 8                // must match across all silos
+  "FabrCore": {
+    "Orleans": {
+      "AzureStorage": {
+        "GrainStorage": "Blob",              // Blob (default) | Table
+        "ContainerName": "fabrcore-grainstate",
+        "Streams": "AzureQueue",             // AzureQueue (default) | Memory
+        "StreamQueueCount": 8                // must match across all silos
+      }
     }
   }
 }
@@ -168,12 +206,14 @@ Optional tuning via the `Orleans:AzureStorage` section (all defaults are sensibl
 
 ```json
 {
-  "Orleans": {
-    "ClusterId": "string",              // Cluster identifier (must match across silos)
-    "ServiceId": "string",              // Service identifier (must match across silos)
-    "ClusteringMode": "string",         // Localhost | SqlServer | AzureStorage
-    "ConnectionString": "string",       // Required for SqlServer/AzureStorage
-    "StorageConnectionString": "string" // Optional: separate storage connection
+  "FabrCore": {
+    "Orleans": {
+      "ClusterId": "string",              // Cluster identifier (must match across silos)
+      "ServiceId": "string",              // Service identifier (must match across silos)
+      "ClusteringMode": "string",         // Localhost | SqlServer | AzureStorage
+      "ConnectionString": "string",       // Required for SqlServer/AzureStorage
+      "StorageConnectionString": "string" // Optional: separate storage connection
+    }
   }
 }
 ```
@@ -190,7 +230,9 @@ not reference the Host's clustering package or copy its cluster identity and con
 
 ```json
 {
-  "FabrCoreHostUrl": "https://fabrcore.internal.example"
+  "FabrCore": {
+    "HostUrl": "https://fabrcore.internal.example"
+  }
 }
 ```
 
@@ -203,7 +245,7 @@ await builder.AddFabrCoreOrleansClientAsync(
     discoveryHttpClient,
     options =>
     {
-        options.FabrCoreHostUrl = builder.Configuration["FabrCoreHostUrl"]!;
+        options.FabrCoreHostUrl = builder.Configuration["FabrCore:HostUrl"]!;
     },
     orleans =>
     {
@@ -229,7 +271,7 @@ lower-level extension:
 ```csharp
 var clientOptions = new FabrCoreOrleansClientOptions
 {
-    FabrCoreHostUrl = builder.Configuration["FabrCoreHostUrl"]
+    FabrCoreHostUrl = builder.Configuration["FabrCore:HostUrl"]
 };
 var discoveryClient = new FabrCoreGatewayDiscoveryClient(
     discoveryHttpClient,

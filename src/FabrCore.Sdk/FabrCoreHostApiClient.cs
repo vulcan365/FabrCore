@@ -508,7 +508,7 @@ namespace FabrCore.Sdk
         {
             _httpClient = httpClient;
             _logger = logger;
-            _baseUrl = configuration["FabrCoreHostUrl"] ?? "http://localhost:5000";
+            _baseUrl = configuration[FabrCore.Core.FabrCoreConfigurationKeys.HostUrl] ?? "http://localhost:5000";
             _storageUserHandle = configuration["FabrCoreStorageUserHandle"] ?? configuration["FabrCore:Storage:UserHandle"];
 
             _logger.LogDebug("FabrCoreApiClient initialized with base URL: {BaseUrl}", _baseUrl);

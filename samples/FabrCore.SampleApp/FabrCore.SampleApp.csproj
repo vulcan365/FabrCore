@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <RootNamespace>FabrCore.SampleApp</RootNamespace>
+    <AssemblyName>FabrCore.SampleApp</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FabrCore.SampleApp.ServiceDefaults\FabrCore.SampleApp.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\..\src\FabrCore.Host\FabrCore.Host.csproj" />
+    <ProjectReference Include="..\..\src\FabrCore.Services.GraphRag\FabrCore.Services.GraphRag.csproj" />
+    <ProjectReference Include="..\..\src\FabrCore.Services.Memory\FabrCore.Services.Memory.csproj" />
+    <ProjectReference Include="..\..\src\FabrCore.Services.Microsoft365Copilot\FabrCore.Services.Microsoft365Copilot.csproj" />
+    <ProjectReference Include="..\..\src\FabrCore.Surface\FabrCore.Surface.csproj" />
+  </ItemGroup>
+
+</Project>

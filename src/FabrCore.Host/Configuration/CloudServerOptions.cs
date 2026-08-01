@@ -66,6 +66,9 @@ public sealed class CloudServerOptions
 
     /// <summary>Gets or sets heartbeat reporting options.</summary>
     public CloudServerHeartbeatOptions Heartbeat { get; set; } = new();
+
+    /// <summary>Gets or sets outbound-only Forge admin connect-channel options.</summary>
+    public CloudServerConnectOptions Connect { get; set; } = new();
 }
 
 /// <summary>Startup behavior when cloud configuration cannot be obtained from network or cache.</summary>
@@ -86,6 +89,36 @@ public sealed class CloudServerHeartbeatOptions
 
     /// <summary>Gets or sets the heartbeat interval.</summary>
     public TimeSpan Interval { get; set; } = TimeSpan.FromMinutes(1);
+}
+
+/// <summary>
+/// Configures the v2 connect channel. The host long-polls the cloud server and executes
+/// received requests against its own admin API.
+/// </summary>
+public sealed class CloudServerConnectOptions
+{
+    /// <summary>Gets or sets whether the outbound admin channel is enabled.</summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>
+    /// Gets or sets the FabrCore host admin URL used to execute admin requests. Optional —
+    /// defaults to <c>FabrCore:HostUrl</c>, then <c>http://127.0.0.1:5000</c>. Non-loopback
+    /// targets (e.g. a container network alias) are allowed but logged with a warning, since
+    /// the local admin key then traverses the network.
+    /// </summary>
+    public string LocalAdminUrl { get; set; } = "";
+
+    /// <summary>
+    /// Gets or sets the local administration key. When omitted, host registration resolves
+    /// it from FabrCore:AdminAuthentication:ApiKey so the secret need not be duplicated.
+    /// </summary>
+    public string? LocalAdminApiKey { get; set; }
+
+    /// <summary>Gets or sets how long each server long poll waits for work.</summary>
+    public TimeSpan PollWait { get; set; } = TimeSpan.FromSeconds(20);
+
+    /// <summary>Gets or sets the maximum proxied request or response body size.</summary>
+    public int MaxBodyBytes { get; set; } = 4 * 1024 * 1024;
 }
 
 internal sealed class CloudServerOptionsValidator : IValidateOptions<CloudServerOptions>
@@ -123,6 +156,34 @@ internal sealed class CloudServerOptionsValidator : IValidateOptions<CloudServer
         if (options.Heartbeat.Enabled && options.Heartbeat.Interval <= TimeSpan.Zero)
         {
             failures.Add($"{CloudServerOptions.SectionName}:Heartbeat:Interval must be greater than zero.");
+        }
+
+        if (options.Connect.Enabled)
+        {
+            if (!Uri.TryCreate(options.Connect.LocalAdminUrl, UriKind.Absolute, out var localUri) ||
+                (localUri.Scheme != Uri.UriSchemeHttp && localUri.Scheme != Uri.UriSchemeHttps))
+            {
+                failures.Add(
+                    $"{CloudServerOptions.SectionName}:Connect:LocalAdminUrl must be an absolute http(s) URL.");
+            }
+
+            if (string.IsNullOrWhiteSpace(options.Connect.LocalAdminApiKey))
+            {
+                failures.Add(
+                    $"{CloudServerOptions.SectionName}:Connect:LocalAdminApiKey is required when Connect is enabled.");
+            }
+
+            if (options.Connect.PollWait <= TimeSpan.Zero || options.Connect.PollWait > TimeSpan.FromSeconds(55))
+            {
+                failures.Add(
+                    $"{CloudServerOptions.SectionName}:Connect:PollWait must be between zero and 55 seconds.");
+            }
+
+            if (options.Connect.MaxBodyBytes is < 1024 or > 64 * 1024 * 1024)
+            {
+                failures.Add(
+                    $"{CloudServerOptions.SectionName}:Connect:MaxBodyBytes must be between 1 KiB and 64 MiB.");
+            }
         }
 
         return failures.Count == 0

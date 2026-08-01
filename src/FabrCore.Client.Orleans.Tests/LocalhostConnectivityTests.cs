@@ -25,9 +25,9 @@ public sealed class LocalhostConnectivityTests
         webBuilder.WebHost.UseUrls("http://127.0.0.1:0");
         webBuilder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["Orleans:ClusterId"] = clusterId,
-            ["Orleans:ServiceId"] = "fabrcore-discovery-tests",
-            ["Orleans:ClusteringMode"] = "Localhost",
+            ["FabrCore:Orleans:ClusterId"] = clusterId,
+            ["FabrCore:Orleans:ServiceId"] = "fabrcore-discovery-tests",
+            ["FabrCore:Orleans:ClusteringMode"] = "Localhost",
             ["FabrCore:Host:GatewayDiscovery:RequireOrleansTls"] = "false"
         });
         webBuilder.AddFabrCoreServer(new FabrCoreServerOptions

@@ -60,10 +60,10 @@ internal static class OrleansAzureStorageInitializer
         catch (Exception ex)
         {
             throw new InvalidOperationException(
-                "Failed to provision Azure Storage resources for Orleans. Verify that Orleans:ConnectionString " +
-                "(and Orleans:StorageConnectionString, if set) contains a valid Azure Storage connection string " +
+                "Failed to provision Azure Storage resources for Orleans. Verify that FabrCore:Orleans:ConnectionString " +
+                "(and FabrCore:Orleans:StorageConnectionString, if set) contains a valid Azure Storage connection string " +
                 "and that the account is reachable. For local development, run Azurite and use " +
-                "'UseDevelopmentStorage=true'. To skip auto-provisioning, set Orleans:AutoInitDatabase to false.",
+                "'UseDevelopmentStorage=true'. To skip auto-provisioning, set FabrCore:Orleans:AutoInitDatabase to false.",
                 ex);
         }
     }

@@ -1,0 +1,6 @@
+# Local model configuration contains API keys. Keep it available to the test runner,
+# but never add it to source control.
+fabrcore.json
+
+# Optional local evaluation output.
+TestResults/

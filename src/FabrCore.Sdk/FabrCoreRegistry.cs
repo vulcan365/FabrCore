@@ -259,7 +259,7 @@ namespace FabrCore.Sdk
 
         private void RecordCollision(string category, string alias, string existingType, string newType)
         {
-            _logger.LogWarning("Registry collision: {Category} alias '{Alias}' claimed by both '{ExistingType}' and '{NewType}' — '{NewType}' wins",
+            _logger.LogWarning("Registry collision: {Category} alias '{Alias}' claimed by both '{ExistingType}' and '{NewType}'; latest registration wins",
                 category, alias, existingType, newType);
 
             var collision = _collisions.FirstOrDefault(c => c.Alias == alias && c.Category == category);

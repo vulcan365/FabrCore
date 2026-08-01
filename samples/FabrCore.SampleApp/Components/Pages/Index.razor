@@ -1,0 +1,11 @@
+@page "/"
+@inject NavigationManager Navigation
+
+<PageTitle>Surface CRM Demo</PageTitle>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Navigation.NavigateTo("/surface", replace: true);
+    }
+}

@@ -1,0 +1,31 @@
+@using Microsoft.Extensions.Options
+@inject IOptions<SurfaceNavigationOptions> NavigationOptions
+
+<aside class="surface-command-rail" aria-label="Surface navigation">
+    @if (NavigationOptions.Value.SurfaceLoaded)
+    {
+        <NavLink href="/surface" data-enhance-nav="false" class="surface-rail-button surface-rail-link" ActiveClass="is-active" Match="NavLinkMatch.All" title="Chat" aria-label="Chat">
+            <i class="bi bi-chat-dots" aria-hidden="true"></i>
+            <span>Chat</span>
+        </NavLink>
+    }
+    @if (NavigationOptions.Value.AdminLoaded)
+    {
+        <NavLink href="/surface/management" data-enhance-nav="false" class="surface-rail-button surface-rail-link" ActiveClass="is-active" Match="NavLinkMatch.Prefix" title="Management" aria-label="Management">
+            <i class="bi bi-sliders" aria-hidden="true"></i>
+            <span>Manage</span>
+        </NavLink>
+        <NavLink href="/surface/knowledge" data-enhance-nav="false" class="surface-rail-button surface-rail-link" ActiveClass="is-active" Match="NavLinkMatch.Prefix" title="Knowledge" aria-label="Knowledge">
+            <i class="bi bi-diagram-3" aria-hidden="true"></i>
+            <span>Knowledge</span>
+        </NavLink>
+        <NavLink href="/surface/memory" data-enhance-nav="false" class="surface-rail-button surface-rail-link" ActiveClass="is-active" Match="NavLinkMatch.Prefix" title="Memory" aria-label="Memory">
+            <i class="bi bi-memory" aria-hidden="true"></i>
+            <span>Memory</span>
+        </NavLink>
+        <NavLink href="/surface/execution" data-enhance-nav="false" class="surface-rail-button surface-rail-link" ActiveClass="is-active" Match="NavLinkMatch.Prefix" title="Execution" aria-label="Execution">
+            <i class="bi bi-shield-check" aria-hidden="true"></i>
+            <span>Execution</span>
+        </NavLink>
+    }
+</aside>

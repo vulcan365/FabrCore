@@ -1,0 +1,36 @@
+{
+  "ModelConfigurations": [
+    {
+      "Name": "default",
+      "Provider": "OpenAI",
+      "Uri": "https://api.openai.com/v1",
+      "Model": "gpt-4.1-mini",
+      "ApiKeyAlias": "openai",
+      "TimeoutSeconds": 180
+    },
+    {
+      "Name": "graphrag",
+      "Provider": "OpenAI",
+      "Uri": "https://api.openai.com/v1",
+      "Model": "gpt-4.1-mini",
+      "ApiKeyAlias": "openai",
+      "TimeoutSeconds": 180,
+      "MaxOutputTokens": 32000,
+      "ContextWindowTokens": 128000
+    },
+    {
+      "Name": "embeddings",
+      "Provider": "OpenAI",
+      "Uri": "https://api.openai.com/v1",
+      "Model": "text-embedding-3-small",
+      "ApiKeyAlias": "openai",
+      "TimeoutSeconds": 180
+    }
+  ],
+  "ApiKeys": [
+    {
+      "Alias": "openai",
+      "Value": "REPLACE_WITH_API_KEY"
+    }
+  ]
+}

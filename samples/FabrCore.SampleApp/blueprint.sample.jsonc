@@ -1,0 +1,39 @@
+{
+  // The same blueprint can be applied locally, stored by the host, or distributed by Forge.
+  "name": "my-local-team",
+  "description": "Copy-me FabrCore blueprint",
+  "version": "1",
+  "agents": [
+    {
+      // Handles without a principal prefix are scoped to x-user-handle at apply time.
+      "handle": "assistant",
+      "agentType": "surface",
+      "models": "default",
+      "description": "A general-purpose assistant",
+      "systemPrompt": "Help the user clearly and concisely.",
+      "plugins": [],
+      "tools": [],
+      "args": {}
+    }
+  ],
+  "swarm": {
+    "squads": [
+      {
+        "squadType": "swarm",
+        "name": "Research Desk",
+        "description": "Plans, supervises, and verifies multi-agent research.",
+        "orchestratorModel": "default",
+        "plannerModel": "default",
+        "agents": [
+          {
+            // Reuse the blueprint-defined assistant instead of creating another agent.
+            "handle": "assistant",
+            "name": "Researcher",
+            "agentType": "surface",
+            "role": "executor"
+          }
+        ]
+      }
+    ]
+  }
+}

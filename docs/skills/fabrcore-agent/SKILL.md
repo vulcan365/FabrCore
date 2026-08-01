@@ -471,9 +471,9 @@ Compaction runs automatically after every `OnMessage`. When stored chat history 
 
 FabrCore also runs a parent-agent run-safety guard before each LLM call made through `TokenTrackingChatClient`. This guard labels actual prompt estimates separately from cumulative turn usage, can checkpoint compaction during long tool loops, and can stop a call before sending an oversized prompt.
 
-**No agent code is needed** — compaction is handled by the framework. Settings resolve in order: **defaults → fabrcore.json model config → agent Args overrides**.
+**No agent code is needed** — compaction is handled by the framework. Settings resolve in order: **defaults → host model config (fabrcore.json, or cloud server when enabled) → agent Args overrides**.
 
-**Model-level** (in `fabrcore.json` on each model entry):
+**Model-level** (on each model entry in `fabrcore.json`, or in the cluster config when the host uses a cloud server):
 
 | Field | Default | Description |
 |-------|---------|-------------|

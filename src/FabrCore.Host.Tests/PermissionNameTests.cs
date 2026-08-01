@@ -39,7 +39,7 @@ public sealed class PermissionNameTests
         Assert.IsTrue(PermissionName.Parse("acl.manage.allow").IsReservedEntity);
     }
 
-    [DataTestMethod]
+    [TestMethod]
     [DataRow("agent.message")]                 // missing effect
     [DataRow("agent.message.allow.extra")]     // too many segments
     [DataRow("agent.message.approve")]         // invalid effect
@@ -85,7 +85,7 @@ public sealed class HandleScopeMatcherTests
 {
     private static bool NoGroups(string group, string principal) => false;
 
-    [DataTestMethod]
+    [TestMethod]
     [DataRow("p2:agent3", "p2", "agent3", true)]     // exact
     [DataRow("p2:agent3", "p2", "agent4", false)]
     [DataRow("p2:agent3", "p3", "agent3", false)]

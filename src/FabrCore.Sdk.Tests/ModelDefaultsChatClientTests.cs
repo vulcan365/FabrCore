@@ -155,7 +155,7 @@ public sealed class ModelDefaultsChatClientTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["FabrCoreHostUrl"] = "https://fabrcore.test"
+                ["FabrCore:HostUrl"] = "https://fabrcore.test"
             })
             .Build();
         var service = new FabrCoreChatClientService(
@@ -179,7 +179,7 @@ public sealed class ModelDefaultsChatClientTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["FabrCoreHostUrl"] = "https://fabrcore.test"
+                ["FabrCore:HostUrl"] = "https://fabrcore.test"
             })
             .Build();
         var service = new FabrCoreChatClientService(

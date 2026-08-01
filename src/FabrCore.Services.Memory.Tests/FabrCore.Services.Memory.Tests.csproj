@@ -1,0 +1,35 @@
+<Project Sdk="MSTest.Sdk/4.0.1">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NSubstitute" Version="6.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.AI.Evaluation" Version="*" />
+    <PackageReference Include="Microsoft.Extensions.AI.Evaluation.Quality" Version="*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FabrCore.Services.Memory\FabrCore.Services.Memory.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="fabrcore.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Update="Microsoft.Testing.Extensions.CodeCoverage" Version="18.9.0" />
+    <PackageReference Update="Microsoft.Testing.Extensions.TrxReport" Version="2.3.2" />
+    <PackageReference Update="MSTest.TestAdapter" Version="4.3.2" />
+    <PackageReference Update="MSTest.TestFramework" Version="4.3.2" />
+  </ItemGroup>
+
+</Project>
