@@ -1797,7 +1797,7 @@ public sealed class KnowledgeIngestionService : IKnowledgeIngestionService
             _logger.LogWarning(
                 "Skipping entity extraction — no chat completion path available. " +
                 "Either register AddFabrCoreServer() for IFabrCoreChatClientService, " +
-                "or configure FabrCoreHostUrl + IHttpClientFactory for Host API fallback.");
+                "or configure FabrCore:HostUrl + IHttpClientFactory for Host API fallback.");
             return null;
         }
 
@@ -3416,7 +3416,7 @@ public sealed class KnowledgeIngestionService : IKnowledgeIngestionService
 
         throw new InvalidOperationException(
             "No embeddings provider available. Either register IEmbeddings via AddFabrCoreServer() " +
-            "or configure FabrCoreHostUrl + IHttpClientFactory for remote embeddings.");
+            "or configure FabrCore:HostUrl + IHttpClientFactory for remote embeddings.");
     }
 
     private async Task<float[]?[]> GenerateEmbeddingsWithTimingAsync(

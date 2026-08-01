@@ -143,10 +143,12 @@ app.Run();
     }
   },
   "AllowedHosts": "*",
-  "Orleans": {
-    "ClusteringMode": "Localhost",
-    "ClusterId": "fabrcore-cluster",
-    "ServiceId": "fabrcore-service"
+  "FabrCore": {
+    "Orleans": {
+      "ClusteringMode": "Localhost",
+      "ClusterId": "fabrcore-cluster",
+      "ServiceId": "fabrcore-service"
+    }
   }
 }
 ```
@@ -305,12 +307,14 @@ Adjust based on how the Blazor template generates the `App.razor` component.
     }
   },
   "AllowedHosts": "*",
-  "Orleans": {
-    "ClusteringMode": "Localhost",
-    "ClusterId": "fabrcore-cluster",
-    "ServiceId": "fabrcore-service"
-  },
-  "FabrCoreHostUrl": "http://localhost:5000"
+  "FabrCore": {
+    "Orleans": {
+      "ClusteringMode": "Localhost",
+      "ClusterId": "fabrcore-cluster",
+      "ServiceId": "fabrcore-service"
+    },
+    "HostUrl": "http://localhost:5000"
+  }
 }
 ```
 

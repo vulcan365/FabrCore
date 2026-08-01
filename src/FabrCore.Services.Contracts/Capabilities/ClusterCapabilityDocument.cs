@@ -2,7 +2,7 @@ namespace FabrCore.Services.Contracts.Capabilities;
 
 public sealed class ClusterCapabilityDocument
 {
-    public const string CurrentApiVersion = "1";
+    public const string CurrentApiVersion = "2";
 
     public string ApiVersion { get; set; } = CurrentApiVersion;
 
@@ -11,6 +11,10 @@ public sealed class ClusterCapabilityDocument
     public List<ClusterServiceCapability> Services { get; set; } = [];
 
     public List<string> BlueprintExtensions { get; set; } = [];
+
+    public int? MaxRequestBodyBytes { get; set; }
+
+    public string DataScope { get; set; } = "cluster";
 }
 
 public sealed class ClusterServiceCapability
@@ -22,4 +26,12 @@ public sealed class ClusterServiceCapability
     public string? ApiVersion { get; set; }
 
     public List<string> Features { get; set; } = [];
+
+    public string DataScope { get; set; } = "cluster";
+
+    public int? MaxRequestBodyBytes { get; set; }
+
+    public bool Available { get; set; } = true;
+
+    public string? UnavailableReason { get; set; }
 }

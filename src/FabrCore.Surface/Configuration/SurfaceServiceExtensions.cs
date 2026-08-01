@@ -1,5 +1,6 @@
 using FabrCore.Surface.Abstractions;
 using FabrCore.Surface.Services;
+using FabrCore.Surface.Api;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -29,6 +30,7 @@ public static class SurfaceServiceExtensions
         services.AddOptions<SurfaceOptions>();
         services.TryAddSingleton<ISurfaceDefinitionProvider, FileSurfaceDefinitionProvider>();
         services.TryAddSingleton<ISurfaceProvider, SurfaceProvider>();
+        services.AddControllers().AddApplicationPart(typeof(SurfaceRemoteAdminController).Assembly);
 
         return services;
     }

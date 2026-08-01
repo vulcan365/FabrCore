@@ -669,7 +669,7 @@ public sealed class KnowledgeSearchService : IKnowledgeSearchService
 
         throw new InvalidOperationException(
             "No embeddings provider available. Either register IEmbeddings via AddFabrCoreServer() " +
-            "or configure FabrCoreHostUrl + IHttpClientFactory for remote embeddings.");
+            "or configure FabrCore:HostUrl + IHttpClientFactory for remote embeddings.");
     }
 
     /// <summary>

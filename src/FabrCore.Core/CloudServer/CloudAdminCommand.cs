@@ -13,6 +13,9 @@ public sealed class CloudAdminCommand
         new(StringComparer.OrdinalIgnoreCase);
     public byte[]? Body { get; set; }
     public DateTimeOffset ExpiresAt { get; set; }
+    public string? TargetHostInstanceId { get; set; }
+    public string LeaseToken { get; set; } = string.Empty;
+    public int Attempt { get; set; } = 1;
 }
 
 /// <summary>Result returned by a cluster after executing a connect-channel command locally.</summary>
@@ -24,4 +27,5 @@ public sealed class CloudAdminCommandResponse
         new(StringComparer.OrdinalIgnoreCase);
     public byte[]? Body { get; set; }
     public string? Error { get; set; }
+    public string LeaseToken { get; set; } = string.Empty;
 }

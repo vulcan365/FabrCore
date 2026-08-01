@@ -10,7 +10,7 @@ public static class FabrCoreAzureStorageExtensions
     /// reminders (tables), and streaming (queues).
     /// <para>
     /// Calling this is optional — referencing the FabrCore.Host.AzureStorage package and setting
-    /// <c>Orleans:ClusteringMode</c> to <c>AzureStorage</c> is enough for the provider to be
+    /// <c>FabrCore:Orleans:ClusteringMode</c> to <c>AzureStorage</c> is enough for the provider to be
     /// auto-discovered by <see cref="FabrCoreHostExtensions.AddFabrCoreServer"/>.
     /// </para>
     /// </summary>

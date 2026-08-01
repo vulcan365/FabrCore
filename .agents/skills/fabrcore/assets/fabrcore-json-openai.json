@@ -16,9 +16,11 @@
       "Value": "sk-your-openai-api-key-here"
     }
   ],
-  "Acl": {
-    "SystemPrincipal": "system",
-    "Mode": "Enforce",
-    "SeedDefaultSystemAgentAccess": true
+  "FabrCore": {
+    "Acl": {
+      "SystemPrincipal": "system",
+      "Mode": "Enforce",
+      "SeedDefaultSystemAgentAccess": true
+    }
   }
 }

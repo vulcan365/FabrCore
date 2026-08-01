@@ -29,7 +29,7 @@ public sealed class GraphRagAdminService : IGraphRagAdminService
         _connectionString = configuration.GetConnectionString(options.ConnectionStringName)
             ?? throw new InvalidOperationException(
                 $"Connection string '{options.ConnectionStringName}' not found");
-        _hostApiBaseUrl = configuration["FabrCoreHostUrl"];
+        _hostApiBaseUrl = configuration[FabrCore.Core.FabrCoreConfigurationKeys.HostUrl];
         _httpClientFactory = serviceProvider.GetService(typeof(IHttpClientFactory)) as IHttpClientFactory;
         _serviceProvider = serviceProvider;
         _logger = logger;
@@ -950,7 +950,7 @@ public sealed class GraphRagAdminService : IGraphRagAdminService
         if (string.IsNullOrWhiteSpace(_hostApiBaseUrl) || _httpClientFactory is null)
             throw new InvalidOperationException(
                 "Search requires either IKnowledgeSearchService (via AddFabrCoreServer) " +
-                "or FabrCoreHostUrl + IHttpClientFactory for remote embeddings.");
+                "or FabrCore:HostUrl + IHttpClientFactory for remote embeddings.");
 
         var embedding = await GetEmbeddingFromHostApiAsync(query, ct);
         var vectorParam = "[" + string.Join(",", embedding.Select(v => v.ToString("G"))) + "]";

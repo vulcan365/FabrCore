@@ -32,7 +32,7 @@ public sealed class FabrCoreHostApiClientTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["FabrCoreHostUrl"] = "https://fabrcore.test"
+                ["FabrCore:HostUrl"] = "https://fabrcore.test"
             })
             .Build();
         var apiClient = new FabrCoreHostApiClient(

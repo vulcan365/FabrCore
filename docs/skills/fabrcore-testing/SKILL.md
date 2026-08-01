@@ -480,7 +480,7 @@ Start a FabrCore Host with an explicit reachable Localhost gateway,
 then register a separate client through `AddFabrCoreOrleansClientAsync`. Assert all of these through
 the resulting `IClusterClient`:
 
-1. The client connects using only `FabrCoreHostUrl`.
+1. The client connects using only `FabrCore:HostUrl`.
 2. A grain request/response succeeds.
 3. `CreateObjectReference` creates an observer, a grain subscribes it, and the client receives a
    callback.

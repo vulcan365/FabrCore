@@ -3,7 +3,7 @@ namespace FabrCore.Client.Orleans;
 /// <summary>Configures provider-neutral FabrCore Orleans client connectivity.</summary>
 public sealed class FabrCoreOrleansClientOptions
 {
-    public const string FabrCoreHostUrlConfigurationKey = "FabrCoreHostUrl";
+    public const string FabrCoreHostUrlConfigurationKey = FabrCore.Core.FabrCoreConfigurationKeys.HostUrl;
     public const string DefaultGatewayDiscoveryPath = "/fabrcoreapi/cluster/gateways";
 
     /// <summary>Gets or sets the base URL of the FabrCore Host.</summary>

@@ -6,7 +6,7 @@ namespace FabrCore.Surface.Configuration;
 /// </summary>
 public sealed class OrleansClusterOptions
 {
-    public const string SectionName = "Orleans";
+    public const string SectionName = FabrCore.Core.FabrCoreConfigurationKeys.OrleansSection;
 
     public string ClusterId { get; set; } = "fabrcore-cluster";
 

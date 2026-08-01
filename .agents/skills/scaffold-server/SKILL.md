@@ -71,10 +71,12 @@ app.Run();
     }
   },
   "AllowedHosts": "*",
-  "Orleans": {
-    "ClusteringMode": "Localhost",
-    "ClusterId": "fabrcore-cluster",
-    "ServiceId": "fabrcore-service"
+  "FabrCore": {
+    "Orleans": {
+      "ClusteringMode": "Localhost",
+      "ClusterId": "fabrcore-cluster",
+      "ServiceId": "fabrcore-service"
+    }
   }
 }
 ```

@@ -1,4 +1,8 @@
+using FabrCore.Core;
+using FabrCore.Core.Blueprints;
+using FabrCore.Core.CloudServer;
 using FabrCore.Host.Configuration;
+using FabrCore.Host.Services;
 using FabrCore.Host.Services.CloudServer;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -39,7 +43,10 @@ public sealed class CloudServerSyncServiceTests
         public CloudConfigurationDiskCache DiskCache { get; private set; } = null!;
         public CloudServerSyncService Service { get; private set; } = null!;
 
-        public static Harness Create(FakeCloudServerHandler handler, Action<CloudServerOptions>? configure = null)
+        public static Harness Create(
+            FakeCloudServerHandler handler,
+            Action<CloudServerOptions>? configure = null,
+            Action<ServiceCollection>? services = null)
         {
             var harness = new Harness();
             Directory.CreateDirectory(harness.ContentRoot);
@@ -53,6 +60,9 @@ public sealed class CloudServerSyncServiceTests
             var optionsWrapper = Microsoft.Extensions.Options.Options.Create(options);
             var environment = new TestHostEnvironment(harness.ContentRoot);
 
+            var serviceCollection = new ServiceCollection();
+            services?.Invoke(serviceCollection);
+
             harness.DiskCache = new CloudConfigurationDiskCache(
                 optionsWrapper, environment, NullLogger<CloudConfigurationDiskCache>.Instance);
             harness.Service = new CloudServerSyncService(
@@ -60,7 +70,7 @@ public sealed class CloudServerSyncServiceTests
                 harness.Store,
                 harness.DiskCache,
                 optionsWrapper,
-                new ServiceCollection().BuildServiceProvider(),
+                serviceCollection.BuildServiceProvider(),
                 new FakeHttpClientFactory(handler),
                 NullLogger<CloudServerSyncService>.Instance);
             return harness;
@@ -162,6 +172,135 @@ public sealed class CloudServerSyncServiceTests
         }
 
         Assert.AreEqual("v2", harness.Store.CurrentConfigurationVersion, "Refresh loop should hot-swap the snapshot.");
+    }
+
+    /// <summary>Envelope JSON with an explicit blueprints value (or the member omitted).</summary>
+    private static Dictionary<string, object?> EnvelopeWithBlueprints(
+        string version, object? blueprints, bool includeBlueprints = true)
+    {
+        var envelope = new Dictionary<string, object?>
+        {
+            ["schemaVersion"] = 1,
+            ["configurationVersion"] = version,
+            ["issuedAt"] = DateTimeOffset.UtcNow,
+            ["configuration"] = new
+            {
+                modelConfigurations = new[]
+                {
+                    new
+                    {
+                        name = "default",
+                        provider = "OpenAI",
+                        uri = "https://api.openai.test",
+                        model = "gpt-test",
+                        apiKeyAlias = "openai"
+                    }
+                },
+                apiKeys = new[] { new { alias = "openai", value = "sk-test" } }
+            }
+        };
+        if (includeBlueprints)
+        {
+            envelope["blueprints"] = blueprints;
+        }
+
+        return envelope;
+    }
+
+    [TestMethod]
+    public void Envelope_Deserialize_NullBlueprints_NormalizesToEmptyList()
+    {
+        // Regression: third-party v1 servers may serialize "blueprints": null; an explicit
+        // null used to overwrite the [] initializer and crash ApplySnapshotAsync.
+        var json = """{ "schemaVersion": 1, "configurationVersion": "v1", "blueprints": null }""";
+
+        var envelope = JsonSerializer.Deserialize<CloudConfigurationEnvelope>(json, JsonSerializerOptions.Web);
+
+        Assert.IsNotNull(envelope);
+        Assert.IsNotNull(envelope.Blueprints, "Explicit JSON null must normalize to an empty list.");
+        Assert.AreEqual(0, envelope.Blueprints.Count);
+    }
+
+    [TestMethod]
+    [DataRow("null", DisplayName = "blueprints: null")]
+    [DataRow("empty", DisplayName = "blueprints: []")]
+    [DataRow("missing", DisplayName = "blueprints omitted")]
+    public async Task StartAsync_Succeeds_ForOptionalBlueprintsShapes(string shape)
+    {
+        var body = shape switch
+        {
+            "null" => EnvelopeWithBlueprints("v1", blueprints: null),
+            "empty" => EnvelopeWithBlueprints("v1", blueprints: Array.Empty<object>()),
+            _ => EnvelopeWithBlueprints("v1", blueprints: null, includeBlueprints: false)
+        };
+        var handler = new FakeCloudServerHandler(_ =>
+            Task.FromResult(FakeCloudServerHandler.Json(HttpStatusCode.OK, body)));
+        await using var harness = Harness.Create(handler);
+
+        await harness.Service.StartAsync(CancellationToken.None);
+
+        Assert.IsTrue(harness.Store.HasSnapshot, "Host must start and apply the snapshot.");
+        var config = await harness.Store.GetConfigurationAsync();
+        Assert.AreEqual("default", config.ModelConfigurations.Single().Name,
+            "Model configuration must still be applied.");
+        Assert.AreEqual("openai", config.ApiKeys.Single().Alias, "API keys must still be applied.");
+    }
+
+    [TestMethod]
+    public async Task StartAsync_NonEmptyBlueprints_AreSavedAndApplied()
+    {
+        var body = EnvelopeWithBlueprints("v1", blueprints: new[]
+        {
+            new
+            {
+                principalId = "user-1",
+                blueprint = new { name = "starter", version = "3" },
+                applyOnRefresh = true
+            }
+        });
+        var handler = new FakeCloudServerHandler(_ =>
+            Task.FromResult(FakeCloudServerHandler.Json(HttpStatusCode.OK, body)));
+        var blueprintService = new FakeBlueprintService();
+        await using var harness = Harness.Create(
+            handler,
+            services: services => services.AddSingleton<IFabrCoreBlueprintService>(blueprintService));
+
+        await harness.Service.StartAsync(CancellationToken.None);
+
+        Assert.IsTrue(harness.Store.HasSnapshot);
+        Assert.AreEqual(1, blueprintService.Saved.Count, "Blueprint deployments must still be saved.");
+        Assert.AreEqual(("user-1", "starter"), blueprintService.Saved.Single());
+        Assert.AreEqual(1, blueprintService.Applied.Count, "applyOnRefresh deployments must be applied.");
+    }
+
+    private sealed class FakeBlueprintService : IFabrCoreBlueprintService
+    {
+        public List<(string PrincipalId, string Name)> Saved { get; } = [];
+        public List<(string PrincipalId, string Name)> Applied { get; } = [];
+
+        public Task<FabrCoreBlueprintApplyResult> ApplyAsync(
+            string principalId, FabrCoreBlueprint blueprint,
+            HealthDetailLevel detailLevel = HealthDetailLevel.Basic,
+            CancellationToken cancellationToken = default)
+        {
+            Applied.Add((principalId, blueprint.Name ?? ""));
+            return Task.FromResult(new FabrCoreBlueprintApplyResult());
+        }
+
+        public Task<FabrCoreBlueprint?> GetAsync(string principalId, string name, CancellationToken cancellationToken = default) =>
+            Task.FromResult<FabrCoreBlueprint?>(null);
+
+        public Task<IReadOnlyList<string>> ListAsync(string principalId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<string>>([]);
+
+        public Task SaveAsync(string principalId, FabrCoreBlueprint blueprint, CancellationToken cancellationToken = default)
+        {
+            Saved.Add((principalId, blueprint.Name ?? ""));
+            return Task.CompletedTask;
+        }
+
+        public Task<bool> DeleteAsync(string principalId, string name, CancellationToken cancellationToken = default) =>
+            Task.FromResult(false);
     }
 
     [TestMethod]

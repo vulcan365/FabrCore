@@ -89,7 +89,7 @@ builder.AddFabrCoreSurface(options =>
 });
 ```
 
-`FabrCoreHostUrl` is used for host API calls such as discovery. If `options.FabrCoreHostUrl` is not set, `AddFabrCoreSurface` reads configuration key `FabrCoreHostUrl`, then falls back to `http://localhost:5000`.
+`FabrCoreHostUrl` is used for host API calls such as discovery. If `options.FabrCoreHostUrl` is not set, `AddFabrCoreSurface` reads configuration key `FabrCore:HostUrl`, then falls back to `http://localhost:5000`.
 
 Surface blueprints can provision grouped agents as squads. Use the top-level `swarm`
 extension with a `squads` array and `squadType` values `swarm`, `orchestrator`, or `task`

@@ -69,16 +69,18 @@ app.Run();
 
 ```json
 {
-  "Orleans": {
-    "ClusterId": "dev",
-    "ServiceId": "fabrcore",
-    "ClusteringMode": "Localhost"
-  },
-  "FabrCoreHostUrl": "http://localhost:5000"
+  "FabrCore": {
+    "Orleans": {
+      "ClusterId": "dev",
+      "ServiceId": "fabrcore",
+      "ClusteringMode": "Localhost"
+    },
+    "HostUrl": "http://localhost:5000"
+  }
 }
 ```
 
-**Important:** The `Orleans` section must match the server's clustering configuration exactly.
+**Important:** The `FabrCore:Orleans` section must match the server's clustering configuration exactly.
 
 ### App.razor Template
 
@@ -274,7 +276,7 @@ using FabrCore.Sdk;
 
 Older `FabrCore.Client` Host API client types are obsolete compatibility shims. New code should reference `FabrCore.Sdk.IFabrCoreHostApiClient` and `FabrCore.Sdk.FabrCoreHostApiClient`.
 
-REST client for the Host API. The base URL is read from the `FabrCoreHostUrl` configuration key (see appsettings.json above; defaults to `http://localhost:5000` if missing).
+REST client for the Host API. The base URL is read from the `FabrCore:HostUrl` configuration key (see appsettings.json above; defaults to `http://localhost:5000` if missing).
 
 Agent-scoped methods take a **fully-qualified handle** in the form `"userHandle:agentHandle"`. The client parses the user handle out of the handle via `HandleUtilities.ParseHandle` and sends it as the `x-user-handle` header automatically — callers do not pass the user handle separately. Bare agent handles are rejected with `ArgumentException`.
 
@@ -321,7 +323,7 @@ var ensured = await ApiClient.EnsureBlueprintAgentsAsync(
     });
 ```
 
-Under the hood, for `GetAgentHealthAsync("user1:my-agent")` the client issues `GET {FabrCoreHostUrl}/fabrcoreapi/Agent/health/my-agent` with header `x-user-handle: user1`. You never have to split the handle yourself.
+Under the hood, for `GetAgentHealthAsync("user1:my-agent")` the client issues `GET {FabrCore:HostUrl}/fabrcoreapi/Agent/health/my-agent` with header `x-user-handle: user1`. You never have to split the handle yourself.
 
 ### Agent eviction
 
@@ -493,7 +495,7 @@ AgentStatisticsResponse stats = await ApiClient.GetAgentStatisticsAsync();
 | `GetAgentStatisticsAsync` | GET | `/fabrcoreapi/Diagnostics/agents/statistics` | `AgentStatisticsResponse` |
 | `PurgeOldAgentsAsync` | POST | `/fabrcoreapi/Diagnostics/agents/purge` | `PurgeAgentsResponse` |
 
-All of these are straight HTTP calls against `{FabrCoreHostUrl}` — no handle parsing, no `x-user-handle` header, no ClientContext required. They're safe to call from any DI-registered consumer.
+All of these are straight HTTP calls against `{FabrCore:HostUrl}` — no handle parsing, no `x-user-handle` header, no ClientContext required. They're safe to call from any DI-registered consumer.
 
 ## Telemetry (OpenTelemetry)
 
@@ -553,4 +555,4 @@ public static IServiceCollection AddFabrCoreClientComponents(this IServiceCollec
 **ChatDock not connecting:**
 1. Ensure Blazor Interactive Server render mode (not WebAssembly or static SSR)
 2. Verify Orleans clustering settings match between server and client
-3. Check `FabrCoreHostUrl` in client appsettings
+3. Check `FabrCore:HostUrl` in client appsettings

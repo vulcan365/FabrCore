@@ -364,6 +364,9 @@ FodyWeavers.xsd
 # FabrCore configuration (may contain API keys)
 **/fabrcore.json
 
+# Local NuGet publishing script (contains a user-supplied API key)
+/scripts/Push-NuGet.ps1
+
 # Claude Code local settings
 .claude/
 /tmp

@@ -19,7 +19,10 @@ namespace FabrCore.Core.Auditing
         BoundaryCrossing,
 
         /// <summary>ACL bootstrap activity (seeding built-ins, applying config seeds).</summary>
-        Bootstrap
+        Bootstrap,
+
+        /// <summary>A privileged remote-administration operation performed through a trusted control plane.</summary>
+        RemoteAdministration
     }
 
     /// <summary>Outcome of the audited operation.</summary>

@@ -20,7 +20,10 @@ public interface IUserScopedFabrCoreStorageProvider
 /// FabrCore entity storage backed by the configured Orleans grain storage provider.
 /// Orleans types remain internal to the Host implementation.
 /// </summary>
-internal sealed class OrleansEntityStorageProvider : IFabrCoreStorageProvider, IUserScopedFabrCoreStorageProvider
+internal sealed class OrleansEntityStorageProvider :
+    IFabrCoreStorageProvider,
+    IUserScopedFabrCoreStorageProvider,
+    IPrincipalScopedFabrCoreStorageProvider
 {
     private const string EntityGrainType = "fabrcore.entity-storage";
     private const string DefaultUserHandle = "system";

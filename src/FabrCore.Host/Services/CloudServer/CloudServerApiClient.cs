@@ -196,6 +196,7 @@ internal sealed class CloudServerApiClient
 
     public async Task SendAdminCommandResponseAsync(
         CloudAdminCommandResponse commandResponse,
+        string hostInstanceId = "(unknown)",
         CancellationToken cancellationToken = default)
     {
         using var request = new HttpRequestMessage(
@@ -205,6 +206,7 @@ internal sealed class CloudServerApiClient
             Content = JsonContent.Create(commandResponse, options: JsonOptions)
         };
         ApplyHeaders(request);
+        request.Headers.TryAddWithoutValidation("X-FabrCore-Host-Instance-Id", hostInstanceId);
 
         using var timeout = CreateTimeout(cancellationToken, out var token);
         using var response = await SendAsync(request, token);

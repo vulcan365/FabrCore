@@ -58,5 +58,5 @@ OSS must never reference the commercial repository.
 - Interactive creation wizards in base OSS Surface.
 - Inbound cluster administration requirements.
 - Forwarding caller `Authorization`, `Host`, or `Content-Length` through the connect channel.
-- Non-loopback `LocalAdminUrl`, HTTPS loopback assumptions, or shared Forge/local admin keys.
+- Silent non-loopback `LocalAdminUrl` (non-loopback http(s) targets are allowed but must log a startup warning, since the local admin key traverses the network), HTTPS loopback assumptions, or shared Forge/local admin keys.
 - Real credentials, tracked cloud caches, or enabled Forge defaults in samples.

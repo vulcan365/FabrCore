@@ -64,7 +64,7 @@ Fix options:
 
 - Register FabrCore server services with an embeddings model.
 - Provide `IEmbeddings` in DI.
-- Configure `FabrCoreHostUrl` and `IHttpClientFactory` for host API fallback.
+- Configure `FabrCore:HostUrl` and `IHttpClientFactory` for host API fallback.
 
 ## Search Without Scopes
 

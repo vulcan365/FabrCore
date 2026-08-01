@@ -210,7 +210,7 @@ namespace FabrCore.Host
         /// <see cref="FabrCoreHostExtensions.AddFabrCoreServer"/>. Provider packages expose
         /// shorthand extensions (e.g. <c>UseSqlServer()</c> from FabrCore.Host.SqlServer,
         /// <c>UseAzureStorage()</c> from FabrCore.Host.AzureStorage). Explicit registration is
-        /// optional — referencing a provider package and setting <c>Orleans:ClusteringMode</c>
+        /// optional — referencing a provider package and setting <c>FabrCore:Orleans:ClusteringMode</c>
         /// is enough for convention-based discovery.
         /// </summary>
         public FabrCoreServerOptions UseOrleansProvider(IFabrCoreOrleansProvider provider)
@@ -488,12 +488,15 @@ namespace FabrCore.Host
                 builder.Services.AddSingleton<OrleansEntityStorageProvider>();
                 builder.Services.AddSingleton<IUserScopedFabrCoreStorageProvider>(sp =>
                     sp.GetRequiredService<OrleansEntityStorageProvider>());
+                builder.Services.AddSingleton<FabrCore.Sdk.IPrincipalScopedFabrCoreStorageProvider>(sp =>
+                    sp.GetRequiredService<OrleansEntityStorageProvider>());
                 builder.Services.AddSingleton<IFabrCoreStorageProvider>(sp =>
                     sp.GetRequiredService<OrleansEntityStorageProvider>());
                 logger.LogDebug("FabrCore typed entity storage configured");
 
                 // Configure File Storage
-                builder.Services.Configure<FileStorageSettings>(builder.Configuration.GetSection("FileStorage"));
+                builder.Services.Configure<FileStorageSettings>(
+                    builder.Configuration.GetSection(FabrCore.Core.FabrCoreConfigurationKeys.FileStorageSection));
                 builder.Services.AddSingleton<IFileStorageService, FileStorageService>();
                 builder.Services.AddHostedService<FileCleanupBackgroundService>();
                 logger.LogInformation("File storage services configured");
@@ -508,10 +511,8 @@ namespace FabrCore.Host
 
                 // Configure ACL (principals/roles/groups/permission grants, persisted via the
                 // single-activation AclRegistryGrain through the configured fabrcoreStorage
-                // backend). Most FabrCore config files keep ACL at the root ("Acl"); the
-                // FabrCore:Acl section remains supported for hosts that wrap settings under a
-                // FabrCore node.
-                builder.Services.Configure<FabrCoreAclOptions>(builder.Configuration.GetSection("Acl"));
+                // backend). All FabrCore configuration lives under the FabrCore node
+                // (FabrCore:Acl); the legacy root "Acl" section no longer binds.
                 builder.Services.Configure<FabrCoreAclOptions>(builder.Configuration.GetSection(FabrCoreAclOptions.SectionName));
                 builder.Services.AddSingleton<GrainBackedAclEntityStore>();
                 builder.Services.AddSingleton<IAclEntityStore>(sp => sp.GetRequiredService<GrainBackedAclEntityStore>());
@@ -524,13 +525,36 @@ namespace FabrCore.Host
 
                 // The legacy rule-based ACL config shape no longer binds — warn loudly so
                 // operators migrate to principals/roles/groups/grants (see fabrcore-acl skill).
-                if (builder.Configuration.GetSection("Acl:Rules").GetChildren().Any() ||
-                    builder.Configuration.GetSection("FabrCore:Acl:Rules").GetChildren().Any())
+                if (builder.Configuration.GetSection("FabrCore:Acl:Rules").GetChildren().Any())
                 {
                     logger.LogWarning(
                         "Legacy ACL 'Rules' configuration detected and IGNORED. The rule-based ACL was replaced " +
-                        "by principals/roles/groups/permission grants — migrate to 'Acl:Seed:Grants' or the ACL " +
-                        "management API (see the fabrcore-acl skill for the mapping).");
+                        "by principals/roles/groups/permission grants — migrate to 'FabrCore:Acl:Seed:Grants' or the " +
+                        "ACL management API (see the fabrcore-acl skill for the mapping).");
+                }
+
+                // All FabrCore configuration now lives under the single "FabrCore" node. Legacy
+                // root-level keys no longer bind — flag them so misconfiguration is not silent
+                // (e.g. a root "Orleans" section would otherwise fall back to Localhost defaults).
+                foreach (var (legacyKey, newKey) in new[]
+                         {
+                             ("Orleans", FabrCore.Core.FabrCoreConfigurationKeys.OrleansSection),
+                             ("FileStorage", FabrCore.Core.FabrCoreConfigurationKeys.FileStorageSection),
+                             ("Acl", FabrCoreAclOptions.SectionName),
+                         })
+                {
+                    if (builder.Configuration.GetSection(legacyKey).GetChildren().Any())
+                    {
+                        logger.LogWarning(
+                            "Root configuration section '{LegacyKey}' no longer binds and is IGNORED — move it under the " +
+                            "FabrCore element as '{NewKey}'.", legacyKey, newKey);
+                    }
+                }
+                if (builder.Configuration["FabrCoreHostUrl"] is not null)
+                {
+                    logger.LogWarning(
+                        "Root configuration key 'FabrCoreHostUrl' no longer binds and is IGNORED — move it under the " +
+                        "FabrCore element as '{NewKey}'.", FabrCore.Core.FabrCoreConfigurationKeys.HostUrl);
                 }
 
                 // Configure Security Audit provider (default in-memory so denials are visible
@@ -554,6 +578,23 @@ namespace FabrCore.Host
                 builder.Services.TryAddSingleton<Services.IGatewayDiscoverySource, Services.GatewayDiscoverySource>();
                 builder.Services.AddOptions<Configuration.CloudServerOptions>()
                     .Bind(builder.Configuration.GetSection(Configuration.CloudServerOptions.SectionName))
+                    .PostConfigure(cloud =>
+                    {
+                        if (cloud.Connect.Enabled && string.IsNullOrWhiteSpace(cloud.Connect.LocalAdminApiKey))
+                        {
+                            cloud.Connect.LocalAdminApiKey = builder.Configuration[
+                                $"{Configuration.FabrCoreAdminAuthenticationOptions.SectionName}:ApiKey"];
+                        }
+
+                        // The connect admin target defaults to the host's own FabrCore:HostUrl so a
+                        // deployment only configures its host URL once; loopback is the last resort.
+                        if (cloud.Connect.Enabled && string.IsNullOrWhiteSpace(cloud.Connect.LocalAdminUrl))
+                        {
+                            cloud.Connect.LocalAdminUrl =
+                                builder.Configuration[FabrCore.Core.FabrCoreConfigurationKeys.HostUrl]
+                                ?? "http://127.0.0.1:5000";
+                        }
+                    })
                     .ValidateOnStart();
                 builder.Services.TryAddEnumerable(
                     ServiceDescriptor.Singleton<Microsoft.Extensions.Options.IValidateOptions<Configuration.CloudServerOptions>,
@@ -799,8 +840,8 @@ namespace FabrCore.Host
                 if (options.OrleansProvider is not null && options.OrleansProvider.Mode != ClusteringMode.Localhost)
                 {
                     logger.LogWarning(
-                        "Orleans provider {ProviderType} is registered but Orleans:ClusteringMode is 'Localhost' — the provider is ignored. " +
-                        "Set Orleans:ClusteringMode to '{Mode}' to use it.",
+                        "Orleans provider {ProviderType} is registered but FabrCore:Orleans:ClusteringMode is 'Localhost' — the provider is ignored. " +
+                        "Set FabrCore:Orleans:ClusteringMode to '{Mode}' to use it.",
                         options.OrleansProvider.GetType().Name, options.OrleansProvider.Mode);
                 }
                 return options.OrleansProvider?.Mode == ClusteringMode.Localhost
@@ -814,14 +855,14 @@ namespace FabrCore.Host
                 {
                     throw new InvalidOperationException(
                         $"The registered Orleans provider '{options.OrleansProvider.GetType().Name}' handles mode " +
-                        $"'{options.OrleansProvider.Mode}' but Orleans:ClusteringMode is '{mode}'.");
+                        $"'{options.OrleansProvider.Mode}' but FabrCore:Orleans:ClusteringMode is '{mode}'.");
                 }
                 return options.OrleansProvider;
             }
 
             // Convention-based discovery: an assembly named FabrCore.Host.<Mode> containing a
             // public parameterless IFabrCoreOrleansProvider implementation. Referencing the
-            // provider package and setting Orleans:ClusteringMode is all a host needs to do.
+            // provider package and setting FabrCore:Orleans:ClusteringMode is all a host needs to do.
             var assemblyName = $"FabrCore.Host.{mode}";
             try
             {
@@ -848,7 +889,7 @@ namespace FabrCore.Host
             }
 
             throw new InvalidOperationException(
-                $"Orleans:ClusteringMode is '{mode}' but no Orleans provider for that mode is available. " +
+                $"FabrCore:Orleans:ClusteringMode is '{mode}' but no Orleans provider for that mode is available. " +
                 $"Reference the '{assemblyName}' NuGet package (it is auto-discovered), or register a provider " +
                 $"explicitly via FabrCoreServerOptions.UseOrleansProvider (e.g. options.Use{mode}()).");
         }

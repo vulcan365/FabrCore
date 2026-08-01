@@ -15,7 +15,7 @@ namespace FabrCore.Host.AzureStorage;
 /// queues are created automatically on startup when
 /// <see cref="OrleansClusterOptions.AutoInitDatabase"/> is true (the default).
 /// <para>
-/// For local development, point <c>Orleans:ConnectionString</c> at Azurite with
+/// For local development, point <c>FabrCore:Orleans:ConnectionString</c> at Azurite with
 /// <c>UseDevelopmentStorage=true</c>.
 /// </para>
 /// </summary>
@@ -50,7 +50,7 @@ public sealed class AzureStorageOrleansProvider : IFabrCoreOrleansProvider
             options.ClusterId, options.ServiceId);
 
         // Grain persistence for FabrCore state — blob by default (agent conversation state can
-        // exceed Azure Table's 1 MB entity limit), table opt-in via Orleans:AzureStorage:GrainStorage.
+        // exceed Azure Table's 1 MB entity limit), table opt-in via FabrCore:Orleans:AzureStorage:GrainStorage.
         if (azureOptions.GrainStorage == AzureGrainStorageMode.Blob)
         {
             siloBuilder.AddAzureBlobGrainStorage(FabrCoreOrleansConstants.StorageProviderName, storage =>
@@ -109,7 +109,7 @@ public sealed class AzureStorageOrleansProvider : IFabrCoreOrleansProvider
         if (string.IsNullOrEmpty(options.ConnectionString))
         {
             throw new InvalidOperationException(
-                "Orleans:ConnectionString is required when using AzureStorage clustering mode. " +
+                "FabrCore:Orleans:ConnectionString is required when using AzureStorage clustering mode. " +
                 "Use an Azure Storage account connection string, or 'UseDevelopmentStorage=true' for local Azurite.");
         }
     }
@@ -127,7 +127,7 @@ public sealed class AzureStorageOrleansProvider : IFabrCoreOrleansProvider
     {
         if (queueCount < 1)
         {
-            throw new InvalidOperationException("Orleans:AzureStorage:StreamQueueCount must be at least 1.");
+            throw new InvalidOperationException("FabrCore:Orleans:AzureStorage:StreamQueueCount must be at least 1.");
         }
 
         var prefix = SanitizeQueueName($"{serviceId}-streams");

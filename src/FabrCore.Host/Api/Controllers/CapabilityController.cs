@@ -6,6 +6,8 @@ using FabrCore.Services.Memory.Administration;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using FabrCore.Host.Configuration;
 
 namespace FabrCore.Host.Api.Controllers;
 
@@ -14,7 +16,8 @@ namespace FabrCore.Host.Api.Controllers;
 [Route("fabrcoreapi/capabilities")]
 public sealed class CapabilityController(
     IServiceProvider services,
-    IEnumerable<IBlueprintExpander> blueprintExpanders) : ControllerBase
+    IEnumerable<IBlueprintExpander> blueprintExpanders,
+    IOptions<CloudServerOptions> cloudOptions) : ControllerBase
 {
     [HttpGet]
     public IActionResult Get()
@@ -25,12 +28,23 @@ public sealed class CapabilityController(
                 .GetName()
                 .Version?
                 .ToString() ?? "unknown",
+            MaxRequestBodyBytes = cloudOptions.Value.Connect.MaxBodyBytes,
             BlueprintExtensions = blueprintExpanders
                 .Select(expander => expander.ExtensionKey)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Order()
                 .ToList()
         };
+
+        document.Services.Add(new ClusterServiceCapability
+        {
+            Name = "host-admin",
+            Version = document.HostVersion,
+            ApiVersion = "1",
+            DataScope = "cluster",
+            MaxRequestBodyBytes = document.MaxRequestBodyBytes,
+            Features = ["runtime", "blueprints", "acl", "audit", "monitor", "evidence"]
+        });
 
         if (services.GetService<IMemoryAdminService>() is not null)
         {

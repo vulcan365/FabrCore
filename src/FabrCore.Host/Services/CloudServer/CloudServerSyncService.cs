@@ -229,7 +229,11 @@ internal sealed class CloudServerSyncService : BackgroundService
     {
         var capabilities = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["host"] = hostVersion
+            ["host"] = hostVersion,
+            ["host.admin"] = "1",
+            ["host.admin.scope"] = "cluster",
+            ["host.admin.maxBodyBytes"] = options.Connect.MaxBodyBytes.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["host.admin.features"] = "runtime,blueprints,acl,audit,monitor,evidence"
         };
 
         if (serviceProvider.GetService<IMemoryAdminService>() is not null)
@@ -247,6 +251,13 @@ internal sealed class CloudServerSyncService : BackgroundService
             capabilities[$"blueprint.{expander.ExtensionKey}"] = "1";
         }
 
+        if (AppDomain.CurrentDomain.GetAssemblies().Any(assembly =>
+                string.Equals(assembly.GetName().Name, "FabrCore.Surface", StringComparison.Ordinal)))
+        {
+            capabilities["surface.admin"] = "1";
+            capabilities["surface.admin.scope"] = "cluster";
+        }
+
         return capabilities;
     }
 
@@ -255,14 +266,18 @@ internal sealed class CloudServerSyncService : BackgroundService
         CancellationToken cancellationToken)
     {
         store.ApplySnapshot(envelope);
-        if (envelope.Blueprints.Count == 0)
+
+        // Blueprints is optional in the v1 protocol; third-party servers may send null even
+        // though the envelope setter normalizes it. Never let an absent list block config.
+        var blueprints = envelope.Blueprints ?? [];
+        if (blueprints.Count == 0)
         {
             return;
         }
 
         var blueprintService =
             serviceProvider.GetRequiredService<FabrCore.Host.Services.IFabrCoreBlueprintService>();
-        foreach (var deployment in envelope.Blueprints)
+        foreach (var deployment in blueprints)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (string.IsNullOrWhiteSpace(deployment.PrincipalId) ||
@@ -308,8 +323,18 @@ internal sealed class CloudServerSyncService : BackgroundService
     private async Task RunConnectLoopAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation(
-            "Cloud Server outbound admin connect channel enabled for loopback target {LocalAdminUrl}",
+            "Cloud Server outbound admin connect channel enabled for admin target {LocalAdminUrl}",
             options.Connect.LocalAdminUrl);
+
+        if (!Uri.TryCreate(options.Connect.LocalAdminUrl, UriKind.Absolute, out var adminUri) ||
+            !adminUri.IsLoopback)
+        {
+            logger.LogWarning(
+                "Connect LocalAdminUrl '{LocalAdminUrl}' is not a loopback address. Admin commands and the " +
+                "local admin key will traverse the network — ensure this target (e.g. a container network " +
+                "alias) is trusted.",
+                options.Connect.LocalAdminUrl);
+        }
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -322,7 +347,7 @@ internal sealed class CloudServerSyncService : BackgroundService
                 }
 
                 var response = await DispatchAdminCommandAsync(command, stoppingToken);
-                await apiClient.SendAdminCommandResponseAsync(response, stoppingToken);
+                await apiClient.SendAdminCommandResponseAsync(response, hostInstanceId, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -357,11 +382,22 @@ internal sealed class CloudServerSyncService : BackgroundService
             return Failed(command.CommandId, 408, "Connect-channel command expired before execution.");
         }
 
-        if (!command.PathAndQuery.StartsWith("/fabrcoreapi/", StringComparison.OrdinalIgnoreCase) ||
+        if (!string.IsNullOrWhiteSpace(command.TargetHostInstanceId) &&
+            !string.Equals(command.TargetHostInstanceId, hostInstanceId, StringComparison.Ordinal))
+        {
+            return Failed(command.CommandId, 409, "Connect-channel command was leased to another host instance.", command.LeaseToken);
+        }
+
+        if (string.IsNullOrWhiteSpace(command.LeaseToken))
+        {
+            return Failed(command.CommandId, 400, "Connect-channel lease token is required.");
+        }
+
+        if (!IsAllowedAdminPath(command.PathAndQuery) ||
             command.PathAndQuery.Contains('\\') ||
             command.PathAndQuery.StartsWith("//", StringComparison.Ordinal))
         {
-            return Failed(command.CommandId, 400, "Only local /fabrcoreapi/ paths are allowed.");
+            return Failed(command.CommandId, 403, "The requested local path is not on the administration allowlist.", command.LeaseToken);
         }
 
         if (command.Body?.Length > options.Connect.MaxBodyBytes)
@@ -396,11 +432,19 @@ internal sealed class CloudServerSyncService : BackgroundService
                 request.Content = new ByteArrayContent(command.Body);
             }
 
+            var isVersionedAdminPath = command.PathAndQuery.StartsWith(
+                "/fabrcoreapi/admin/v1", StringComparison.OrdinalIgnoreCase) ||
+                command.PathAndQuery.StartsWith(
+                    "/fabrcoreapi/surface/admin/v1", StringComparison.OrdinalIgnoreCase);
+
             foreach (var (name, values) in command.Headers)
             {
                 if (name.Equals("Authorization", StringComparison.OrdinalIgnoreCase) ||
                     name.Equals("Host", StringComparison.OrdinalIgnoreCase) ||
-                    name.Equals("Content-Length", StringComparison.OrdinalIgnoreCase))
+                    name.Equals("Content-Length", StringComparison.OrdinalIgnoreCase) ||
+                    name.Equals("X-FabrCore-Admin-Target", StringComparison.OrdinalIgnoreCase) ||
+                    name.StartsWith("Forwarded", StringComparison.OrdinalIgnoreCase) ||
+                    name.StartsWith("X-Forwarded-", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
@@ -413,11 +457,14 @@ internal sealed class CloudServerSyncService : BackgroundService
                 else if (name.Equals("Accept", StringComparison.OrdinalIgnoreCase) ||
                          name.Equals("If-Match", StringComparison.OrdinalIgnoreCase) ||
                          name.Equals("If-None-Match", StringComparison.OrdinalIgnoreCase) ||
-                         name.Equals("x-user-handle", StringComparison.OrdinalIgnoreCase))
+                         (name.Equals("x-user-handle", StringComparison.OrdinalIgnoreCase) && !isVersionedAdminPath) ||
+                         (name.Equals("X-FabrCore-Admin-Actor", StringComparison.OrdinalIgnoreCase) && isVersionedAdminPath))
                 {
                     request.Headers.TryAddWithoutValidation(name, values);
                 }
             }
+
+            request.Headers.TryAddWithoutValidation("X-FabrCore-Admin-Command-Id", command.CommandId);
 
             request.Headers.Authorization =
                 new AuthenticationHeaderValue("Bearer", options.Connect.LocalAdminApiKey);
@@ -446,14 +493,59 @@ internal sealed class CloudServerSyncService : BackgroundService
                 CommandId = command.CommandId,
                 StatusCode = (int)response.StatusCode,
                 Headers = headers,
-                Body = body
+                Body = body,
+                LeaseToken = command.LeaseToken
             };
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "Failed to execute connect-channel command {CommandId}", command.CommandId);
-            return Failed(command.CommandId, 502, "The cluster could not execute the local admin request.");
+            return Failed(command.CommandId, 502, "The cluster could not execute the local admin request.", command.LeaseToken);
         }
+    }
+
+    private static bool IsAllowedAdminPath(string pathAndQuery)
+    {
+        if (string.IsNullOrWhiteSpace(pathAndQuery)) return false;
+
+        var path = pathAndQuery.Split('?', 2)[0];
+        try
+        {
+            path = Uri.UnescapeDataString(path);
+        }
+        catch (UriFormatException)
+        {
+            return false;
+        }
+
+        if (path.StartsWith("/fabrcoreapi/agent/chat/", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("/fabrcoreapi/agent/event/", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        string[] allowedPrefixes =
+        [
+            "/fabrcoreapi/admin/v1",
+            "/fabrcoreapi/surface/admin/v1",
+            "/fabrcoreapi/memory/admin/v1",
+            "/fabrcoreapi/graphrag/admin/v1",
+            // Compatibility paths for the existing Surface Admin integration.
+            "/fabrcoreapi/capabilities",
+            "/fabrcoreapi/diagnostics",
+            "/fabrcoreapi/acl",
+            "/fabrcoreapi/audit",
+            "/fabrcoreapi/agent",
+            "/fabrcoreapi/blueprint",
+            "/fabrcoreapi/monitor",
+            "/fabrcoreapi/verifiableexecution",
+            "/fabrcoreapi/discovery",
+            "/fabrcoreapi/storage/surface/"
+        ];
+
+        return allowedPrefixes.Any(prefix =>
+            path.Equals(prefix, StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith(prefix.EndsWith('/') ? prefix : $"{prefix}/", StringComparison.OrdinalIgnoreCase));
     }
 
     private static async Task<byte[]> ReadLimitedAsync(
@@ -484,12 +576,17 @@ internal sealed class CloudServerSyncService : BackgroundService
         }
     }
 
-    private static CloudAdminCommandResponse Failed(string commandId, int statusCode, string error) =>
+    private static CloudAdminCommandResponse Failed(
+        string commandId,
+        int statusCode,
+        string error,
+        string? leaseToken = null) =>
         new()
         {
             CommandId = commandId,
             StatusCode = statusCode,
-            Error = error
+            Error = error,
+            LeaseToken = leaseToken ?? string.Empty
         };
 
     private int TryGetActiveGatewayCount()

@@ -27,13 +27,13 @@ public sealed class SqlServerOrleansProvider : IFabrCoreOrleansProvider
     {
         if (string.IsNullOrEmpty(options.ConnectionString))
         {
-            throw new InvalidOperationException("Orleans:ConnectionString is required when using SqlServer clustering mode.");
+            throw new InvalidOperationException("FabrCore:Orleans:ConnectionString is required when using SqlServer clustering mode.");
         }
 
         var storageConnectionString = options.EffectiveStorageConnectionString;
         if (string.IsNullOrEmpty(storageConnectionString))
         {
-            throw new InvalidOperationException("Orleans:ConnectionString or Orleans:StorageConnectionString is required when using SqlServer clustering mode.");
+            throw new InvalidOperationException("FabrCore:Orleans:ConnectionString or FabrCore:Orleans:StorageConnectionString is required when using SqlServer clustering mode.");
         }
 
         // Clustering

@@ -294,7 +294,9 @@ Host API embeddings endpoint if these are configured:
 
 ```json
 {
-  "FabrCoreHostUrl": "https://your-fabrcore-host"
+  "FabrCore": {
+    "HostUrl": "https://your-fabrcore-host"
+  }
 }
 ```
 

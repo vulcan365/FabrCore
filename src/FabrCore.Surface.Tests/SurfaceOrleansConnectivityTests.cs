@@ -65,7 +65,7 @@ public sealed class SurfaceOrleansConnectivityTests
         var builder = Host.CreateApplicationBuilder();
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["Orleans:ClusteringMode"] = clusteringMode
+            ["FabrCore:Orleans:ClusteringMode"] = clusteringMode
         });
 
         var exception = Assert.Throws<InvalidOperationException>(() => builder.AddFabrCoreSurface());

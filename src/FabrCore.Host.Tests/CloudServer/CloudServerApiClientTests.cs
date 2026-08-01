@@ -66,8 +66,8 @@ public sealed class CloudServerApiClientTests
             CloudServerTestFactory.Options(),
             configValues: new Dictionary<string, string?>
             {
-                ["Orleans:ClusterId"] = "orleans-cluster-7",
-                ["Orleans:ServiceId"] = "orleans-service-7"
+                ["FabrCore:Orleans:ClusterId"] = "orleans-cluster-7",
+                ["FabrCore:Orleans:ServiceId"] = "orleans-service-7"
             });
 
         Assert.AreEqual("orleans-cluster-7", client.EffectiveClusterId);

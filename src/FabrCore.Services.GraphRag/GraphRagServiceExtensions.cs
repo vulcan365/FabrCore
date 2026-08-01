@@ -81,7 +81,7 @@ public static class GraphRagServiceExtensions
                 sp.GetRequiredService<IGraphRagAuditLog>(),
                 embeddings: sp.GetService<IEmbeddings>(),
                 httpClientFactory: sp.GetService<IHttpClientFactory>(),
-                hostApiBaseUrl: config["FabrCoreHostUrl"]);
+                hostApiBaseUrl: config[FabrCore.Core.FabrCoreConfigurationKeys.HostUrl]);
         });
 
         // Ingestion service. Uses IEmbeddings when available (server), falls back
@@ -99,7 +99,7 @@ public static class GraphRagServiceExtensions
                 sp.GetRequiredService<IGraphRagAuditLog>(),
                 embeddings: sp.GetService<IEmbeddings>(),
                 httpClientFactory: sp.GetService<IHttpClientFactory>(),
-                hostApiBaseUrl: config["FabrCoreHostUrl"],
+                hostApiBaseUrl: config[FabrCore.Core.FabrCoreConfigurationKeys.HostUrl],
                 serviceProvider: sp,
                 extractionModelName: opts.ExtractionModelName,
                 agentMessageMonitor: sp.GetService<IAgentMessageMonitor>(),

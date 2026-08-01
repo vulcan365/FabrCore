@@ -19,7 +19,7 @@ The host enables the feature purely through `appsettings.json` — no `fabrcore.
 {
   "FabrCore": {
     "AdminAuthentication": {
-      "ApiKey": "<separate loopback admin key>"
+      "ApiKey": "<separate local admin key>"
     },
     "CloudServer": {
       "Enabled": true,
@@ -28,11 +28,7 @@ The host enables the feature purely through `appsettings.json` — no `fabrcore.
       "ClusterId": null,
       "Environment": null,
       "Connect": {
-        "Enabled": true,
-        "LocalAdminUrl": "http://127.0.0.1:5000",
-        "LocalAdminApiKey": "<same loopback admin key>",
-        "PollWait": "00:00:20",
-        "MaxBodyBytes": 4194304
+        "Enabled": true
       }
     }
   }
@@ -44,9 +40,17 @@ The host enables the feature purely through `appsettings.json` — no `fabrcore.
 - `Environment` defaults to `IHostEnvironment.EnvironmentName` (`ASPNETCORE_ENVIRONMENT`).
 - Securing `ApiKey` (user secrets, environment variables, vault-backed configuration
   providers) is the operator's responsibility.
-- Connect is disabled by default. Its local target must be an HTTP loopback URL; the host
-  rejects non-loopback targets and requests outside `/fabrcoreapi/`. Use a separate local
-  admin key rather than reusing the Forge cluster key.
+- Connect is disabled by default; `"Connect": { "Enabled": true }` is the minimal form.
+  `LocalAdminUrl` is optional — it defaults to `FabrCore:HostUrl`, then
+  `http://127.0.0.1:5000`. `LocalAdminApiKey` is optional — it defaults to
+  `FabrCore:AdminAuthentication:ApiKey`. `PollWait` and `MaxBodyBytes` are also optional
+  tuning values.
+- The local admin target must be an absolute http(s) URL, and requests outside
+  `/fabrcoreapi/` are rejected. Loopback remains the recommended default, but non-loopback
+  targets (for example a container network alias) are allowed: the host logs a startup
+  warning because the local admin key then traverses the network — use non-loopback targets
+  only on trusted networks. Use a separate local admin key rather than reusing the Forge
+  cluster key.
 
 See the `fabrcore-server` skill for the full option list (refresh interval, disk cache,
 startup failure behavior, heartbeat settings).
@@ -199,8 +203,10 @@ inbound network ports. Every network connection originates at the FabrCore host:
 
 1. Forge (or another server implementation) durably queues an admin request.
 2. A cluster silo receives it through a long poll.
-3. The silo validates the command, sends it to its loopback `/fabrcoreapi/` endpoint using
-   the separately configured admin key, and captures the response.
+3. The silo validates the command, sends it to its configured local admin `/fabrcoreapi/`
+   endpoint (loopback by default; a non-loopback http(s) target such as a container network
+   alias is allowed and logged with a startup warning) using the separately configured admin
+   key, and captures the response.
 4. The silo posts that response back to the server. The server completes the waiting console
    request.
 
@@ -235,7 +241,7 @@ Normative host safety rules:
 - `pathAndQuery` must begin with `/fabrcoreapi/`; absolute URLs, scheme-relative URLs, and
   backslashes are rejected.
 - `Authorization`, `Host`, and `Content-Length` from the command are discarded. The host sets
-  its own loopback admin bearer key.
+  its own local admin bearer key.
 - Request and response bodies are bounded by `Connect:MaxBodyBytes`.
 - Expired commands are not executed.
 

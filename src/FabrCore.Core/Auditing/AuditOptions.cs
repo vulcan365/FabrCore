@@ -37,7 +37,8 @@ namespace FabrCore.Core.Auditing
         {
             [AuditCategory.AclManagement] = AuditLevel.All,
             [AuditCategory.BoundaryCrossing] = AuditLevel.All,
-            [AuditCategory.Bootstrap] = AuditLevel.All
+            [AuditCategory.Bootstrap] = AuditLevel.All,
+            [AuditCategory.RemoteAdministration] = AuditLevel.All
         };
 
         /// <summary>

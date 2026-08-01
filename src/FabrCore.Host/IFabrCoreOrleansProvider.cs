@@ -16,7 +16,7 @@ namespace FabrCore.Host
     ///   (provider packages expose shorthand extensions such as <c>UseSqlServer()</c>).</item>
     ///   <item>Convention-based auto-discovery: an assembly named <c>FabrCore.Host.&lt;Mode&gt;</c>
     ///   containing a public parameterless implementation of this interface. Referencing the
-    ///   provider NuGet package and setting <c>Orleans:ClusteringMode</c> is all that is required.</item>
+    ///   provider NuGet package and setting <c>FabrCore:Orleans:ClusteringMode</c> is all that is required.</item>
     /// </list>
     /// </para>
     /// </summary>

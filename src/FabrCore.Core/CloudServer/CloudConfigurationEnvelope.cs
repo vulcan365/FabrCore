@@ -33,9 +33,17 @@ public sealed class CloudConfigurationEnvelope
 
     /// <summary>
     /// Gets or sets canonical blueprint deployments distributed with this configuration.
-    /// This additive field is optional for v1 servers and clients.
+    /// This additive field is optional for v1 servers and clients: a server may omit it or
+    /// serialize an explicit <c>null</c>, so the setter normalizes null to an empty list and
+    /// consumers always observe a non-null collection.
     /// </summary>
-    public List<CloudBlueprintDeployment> Blueprints { get; set; } = [];
+    public List<CloudBlueprintDeployment> Blueprints
+    {
+        get => _blueprints;
+        set => _blueprints = value ?? [];
+    }
+
+    private List<CloudBlueprintDeployment> _blueprints = [];
 }
 
 /// <summary>One principal-scoped blueprint delivered by a cloud configuration server.</summary>

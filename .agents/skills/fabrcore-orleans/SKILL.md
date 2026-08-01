@@ -23,7 +23,7 @@ FabrCore uses Microsoft Orleans as its distributed runtime. This skill covers cl
 
 `AddFabrCoreServer()` configures Orleans automatically from `appsettings.json`. Use this when Localhost/SqlServer/AzureStorage modes are sufficient.
 
-Localhost mode is built into `FabrCore.Host`. The other modes live in provider packages that are auto-discovered — reference the package and set `Orleans:ClusteringMode`; no code changes needed:
+Localhost mode is built into `FabrCore.Host`. The other modes live in provider packages that are auto-discovered — reference the package and set `FabrCore:Orleans:ClusteringMode`; no code changes needed:
 
 | Mode | NuGet package |
 |------|---------------|
@@ -47,7 +47,7 @@ builder.AddFabrCoreServer(new FabrCoreServerOptions
 });
 ```
 
-Orleans settings are read from the `"Orleans"` section in `appsettings.json`.
+Orleans settings are read from the `FabrCore:Orleans` section in `appsettings.json`.
 
 ### Custom TimeProvider
 
@@ -75,10 +75,12 @@ Configure in `appsettings.json`:
 
 ```json
 {
-  "Orleans": {
-    "ClusterId": "dev",
-    "ServiceId": "fabrcore",
-    "ClusteringMode": "Localhost"
+  "FabrCore": {
+    "Orleans": {
+      "ClusterId": "dev",
+      "ServiceId": "fabrcore",
+      "ClusteringMode": "Localhost"
+    }
   }
 }
 ```
@@ -91,12 +93,14 @@ Configure in `appsettings.json`:
 
 ```json
 {
-  "Orleans": {
-    "ClusterId": "prod",
-    "ServiceId": "fabrcore",
-    "ClusteringMode": "SqlServer",
-    "ConnectionString": "Server=localhost;Database=FabrCore;Trusted_Connection=True;TrustServerCertificate=True;",
-    "StorageConnectionString": "Server=localhost;Database=FabrCoreStorage;Trusted_Connection=True;TrustServerCertificate=True;"
+  "FabrCore": {
+    "Orleans": {
+      "ClusterId": "prod",
+      "ServiceId": "fabrcore",
+      "ClusteringMode": "SqlServer",
+      "ConnectionString": "Server=localhost;Database=FabrCore;Trusted_Connection=True;TrustServerCertificate=True;",
+      "StorageConnectionString": "Server=localhost;Database=FabrCoreStorage;Trusted_Connection=True;TrustServerCertificate=True;"
+    }
   }
 }
 ```
@@ -142,12 +146,14 @@ the database user's default schema or creating `dbo` synonyms for the physical O
 
 ```json
 {
-  "Orleans": {
-    "ClusterId": "prod",
-    "ServiceId": "fabrcore",
-    "ClusteringMode": "AzureStorage",
-    "ConnectionString": "DefaultEndpointsProtocol=https;AccountName=...;AccountKey=...;EndpointSuffix=core.windows.net",
-    "StorageConnectionString": "DefaultEndpointsProtocol=https;AccountName=...;AccountKey=...;EndpointSuffix=core.windows.net"
+  "FabrCore": {
+    "Orleans": {
+      "ClusterId": "prod",
+      "ServiceId": "fabrcore",
+      "ClusteringMode": "AzureStorage",
+      "ConnectionString": "DefaultEndpointsProtocol=https;AccountName=...;AccountKey=...;EndpointSuffix=core.windows.net",
+      "StorageConnectionString": "DefaultEndpointsProtocol=https;AccountName=...;AccountKey=...;EndpointSuffix=core.windows.net"
+    }
   }
 }
 ```
@@ -160,16 +166,18 @@ the database user's default schema or creating `dbo` synonyms for the physical O
 - Multi-silo clustering supported
 - Local development: run [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite) and set `"ConnectionString": "UseDevelopmentStorage=true"`
 
-Optional tuning via the `Orleans:AzureStorage` section (all defaults are sensible):
+Optional tuning via the `FabrCore:Orleans:AzureStorage` section (all defaults are sensible):
 
 ```json
 {
-  "Orleans": {
-    "AzureStorage": {
-      "GrainStorage": "Blob",              // Blob (default) | Table
-      "ContainerName": "fabrcore-grainstate",
-      "Streams": "AzureQueue",             // AzureQueue (default) | Memory
-      "StreamQueueCount": 8                // must match across all silos
+  "FabrCore": {
+    "Orleans": {
+      "AzureStorage": {
+        "GrainStorage": "Blob",              // Blob (default) | Table
+        "ContainerName": "fabrcore-grainstate",
+        "Streams": "AzureQueue",             // AzureQueue (default) | Memory
+        "StreamQueueCount": 8                // must match across all silos
+      }
     }
   }
 }
@@ -181,12 +189,14 @@ Optional tuning via the `Orleans:AzureStorage` section (all defaults are sensibl
 
 ```json
 {
-  "Orleans": {
-    "ClusterId": "string",              // Cluster identifier (must match across silos)
-    "ServiceId": "string",              // Service identifier (must match across silos)
-    "ClusteringMode": "string",         // Localhost | SqlServer | AzureStorage
-    "ConnectionString": "string",       // Required for SqlServer/AzureStorage
-    "StorageConnectionString": "string" // Optional: separate storage connection
+  "FabrCore": {
+    "Orleans": {
+      "ClusterId": "string",              // Cluster identifier (must match across silos)
+      "ServiceId": "string",              // Service identifier (must match across silos)
+      "ClusteringMode": "string",         // Localhost | SqlServer | AzureStorage
+      "ConnectionString": "string",       // Required for SqlServer/AzureStorage
+      "StorageConnectionString": "string" // Optional: separate storage connection
+    }
   }
 }
 ```
@@ -195,19 +205,21 @@ Optional tuning via the `Orleans:AzureStorage` section (all defaults are sensibl
 
 ```json
 {
-  "Orleans": {
-    "ClusterId": "string",              // Must match server
-    "ServiceId": "string",              // Must match server
-    "ClusteringMode": "string",         // Must match server
-    "ConnectionString": "string",       // Must match server
-    "ConnectionRetryCount": 5,          // Max connection retries (default 5)
-    "ConnectionRetryDelay": "00:00:03", // Base retry delay (default 3s)
-    "GatewayListRefreshPeriod": "00:00:30" // Gateway refresh interval (default 30s)
+  "FabrCore": {
+    "Orleans": {
+      "ClusterId": "string",              // Must match server
+      "ServiceId": "string",              // Must match server
+      "ClusteringMode": "string",         // Must match server
+      "ConnectionString": "string",       // Must match server
+      "ConnectionRetryCount": 5,          // Max connection retries (default 5)
+      "ConnectionRetryDelay": "00:00:03", // Base retry delay (default 3s)
+      "GatewayListRefreshPeriod": "00:00:30" // Gateway refresh interval (default 30s)
+    }
   }
 }
 ```
 
-**Important:** The `Orleans` section must match between server and client exactly (same ClusterId, ServiceId, and ClusteringMode).
+**Important:** The `FabrCore:Orleans` section must match between server and client exactly (same ClusterId, ServiceId, and ClusteringMode).
 
 ## Advanced Path: Direct Orleans Configuration
 
@@ -342,10 +354,12 @@ External applications should connect through the Host HTTP/WebSocket APIs. Orlea
 
 ```json
 {
-  "Orleans": {
-    "ConnectionRetryCount": 10,
-    "ConnectionRetryDelay": "00:00:05",
-    "GatewayListRefreshPeriod": "00:00:30"
+  "FabrCore": {
+    "Orleans": {
+      "ConnectionRetryCount": 10,
+      "ConnectionRetryDelay": "00:00:05",
+      "GatewayListRefreshPeriod": "00:00:30"
+    }
   }
 }
 ```

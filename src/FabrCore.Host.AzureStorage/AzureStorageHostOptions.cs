@@ -1,7 +1,7 @@
 namespace FabrCore.Host.AzureStorage;
 
 /// <summary>
-/// Azure Storage provider options, bound from the <c>Orleans:AzureStorage</c> configuration section.
+/// Azure Storage provider options, bound from the <c>FabrCore:Orleans:AzureStorage</c> configuration section.
 /// All settings have sensible defaults — an empty section (or none at all) works out of the box.
 /// </summary>
 public class AzureStorageHostOptions
@@ -9,7 +9,7 @@ public class AzureStorageHostOptions
     /// <summary>
     /// Configuration section name.
     /// </summary>
-    public const string SectionName = "Orleans:AzureStorage";
+    public const string SectionName = FabrCore.Core.FabrCoreConfigurationKeys.OrleansAzureStorageSection;
 
     /// <summary>
     /// Backend for the <c>fabrcoreStorage</c> grain storage provider.

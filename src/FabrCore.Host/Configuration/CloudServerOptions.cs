@@ -93,7 +93,7 @@ public sealed class CloudServerHeartbeatOptions
 
 /// <summary>
 /// Configures the v2 connect channel. The host long-polls the cloud server and executes
-/// received requests only against its own loopback admin API.
+/// received requests against its own admin API.
 /// </summary>
 public sealed class CloudServerConnectOptions
 {
@@ -101,12 +101,17 @@ public sealed class CloudServerConnectOptions
     public bool Enabled { get; set; }
 
     /// <summary>
-    /// Gets or sets the loopback FabrCore host URL used to execute admin requests.
-    /// This should never point at another machine.
+    /// Gets or sets the FabrCore host admin URL used to execute admin requests. Optional —
+    /// defaults to <c>FabrCore:HostUrl</c>, then <c>http://127.0.0.1:5000</c>. Non-loopback
+    /// targets (e.g. a container network alias) are allowed but logged with a warning, since
+    /// the local admin key then traverses the network.
     /// </summary>
-    public string LocalAdminUrl { get; set; } = "http://127.0.0.1:5000";
+    public string LocalAdminUrl { get; set; } = "";
 
-    /// <summary>Gets or sets the key configured under FabrCore:AdminAuthentication:ApiKey.</summary>
+    /// <summary>
+    /// Gets or sets the local administration key. When omitted, host registration resolves
+    /// it from FabrCore:AdminAuthentication:ApiKey so the secret need not be duplicated.
+    /// </summary>
     public string? LocalAdminApiKey { get; set; }
 
     /// <summary>Gets or sets how long each server long poll waits for work.</summary>
@@ -156,11 +161,10 @@ internal sealed class CloudServerOptionsValidator : IValidateOptions<CloudServer
         if (options.Connect.Enabled)
         {
             if (!Uri.TryCreate(options.Connect.LocalAdminUrl, UriKind.Absolute, out var localUri) ||
-                localUri.Scheme != Uri.UriSchemeHttp ||
-                !localUri.IsLoopback)
+                (localUri.Scheme != Uri.UriSchemeHttp && localUri.Scheme != Uri.UriSchemeHttps))
             {
                 failures.Add(
-                    $"{CloudServerOptions.SectionName}:Connect:LocalAdminUrl must be an absolute loopback HTTP URL.");
+                    $"{CloudServerOptions.SectionName}:Connect:LocalAdminUrl must be an absolute http(s) URL.");
             }
 
             if (string.IsNullOrWhiteSpace(options.Connect.LocalAdminApiKey))

@@ -194,7 +194,7 @@ Surface command center features are controlled through `SurfaceOptions`. Keep fe
 builder.AddFabrCoreSurface(options =>
 {
     // Host API base URL used by discovery and monitor clients.
-    // If omitted, AddFabrCoreSurface reads configuration key "FabrCoreHostUrl",
+    // If omitted, AddFabrCoreSurface reads configuration key "FabrCore:HostUrl",
     // then falls back to "http://localhost:5000".
     options.FabrCoreHostUrl = "https://fabrcore-host.example.com";
 

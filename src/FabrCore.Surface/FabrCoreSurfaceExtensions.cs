@@ -124,7 +124,7 @@ public static class FabrCoreSurfaceExtensions
             if (orleansOptions.ClusteringMode != ClusteringMode.Localhost)
             {
                 throw new InvalidOperationException(
-                    $"Orleans:ClusteringMode is '{orleansOptions.ClusteringMode}'. Split Surface clients no longer " +
+                    $"FabrCore:Orleans:ClusteringMode is '{orleansOptions.ClusteringMode}'. Split Surface clients no longer " +
                     "load SQL Server or Azure Storage clustering providers. Call AddFabrCoreSurfaceAsync with an " +
                     "authenticated discovery HttpClient, or configure IClusterClient before AddFabrCoreSurface.");
             }
@@ -353,7 +353,7 @@ public static class FabrCoreSurfaceExtensions
             .AddConfiguration(configuration)
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["FabrCoreHostUrl"] = options.FabrCoreHostUrl
+                [FabrCore.Core.FabrCoreConfigurationKeys.HostUrl] = options.FabrCoreHostUrl
             })
             .Build();
 

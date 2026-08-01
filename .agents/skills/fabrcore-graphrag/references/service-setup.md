@@ -41,7 +41,9 @@ Optional host API fallback:
 
 ```json
 {
-  "FabrCoreHostUrl": "https://your-fabrcore-host"
+  "FabrCore": {
+    "HostUrl": "https://your-fabrcore-host"
+  }
 }
 ```
 
@@ -108,7 +110,7 @@ If `IEmbeddings` is not available, services can use the FabrCore Host API
 embeddings endpoint when:
 
 - `IHttpClientFactory` is registered.
-- `FabrCoreHostUrl` is configured.
+- `FabrCore:HostUrl` is configured.
 
 LLM extraction during ingestion is separate from embeddings. It is enabled by
 passing `extractionModelName` to `AddGraphRagServices`. The value maps to a named

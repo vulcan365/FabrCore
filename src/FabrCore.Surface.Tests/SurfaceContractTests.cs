@@ -892,7 +892,7 @@ public sealed class SurfaceContractTests
     public async Task AddFabrCoreSurfaceUsesConfiguredHostUrlForDiscovery()
     {
         var builder = global::Microsoft.Extensions.Hosting.Host.CreateApplicationBuilder();
-        builder.Configuration["FabrCoreHostUrl"] = "https://configured.example";
+        builder.Configuration["FabrCore:HostUrl"] = "https://configured.example";
 
         builder.AddFabrCoreSurface();
 
