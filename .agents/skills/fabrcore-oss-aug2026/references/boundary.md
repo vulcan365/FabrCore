@@ -58,5 +58,5 @@ OSS must never reference the commercial repository.
 - Interactive creation wizards in base OSS Surface.
 - Inbound cluster administration requirements.
 - Forwarding caller `Authorization`, `Host`, or `Content-Length` through the connect channel.
-- Silent non-loopback `FabrCore:HostUrl`, alternate remote-administration target URLs, HTTPS loopback assumptions, or shared Forge/local admin keys.
+- Silent non-loopback `FabrCore:HostUrl`, alternate remote-administration target URLs, HTTPS loopback assumptions, or accepting the Cloud Server key when remote administration is disabled.
 - Real credentials, tracked cloud caches, or enabled Forge defaults in samples.

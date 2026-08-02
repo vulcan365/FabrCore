@@ -45,9 +45,9 @@ operations, and commercial adapters in Forge.
   `FabrCore.Services.GraphRag.Vulcan365` in the commercial repo.
 - Protect Memory and GraphRAG admin endpoints with the `FabrCoreAdmin` bearer policy.
 - Keep Cloud Server v2 remote administration outbound-only. Execute commands only against the
-  required `FabrCore:HostUrl` with a separate local admin key and strict path/body/header
-  controls. Log a startup warning when the host URL is non-loopback because the key traverses
-  the network.
+  required `FabrCore:HostUrl` with `FabrCore:CloudServer:ApiKey` and strict path/body/header
+  controls. Accept that key through the `FabrCoreAdmin` policy only when Cloud Server remote
+  administration is enabled. Log a startup warning when a non-loopback host URL carries the key.
 
 ## Product boundary
 

@@ -58,6 +58,8 @@ public sealed class CloudServerSyncServiceTests
                 configure?.Invoke(o);
             });
             var optionsWrapper = Microsoft.Extensions.Options.Options.Create(options);
+            var remoteOptionsWrapper = Microsoft.Extensions.Options.Options.Create(
+                CloudServerTestFactory.RemoteOptions());
             var environment = new TestHostEnvironment(harness.ContentRoot);
 
             var serviceCollection = new ServiceCollection();
@@ -70,6 +72,7 @@ public sealed class CloudServerSyncServiceTests
                 harness.Store,
                 harness.DiskCache,
                 optionsWrapper,
+                remoteOptionsWrapper,
                 serviceCollection.BuildServiceProvider(),
                 new FakeHttpClientFactory(handler),
                 NullLogger<CloudServerSyncService>.Instance);

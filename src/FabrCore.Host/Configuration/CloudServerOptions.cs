@@ -67,15 +67,6 @@ public sealed class CloudServerOptions
     /// <summary>Gets or sets heartbeat reporting options.</summary>
     public CloudServerHeartbeatOptions Heartbeat { get; set; } = new();
 
-    /// <summary>Gets or sets outbound-only cloud administration options.</summary>
-    public CloudServerRemoteAdministrationOptions RemoteAdministration { get; set; } = new();
-
-    /// <summary>
-    /// Gets the FabrCore host URL used as the remote-administration target. This value is
-    /// populated from <c>FabrCore:HostUrl</c> during host registration and is not a setting
-    /// beneath <c>CloudServer</c>.
-    /// </summary>
-    internal string? HostUrl { get; set; }
 }
 
 /// <summary>Startup behavior when cloud configuration cannot be obtained from network or cache.</summary>
@@ -99,25 +90,25 @@ public sealed class CloudServerHeartbeatOptions
 }
 
 /// <summary>
-/// Configures outbound-only remote administration. The host long-polls the cloud server and
-/// executes received requests against its own admin API at <c>FabrCore:HostUrl</c>.
+/// Configures outbound-only remote administration at <c>FabrCore:RemoteAdministration</c>.
+/// The host long-polls the enabled Cloud Server and executes received requests against its own
+/// admin API at <c>FabrCore:HostUrl</c>, using the Cloud Server API key for both hops.
 /// </summary>
-public sealed class CloudServerRemoteAdministrationOptions
+public sealed class RemoteAdministrationOptions
 {
-    /// <summary>Gets or sets whether outbound-only remote administration is enabled.</summary>
-    public bool Enabled { get; set; }
+    public const string SectionName = "FabrCore:RemoteAdministration";
 
-    /// <summary>
-    /// Gets or sets the local administration key. When omitted, host registration resolves
-    /// it from FabrCore:AdminAuthentication:ApiKey so the secret need not be duplicated.
-    /// </summary>
-    public string? LocalAdminApiKey { get; set; }
+    /// <summary>Gets or sets whether outbound-only remote administration is enabled.</summary>
+    public bool Enable { get; set; }
 
     /// <summary>Gets or sets how long each server long poll waits for work.</summary>
     public TimeSpan PollWait { get; set; } = TimeSpan.FromSeconds(20);
 
     /// <summary>Gets or sets the maximum proxied request or response body size.</summary>
     public int MaxBodyBytes { get; set; } = 4 * 1024 * 1024;
+
+    /// <summary>The FabrCore host URL populated from <c>FabrCore:HostUrl</c>.</summary>
+    internal string? HostUrl { get; set; }
 }
 
 internal sealed class CloudServerOptionsValidator : IValidateOptions<CloudServerOptions>
@@ -157,35 +148,55 @@ internal sealed class CloudServerOptionsValidator : IValidateOptions<CloudServer
             failures.Add($"{CloudServerOptions.SectionName}:Heartbeat:Interval must be greater than zero.");
         }
 
-        if (options.RemoteAdministration.Enabled)
+        return failures.Count == 0
+            ? ValidateOptionsResult.Success
+            : ValidateOptionsResult.Fail(failures);
+    }
+}
+
+internal sealed class RemoteAdministrationOptionsValidator(IOptions<CloudServerOptions> cloudServerOptions)
+    : IValidateOptions<RemoteAdministrationOptions>
+{
+    public ValidateOptionsResult Validate(string? name, RemoteAdministrationOptions options)
+    {
+        if (!options.Enable)
         {
-            if (!Uri.TryCreate(options.HostUrl, UriKind.Absolute, out var hostUri) ||
-                (hostUri.Scheme != Uri.UriSchemeHttp && hostUri.Scheme != Uri.UriSchemeHttps))
-            {
-                failures.Add(
-                    $"{FabrCore.Core.FabrCoreConfigurationKeys.HostUrl} must be an absolute http(s) URL " +
-                    "when Cloud Server remote administration is enabled.");
-            }
+            return ValidateOptionsResult.Success;
+        }
 
-            if (string.IsNullOrWhiteSpace(options.RemoteAdministration.LocalAdminApiKey))
-            {
-                failures.Add(
-                    $"{CloudServerOptions.SectionName}:RemoteAdministration:LocalAdminApiKey is required when " +
-                    "remote administration is enabled.");
-            }
+        var failures = new List<string>();
+        var cloud = cloudServerOptions.Value;
 
-            if (options.RemoteAdministration.PollWait <= TimeSpan.Zero ||
-                options.RemoteAdministration.PollWait > TimeSpan.FromSeconds(55))
-            {
-                failures.Add(
-                    $"{CloudServerOptions.SectionName}:RemoteAdministration:PollWait must be between zero and 55 seconds.");
-            }
+        if (!cloud.Enabled)
+        {
+            failures.Add(
+                $"{CloudServerOptions.SectionName}:Enabled must be true when {RemoteAdministrationOptions.SectionName}:Enable is true.");
+        }
 
-            if (options.RemoteAdministration.MaxBodyBytes is < 1024 or > 64 * 1024 * 1024)
-            {
-                failures.Add(
-                    $"{CloudServerOptions.SectionName}:RemoteAdministration:MaxBodyBytes must be between 1 KiB and 64 MiB.");
-            }
+        if (string.IsNullOrWhiteSpace(cloud.ApiKey))
+        {
+            failures.Add(
+                $"{CloudServerOptions.SectionName}:ApiKey is required when remote administration is enabled.");
+        }
+
+        if (!Uri.TryCreate(options.HostUrl, UriKind.Absolute, out var hostUri) ||
+            (hostUri.Scheme != Uri.UriSchemeHttp && hostUri.Scheme != Uri.UriSchemeHttps))
+        {
+            failures.Add(
+                $"{FabrCore.Core.FabrCoreConfigurationKeys.HostUrl} must be an absolute http(s) URL " +
+                "when remote administration is enabled.");
+        }
+
+        if (options.PollWait <= TimeSpan.Zero || options.PollWait > TimeSpan.FromSeconds(55))
+        {
+            failures.Add(
+                $"{RemoteAdministrationOptions.SectionName}:PollWait must be between zero and 55 seconds.");
+        }
+
+        if (options.MaxBodyBytes is < 1024 or > 64 * 1024 * 1024)
+        {
+            failures.Add(
+                $"{RemoteAdministrationOptions.SectionName}:MaxBodyBytes must be between 1 KiB and 64 MiB.");
         }
 
         return failures.Count == 0

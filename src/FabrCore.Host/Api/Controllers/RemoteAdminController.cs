@@ -36,6 +36,7 @@ public sealed class RemoteAdminController(
     IServiceProvider services,
     IEnumerable<IBlueprintExpander> blueprintExpanders,
     IOptions<CloudServerOptions> cloudOptions,
+    IOptions<RemoteAdministrationOptions> remoteAdministrationOptions,
     IHostEnvironment environment,
     ITokenCostCalculator? tokenCosts = null) : ControllerBase
 {
@@ -48,6 +49,7 @@ public sealed class RemoteAdminController(
         if (RejectSpoofedTargetHeaders() is { } rejected) return rejected;
 
         var cloud = cloudOptions.Value;
+        var remoteAdministration = remoteAdministrationOptions.Value;
         return Ok(new
         {
             ApiVersion = "1",
@@ -59,10 +61,9 @@ public sealed class RemoteAdminController(
             StartedAt = Process.GetCurrentProcess().StartTime.ToUniversalTime(),
             RemoteAdministration = new
             {
-                cloud.RemoteAdministration.Enabled,
-                LocalAdminKeyConfigured = !string.IsNullOrWhiteSpace(
-                    cloud.RemoteAdministration.LocalAdminApiKey),
-                cloud.RemoteAdministration.MaxBodyBytes
+                remoteAdministration.Enable,
+                CloudServerApiKeyConfigured = !string.IsNullOrWhiteSpace(cloud.ApiKey),
+                remoteAdministration.MaxBodyBytes
             }
         });
     }
@@ -75,7 +76,7 @@ public sealed class RemoteAdminController(
         var document = new ClusterCapabilityDocument
         {
             HostVersion = typeof(RemoteAdminController).Assembly.GetName().Version?.ToString() ?? "unknown",
-            MaxRequestBodyBytes = cloudOptions.Value.RemoteAdministration.MaxBodyBytes,
+            MaxRequestBodyBytes = remoteAdministrationOptions.Value.MaxBodyBytes,
             BlueprintExtensions = blueprintExpanders
                 .Select(expander => expander.ExtensionKey)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -90,7 +91,7 @@ public sealed class RemoteAdminController(
                     ApiVersion = "1",
                     Features = ["runtime", "blueprints", "acl", "audit", "monitor", "evidence", "capabilities"],
                     DataScope = "cluster",
-                    MaxRequestBodyBytes = cloudOptions.Value.RemoteAdministration.MaxBodyBytes
+                    MaxRequestBodyBytes = remoteAdministrationOptions.Value.MaxBodyBytes
                 }
             ]
         };
@@ -116,7 +117,7 @@ public sealed class RemoteAdminController(
                 ApiVersion = GraphRagAdminCapability.CurrentApiVersion,
                 Features = ["dashboard", "scopes", "documents", "graph", "search", "maintenance", "upload"],
                 DataScope = "cluster",
-                MaxRequestBodyBytes = cloudOptions.Value.RemoteAdministration.MaxBodyBytes
+                MaxRequestBodyBytes = remoteAdministrationOptions.Value.MaxBodyBytes
             });
         }
 

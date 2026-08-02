@@ -17,7 +17,7 @@ namespace FabrCore.Host.Api.Controllers;
 public sealed class CapabilityController(
     IServiceProvider services,
     IEnumerable<IBlueprintExpander> blueprintExpanders,
-    IOptions<CloudServerOptions> cloudOptions) : ControllerBase
+    IOptions<RemoteAdministrationOptions> remoteAdministrationOptions) : ControllerBase
 {
     [HttpGet]
     public IActionResult Get()
@@ -28,7 +28,7 @@ public sealed class CapabilityController(
                 .GetName()
                 .Version?
                 .ToString() ?? "unknown",
-            MaxRequestBodyBytes = cloudOptions.Value.RemoteAdministration.MaxBodyBytes,
+            MaxRequestBodyBytes = remoteAdministrationOptions.Value.MaxBodyBytes,
             BlueprintExtensions = blueprintExpanders
                 .Select(expander => expander.ExtensionKey)
                 .Distinct(StringComparer.OrdinalIgnoreCase)

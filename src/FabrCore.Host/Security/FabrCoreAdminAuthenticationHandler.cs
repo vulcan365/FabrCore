@@ -16,17 +16,24 @@ public static class FabrCoreAdminAuthenticationDefaults
 
 internal sealed class FabrCoreAdminAuthenticationHandler(
     IOptionsMonitor<FabrCoreAdminAuthenticationOptions> options,
+    IOptionsMonitor<CloudServerOptions> cloudServerOptions,
+    IOptionsMonitor<RemoteAdministrationOptions> remoteAdministrationOptions,
     ILoggerFactory logger,
     System.Text.Encodings.Web.UrlEncoder encoder)
     : AuthenticationHandler<FabrCoreAdminAuthenticationOptions>(options, logger, encoder)
 {
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        var configuredKey = Options.ApiKey;
-        if (string.IsNullOrWhiteSpace(configuredKey))
+        var cloud = cloudServerOptions.CurrentValue;
+        var cloudRemoteAdministrationKey = cloud.Enabled && remoteAdministrationOptions.CurrentValue.Enable
+            ? cloud.ApiKey
+            : null;
+        if (string.IsNullOrWhiteSpace(Options.ApiKey) &&
+            string.IsNullOrWhiteSpace(cloudRemoteAdministrationKey))
         {
             return Task.FromResult(AuthenticateResult.Fail(
-                $"{FabrCoreAdminAuthenticationOptions.SectionName}:ApiKey is not configured."));
+                $"{FabrCoreAdminAuthenticationOptions.SectionName}:ApiKey is not configured, and " +
+                $"{RemoteAdministrationOptions.SectionName}:Enable is not true with an enabled Cloud Server API key."));
         }
 
         var authorization = Request.Headers.Authorization.ToString();
@@ -37,7 +44,8 @@ internal sealed class FabrCoreAdminAuthenticationHandler(
         }
 
         var suppliedKey = authorization[bearerPrefix.Length..].Trim();
-        if (!FixedTimeEquals(configuredKey, suppliedKey))
+        if (!FixedTimeEquals(Options.ApiKey, suppliedKey) &&
+            !FixedTimeEquals(cloudRemoteAdministrationKey, suppliedKey))
         {
             return Task.FromResult(AuthenticateResult.Fail("Invalid administration API key."));
         }
@@ -54,8 +62,13 @@ internal sealed class FabrCoreAdminAuthenticationHandler(
         return Task.FromResult(AuthenticateResult.Success(ticket));
     }
 
-    private static bool FixedTimeEquals(string expected, string supplied)
+    private static bool FixedTimeEquals(string? expected, string supplied)
     {
+        if (string.IsNullOrWhiteSpace(expected))
+        {
+            return false;
+        }
+
         var expectedBytes = Encoding.UTF8.GetBytes(expected);
         var suppliedBytes = Encoding.UTF8.GetBytes(supplied);
         return expectedBytes.Length == suppliedBytes.Length
