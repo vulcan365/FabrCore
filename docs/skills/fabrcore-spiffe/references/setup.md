@@ -132,6 +132,10 @@ Expected behavior for a future `SpiffeVerifiableExecutionSigner`:
 
 `VerifiableExecutionOptions`:
 
+The current Host receives these options through `FabrCoreServerOptions.UseVerifiableExecution`;
+it does not bind a `FabrCore:VerifiableExecution` appsettings branch. A custom provider may add
+its own options binding, but do not present the illustrative asset as built-in Host configuration.
+
 - `Enabled`
 - `DefaultPropagationScope`
 - `RequireSignerForTrustedExecution`

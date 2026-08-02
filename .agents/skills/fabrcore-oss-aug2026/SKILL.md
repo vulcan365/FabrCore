@@ -44,10 +44,10 @@ operations, and commercial adapters in Forge.
 - Keep the OSS GraphRAG markdown converter vendor-neutral. Put Vulcan365 conversion in
   `FabrCore.Services.GraphRag.Vulcan365` in the commercial repo.
 - Protect Memory and GraphRAG admin endpoints with the `FabrCoreAdmin` bearer policy.
-- Keep Cloud Server v2 connect outbound-only. Execute commands only against the configured
-  local admin URL (loopback recommended; non-loopback http(s) targets are allowed with a
-  logged startup warning) with a separate local admin key and strict path/body/header
-  controls.
+- Keep Cloud Server v2 remote administration outbound-only. Execute commands only against the
+  required `FabrCore:HostUrl` with a separate local admin key and strict path/body/header
+  controls. Log a startup warning when the host URL is non-loopback because the key traverses
+  the network.
 
 ## Product boundary
 

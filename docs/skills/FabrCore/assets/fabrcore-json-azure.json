@@ -16,12 +16,5 @@
       "Alias": "azure-key",
       "Value": "your-azure-openai-api-key-here"
     }
-  ],
-  "FabrCore": {
-    "Acl": {
-      "SystemPrincipal": "system",
-      "Mode": "Enforce",
-      "SeedDefaultSystemAgentAccess": true
-    }
-  }
+  ]
 }

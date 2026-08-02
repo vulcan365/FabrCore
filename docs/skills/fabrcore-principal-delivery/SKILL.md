@@ -94,6 +94,33 @@ The agent must have a principal-qualified handle. The helper sets the owning pri
 - Use the one-minute Orleans reminder as crash recovery; do not move provider network I/O into the
   grain.
 
+## Host appsettings configuration
+
+Durability and provider-context limits are sibling branches under the canonical `FabrCore` root:
+
+```json
+{
+  "FabrCore": {
+    "PrincipalContext": {
+      "MaxEntries": 64,
+      "MaxKeyLength": 128,
+      "MaxValueBytes": 131072,
+      "MaxTotalBytes": 262144
+    },
+    "PrincipalDelivery": {
+      "LeaseDuration": "00:02:00",
+      "RecoveryReminderPeriod": "00:01:00",
+      "MaxDeliveryAge": "1.00:00:00",
+      "DeadLetterRetention": "7.00:00:00",
+      "MaxDeadLetters": 100
+    }
+  }
+}
+```
+
+These values are the Host defaults. Put overrides in `appsettings.json`, not at the document root
+and not in the model-only `fabrcore.json`. See the reference for lifecycle and tuning implications.
+
 ## Microsoft 365 proactive delivery
 
 Proactive delivery is disabled by default. Enable only after the normal M365 turn bridge works:

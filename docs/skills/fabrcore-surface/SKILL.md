@@ -173,6 +173,18 @@ builder.AddFabrCoreSurface(options =>
 });
 ```
 
+When the URL should come from `appsettings.json`, keep it inside the canonical FabrCore tree:
+
+```json
+{
+  "FabrCore": {
+    "HostUrl": "https://fabrcore-host.example.com"
+  }
+}
+```
+
+`FabrCore:HostUrl` is the Host HTTP API base URL; it is not the ASP.NET Core listen address.
+
 Use `SurfaceChatDeliveryMode.RequestResponse` only when the command center should await and append the returned `OnMessage` response. Use `SurfaceChatMessageKind.OneWay` only when the receiver is not expected to respond.
 
 The command center defaults to embedded layout mode so Surface fills the host-provided container

@@ -59,7 +59,9 @@ Read only the references needed for the task:
 
 Copy or adapt assets when implementing examples:
 
-- `assets/appsettings-verifiable-execution.json` — config shape for local/cert/SPIFFE style deployments.
+- `assets/appsettings-verifiable-execution.json` — illustrative future/custom-binder configuration
+  shape. The current Host does not bind `FabrCore:VerifiableExecution`; configure the built-in
+  feature through `FabrCoreServerOptions` as shown in `references/setup.md`.
 - `assets/sql-evidence-store-schema.sql` — starter schema for a SQL append-only evidence store provider.
 - `assets/custom-signer-template.cs` — template for an `IVerifiableExecutionSigner`.
 - `assets/external-effect-plugin-template.cs` — plugin pattern for recording DB/API effects through the SDK helper extensions on `IVerifiableExecutionContext`.

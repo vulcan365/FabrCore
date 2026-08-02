@@ -38,8 +38,8 @@ observable through a pluggable security audit provider.
   principal (checked again if they cross another boundary) and are audited via a breadcrumb —
   warned, never blocked.
 - **The System principal is unrestricted** and bypasses all checks. Its handle is set in
-  fabrcore.json (`FabrCore:Acl:SystemPrincipal`, default `"system"`).
-- **Zero-config works.** With an empty fabrcore.json you get: secure defaults, an auto-created
+  appsettings (`FabrCore:Acl:SystemPrincipal`, default `"system"`).
+- **Zero-config works.** With no `FabrCore:Acl` appsettings section you get: secure defaults, an auto-created
   System principal, dynamic groups, in-memory audit, and (by default) a seeded grant letting
   every principal message/read the System principal's agents so the shared-demo experience
   keeps working.
@@ -151,7 +151,7 @@ That transitive hop runs as P2 and is **not blocked** — it is made visible ins
 Enforcement identity always derives from the sending grain's key — `FromHandle` is spoofable
 routing metadata and is never trusted for authorization.
 
-## Configuration (fabrcore.json)
+## Configuration (appsettings.json)
 
 ```json
 {
@@ -186,8 +186,11 @@ routing metadata and is never trusted for authorization.
 }
 ```
 
-The `Acl` section binds under `FabrCore:Acl` (a root-level `Acl` section no longer binds). **Seeds apply on first bootstrap
-only** — after that, manage entities via the API (seed drift logs a warning).
+The `Acl` and `Audit` sections bind from `IConfiguration` under `FabrCore:Acl` and
+`FabrCore:Audit`. Put them in `appsettings.json` or another normal .NET configuration provider.
+FabrCore.Host reads the separate `fabrcore.json` file only through its model/API-key store; it does
+not add that file to `IConfiguration`. A root-level `Acl` section no longer binds. **Seeds apply on
+first bootstrap only** — after that, manage entities via the API (seed drift logs a warning).
 
 Zero-config defaults: System = `"system"`, `Enforce`, in-memory audit at `Failures` level,
 own-principal traffic allowed, cross-principal denied, all-principals → message/read on

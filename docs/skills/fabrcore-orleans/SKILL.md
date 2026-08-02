@@ -212,7 +212,14 @@ Optional tuning via the `FabrCore:Orleans:AzureStorage` section (all defaults ar
       "ServiceId": "string",              // Service identifier (must match across silos)
       "ClusteringMode": "string",         // Localhost | SqlServer | AzureStorage
       "ConnectionString": "string",       // Required for SqlServer/AzureStorage
-      "StorageConnectionString": "string" // Optional: separate storage connection
+      "StorageConnectionString": "string", // Optional: separate storage connection
+      "AutoInitDatabase": true,            // Auto-provision provider resources (default true)
+      "AzureStorage": {
+        "GrainStorage": "Blob",           // Blob | Table
+        "ContainerName": "fabrcore-grainstate",
+        "Streams": "AzureQueue",          // AzureQueue | Memory
+        "StreamQueueCount": 8
+      }
     }
   }
 }
@@ -223,6 +230,26 @@ Optional tuning via the `FabrCore:Orleans:AzureStorage` section (all defaults ar
 Trusted server-side clients that need grain references, object-reference observers, streams, and
 the rest of Orleans use `FabrCore.Client.Orleans`. They remain normal Orleans clients, but they do
 not reference the Host's clustering package or copy its cluster identity and connection string.
+
+The Host publishes gateway discovery from the sibling `FabrCore:Host:GatewayDiscovery` branch:
+
+```json
+{
+  "FabrCore": {
+    "Host": {
+      "GatewayDiscovery": {
+        "RefreshPeriod": "00:00:30",
+        "AdvertisedGateways": [ "gwy.tcp://silo.example.com:30000/0" ],
+        "RequireOrleansTls": true
+      }
+    }
+  }
+}
+```
+
+Leave `AdvertisedGateways` empty to derive active gateways from Orleans membership. Explicit
+gateway URIs must use `gwy.tcp://host:port/generation`. `RequireOrleansTls` defaults to false in
+Development and true in other environments before an explicit configuration value is applied.
 
 ```xml
 <PackageReference Include="FabrCore.Client.Orleans" Version="*" />
