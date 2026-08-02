@@ -25,7 +25,7 @@ internal sealed class FabrCoreAdminAuthenticationHandler(
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
         var cloud = cloudServerOptions.CurrentValue;
-        var cloudRemoteAdministrationKey = cloud.Enabled && remoteAdministrationOptions.CurrentValue.Enable
+        var cloudRemoteAdministrationKey = cloud.Enabled && remoteAdministrationOptions.CurrentValue.Enabled
             ? cloud.ApiKey
             : null;
         if (string.IsNullOrWhiteSpace(Options.ApiKey) &&
@@ -33,7 +33,7 @@ internal sealed class FabrCoreAdminAuthenticationHandler(
         {
             return Task.FromResult(AuthenticateResult.Fail(
                 $"{FabrCoreAdminAuthenticationOptions.SectionName}:ApiKey is not configured, and " +
-                $"{RemoteAdministrationOptions.SectionName}:Enable is not true with an enabled Cloud Server API key."));
+                $"{RemoteAdministrationOptions.SectionName}:Enabled is not true with an enabled Cloud Server API key."));
         }
 
         var authorization = Request.Headers.Authorization.ToString();

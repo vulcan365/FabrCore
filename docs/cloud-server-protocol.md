@@ -27,7 +27,7 @@ The host enables the feature purely through `appsettings.json` — no `fabrcore.
       "Environment": null
     },
     "RemoteAdministration": {
-      "Enable": true
+      "Enabled": true
     }
   }
 }
@@ -39,7 +39,7 @@ The host enables the feature purely through `appsettings.json` — no `fabrcore.
 - Securing `ApiKey` (user secrets, environment variables, vault-backed configuration
   providers) is the operator's responsibility.
 - Remote administration is disabled by default;
-  `"RemoteAdministration": { "Enable": true }` enables it. The dispatcher uses the existing
+  `"RemoteAdministration": { "Enabled": true }` enables it. The dispatcher uses the existing
   `FabrCore:CloudServer:ApiKey`; there is no separate remote-administration credential.
   `PollWait` and `MaxBodyBytes` are optional tuning values.
 - Remote administration requires `FabrCore:CloudServer:Enabled` to be true. A host cannot enable

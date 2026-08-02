@@ -270,7 +270,7 @@ sufficient:
       }
     },
     "RemoteAdministration": {
-      "Enable": false,
+      "Enabled": false,
       "PollWait": "00:00:20",
       "MaxBodyBytes": 4194304
     },
@@ -291,7 +291,7 @@ Configuration ownership:
 - `FabrCore:HostUrl` is the HTTP base URL used by FabrCore clients and as the only Cloud Server
   remote-administration target. When remote administration is enabled, it must be an absolute
   HTTP(S) URL reachable from the host process. It is not the ASP.NET Core listen address.
-- `FabrCore:RemoteAdministration:Enable` is the remote-administration gate and requires
+- `FabrCore:RemoteAdministration:Enabled` is the remote-administration gate and requires
   `FabrCore:CloudServer:Enabled` to be true. The dispatcher uses `FabrCore:CloudServer:ApiKey`
   for its local Host admin requests, and the `FabrCoreAdmin` policy accepts that key. There is
   no separate remote-admin key or remote-admin-without-Cloud-Server state.

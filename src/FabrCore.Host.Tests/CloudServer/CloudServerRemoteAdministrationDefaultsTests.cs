@@ -15,7 +15,7 @@ public sealed class CloudServerRemoteAdministrationDefaultsTests
         builder.Configuration["FabrCore:HostUrl"] = "http://curia-ai";
         builder.Configuration["FabrCore:CloudServer:Enabled"] = "true";
         builder.Configuration["FabrCore:CloudServer:ApiKey"] = "forge-key";
-        builder.Configuration["FabrCore:RemoteAdministration:Enable"] = "true";
+        builder.Configuration["FabrCore:RemoteAdministration:Enabled"] = "true";
 
         builder.AddFabrCoreServices();
 
@@ -23,7 +23,7 @@ public sealed class CloudServerRemoteAdministrationDefaultsTests
         var options = services.GetRequiredService<IOptions<RemoteAdministrationOptions>>().Value;
 
         Assert.AreEqual("http://curia-ai", options.HostUrl);
-        Assert.IsTrue(options.Enable);
+        Assert.IsTrue(options.Enabled);
     }
 
     [TestMethod]
@@ -32,7 +32,7 @@ public sealed class CloudServerRemoteAdministrationDefaultsTests
         var builder = WebApplication.CreateBuilder();
         builder.Configuration["FabrCore:CloudServer:Enabled"] = "true";
         builder.Configuration["FabrCore:CloudServer:ApiKey"] = "forge-key";
-        builder.Configuration["FabrCore:RemoteAdministration:Enable"] = "true";
+        builder.Configuration["FabrCore:RemoteAdministration:Enabled"] = "true";
 
         builder.AddFabrCoreServices();
 
@@ -47,7 +47,7 @@ public sealed class CloudServerRemoteAdministrationDefaultsTests
     {
         var builder = WebApplication.CreateBuilder();
         builder.Configuration["FabrCore:HostUrl"] = "http://127.0.0.1:5000";
-        builder.Configuration["FabrCore:RemoteAdministration:Enable"] = "true";
+        builder.Configuration["FabrCore:RemoteAdministration:Enabled"] = "true";
 
         builder.AddFabrCoreServices();
 
@@ -71,7 +71,7 @@ public sealed class CloudServerRemoteAdministrationDefaultsTests
         var remoteAdministration = services
             .GetRequiredService<IOptions<RemoteAdministrationOptions>>().Value;
 
-        Assert.IsFalse(remoteAdministration.Enable);
+        Assert.IsFalse(remoteAdministration.Enabled);
     }
 
     [TestMethod]
@@ -81,7 +81,7 @@ public sealed class CloudServerRemoteAdministrationDefaultsTests
         builder.Configuration["FabrCore:CloudServer:Enabled"] = "true";
         builder.Configuration["FabrCore:CloudServer:ApiKey"] = "forge-key";
         builder.Configuration["FabrCore:HostUrl"] = "http://127.0.0.1:5000";
-        builder.Configuration["FabrCore:RemoteAdministration:Enable"] = "true";
+        builder.Configuration["FabrCore:RemoteAdministration:Enabled"] = "true";
 
         builder.AddFabrCoreServices();
 
@@ -90,6 +90,6 @@ public sealed class CloudServerRemoteAdministrationDefaultsTests
         var remoteAdministration = services.GetRequiredService<IOptions<RemoteAdministrationOptions>>().Value;
 
         Assert.AreEqual("forge-key", cloud.ApiKey);
-        Assert.IsTrue(remoteAdministration.Enable);
+        Assert.IsTrue(remoteAdministration.Enabled);
     }
 }
