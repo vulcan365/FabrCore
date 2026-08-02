@@ -187,11 +187,8 @@ public sealed class CloudServerApiClientTests
             })));
         var client = CloudServerTestFactory.ApiClient(
             handler,
-            CloudServerTestFactory.Options(o =>
-            {
-                o.ClusterId = "cluster-1";
-                o.RemoteAdministration.PollWait = TimeSpan.FromSeconds(7);
-            }),
+            CloudServerTestFactory.Options(o => o.ClusterId = "cluster-1"),
+            CloudServerTestFactory.RemoteOptions(o => o.PollWait = TimeSpan.FromSeconds(7)),
             environmentName: "Production");
 
         var command = await client.PollAdminCommandAsync("silo:1");

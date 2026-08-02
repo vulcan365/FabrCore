@@ -19,18 +19,15 @@ The host enables the feature purely through `appsettings.json` — no `fabrcore.
 {
   "FabrCore": {
     "HostUrl": "https://agents.example.com",
-    "AdminAuthentication": {
-      "ApiKey": "<separate local admin key>"
-    },
     "CloudServer": {
       "Enabled": true,
       "Url": "https://forge.vulcan365.ai",
       "ApiKey": "<per-cluster API key>",
       "ClusterId": null,
-      "Environment": null,
-      "RemoteAdministration": {
-        "Enabled": true
-      }
+      "Environment": null
+    },
+    "RemoteAdministration": {
+      "Enable": true
     }
   }
 }
@@ -42,13 +39,15 @@ The host enables the feature purely through `appsettings.json` — no `fabrcore.
 - Securing `ApiKey` (user secrets, environment variables, vault-backed configuration
   providers) is the operator's responsibility.
 - Remote administration is disabled by default;
-  `"RemoteAdministration": { "Enabled": true }` is the minimal form. `LocalAdminApiKey`
-  is optional — it defaults to `FabrCore:AdminAuthentication:ApiKey`. `PollWait` and
-  `MaxBodyBytes` are also optional tuning values.
+  `"RemoteAdministration": { "Enable": true }` enables it. The dispatcher uses the existing
+  `FabrCore:CloudServer:ApiKey`; there is no separate remote-administration credential.
+  `PollWait` and `MaxBodyBytes` are optional tuning values.
+- Remote administration requires `FabrCore:CloudServer:Enabled` to be true. A host cannot enable
+  remote administration without also enabling its Cloud Server connection.
 - `FabrCore:HostUrl` is the only remote-administration target. It must be an absolute http(s)
   URL reachable from the host process, and requests outside `/fabrcoreapi/` are rejected. The
-  host logs a startup warning for a non-loopback URL because the local admin key then traverses
-  the network. Use a separate local admin key rather than reusing the Forge cluster key.
+  host logs a startup warning for a non-loopback URL because the Cloud Server API key then
+  traverses the network.
 
 See the `fabrcore-server` skill for the full option list (refresh interval, disk cache,
 startup failure behavior, heartbeat settings).
@@ -202,7 +201,7 @@ inbound network ports. Every network connection originates at the FabrCore host:
 1. Forge (or another server implementation) durably queues an admin request.
 2. A cluster silo receives it through a long poll.
 3. The silo validates the command, sends it to the `/fabrcoreapi/` endpoint at the required
-   `FabrCore:HostUrl` using the separately configured admin key, and captures the response.
+   `FabrCore:HostUrl` using `FabrCore:CloudServer:ApiKey`, and captures the response.
 4. The silo posts that response back to the server. The server completes the waiting console
    request.
 
@@ -237,7 +236,7 @@ Normative host safety rules:
 - `pathAndQuery` must begin with `/fabrcoreapi/`; absolute URLs, scheme-relative URLs, and
   backslashes are rejected.
 - `Authorization`, `Host`, and `Content-Length` from the command are discarded. The host sets
-  its own local admin bearer key.
+  its own `FabrCore:CloudServer:ApiKey` bearer token.
 - Request and response bodies are bounded by `RemoteAdministration:MaxBodyBytes`.
 - Expired commands are not executed.
 

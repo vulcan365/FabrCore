@@ -267,13 +267,12 @@ sufficient:
       "Heartbeat": {
         "Enabled": true,
         "Interval": "00:01:00"
-      },
-      "RemoteAdministration": {
-        "Enabled": false,
-        "LocalAdminApiKey": null,
-        "PollWait": "00:00:20",
-        "MaxBodyBytes": 4194304
       }
+    },
+    "RemoteAdministration": {
+      "Enable": false,
+      "PollWait": "00:00:20",
+      "MaxBodyBytes": 4194304
     },
     "ModelPricing": {
       "model-name": {
@@ -292,6 +291,12 @@ Configuration ownership:
 - `FabrCore:HostUrl` is the HTTP base URL used by FabrCore clients and as the only Cloud Server
   remote-administration target. When remote administration is enabled, it must be an absolute
   HTTP(S) URL reachable from the host process. It is not the ASP.NET Core listen address.
+- `FabrCore:RemoteAdministration:Enable` is the remote-administration gate and requires
+  `FabrCore:CloudServer:Enabled` to be true. The dispatcher uses `FabrCore:CloudServer:ApiKey`
+  for its local Host admin requests, and the `FabrCoreAdmin` policy accepts that key. There is
+  no separate remote-admin key or remote-admin-without-Cloud-Server state.
+- `FabrCore:AdminAuthentication:ApiKey` remains available for direct non-cloud callers of the
+  privileged Host administration APIs.
 - `FabrCore:EmitAttributionHeaders` opts OpenAI-compatible LLM requests into per-agent attribution
   headers. Leave it false unless the endpoint is trusted to receive agent and trace metadata.
 - `FabrCore:Storage:UserHandle` is an optional default principal handle for the SDK storage-provider

@@ -556,6 +556,15 @@ namespace FabrCore.Host
                         "Root configuration key 'FabrCoreHostUrl' no longer binds and is IGNORED — move it under the " +
                         "FabrCore element as '{NewKey}'.", FabrCore.Core.FabrCoreConfigurationKeys.HostUrl);
                 }
+                if (builder.Configuration
+                    .GetSection($"{Configuration.CloudServerOptions.SectionName}:RemoteAdministration")
+                    .GetChildren().Any())
+                {
+                    logger.LogWarning(
+                        "'{LegacySection}' no longer binds and is IGNORED — configure '{NewSection}:Enable' instead.",
+                        $"{Configuration.CloudServerOptions.SectionName}:RemoteAdministration",
+                        Configuration.RemoteAdministrationOptions.SectionName);
+                }
 
                 // Configure Security Audit provider (default in-memory so denials are visible
                 // out of the box; UseNullAuditProvider() opts out).
@@ -578,21 +587,18 @@ namespace FabrCore.Host
                 builder.Services.TryAddSingleton<Services.IGatewayDiscoverySource, Services.GatewayDiscoverySource>();
                 builder.Services.AddOptions<Configuration.CloudServerOptions>()
                     .Bind(builder.Configuration.GetSection(Configuration.CloudServerOptions.SectionName))
-                    .PostConfigure(cloud =>
-                    {
-                        cloud.HostUrl = builder.Configuration[FabrCore.Core.FabrCoreConfigurationKeys.HostUrl];
-
-                        if (cloud.RemoteAdministration.Enabled &&
-                            string.IsNullOrWhiteSpace(cloud.RemoteAdministration.LocalAdminApiKey))
-                        {
-                            cloud.RemoteAdministration.LocalAdminApiKey = builder.Configuration[
-                                $"{Configuration.FabrCoreAdminAuthenticationOptions.SectionName}:ApiKey"];
-                        }
-                    })
                     .ValidateOnStart();
                 builder.Services.TryAddEnumerable(
                     ServiceDescriptor.Singleton<Microsoft.Extensions.Options.IValidateOptions<Configuration.CloudServerOptions>,
                         Configuration.CloudServerOptionsValidator>());
+                builder.Services.AddOptions<Configuration.RemoteAdministrationOptions>()
+                    .Bind(builder.Configuration.GetSection(Configuration.RemoteAdministrationOptions.SectionName))
+                    .PostConfigure(remote =>
+                        remote.HostUrl = builder.Configuration[FabrCore.Core.FabrCoreConfigurationKeys.HostUrl])
+                    .ValidateOnStart();
+                builder.Services.TryAddEnumerable(
+                    ServiceDescriptor.Singleton<Microsoft.Extensions.Options.IValidateOptions<Configuration.RemoteAdministrationOptions>,
+                        Configuration.RemoteAdministrationOptionsValidator>());
                 builder.Services.Configure<Configuration.AgentGrainOptions>(
                     builder.Configuration.GetSection(Configuration.AgentGrainOptions.SectionName));
                 builder.Services.Configure<Configuration.PrincipalGrainOptions>(

@@ -7,6 +7,12 @@ public sealed class CloudServerOptionsValidatorTests
 {
     private static readonly CloudServerOptionsValidator Validator = new();
 
+    private static Microsoft.Extensions.Options.ValidateOptionsResult ValidateRemote(
+        CloudServerOptions cloud,
+        RemoteAdministrationOptions remote) =>
+        new RemoteAdministrationOptionsValidator(Microsoft.Extensions.Options.Options.Create(cloud))
+            .Validate(null, remote);
+
     [TestMethod]
     public void Disabled_AlwaysValid()
     {
@@ -70,21 +76,17 @@ public sealed class CloudServerOptionsValidatorTests
     }
 
     [TestMethod]
-    public void RemoteAdministrationEnabled_WithHostUrlAndAdminKey_IsValid()
+    public void RemoteAdministrationEnabled_WithHostUrlAndCloudServerKey_IsValid()
     {
-        var options = new CloudServerOptions
+        var cloud = new CloudServerOptions
         {
             Enabled = true,
-            ApiKey = "forge-key",
-            HostUrl = "http://127.0.0.1:5000",
-            RemoteAdministration =
-            {
-                Enabled = true,
-                LocalAdminApiKey = "local-admin-key"
-            }
+            ApiKey = "forge-key"
         };
+        var remote = new RemoteAdministrationOptions
+            { Enable = true, HostUrl = "http://127.0.0.1:5000" };
 
-        Assert.IsTrue(Validator.Validate(null, options).Succeeded);
+        Assert.IsTrue(ValidateRemote(cloud, remote).Succeeded);
     }
 
     [TestMethod]
@@ -92,19 +94,14 @@ public sealed class CloudServerOptionsValidatorTests
     {
         foreach (var url in new[] { "http://host.internal:5000", "https://127.0.0.1:5000", "http://curia-ai" })
         {
-            var options = new CloudServerOptions
+            var cloud = new CloudServerOptions
             {
                 Enabled = true,
-                ApiKey = "forge-key",
-                HostUrl = url,
-                RemoteAdministration =
-                {
-                    Enabled = true,
-                    LocalAdminApiKey = "local-admin-key"
-                }
+                ApiKey = "forge-key"
             };
+            var remote = new RemoteAdministrationOptions { Enable = true, HostUrl = url };
 
-            var result = Validator.Validate(null, options);
+            var result = ValidateRemote(cloud, remote);
             Assert.IsTrue(result.Succeeded, $"Expected '{url}' to be accepted.");
         }
     }
@@ -114,46 +111,39 @@ public sealed class CloudServerOptionsValidatorTests
     {
         foreach (var url in new string?[] { null, "", "not a url", "ftp://x" })
         {
-            var options = new CloudServerOptions
+            var cloud = new CloudServerOptions
             {
                 Enabled = true,
-                ApiKey = "forge-key",
-                HostUrl = url,
-                RemoteAdministration =
-                {
-                    Enabled = true,
-                    LocalAdminApiKey = "local-admin-key"
-                }
+                ApiKey = "forge-key"
             };
+            var remote = new RemoteAdministrationOptions { Enable = true, HostUrl = url };
 
-            var result = Validator.Validate(null, options);
+            var result = ValidateRemote(cloud, remote);
             Assert.IsTrue(result.Failed, $"Expected '{url}' to be rejected.");
             Assert.IsTrue(result.FailureMessage!.Contains("FabrCore:HostUrl"));
         }
     }
 
     [TestMethod]
-    public void RemoteAdministrationEnabled_RequiresAdminKeyAndSafeLimits()
+    public void RemoteAdministrationEnabled_RequiresSafeLimits()
     {
-        var options = new CloudServerOptions
+        var cloud = new CloudServerOptions
         {
             Enabled = true,
-            ApiKey = "forge-key",
+            ApiKey = "forge-key"
+        };
+        var remote = new RemoteAdministrationOptions
+        {
+            Enable = true,
             HostUrl = "http://127.0.0.1:5000",
-            RemoteAdministration =
-            {
-                Enabled = true,
-                LocalAdminApiKey = null,
-                PollWait = TimeSpan.FromSeconds(56),
-                MaxBodyBytes = 512
-            }
+            PollWait = TimeSpan.FromSeconds(56),
+            MaxBodyBytes = 512
         };
 
-        var result = Validator.Validate(null, options);
+        var result = ValidateRemote(cloud, remote);
 
         Assert.IsTrue(result.Failed);
-        Assert.IsTrue(result.FailureMessage!.Contains("LocalAdminApiKey"));
-        Assert.IsTrue(result.FailureMessage.Contains("PollWait"));
+        Assert.IsTrue(result.FailureMessage!.Contains("PollWait"));
         Assert.IsTrue(result.FailureMessage.Contains("MaxBodyBytes"));
     }
 }

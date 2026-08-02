@@ -45,17 +45,20 @@ internal sealed class CloudServerApiClient
 
     private readonly IHttpClientFactory httpClientFactory;
     private readonly CloudServerOptions options;
+    private readonly RemoteAdministrationOptions remoteAdministration;
     private readonly ILogger<CloudServerApiClient> logger;
 
     public CloudServerApiClient(
         IHttpClientFactory httpClientFactory,
         IOptions<CloudServerOptions> options,
+        IOptions<RemoteAdministrationOptions> remoteAdministration,
         IConfiguration configuration,
         IWebHostEnvironment environment,
         ILogger<CloudServerApiClient> logger)
     {
         this.httpClientFactory = httpClientFactory;
         this.options = options.Value;
+        this.remoteAdministration = remoteAdministration.Value;
         this.logger = logger;
 
         var orleans = configuration.GetSection(OrleansClusterOptions.SectionName).Get<OrleansClusterOptions>()
@@ -172,7 +175,7 @@ internal sealed class CloudServerApiClient
         string hostInstanceId,
         CancellationToken cancellationToken = default)
     {
-        var waitSeconds = Math.Max(1, (int)options.RemoteAdministration.PollWait.TotalSeconds);
+        var waitSeconds = Math.Max(1, (int)remoteAdministration.PollWait.TotalSeconds);
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             BuildUri(
@@ -181,7 +184,7 @@ internal sealed class CloudServerApiClient
         ApplyHeaders(request);
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(options.RemoteAdministration.PollWait + TimeSpan.FromSeconds(10));
+        timeout.CancelAfter(remoteAdministration.PollWait + TimeSpan.FromSeconds(10));
         using var response = await SendAsync(request, timeout.Token);
         if (response.StatusCode == HttpStatusCode.NoContent)
         {

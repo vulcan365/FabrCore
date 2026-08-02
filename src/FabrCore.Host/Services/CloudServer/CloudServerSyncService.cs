@@ -33,6 +33,7 @@ internal sealed class CloudServerSyncService : BackgroundService
     private readonly CloudServerConfigurationStore store;
     private readonly CloudConfigurationDiskCache diskCache;
     private readonly CloudServerOptions options;
+    private readonly RemoteAdministrationOptions remoteAdministration;
     private readonly IServiceProvider serviceProvider;
     private readonly IHttpClientFactory httpClientFactory;
     private readonly ILogger<CloudServerSyncService> logger;
@@ -44,6 +45,7 @@ internal sealed class CloudServerSyncService : BackgroundService
         CloudServerConfigurationStore store,
         CloudConfigurationDiskCache diskCache,
         IOptions<CloudServerOptions> options,
+        IOptions<RemoteAdministrationOptions> remoteAdministration,
         IServiceProvider serviceProvider,
         IHttpClientFactory httpClientFactory,
         ILogger<CloudServerSyncService> logger)
@@ -52,6 +54,7 @@ internal sealed class CloudServerSyncService : BackgroundService
         this.store = store;
         this.diskCache = diskCache;
         this.options = options.Value;
+        this.remoteAdministration = remoteAdministration.Value;
         this.serviceProvider = serviceProvider;
         this.httpClientFactory = httpClientFactory;
         this.logger = logger;
@@ -124,7 +127,7 @@ internal sealed class CloudServerSyncService : BackgroundService
         {
             loops.Add(RunHeartbeatLoopAsync(stoppingToken));
         }
-        if (options.RemoteAdministration.Enabled)
+        if (remoteAdministration.Enable)
         {
             loops.Add(RunConnectLoopAsync(stoppingToken));
         }
@@ -229,12 +232,17 @@ internal sealed class CloudServerSyncService : BackgroundService
     {
         var capabilities = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["host"] = hostVersion,
-            ["host.admin"] = "1",
-            ["host.admin.scope"] = "cluster",
-            ["host.admin.maxBodyBytes"] = options.RemoteAdministration.MaxBodyBytes.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ["host.admin.features"] = "runtime,blueprints,acl,audit,monitor,evidence"
+            ["host"] = hostVersion
         };
+
+        if (remoteAdministration.Enable)
+        {
+            capabilities["host.admin"] = "1";
+            capabilities["host.admin.scope"] = "cluster";
+            capabilities["host.admin.maxBodyBytes"] = remoteAdministration.MaxBodyBytes.ToString(
+                System.Globalization.CultureInfo.InvariantCulture);
+            capabilities["host.admin.features"] = "runtime,blueprints,acl,audit,monitor,evidence";
+        }
 
         if (serviceProvider.GetService<IMemoryAdminService>() is not null)
         {
@@ -324,15 +332,15 @@ internal sealed class CloudServerSyncService : BackgroundService
     {
         logger.LogInformation(
             "Cloud Server outbound remote administration enabled for host target {HostUrl}",
-            options.HostUrl);
+            remoteAdministration.HostUrl);
 
-        if (!Uri.TryCreate(options.HostUrl, UriKind.Absolute, out var adminUri) ||
+        if (!Uri.TryCreate(remoteAdministration.HostUrl, UriKind.Absolute, out var adminUri) ||
             !adminUri.IsLoopback)
         {
             logger.LogWarning(
                 "FabrCore:HostUrl '{HostUrl}' is not a loopback address. Remote administration commands and " +
-                "the local admin key will traverse the network — ensure the configured host URL is trusted.",
-                options.HostUrl);
+                "the Cloud Server API key will traverse the network — ensure the configured host URL is trusted.",
+                remoteAdministration.HostUrl);
         }
 
         while (!stoppingToken.IsCancellationRequested)
@@ -399,7 +407,7 @@ internal sealed class CloudServerSyncService : BackgroundService
             return Failed(command.CommandId, 403, "The requested local path is not on the administration allowlist.", command.LeaseToken);
         }
 
-        if (command.Body?.Length > options.RemoteAdministration.MaxBodyBytes)
+        if (command.Body?.Length > remoteAdministration.MaxBodyBytes)
         {
             return Failed(command.CommandId, 413, "Connect-channel request body exceeds the configured limit.");
         }
@@ -423,7 +431,7 @@ internal sealed class CloudServerSyncService : BackgroundService
         try
         {
             var target = new Uri(
-                $"{options.HostUrl!.TrimEnd('/')}{command.PathAndQuery}",
+                $"{remoteAdministration.HostUrl!.TrimEnd('/')}{command.PathAndQuery}",
                 UriKind.Absolute);
             using var request = new HttpRequestMessage(method, target);
             if (command.Body is not null)
@@ -466,7 +474,7 @@ internal sealed class CloudServerSyncService : BackgroundService
             request.Headers.TryAddWithoutValidation("X-FabrCore-Admin-Command-Id", command.CommandId);
 
             request.Headers.Authorization =
-                new AuthenticationHeaderValue("Bearer", options.RemoteAdministration.LocalAdminApiKey);
+                new AuthenticationHeaderValue("Bearer", options.ApiKey);
             var client = httpClientFactory.CreateClient(LocalAdminHttpClientName);
             using var response = await client.SendAsync(
                 request,
@@ -474,7 +482,7 @@ internal sealed class CloudServerSyncService : BackgroundService
                 cancellationToken);
             var body = await ReadLimitedAsync(
                 response.Content,
-                options.RemoteAdministration.MaxBodyBytes,
+                remoteAdministration.MaxBodyBytes,
                 cancellationToken);
 
             var headers = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);

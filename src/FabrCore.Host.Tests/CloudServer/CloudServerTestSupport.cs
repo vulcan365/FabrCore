@@ -66,9 +66,18 @@ internal static class CloudServerTestFactory
         return options;
     }
 
+    public static RemoteAdministrationOptions RemoteOptions(
+        Action<RemoteAdministrationOptions>? configure = null)
+    {
+        var options = new RemoteAdministrationOptions();
+        configure?.Invoke(options);
+        return options;
+    }
+
     public static CloudServerApiClient ApiClient(
         HttpMessageHandler handler,
         CloudServerOptions options,
+        RemoteAdministrationOptions? remoteAdministration = null,
         string environmentName = "Test",
         Dictionary<string, string?>? configValues = null)
     {
@@ -78,6 +87,7 @@ internal static class CloudServerTestFactory
         return new CloudServerApiClient(
             new FakeHttpClientFactory(handler),
             Microsoft.Extensions.Options.Options.Create(options),
+            Microsoft.Extensions.Options.Options.Create(remoteAdministration ?? RemoteOptions()),
             configuration,
             new TestHostEnvironment(Path.GetTempPath(), environmentName),
             NullLogger<CloudServerApiClient>.Instance);
