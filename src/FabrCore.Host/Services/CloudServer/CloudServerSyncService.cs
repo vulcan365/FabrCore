@@ -127,7 +127,7 @@ internal sealed class CloudServerSyncService : BackgroundService
         {
             loops.Add(RunHeartbeatLoopAsync(stoppingToken));
         }
-        if (remoteAdministration.Enable)
+        if (remoteAdministration.Enabled)
         {
             loops.Add(RunConnectLoopAsync(stoppingToken));
         }
@@ -235,7 +235,7 @@ internal sealed class CloudServerSyncService : BackgroundService
             ["host"] = hostVersion
         };
 
-        if (remoteAdministration.Enable)
+        if (remoteAdministration.Enabled)
         {
             capabilities["host.admin"] = "1";
             capabilities["host.admin.scope"] = "cluster";

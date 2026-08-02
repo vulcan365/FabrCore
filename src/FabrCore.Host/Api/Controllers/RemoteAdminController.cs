@@ -61,7 +61,7 @@ public sealed class RemoteAdminController(
             StartedAt = Process.GetCurrentProcess().StartTime.ToUniversalTime(),
             RemoteAdministration = new
             {
-                remoteAdministration.Enable,
+                remoteAdministration.Enabled,
                 CloudServerApiKeyConfigured = !string.IsNullOrWhiteSpace(cloud.ApiKey),
                 remoteAdministration.MaxBodyBytes
             }

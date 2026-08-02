@@ -99,7 +99,7 @@ public sealed class RemoteAdministrationOptions
     public const string SectionName = "FabrCore:RemoteAdministration";
 
     /// <summary>Gets or sets whether outbound-only remote administration is enabled.</summary>
-    public bool Enable { get; set; }
+    public bool Enabled { get; set; }
 
     /// <summary>Gets or sets how long each server long poll waits for work.</summary>
     public TimeSpan PollWait { get; set; } = TimeSpan.FromSeconds(20);
@@ -159,7 +159,7 @@ internal sealed class RemoteAdministrationOptionsValidator(IOptions<CloudServerO
 {
     public ValidateOptionsResult Validate(string? name, RemoteAdministrationOptions options)
     {
-        if (!options.Enable)
+        if (!options.Enabled)
         {
             return ValidateOptionsResult.Success;
         }
@@ -170,7 +170,7 @@ internal sealed class RemoteAdministrationOptionsValidator(IOptions<CloudServerO
         if (!cloud.Enabled)
         {
             failures.Add(
-                $"{CloudServerOptions.SectionName}:Enabled must be true when {RemoteAdministrationOptions.SectionName}:Enable is true.");
+                $"{CloudServerOptions.SectionName}:Enabled must be true when {RemoteAdministrationOptions.SectionName}:Enabled is true.");
         }
 
         if (string.IsNullOrWhiteSpace(cloud.ApiKey))

@@ -34,6 +34,18 @@ public sealed class FabrCoreAdminAuthenticationTests
     }
 
     [TestMethod]
+    public async Task CloudServerApiKey_IsRejected_WhenCloudServerIsDisabled()
+    {
+        var result = await AuthenticateAsync(
+            suppliedKey: "cloud-key",
+            adminKey: null,
+            cloudEnabled: false,
+            remoteAdministrationEnabled: true);
+
+        Assert.IsFalse(result.Succeeded);
+    }
+
+    [TestMethod]
     public async Task AdminAuthenticationApiKey_RemainsAccepted()
     {
         var result = await AuthenticateAsync(
@@ -59,7 +71,7 @@ public sealed class FabrCoreAdminAuthenticationTests
             options.ApiKey = "cloud-key";
         });
         services.Configure<RemoteAdministrationOptions>(options =>
-            options.Enable = remoteAdministrationEnabled);
+            options.Enabled = remoteAdministrationEnabled);
         services
             .AddAuthentication()
             .AddScheme<FabrCoreAdminAuthenticationOptions, FabrCoreAdminAuthenticationHandler>(

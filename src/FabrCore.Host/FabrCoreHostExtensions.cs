@@ -561,7 +561,7 @@ namespace FabrCore.Host
                     .GetChildren().Any())
                 {
                     logger.LogWarning(
-                        "'{LegacySection}' no longer binds and is IGNORED — configure '{NewSection}:Enable' instead.",
+                        "'{LegacySection}' no longer binds and is IGNORED — configure '{NewSection}:Enabled' instead.",
                         $"{Configuration.CloudServerOptions.SectionName}:RemoteAdministration",
                         Configuration.RemoteAdministrationOptions.SectionName);
                 }

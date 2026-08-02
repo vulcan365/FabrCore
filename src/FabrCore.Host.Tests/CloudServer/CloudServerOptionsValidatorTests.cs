@@ -84,7 +84,7 @@ public sealed class CloudServerOptionsValidatorTests
             ApiKey = "forge-key"
         };
         var remote = new RemoteAdministrationOptions
-            { Enable = true, HostUrl = "http://127.0.0.1:5000" };
+            { Enabled = true, HostUrl = "http://127.0.0.1:5000" };
 
         Assert.IsTrue(ValidateRemote(cloud, remote).Succeeded);
     }
@@ -99,7 +99,7 @@ public sealed class CloudServerOptionsValidatorTests
                 Enabled = true,
                 ApiKey = "forge-key"
             };
-            var remote = new RemoteAdministrationOptions { Enable = true, HostUrl = url };
+            var remote = new RemoteAdministrationOptions { Enabled = true, HostUrl = url };
 
             var result = ValidateRemote(cloud, remote);
             Assert.IsTrue(result.Succeeded, $"Expected '{url}' to be accepted.");
@@ -116,7 +116,7 @@ public sealed class CloudServerOptionsValidatorTests
                 Enabled = true,
                 ApiKey = "forge-key"
             };
-            var remote = new RemoteAdministrationOptions { Enable = true, HostUrl = url };
+            var remote = new RemoteAdministrationOptions { Enabled = true, HostUrl = url };
 
             var result = ValidateRemote(cloud, remote);
             Assert.IsTrue(result.Failed, $"Expected '{url}' to be rejected.");
@@ -134,7 +134,7 @@ public sealed class CloudServerOptionsValidatorTests
         };
         var remote = new RemoteAdministrationOptions
         {
-            Enable = true,
+            Enabled = true,
             HostUrl = "http://127.0.0.1:5000",
             PollWait = TimeSpan.FromSeconds(56),
             MaxBodyBytes = 512
