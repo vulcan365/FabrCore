@@ -95,19 +95,27 @@ and wakes outbox entries waiting for endpoint refresh.
 Default Host settings:
 
 ```json
-"FabrCore": {
-  "PrincipalDelivery": {
-    "LeaseDuration": "00:02:00",
-    "RecoveryReminderPeriod": "00:01:00",
-    "MaxDeliveryAge": "1.00:00:00",
-    "DeadLetterRetention": "7.00:00:00",
-    "MaxDeadLetters": 100
+{
+  "FabrCore": {
+    "PrincipalContext": {
+      "MaxEntries": 64,
+      "MaxKeyLength": 128,
+      "MaxValueBytes": 131072,
+      "MaxTotalBytes": 262144
+    },
+    "PrincipalDelivery": {
+      "LeaseDuration": "00:02:00",
+      "RecoveryReminderPeriod": "00:01:00",
+      "MaxDeliveryAge": "1.00:00:00",
+      "DeadLetterRetention": "7.00:00:00",
+      "MaxDeadLetters": 100
+    }
   }
 }
 ```
 
-The actual configuration section is `FabrCore:PrincipalDelivery`; context limits bind from
-`FabrCore:PrincipalContext`.
+These sibling branches bind from `FabrCore:PrincipalDelivery` and `FabrCore:PrincipalContext` in
+`appsettings.json`. Do not place them at the document root or in the model-only `fabrcore.json`.
 
 Lifecycle:
 

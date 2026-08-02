@@ -124,7 +124,7 @@ internal sealed class CloudServerSyncService : BackgroundService
         {
             loops.Add(RunHeartbeatLoopAsync(stoppingToken));
         }
-        if (options.Connect.Enabled)
+        if (options.RemoteAdministration.Enabled)
         {
             loops.Add(RunConnectLoopAsync(stoppingToken));
         }
@@ -232,7 +232,7 @@ internal sealed class CloudServerSyncService : BackgroundService
             ["host"] = hostVersion,
             ["host.admin"] = "1",
             ["host.admin.scope"] = "cluster",
-            ["host.admin.maxBodyBytes"] = options.Connect.MaxBodyBytes.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["host.admin.maxBodyBytes"] = options.RemoteAdministration.MaxBodyBytes.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ["host.admin.features"] = "runtime,blueprints,acl,audit,monitor,evidence"
         };
 
@@ -323,17 +323,16 @@ internal sealed class CloudServerSyncService : BackgroundService
     private async Task RunConnectLoopAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation(
-            "Cloud Server outbound admin connect channel enabled for admin target {LocalAdminUrl}",
-            options.Connect.LocalAdminUrl);
+            "Cloud Server outbound remote administration enabled for host target {HostUrl}",
+            options.HostUrl);
 
-        if (!Uri.TryCreate(options.Connect.LocalAdminUrl, UriKind.Absolute, out var adminUri) ||
+        if (!Uri.TryCreate(options.HostUrl, UriKind.Absolute, out var adminUri) ||
             !adminUri.IsLoopback)
         {
             logger.LogWarning(
-                "Connect LocalAdminUrl '{LocalAdminUrl}' is not a loopback address. Admin commands and the " +
-                "local admin key will traverse the network — ensure this target (e.g. a container network " +
-                "alias) is trusted.",
-                options.Connect.LocalAdminUrl);
+                "FabrCore:HostUrl '{HostUrl}' is not a loopback address. Remote administration commands and " +
+                "the local admin key will traverse the network — ensure the configured host URL is trusted.",
+                options.HostUrl);
         }
 
         while (!stoppingToken.IsCancellationRequested)
@@ -400,7 +399,7 @@ internal sealed class CloudServerSyncService : BackgroundService
             return Failed(command.CommandId, 403, "The requested local path is not on the administration allowlist.", command.LeaseToken);
         }
 
-        if (command.Body?.Length > options.Connect.MaxBodyBytes)
+        if (command.Body?.Length > options.RemoteAdministration.MaxBodyBytes)
         {
             return Failed(command.CommandId, 413, "Connect-channel request body exceeds the configured limit.");
         }
@@ -424,7 +423,7 @@ internal sealed class CloudServerSyncService : BackgroundService
         try
         {
             var target = new Uri(
-                $"{options.Connect.LocalAdminUrl.TrimEnd('/')}{command.PathAndQuery}",
+                $"{options.HostUrl!.TrimEnd('/')}{command.PathAndQuery}",
                 UriKind.Absolute);
             using var request = new HttpRequestMessage(method, target);
             if (command.Body is not null)
@@ -467,7 +466,7 @@ internal sealed class CloudServerSyncService : BackgroundService
             request.Headers.TryAddWithoutValidation("X-FabrCore-Admin-Command-Id", command.CommandId);
 
             request.Headers.Authorization =
-                new AuthenticationHeaderValue("Bearer", options.Connect.LocalAdminApiKey);
+                new AuthenticationHeaderValue("Bearer", options.RemoteAdministration.LocalAdminApiKey);
             var client = httpClientFactory.CreateClient(LocalAdminHttpClientName);
             using var response = await client.SendAsync(
                 request,
@@ -475,7 +474,7 @@ internal sealed class CloudServerSyncService : BackgroundService
                 cancellationToken);
             var body = await ReadLimitedAsync(
                 response.Content,
-                options.Connect.MaxBodyBytes,
+                options.RemoteAdministration.MaxBodyBytes,
                 cancellationToken);
 
             var headers = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);

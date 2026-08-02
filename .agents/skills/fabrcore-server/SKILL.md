@@ -153,7 +153,7 @@ For instance-based registration, FabrCore registers both `TimeProvider` and the 
 4. **Verifiable Execution Services** — `IVerifiableExecutionStore`, `IVerifiableExecutionSigner`, `IVerifiableExecutionVerifier`, `IVerifiableExecutionContext`, and SDK helper support for external effects (disabled/no-op unless enabled)
 5. **Background Services** — `AgentRegistryCleanupService`, `FileCleanupService`
 6. **Assembly Discovery** — Scans `AdditionalAssemblies` for agent, plugin, and tool types
-7. **ACL & Security Audit** — Loads `Acl` and `FabrCore:Audit` sections from `fabrcore.json`, registers the ACL evaluator/enforcer, the `AclRegistryGrain`-backed entity store, and the audit provider (see fabrcore-acl)
+7. **ACL & Security Audit** — Binds `FabrCore:Acl` and `FabrCore:Audit` from `IConfiguration` (normally `appsettings.json`), registers the ACL evaluator/enforcer, the `AclRegistryGrain`-backed entity store, and the audit provider (see fabrcore-acl)
 
 ## What UseFabrCoreServer Configures
 
@@ -161,9 +161,156 @@ For instance-based registration, FabrCore registers both `TimeProvider` and the 
 2. **WebSocket** — Enables WebSocket middleware at `/ws`
 3. **CORS** — Configures cross-origin policies
 
+## appsettings.json — FabrCore Runtime Configuration
+
+All FabrCore-owned runtime configuration belongs under the single `FabrCore` root. A root-level
+`Orleans`, `FileStorage`, `Acl`, or `FabrCoreHostUrl` key is legacy and does not bind. Use normal
+.NET configuration layering for environment overrides; for example,
+`FabrCore__Host__WebSocketPath=/agent-ws` maps to `FabrCore:Host:WebSocketPath`.
+
+The following tree defines the runtime branches used by `FabrCore.Host` and the SDK services it
+registers. Values shown are defaults or safe disabled examples; omit branches whose defaults are
+sufficient:
+
+```json
+{
+  "FabrCore": {
+    "HostUrl": "http://localhost:5000",
+    "EmitAttributionHeaders": false,
+    "Storage": {
+      "UserHandle": null
+    },
+    "Host": {
+      "WebSocketPath": "/ws",
+      "MaxIncomingMessageBytes": 1048576,
+      "OutboundQueueCapacity": 256,
+      "WebSocketKeepAliveInterval": "00:02:00",
+      "AllowedWebSocketOrigins": [],
+      "GatewayDiscovery": {
+        "RefreshPeriod": "00:00:30",
+        "AdvertisedGateways": [],
+        "RequireOrleansTls": false
+      }
+    },
+    "Orleans": {
+      "ClusterId": "fabrcore-cluster",
+      "ServiceId": "fabrcore-service",
+      "ClusteringMode": "Localhost",
+      "ConnectionString": null,
+      "StorageConnectionString": null,
+      "AutoInitDatabase": true,
+      "AzureStorage": {
+        "GrainStorage": "Blob",
+        "ContainerName": "fabrcore-grainstate",
+        "Streams": "AzureQueue",
+        "StreamQueueCount": 8
+      }
+    },
+    "FileStorage": {
+      "StoragePath": "c:\\temp\\fabrcorefiles",
+      "DefaultTtlSeconds": 300,
+      "CleanupIntervalMinutes": 1
+    },
+    "AgentGrain": {
+      "HeartbeatInterval": "00:00:03",
+      "LatencyReservoirCapacity": 256
+    },
+    "PrincipalGrain": {
+      "PendingMessageMaxAge": "01:00:00"
+    },
+    "PrincipalContext": {
+      "MaxEntries": 64,
+      "MaxKeyLength": 128,
+      "MaxValueBytes": 131072,
+      "MaxTotalBytes": 262144
+    },
+    "PrincipalDelivery": {
+      "LeaseDuration": "00:02:00",
+      "RecoveryReminderPeriod": "00:01:00",
+      "MaxDeliveryAge": "1.00:00:00",
+      "DeadLetterRetention": "7.00:00:00",
+      "MaxDeadLetters": 100
+    },
+    "Acl": {
+      "SystemPrincipal": "system",
+      "Mode": "Enforce",
+      "AllPrincipalsGroupId": "all-principals",
+      "AllAgentsGroupId": "all-agents",
+      "CacheTtlSeconds": 30,
+      "SeedDefaultSystemAgentAccess": true
+    },
+    "Audit": {
+      "DefaultLevel": "Failures",
+      "Categories": {
+        "AclManagement": "All",
+        "BoundaryCrossing": "All",
+        "Bootstrap": "All",
+        "RemoteAdministration": "All"
+      },
+      "MaxBufferedEvents": 10000
+    },
+    "AdminAuthentication": {
+      "ApiKey": null,
+      "PrincipalId": "cluster-admin"
+    },
+    "CloudServer": {
+      "Enabled": false,
+      "Url": "https://forge.vulcan365.ai",
+      "ApiKey": null,
+      "ClusterId": null,
+      "Environment": null,
+      "RefreshInterval": "00:05:00",
+      "RequestTimeout": "00:00:30",
+      "CacheLastKnownGood": true,
+      "CacheFilePath": null,
+      "StartupFailureBehavior": "Fail",
+      "Heartbeat": {
+        "Enabled": true,
+        "Interval": "00:01:00"
+      },
+      "RemoteAdministration": {
+        "Enabled": false,
+        "LocalAdminApiKey": null,
+        "PollWait": "00:00:20",
+        "MaxBodyBytes": 4194304
+      }
+    },
+    "ModelPricing": {
+      "model-name": {
+        "InputPer1K": 0.0,
+        "OutputPer1K": 0.0,
+        "CachedInputPer1K": 0.0,
+        "ReasoningPer1K": 0.0
+      }
+    }
+  }
+}
+```
+
+Configuration ownership:
+
+- `FabrCore:HostUrl` is the HTTP base URL used by FabrCore clients and as the only Cloud Server
+  remote-administration target. When remote administration is enabled, it must be an absolute
+  HTTP(S) URL reachable from the host process. It is not the ASP.NET Core listen address.
+- `FabrCore:EmitAttributionHeaders` opts OpenAI-compatible LLM requests into per-agent attribution
+  headers. Leave it false unless the endpoint is trusted to receive agent and trace metadata.
+- `FabrCore:Storage:UserHandle` is an optional default principal handle for the SDK storage-provider
+  convenience methods. Prefer methods that take an explicit principal handle when a process serves
+  more than one principal.
+- `FabrCore:Host:GatewayDiscovery:RequireOrleansTls` defaults to false in Development and true
+  outside Development before configuration overrides are applied.
+- `FabrCore:ModelPricing` is keyed by provider-returned model name. Unknown models produce an
+  unknown cost rather than zero; replace or remove the placeholder entry above.
+- Put secrets such as admin, cloud-server, and provider keys in user secrets, environment
+  variables, or a secret manager rather than committed appsettings files.
+- Use `fabrcore-orleans`, `fabrcore-acl`, and `fabrcore-principal-delivery` for branch-specific
+  behavior and production guidance.
+
 ## fabrcore.json — LLM Provider Configuration
 
 Place `fabrcore.json` in the server project root. **Add to .gitignore** (contains API keys).
+It is read by FabrCore's local model configuration store, not added to the application's general
+`IConfiguration`. Keep host runtime settings in `appsettings.json`.
 
 ### Complete Schema
 

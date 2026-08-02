@@ -116,6 +116,38 @@ dotnet add package FabrCore.Sdk
 
 Create `fabrcore.json` in the server project root with your LLM provider configuration.
 
+## Configuration Files
+
+FabrCore uses two separate configuration documents:
+
+- `appsettings.json` contains host, client, Orleans, storage, delivery, ACL, audit, and other
+  runtime settings. Every FabrCore-owned appsettings key belongs under the single `FabrCore`
+  root element.
+- With the standard Host, `fabrcore.json` is consumed only as `ModelConfigurations` and `ApiKeys`
+  by the local model configuration store. Do not put host runtime sections such as `Orleans`,
+  `FileStorage`, or `Acl` at its root. An addon may explicitly document additional sections and
+  add this file to `IConfiguration`; Microsoft 365 Copilot is one such exception.
+
+Minimal server `appsettings.json` shape:
+
+```json
+{
+  "FabrCore": {
+    "HostUrl": "http://localhost:5000",
+    "Orleans": {
+      "ClusterId": "dev",
+      "ServiceId": "fabrcore",
+      "ClusteringMode": "Localhost"
+    }
+  }
+}
+```
+
+Use `fabrcore-server` for the complete host configuration tree, `fabrcore-orleans` for
+provider-specific Orleans settings, and `fabrcore-acl` for ACL seeds and audit policy. Environment
+variables use the normal .NET double-underscore form, for example
+`FabrCore__Orleans__ClusteringMode`.
+
 ## Required Using Directives
 
 ```csharp

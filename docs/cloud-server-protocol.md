@@ -1,4 +1,4 @@
-# FabrCore Cloud Server Protocol (configuration v1 + connect v2)
+# FabrCore Cloud Server Protocol (configuration v1 + remote administration v2)
 
 The **Cloud Server** feature lets a FabrCore host pull its model/API-key configuration (the
 `fabrcore.json` payload) from a remote server instead of the local file, and report periodic
@@ -18,6 +18,7 @@ The host enables the feature purely through `appsettings.json` — no `fabrcore.
 ```json
 {
   "FabrCore": {
+    "HostUrl": "https://agents.example.com",
     "AdminAuthentication": {
       "ApiKey": "<separate local admin key>"
     },
@@ -27,7 +28,7 @@ The host enables the feature purely through `appsettings.json` — no `fabrcore.
       "ApiKey": "<per-cluster API key>",
       "ClusterId": null,
       "Environment": null,
-      "Connect": {
+      "RemoteAdministration": {
         "Enabled": true
       }
     }
@@ -40,17 +41,14 @@ The host enables the feature purely through `appsettings.json` — no `fabrcore.
 - `Environment` defaults to `IHostEnvironment.EnvironmentName` (`ASPNETCORE_ENVIRONMENT`).
 - Securing `ApiKey` (user secrets, environment variables, vault-backed configuration
   providers) is the operator's responsibility.
-- Connect is disabled by default; `"Connect": { "Enabled": true }` is the minimal form.
-  `LocalAdminUrl` is optional — it defaults to `FabrCore:HostUrl`, then
-  `http://127.0.0.1:5000`. `LocalAdminApiKey` is optional — it defaults to
-  `FabrCore:AdminAuthentication:ApiKey`. `PollWait` and `MaxBodyBytes` are also optional
-  tuning values.
-- The local admin target must be an absolute http(s) URL, and requests outside
-  `/fabrcoreapi/` are rejected. Loopback remains the recommended default, but non-loopback
-  targets (for example a container network alias) are allowed: the host logs a startup
-  warning because the local admin key then traverses the network — use non-loopback targets
-  only on trusted networks. Use a separate local admin key rather than reusing the Forge
-  cluster key.
+- Remote administration is disabled by default;
+  `"RemoteAdministration": { "Enabled": true }` is the minimal form. `LocalAdminApiKey`
+  is optional — it defaults to `FabrCore:AdminAuthentication:ApiKey`. `PollWait` and
+  `MaxBodyBytes` are also optional tuning values.
+- `FabrCore:HostUrl` is the only remote-administration target. It must be an absolute http(s)
+  URL reachable from the host process, and requests outside `/fabrcoreapi/` are rejected. The
+  host logs a startup warning for a non-loopback URL because the local admin key then traverses
+  the network. Use a separate local admin key rather than reusing the Forge cluster key.
 
 See the `fabrcore-server` skill for the full option list (refresh interval, disk cache,
 startup failure behavior, heartbeat settings).
@@ -196,17 +194,15 @@ Response — `200` with an optional body; an empty object (or empty body) is val
 - Future protocol versions may add response members (for example a command list) additively.
   Hosts ignore unknown members.
 
-## Outbound admin connect channel (v2)
+## Outbound remote administration channel (v2)
 
 The optional connect channel lets a hosted console administer a cluster without exposing
 inbound network ports. Every network connection originates at the FabrCore host:
 
 1. Forge (or another server implementation) durably queues an admin request.
 2. A cluster silo receives it through a long poll.
-3. The silo validates the command, sends it to its configured local admin `/fabrcoreapi/`
-   endpoint (loopback by default; a non-loopback http(s) target such as a container network
-   alias is allowed and logged with a startup warning) using the separately configured admin
-   key, and captures the response.
+3. The silo validates the command, sends it to the `/fabrcoreapi/` endpoint at the required
+   `FabrCore:HostUrl` using the separately configured admin key, and captures the response.
 4. The silo posts that response back to the server. The server completes the waiting console
    request.
 
@@ -242,7 +238,7 @@ Normative host safety rules:
   backslashes are rejected.
 - `Authorization`, `Host`, and `Content-Length` from the command are discarded. The host sets
   its own local admin bearer key.
-- Request and response bodies are bounded by `Connect:MaxBodyBytes`.
+- Request and response bodies are bounded by `RemoteAdministration:MaxBodyBytes`.
 - Expired commands are not executed.
 
 ### POST /fabrcore-cloud/v2/connect/{commandId}/response

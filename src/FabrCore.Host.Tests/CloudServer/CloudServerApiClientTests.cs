@@ -190,7 +190,7 @@ public sealed class CloudServerApiClientTests
             CloudServerTestFactory.Options(o =>
             {
                 o.ClusterId = "cluster-1";
-                o.Connect.PollWait = TimeSpan.FromSeconds(7);
+                o.RemoteAdministration.PollWait = TimeSpan.FromSeconds(7);
             }),
             environmentName: "Production");
 

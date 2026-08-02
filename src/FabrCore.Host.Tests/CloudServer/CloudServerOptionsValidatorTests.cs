@@ -70,16 +70,16 @@ public sealed class CloudServerOptionsValidatorTests
     }
 
     [TestMethod]
-    public void ConnectEnabled_WithLoopbackUrlAndAdminKey_IsValid()
+    public void RemoteAdministrationEnabled_WithHostUrlAndAdminKey_IsValid()
     {
         var options = new CloudServerOptions
         {
             Enabled = true,
             ApiKey = "forge-key",
-            Connect =
+            HostUrl = "http://127.0.0.1:5000",
+            RemoteAdministration =
             {
                 Enabled = true,
-                LocalAdminUrl = "http://127.0.0.1:5000",
                 LocalAdminApiKey = "local-admin-key"
             }
         };
@@ -88,7 +88,7 @@ public sealed class CloudServerOptionsValidatorTests
     }
 
     [TestMethod]
-    public void ConnectEnabled_AcceptsRemoteAndHttpsAdminUrl()
+    public void RemoteAdministrationEnabled_AcceptsRemoteAndHttpsHostUrl()
     {
         foreach (var url in new[] { "http://host.internal:5000", "https://127.0.0.1:5000", "http://curia-ai" })
         {
@@ -96,10 +96,10 @@ public sealed class CloudServerOptionsValidatorTests
             {
                 Enabled = true,
                 ApiKey = "forge-key",
-                Connect =
+                HostUrl = url,
+                RemoteAdministration =
                 {
                     Enabled = true,
-                    LocalAdminUrl = url,
                     LocalAdminApiKey = "local-admin-key"
                 }
             };
@@ -110,39 +110,39 @@ public sealed class CloudServerOptionsValidatorTests
     }
 
     [TestMethod]
-    public void ConnectEnabled_RejectsMissingOrNonHttpAdminUrl()
+    public void RemoteAdministrationEnabled_RejectsMissingOrNonHttpHostUrl()
     {
-        foreach (var url in new[] { "", "not a url", "ftp://x" })
+        foreach (var url in new string?[] { null, "", "not a url", "ftp://x" })
         {
             var options = new CloudServerOptions
             {
                 Enabled = true,
                 ApiKey = "forge-key",
-                Connect =
+                HostUrl = url,
+                RemoteAdministration =
                 {
                     Enabled = true,
-                    LocalAdminUrl = url,
                     LocalAdminApiKey = "local-admin-key"
                 }
             };
 
             var result = Validator.Validate(null, options);
             Assert.IsTrue(result.Failed, $"Expected '{url}' to be rejected.");
-            Assert.IsTrue(result.FailureMessage!.Contains("LocalAdminUrl"));
+            Assert.IsTrue(result.FailureMessage!.Contains("FabrCore:HostUrl"));
         }
     }
 
     [TestMethod]
-    public void ConnectEnabled_RequiresAdminKeyAndSafeLimits()
+    public void RemoteAdministrationEnabled_RequiresAdminKeyAndSafeLimits()
     {
         var options = new CloudServerOptions
         {
             Enabled = true,
             ApiKey = "forge-key",
-            Connect =
+            HostUrl = "http://127.0.0.1:5000",
+            RemoteAdministration =
             {
                 Enabled = true,
-                LocalAdminUrl = "http://127.0.0.1:5000",
                 LocalAdminApiKey = null,
                 PollWait = TimeSpan.FromSeconds(56),
                 MaxBodyBytes = 512

@@ -57,13 +57,12 @@ public sealed class RemoteAdminController(
             Environment = environment.EnvironmentName,
             ProcessId = Environment.ProcessId,
             StartedAt = Process.GetCurrentProcess().StartTime.ToUniversalTime(),
-            Connect = new
+            RemoteAdministration = new
             {
-                cloud.Connect.Enabled,
-                LoopbackTarget = Uri.TryCreate(cloud.Connect.LocalAdminUrl, UriKind.Absolute, out var local)
-                                 && local.IsLoopback,
-                LocalAdminKeyConfigured = !string.IsNullOrWhiteSpace(cloud.Connect.LocalAdminApiKey),
-                cloud.Connect.MaxBodyBytes
+                cloud.RemoteAdministration.Enabled,
+                LocalAdminKeyConfigured = !string.IsNullOrWhiteSpace(
+                    cloud.RemoteAdministration.LocalAdminApiKey),
+                cloud.RemoteAdministration.MaxBodyBytes
             }
         });
     }
@@ -76,7 +75,7 @@ public sealed class RemoteAdminController(
         var document = new ClusterCapabilityDocument
         {
             HostVersion = typeof(RemoteAdminController).Assembly.GetName().Version?.ToString() ?? "unknown",
-            MaxRequestBodyBytes = cloudOptions.Value.Connect.MaxBodyBytes,
+            MaxRequestBodyBytes = cloudOptions.Value.RemoteAdministration.MaxBodyBytes,
             BlueprintExtensions = blueprintExpanders
                 .Select(expander => expander.ExtensionKey)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -91,7 +90,7 @@ public sealed class RemoteAdminController(
                     ApiVersion = "1",
                     Features = ["runtime", "blueprints", "acl", "audit", "monitor", "evidence", "capabilities"],
                     DataScope = "cluster",
-                    MaxRequestBodyBytes = cloudOptions.Value.Connect.MaxBodyBytes
+                    MaxRequestBodyBytes = cloudOptions.Value.RemoteAdministration.MaxBodyBytes
                 }
             ]
         };
@@ -117,7 +116,7 @@ public sealed class RemoteAdminController(
                 ApiVersion = GraphRagAdminCapability.CurrentApiVersion,
                 Features = ["dashboard", "scopes", "documents", "graph", "search", "maintenance", "upload"],
                 DataScope = "cluster",
-                MaxRequestBodyBytes = cloudOptions.Value.Connect.MaxBodyBytes
+                MaxRequestBodyBytes = cloudOptions.Value.RemoteAdministration.MaxBodyBytes
             });
         }
 

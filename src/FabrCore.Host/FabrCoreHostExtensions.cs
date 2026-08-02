@@ -580,19 +580,13 @@ namespace FabrCore.Host
                     .Bind(builder.Configuration.GetSection(Configuration.CloudServerOptions.SectionName))
                     .PostConfigure(cloud =>
                     {
-                        if (cloud.Connect.Enabled && string.IsNullOrWhiteSpace(cloud.Connect.LocalAdminApiKey))
-                        {
-                            cloud.Connect.LocalAdminApiKey = builder.Configuration[
-                                $"{Configuration.FabrCoreAdminAuthenticationOptions.SectionName}:ApiKey"];
-                        }
+                        cloud.HostUrl = builder.Configuration[FabrCore.Core.FabrCoreConfigurationKeys.HostUrl];
 
-                        // The connect admin target defaults to the host's own FabrCore:HostUrl so a
-                        // deployment only configures its host URL once; loopback is the last resort.
-                        if (cloud.Connect.Enabled && string.IsNullOrWhiteSpace(cloud.Connect.LocalAdminUrl))
+                        if (cloud.RemoteAdministration.Enabled &&
+                            string.IsNullOrWhiteSpace(cloud.RemoteAdministration.LocalAdminApiKey))
                         {
-                            cloud.Connect.LocalAdminUrl =
-                                builder.Configuration[FabrCore.Core.FabrCoreConfigurationKeys.HostUrl]
-                                ?? "http://127.0.0.1:5000";
+                            cloud.RemoteAdministration.LocalAdminApiKey = builder.Configuration[
+                                $"{Configuration.FabrCoreAdminAuthenticationOptions.SectionName}:ApiKey"];
                         }
                     })
                     .ValidateOnStart();

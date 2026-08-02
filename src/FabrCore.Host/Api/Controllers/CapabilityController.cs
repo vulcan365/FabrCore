@@ -28,7 +28,7 @@ public sealed class CapabilityController(
                 .GetName()
                 .Version?
                 .ToString() ?? "unknown",
-            MaxRequestBodyBytes = cloudOptions.Value.Connect.MaxBodyBytes,
+            MaxRequestBodyBytes = cloudOptions.Value.RemoteAdministration.MaxBodyBytes,
             BlueprintExtensions = blueprintExpanders
                 .Select(expander => expander.ExtensionKey)
                 .Distinct(StringComparer.OrdinalIgnoreCase)

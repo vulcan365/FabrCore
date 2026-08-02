@@ -67,8 +67,15 @@ public sealed class CloudServerOptions
     /// <summary>Gets or sets heartbeat reporting options.</summary>
     public CloudServerHeartbeatOptions Heartbeat { get; set; } = new();
 
-    /// <summary>Gets or sets outbound-only Forge admin connect-channel options.</summary>
-    public CloudServerConnectOptions Connect { get; set; } = new();
+    /// <summary>Gets or sets outbound-only cloud administration options.</summary>
+    public CloudServerRemoteAdministrationOptions RemoteAdministration { get; set; } = new();
+
+    /// <summary>
+    /// Gets the FabrCore host URL used as the remote-administration target. This value is
+    /// populated from <c>FabrCore:HostUrl</c> during host registration and is not a setting
+    /// beneath <c>CloudServer</c>.
+    /// </summary>
+    internal string? HostUrl { get; set; }
 }
 
 /// <summary>Startup behavior when cloud configuration cannot be obtained from network or cache.</summary>
@@ -92,21 +99,13 @@ public sealed class CloudServerHeartbeatOptions
 }
 
 /// <summary>
-/// Configures the v2 connect channel. The host long-polls the cloud server and executes
-/// received requests against its own admin API.
+/// Configures outbound-only remote administration. The host long-polls the cloud server and
+/// executes received requests against its own admin API at <c>FabrCore:HostUrl</c>.
 /// </summary>
-public sealed class CloudServerConnectOptions
+public sealed class CloudServerRemoteAdministrationOptions
 {
-    /// <summary>Gets or sets whether the outbound admin channel is enabled.</summary>
+    /// <summary>Gets or sets whether outbound-only remote administration is enabled.</summary>
     public bool Enabled { get; set; }
-
-    /// <summary>
-    /// Gets or sets the FabrCore host admin URL used to execute admin requests. Optional —
-    /// defaults to <c>FabrCore:HostUrl</c>, then <c>http://127.0.0.1:5000</c>. Non-loopback
-    /// targets (e.g. a container network alias) are allowed but logged with a warning, since
-    /// the local admin key then traverses the network.
-    /// </summary>
-    public string LocalAdminUrl { get; set; } = "";
 
     /// <summary>
     /// Gets or sets the local administration key. When omitted, host registration resolves
@@ -158,31 +157,34 @@ internal sealed class CloudServerOptionsValidator : IValidateOptions<CloudServer
             failures.Add($"{CloudServerOptions.SectionName}:Heartbeat:Interval must be greater than zero.");
         }
 
-        if (options.Connect.Enabled)
+        if (options.RemoteAdministration.Enabled)
         {
-            if (!Uri.TryCreate(options.Connect.LocalAdminUrl, UriKind.Absolute, out var localUri) ||
-                (localUri.Scheme != Uri.UriSchemeHttp && localUri.Scheme != Uri.UriSchemeHttps))
+            if (!Uri.TryCreate(options.HostUrl, UriKind.Absolute, out var hostUri) ||
+                (hostUri.Scheme != Uri.UriSchemeHttp && hostUri.Scheme != Uri.UriSchemeHttps))
             {
                 failures.Add(
-                    $"{CloudServerOptions.SectionName}:Connect:LocalAdminUrl must be an absolute http(s) URL.");
+                    $"{FabrCore.Core.FabrCoreConfigurationKeys.HostUrl} must be an absolute http(s) URL " +
+                    "when Cloud Server remote administration is enabled.");
             }
 
-            if (string.IsNullOrWhiteSpace(options.Connect.LocalAdminApiKey))
+            if (string.IsNullOrWhiteSpace(options.RemoteAdministration.LocalAdminApiKey))
             {
                 failures.Add(
-                    $"{CloudServerOptions.SectionName}:Connect:LocalAdminApiKey is required when Connect is enabled.");
+                    $"{CloudServerOptions.SectionName}:RemoteAdministration:LocalAdminApiKey is required when " +
+                    "remote administration is enabled.");
             }
 
-            if (options.Connect.PollWait <= TimeSpan.Zero || options.Connect.PollWait > TimeSpan.FromSeconds(55))
+            if (options.RemoteAdministration.PollWait <= TimeSpan.Zero ||
+                options.RemoteAdministration.PollWait > TimeSpan.FromSeconds(55))
             {
                 failures.Add(
-                    $"{CloudServerOptions.SectionName}:Connect:PollWait must be between zero and 55 seconds.");
+                    $"{CloudServerOptions.SectionName}:RemoteAdministration:PollWait must be between zero and 55 seconds.");
             }
 
-            if (options.Connect.MaxBodyBytes is < 1024 or > 64 * 1024 * 1024)
+            if (options.RemoteAdministration.MaxBodyBytes is < 1024 or > 64 * 1024 * 1024)
             {
                 failures.Add(
-                    $"{CloudServerOptions.SectionName}:Connect:MaxBodyBytes must be between 1 KiB and 64 MiB.");
+                    $"{CloudServerOptions.SectionName}:RemoteAdministration:MaxBodyBytes must be between 1 KiB and 64 MiB.");
             }
         }
 

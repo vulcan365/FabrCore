@@ -172,7 +172,7 @@ internal sealed class CloudServerApiClient
         string hostInstanceId,
         CancellationToken cancellationToken = default)
     {
-        var waitSeconds = Math.Max(1, (int)options.Connect.PollWait.TotalSeconds);
+        var waitSeconds = Math.Max(1, (int)options.RemoteAdministration.PollWait.TotalSeconds);
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             BuildUri(
@@ -181,7 +181,7 @@ internal sealed class CloudServerApiClient
         ApplyHeaders(request);
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(options.Connect.PollWait + TimeSpan.FromSeconds(10));
+        timeout.CancelAfter(options.RemoteAdministration.PollWait + TimeSpan.FromSeconds(10));
         using var response = await SendAsync(request, timeout.Token);
         if (response.StatusCode == HttpStatusCode.NoContent)
         {
