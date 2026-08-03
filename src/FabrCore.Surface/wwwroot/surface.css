@@ -4237,7 +4237,7 @@ body:has(.surface-command-center-standalone) {
     color: #d7e6ff;
 }
 
-.surface-message.is-swarm-mirror .surface-message-avatar {
+.surface-message.is-squad-mirror .surface-message-avatar {
     border-color: rgba(139, 124, 246, 0.45);
     background: #30384f;
     color: #dbe4ff;

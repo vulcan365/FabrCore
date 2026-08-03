@@ -26,7 +26,7 @@ FabrCore provides the building blocks for creating, hosting, and connecting to A
 - **Real-Time Monitoring** -- Agent message traffic, events, LLM request/response capture, and token tracking
 - **Audio Transcription** -- Azure OpenAI gpt-4o transcription model support
 - **Testing Harness** -- In-memory agent testing with mock and live LLM modes
-- **Blueprint-Driven Development** -- One source-controlled document for agents and supervised Swarm squads
+- **Blueprint-Driven Development** -- One source-controlled document for agents and Surface squads
 - **Standalone Surface UI** -- Blazor command center and chat with no Forge account required
 - **Optional Memory and GraphRAG** -- SQL Server 2025-backed durable memory and knowledge services
 
@@ -63,7 +63,7 @@ FabrCore provides the building blocks for creating, hosting, and connecting to A
 | **FabrCore.Services.Contracts** | Open Memory and GraphRAG administration protocol used by self-hosted tools and Forge |
 | **FabrCore.Services.Memory** | Optional scoped durable memory, taxonomy, consolidation, and audit services |
 | **FabrCore.Services.GraphRag** | Optional document ingestion, graph retrieval, search, and administration services |
-| **FabrCore.Surface** | Standalone Blazor command center, chat, Adaptive Cards, and supervised Swarm |
+| **FabrCore.Surface** | Standalone Blazor command center, chat, Adaptive Cards, and squads |
 
 Forge is the commercial operations and governance product: hosted or on-prem fleet
 administration, identity/team management, incidents, and configuration distribution.
@@ -164,7 +164,7 @@ Full documentation is available in the [`docs/skills`](docs/skills/) directory:
 | [Orleans Configuration](docs/skills/fabrcore-orleans/SKILL.md) | Clustering, persistence, streaming, reminders, and multi-silo |
 | [Testing](docs/skills/fabrcore-testing/SKILL.md) | In-memory test harness with mock and live LLM modes |
 | [Audio Transcription](docs/skills/fabrcore-transcription/SKILL.md) | Azure OpenAI gpt-4o audio transcription |
-| [Blueprints](docs/blueprints.md) | Canonical agent and Swarm configuration, storage, apply endpoints, and admin authentication |
+| [Blueprints](docs/blueprints.md) | Canonical agent and squad configuration, storage, apply endpoints, and admin authentication |
 
 **Check out the [FabrCore Blog](https://fabrcore.ai/blogs)** for tutorials, architecture deep-dives, integration guides, and best practices.
 

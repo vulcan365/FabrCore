@@ -1,7 +1,7 @@
 using FabrCore.Core;
 using FabrCore.SampleApp.Surface;
 using FabrCore.Surface.Ai.Orchestration;
-using FabrCore.Surface.Ai.Swarm;
+using FabrCore.Surface.Ai.Squads;
 using Xunit;
 
 namespace FabrCore.SampleApp.Tests;
@@ -21,7 +21,7 @@ public sealed class SurfaceDemoBlueprintFactoryTests
             config.Handle == SurfaceDemoBlueprintFactory.CrmAgentHandle
             && config.AgentType == "crm-demo-agent");
 
-        var squads = blueprint.Swarm.Squads;
+        var squads = blueprint.Squads;
         Assert.Equal(6, squads.Count);
 
         var assistant = squads[0];
@@ -31,9 +31,9 @@ public sealed class SurfaceDemoBlueprintFactoryTests
         var branchSquads = squads.Skip(1).Where(squad => squad.SquadType == SurfaceSquadType.Orchestrator).ToList();
         Assert.Equal(["Sales", "CRM", "Inventory", "Accounts Receivables"], branchSquads.Select(s => s.Name).ToArray());
 
-        var assistantRuntime = SurfaceBasicSquadService.BuildSquad(SurfaceDemoBlueprintFactory.PrincipalHandle, assistant);
+        var assistantRuntime = SurfaceSquadService.BuildSquad(SurfaceDemoBlueprintFactory.PrincipalHandle, assistant);
         var expectedBranchHandles = branchSquads
-            .Select(squad => SurfaceBasicSquadService.BuildSquad(SurfaceDemoBlueprintFactory.PrincipalHandle, squad).OrchestratorHandle)
+            .Select(squad => SurfaceSquadService.BuildSquad(SurfaceDemoBlueprintFactory.PrincipalHandle, squad).OrchestratorHandle)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         Assert.Equal(expectedBranchHandles, assistantRuntime.Agents.Select(agent => agent.Handle).ToHashSet(StringComparer.OrdinalIgnoreCase));
@@ -45,7 +45,7 @@ public sealed class SurfaceDemoBlueprintFactoryTests
     public void CreateBuildsFourLeafAgentsForEveryBranch()
     {
         var blueprint = SurfaceDemoBlueprintFactory.Create();
-        var branches = blueprint.Swarm.Squads.Skip(1)
+        var branches = blueprint.Squads.Skip(1)
             .Where(squad => squad.SquadType == SurfaceSquadType.Orchestrator)
             .ToList();
 

@@ -8,7 +8,7 @@
 | `FabrCore.Services.Contracts` | OSS |
 | `FabrCore.Services.Memory` and tests | OSS |
 | `FabrCore.Services.GraphRag` and tests | OSS |
-| `FabrCore.Surface`, Swarm, and tests | OSS |
+| `FabrCore.Surface`, squads, and tests | OSS |
 | Sample app, Aspire sample host, ServiceDefaults | OSS |
 | Blueprint envelope, expanders, Host CRUD/apply | OSS |
 | Admin bearer scheme and cluster capabilities | OSS |
@@ -38,9 +38,9 @@ OSS must never reference the commercial repository.
 | Concern | Current shape |
 |---|---|
 | Blueprint | `FabrCoreBlueprint` |
-| Blueprint extension | top-level `"swarm": { "squads": [...] }` |
-| Swarm enum | `SurfaceSquadType.Swarm` |
-| Swarm messages | `swarm.*` |
+| Blueprint extension | top-level `"squads": [...]` |
+| Squad enum | `SurfaceSquadType` (`Orchestrator`, `Task`) |
+| Squad messages | `squad.*` |
 | Generated squad handles | `squad-*` |
 | Memory admin | `/fabrcoreapi/memory/admin/v1` |
 | GraphRAG admin | `/fabrcoreapi/graphrag/admin/v1` |

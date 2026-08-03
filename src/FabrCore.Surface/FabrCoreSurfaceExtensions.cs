@@ -2,7 +2,7 @@ using FabrCore.Client.Orleans;
 using FabrCore.Core.Blueprints;
 using FabrCore.Surface.Configuration;
 using FabrCore.Surface.Actions;
-using FabrCore.Surface.Ai.Swarm;
+using FabrCore.Surface.Ai.Squads;
 using FabrCore.Surface.CommandCenter;
 using FabrCore.Surface.Components;
 using FabrCore.Surface.Identity;
@@ -182,11 +182,9 @@ public static class FabrCoreSurfaceExtensions
 
         builder.Services.TryAddSingleton<ISurfacePrincipalContextFactory, SurfacePrincipalContextFactory>();
         builder.Services.TryAddSingleton<ISurfaceDirectMessageSender, SurfaceDirectMessageSender>();
-        builder.Services.TryAddSingleton<ISurfaceBasicSquadService, SurfaceBasicSquadService>();
-        builder.Services.AddOptions<SurfaceSwarmOptions>();
         builder.Services.TryAddSingleton<ISurfaceSquadService, SurfaceSquadService>();
         builder.Services.TryAddEnumerable(
-            ServiceDescriptor.Singleton<IBlueprintExpander, SurfaceSwarmBlueprintExpander>());
+            ServiceDescriptor.Singleton<IBlueprintExpander, SurfaceSquadBlueprintExpander>());
         builder.Services.TryAddSingleton<SurfaceTranscriptStore>();
         builder.Services.AddHttpClient<ISurfaceDiscoveryClient, SurfaceDiscoveryClient>();
         builder.Services.AddHttpClient<ISurfaceMonitorClient, SurfaceMonitorClient>();
@@ -218,11 +216,9 @@ public static class FabrCoreSurfaceExtensions
     {
         services.AddOptions<SurfaceOptions>();
         services.AddFabrCoreSurfaceNavigation();
-        services.TryAddSingleton<ISurfaceBasicSquadService, SurfaceBasicSquadService>();
-        services.AddOptions<SurfaceSwarmOptions>();
         services.TryAddSingleton<ISurfaceSquadService, SurfaceSquadService>();
         services.TryAddEnumerable(
-            ServiceDescriptor.Singleton<IBlueprintExpander, SurfaceSwarmBlueprintExpander>());
+            ServiceDescriptor.Singleton<IBlueprintExpander, SurfaceSquadBlueprintExpander>());
         services.TryAddSingleton<SurfaceTranscriptStore>();
         services.AddHttpClient<ISurfaceDiscoveryClient, SurfaceDiscoveryClient>();
         services.AddHttpClient<ISurfaceMonitorClient, SurfaceMonitorClient>();

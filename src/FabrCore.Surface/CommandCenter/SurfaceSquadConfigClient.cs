@@ -1,4 +1,4 @@
-using FabrCore.Surface.Ai.Swarm;
+using FabrCore.Surface.Ai.Squads;
 using FabrCore.Surface.Services;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -39,7 +39,7 @@ public sealed class SurfaceSquadConfigClient : ISurfaceSquadConfigClient
         ArgumentException.ThrowIfNullOrWhiteSpace(principalId);
 
         var url = BuildUrl();
-        logger.LogDebug("Loading Surface swarm squads from {Url}.", url);
+        logger.LogDebug("Loading Surface squads from {Url}.", url);
 
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         AddOwnerHeaders(request, principalId);
@@ -63,7 +63,7 @@ public sealed class SurfaceSquadConfigClient : ISurfaceSquadConfigClient
         ArgumentException.ThrowIfNullOrWhiteSpace(principalId);
 
         var url = BuildUrl();
-        logger.LogDebug("Saving Surface swarm squads to {Url}.", url);
+        logger.LogDebug("Saving Surface squads to {Url}.", url);
 
         using var request = new HttpRequestMessage(HttpMethod.Put, url);
         AddOwnerHeaders(request, principalId);
@@ -80,7 +80,7 @@ public sealed class SurfaceSquadConfigClient : ISurfaceSquadConfigClient
         if (string.IsNullOrWhiteSpace(options.FabrCoreHostUrl))
         {
             throw new InvalidOperationException(
-                $"{nameof(SurfaceOptions.FabrCoreHostUrl)} must be configured before loading Surface swarm squads.");
+                $"{nameof(SurfaceOptions.FabrCoreHostUrl)} must be configured before loading Surface squads.");
         }
 
         return $"{options.FabrCoreHostUrl.TrimEnd('/')}/fabrcoreapi/Storage/{Container}/{EntityKey}";
@@ -107,7 +107,6 @@ public sealed class SurfaceSquadConfigClient : ISurfaceSquadConfigClient
             Slug = squad.Slug,
             PrincipalHandle = squad.PrincipalHandle,
             OrchestratorHandle = squad.OrchestratorHandle,
-            PlannerHandle = squad.PlannerHandle,
             Description = squad.Description,
             TaskOptions = CloneTaskOptions(squad.TaskOptions),
             Agents = squad.Agents.Select(agent => new SurfaceSquadAgent
@@ -123,14 +122,11 @@ public sealed class SurfaceSquadConfigClient : ISurfaceSquadConfigClient
     private static SurfaceTaskSquadOptions CloneTaskOptions(SurfaceTaskSquadOptions? options)
         => new()
         {
-            FastModelName = string.IsNullOrWhiteSpace(options?.FastModelName) ? "default" : options.FastModelName.Trim(),
             WorkerModelName = string.IsNullOrWhiteSpace(options?.WorkerModelName) ? "default" : options.WorkerModelName.Trim(),
-            PlannerModelName = string.IsNullOrWhiteSpace(options?.PlannerModelName) ? "default" : options.PlannerModelName.Trim(),
             PersonaPrompt = string.IsNullOrWhiteSpace(options?.PersonaPrompt) ? null : options.PersonaPrompt.Trim(),
             ClientAgentOverlay = string.IsNullOrWhiteSpace(options?.ClientAgentOverlay) ? null : options.ClientAgentOverlay.Trim(),
             DelegationTimeoutSeconds = options?.DelegationTimeoutSeconds > 0 ? options.DelegationTimeoutSeconds : 120,
-            MaxTaskAttempts = options?.MaxTaskAttempts > 0 ? options.MaxTaskAttempts : 2,
-            MaxValidationAttempts = options?.MaxValidationAttempts > 0 ? options.MaxValidationAttempts : 2
+            MaxLoopIterations = options?.MaxLoopIterations > 0 ? options.MaxLoopIterations : 10
         };
 
     private sealed class SurfaceSquadConfigState

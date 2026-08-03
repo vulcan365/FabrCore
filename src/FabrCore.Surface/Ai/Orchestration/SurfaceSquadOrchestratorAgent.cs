@@ -2,7 +2,7 @@ using System.ComponentModel;
 using System.Text.Json;
 using FabrCore.Core;
 using FabrCore.Sdk;
-using FabrCore.Surface.Ai.Swarm;
+using FabrCore.Surface.Ai.Squads;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -103,48 +103,8 @@ public sealed class SurfaceSquadOrchestratorAgent : FabrCoreAgentProxy
         return response;
     }
 
-    private async Task<List<SurfaceSquadAgentCapability>> BuildCapabilitiesAsync()
-    {
-        var capabilities = new List<SurfaceSquadAgentCapability>();
-        foreach (var squadAgent in runtime.Squad.Agents)
-        {
-            RegistryEntry? registryEntry = null;
-            try
-            {
-                registryEntry = registry?.GetAgentTypes()
-                    .FirstOrDefault(entry => entry.Aliases.Any(alias =>
-                        string.Equals(alias, squadAgent.AgentType, StringComparison.OrdinalIgnoreCase)
-                        || string.Equals(alias, ShortHandle(squadAgent.Handle), StringComparison.OrdinalIgnoreCase)));
-            }
-            catch
-            {
-                registryEntry = null;
-            }
-
-            AgentHealthStatus? health = null;
-            string? unavailableReason = null;
-            try
-            {
-                health = await fabrcoreAgentHost.GetAgentHealth(squadAgent.Handle, HealthDetailLevel.Detailed);
-                if (health?.IsConfigured != true)
-                {
-                    unavailableReason = "Agent is not configured.";
-                }
-            }
-            catch (Exception ex)
-            {
-                unavailableReason = ex.Message;
-            }
-
-            capabilities.Add(SurfaceSquadAgentCapabilityProjection.Build(
-                squadAgent,
-                registryEntry,
-                health,
-                unavailableReason));
-        }
-
-        return capabilities;
-    }
+    private Task<List<SurfaceSquadAgentCapability>> BuildCapabilitiesAsync()
+        => SurfaceSquadCapabilityLoader.BuildAsync(runtime.Squad, fabrcoreAgentHost, registry, includeRoleNote: false, logger);
 
     private async Task<SurfaceSquadRouteDecision> ChooseRouteAsync(
         string userMessage,

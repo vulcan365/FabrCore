@@ -3,7 +3,7 @@ using System.Reflection;
 using FabrCore.Core.Auditing;
 using FabrCore.Core.Blueprints;
 using FabrCore.Sdk;
-using FabrCore.Surface.Ai.Swarm;
+using FabrCore.Surface.Ai.Squads;
 using FabrCore.Surface.CommandCenter;
 using FabrCore.Surface.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -36,7 +36,7 @@ public sealed class SurfaceRemoteAdminController(
         Features = new[]
         {
             "preferences", "preferences-reset", "squad-compatibility", "squad-reset",
-            "blueprint-validation", "blueprint-extension:swarm.squads"
+            "blueprint-validation", "blueprint-extension:squads"
         },
         DataScope = "cluster"
     });
@@ -119,7 +119,7 @@ public sealed class SurfaceRemoteAdminController(
         var results = new List<object>();
         foreach (var (extensionKey, extension) in blueprint.Extensions.Where(item =>
                      item.Key.StartsWith("surface", StringComparison.OrdinalIgnoreCase) ||
-                     item.Key.StartsWith("swarm", StringComparison.OrdinalIgnoreCase)))
+                     item.Key.StartsWith("squads", StringComparison.OrdinalIgnoreCase)))
         {
             if (!expanders.TryGetValue(extensionKey, out var expander))
             {

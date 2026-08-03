@@ -1,7 +1,7 @@
 namespace FabrCore.SampleApp.Contoso;
 
 /// <summary>
-/// Shared in-memory fake company data for the Contoso Bike Shop Swarm demo.
+/// Shared in-memory fake company data for the Contoso Bike Shop Task squad demo.
 /// Seeded once at startup; every mutation is really applied so multi-step demos
 /// (add a customer, then report on it) observe consistent state across agents.
 /// A few seeded customers intentionally share emails with employees so

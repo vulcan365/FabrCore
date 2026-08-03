@@ -1,7 +1,7 @@
 using FabrCore.Core;
 using FabrCore.SampleApp.Contoso;
 using FabrCore.SampleApp.Surface;
-using FabrCore.Surface.Ai.Swarm;
+using FabrCore.Surface.Ai.Squads;
 using Xunit;
 
 namespace FabrCore.SampleApp.Tests;
@@ -9,19 +9,19 @@ namespace FabrCore.SampleApp.Tests;
 public sealed class ContosoBikeShopDemoTests
 {
     [Fact]
-    public void BlueprintIncludesContosoSwarmSquadWithTenAgents()
+    public void BlueprintIncludesContosoTaskSquadWithTenAgents()
     {
         var blueprint = SurfaceDemoBlueprintFactory.Create();
 
         var contoso = Assert.Single(
-            blueprint.Swarm.Squads,
-            squad => squad.SquadType == SurfaceSquadType.Swarm);
+            blueprint.Squads,
+            squad => squad.SquadType == SurfaceSquadType.Task);
 
         Assert.Equal(SurfaceDemoBlueprintFactory.ContosoSquadName, contoso.Name);
         Assert.Equal(10, contoso.Agents.Count);
         Assert.True(contoso.ForceReconfigure);
         Assert.False(string.IsNullOrWhiteSpace(contoso.OrchestratorSystemPrompt));
-        Assert.False(string.IsNullOrWhiteSpace(contoso.PlannerSystemPrompt));
+        Assert.False(string.IsNullOrWhiteSpace(contoso.TaskOptions.PersonaPrompt));
 
         Assert.All(contoso.Agents, agent =>
         {
@@ -41,16 +41,16 @@ public sealed class ContosoBikeShopDemoTests
     }
 
     [Fact]
-    public void ContosoSquadResolvesToExpectedSwarmHandles()
+    public void ContosoSquadResolvesToExpectedSquadHandles()
     {
         var blueprint = SurfaceDemoBlueprintFactory.Create();
         var contoso = Assert.Single(
-            blueprint.Swarm.Squads,
-            squad => squad.SquadType == SurfaceSquadType.Swarm);
+            blueprint.Squads,
+            squad => squad.SquadType == SurfaceSquadType.Task);
 
         var squad = SurfaceSquadService.BuildSquad(
             SurfaceDemoBlueprintFactory.PrincipalHandle,
-            SurfaceSwarmInterop.ToSwarmDefinition(contoso));
+            contoso);
 
         Assert.Equal(SurfaceDemoBlueprintFactory.ContosoSquadOrchestratorHandle, squad.OrchestratorHandle);
         Assert.Equal(10, squad.Agents.Count);

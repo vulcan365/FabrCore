@@ -75,7 +75,11 @@ public sealed class SurfaceSquadService : ISurfaceSquadService
             Description = definition.Description ?? (definition.SquadType == SurfaceSquadType.Task
                 ? $"Task runner for Surface squad {squad.Name}"
                 : $"Orchestrator for squad {squad.Name}"),
-            SystemPrompt = BuildOrchestratorPrompt(definition),
+            // Task squads carry their persona in TaskOptions.PersonaPrompt; the orchestrator boilerplate
+            // would otherwise leak into the task coordinator's instructions.
+            SystemPrompt = definition.SquadType == SurfaceSquadType.Task
+                ? NullIfWhiteSpace(squad.TaskOptions.PersonaPrompt)
+                : BuildOrchestratorPrompt(definition),
             Args = BuildBaseArgs(squad, runtimeJson, "orchestrator"),
             ForceReconfigure = definition.ForceReconfigure
         };
@@ -403,15 +407,12 @@ public sealed class SurfaceSquadService : ISurfaceSquadService
     private static SurfaceTaskSquadOptions CloneTaskOptions(SurfaceTaskSquadOptions? options)
         => new()
         {
-            FastModelName = BlankToDefault(options?.FastModelName),
             WorkerModelName = BlankToDefault(options?.WorkerModelName),
-            PlannerModelName = BlankToDefault(options?.PlannerModelName),
             PersonaPrompt = NullIfWhiteSpace(options?.PersonaPrompt),
             ClientAgentOverlay = NullIfWhiteSpace(options?.ClientAgentOverlay),
             DelegationTimeoutSeconds = options?.DelegationTimeoutSeconds > 0
                 ? options.DelegationTimeoutSeconds
                 : 120,
-            MaxTaskAttempts = options?.MaxTaskAttempts > 0 ? options.MaxTaskAttempts : 2,
-            MaxValidationAttempts = options?.MaxValidationAttempts > 0 ? options.MaxValidationAttempts : 2
+            MaxLoopIterations = options?.MaxLoopIterations > 0 ? options.MaxLoopIterations : 10
         };
 }

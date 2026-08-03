@@ -236,34 +236,38 @@ Host API compatibility note: Surface local code and public APIs should use Princ
 
 Surface uses the canonical `FabrCoreBlueprint` Host resource. Its compatibility
 `SurfaceBlueprintDocument` derives from that envelope and provides a typed view of the top-level
-`swarm` extension. A squad has `squadType` set to `swarm`, `orchestrator`, or `task`.
+`squads` extension. A squad has `squadType` set to `orchestrator` or `task`.
+
+An `orchestrator` squad is a one-hop router. A `task` squad is a coordinator built on the
+Microsoft Agent Framework harness primitives (`SurfaceTaskHarnessAgent`): the plan is a
+model-owned todo list (`todos_*`), execution is delegated concurrently to Executor members
+and advice is requested from SubjectMatterExpert members through background-agent tools
+(`background_agents_*`), and a `LoopAgent` re-invokes until no todos and no delegations
+remain outstanding. A run completes inside one turn, so todos do not persist across user
+messages.
 
 ```json
 {
   "name": "support-workspace",
-  "swarm": {
-    "squads": [
-      {
-        "squadType": "task",
-        "name": "Ops Desk",
-        "orchestratorModel": "default",
-        "plannerModel": "default",
-        "taskOptions": {
-          "workerModelName": "default",
-          "plannerModelName": "default",
-          "maxTaskAttempts": 2,
-          "maxValidationAttempts": 2
-        },
-        "agents": [
-          {
-            "name": "data-intel",
-            "agentType": "data-intel-agent",
-            "role": "executor"
-          }
-        ]
-      }
-    ]
-  }
+  "squads": [
+    {
+      "squadType": "task",
+      "name": "Ops Desk",
+      "orchestratorModel": "default",
+      "taskOptions": {
+        "workerModelName": "default",
+        "delegationTimeoutSeconds": 120,
+        "maxLoopIterations": 10
+      },
+      "agents": [
+        {
+          "name": "data-intel",
+          "agentType": "data-intel-agent",
+          "role": "executor"
+        }
+      ]
+    }
+  ]
 }
 ```
 

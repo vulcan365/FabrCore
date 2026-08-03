@@ -17,21 +17,20 @@ public enum SurfaceSquadMemberRole
 
 public sealed class SurfaceTaskSquadOptions
 {
-    public string FastModelName { get; set; } = "default";
-
+    /// <summary>Model that backs the task coordinator itself. Squad members use their own configured models.</summary>
     public string WorkerModelName { get; set; } = "default";
 
-    public string PlannerModelName { get; set; } = "default";
-
+    /// <summary>Additional instructions appended to the coordinator's system prompt.</summary>
     public string? PersonaPrompt { get; set; }
 
+    /// <summary>Prepended to every delegation message sent to a squad member.</summary>
     public string? ClientAgentOverlay { get; set; }
 
+    /// <summary>How long a single delegation may run before it is abandoned and reported as failed.</summary>
     public int DelegationTimeoutSeconds { get; set; } = 120;
 
-    public int MaxTaskAttempts { get; set; } = 2;
-
-    public int MaxValidationAttempts { get; set; } = 2;
+    /// <summary>Safety cap on coordinator re-invocations within one run.</summary>
+    public int MaxLoopIterations { get; set; } = 10;
 }
 
 public sealed class SurfaceSquadDefinition

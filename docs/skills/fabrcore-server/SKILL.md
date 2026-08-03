@@ -1006,7 +1006,7 @@ External systems should prefer bundle export plus local verification against the
 | `Extensions` | Dictionary\<string, JsonElement\> | Top-level package-owned extension data; serialized with `JsonExtensionData` |
 
 `AgentBlueprintRequest` and SDK `EnsureBlueprintAgentsAsync` are agents-only compatibility
-surfaces. Prefer `FabrCoreBlueprint` for new code, especially Swarm or Forge fleet delivery.
+surfaces. Prefer `FabrCoreBlueprint` for new code, especially squad or Forge fleet delivery.
 
 **`AgentBlueprintResponse`** — returned by `/agent/blueprint`:
 

@@ -10,7 +10,7 @@ description: >
   fabrcore-principal-delivery; authorization/audit to fabrcore-acl; MCP to fabrcore-mcp;
   verifiable execution/SPIFFE to fabrcore-spiffe; Microsoft 365 Copilot/Teams integration to
   fabrcore-microsoft365copilot; Memory to fabrcore-services-memory; GraphRAG to
-  fabrcore-graphrag; Surface UI to fabrcore-surface; supervised squads to fabrcore-swarm;
+  fabrcore-graphrag; Surface UI and squads to fabrcore-surface;
   tests to fabrcore-testing; and August 2026 OSS/Forge ownership or cross-repo changes to
   fabrcore-oss-aug2026.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
@@ -49,7 +49,7 @@ Build distributed AI agent systems with FabrCore — an open-source .NET 10 fram
 | Memory | Durable scoped agent memory | `AddAgentMemoryServices()`, `IAgentMemoryService` | fabrcore-services-memory |
 | GraphRAG | Scoped knowledge ingestion/search | `AddGraphRagServices()`, `IKnowledgeSearchService` | fabrcore-graphrag |
 | Surface | OSS command-center UI | `AddFabrCoreSurface()`, `SurfaceChatLink` | fabrcore-surface |
-| Swarm | Blueprint-defined supervised squads | `SurfaceSquadType.Swarm`, `swarm.squads` | fabrcore-swarm |
+| Squads | Blueprint-defined agent squads | `SurfaceSquadType`, `squads` extension | fabrcore-surface |
 | Configuration | Agent definition | `AgentConfiguration` | fabrcore-server |
 | Telemetry | W3C TraceContext on every message | `AgentMessageTelemetry`, `StampFromActivity`, `StartIngressActivity` | fabrcore-messaging (surface), fabrcore-server (exporter setup) |
 | Verifiable Execution | Signed/tamper-evident agent/event evidence | `IVerifiableExecutionStore`, `IVerifiableExecutionSigner`, `VerifiableExecutionEnvelope` | fabrcore-spiffe |
@@ -60,11 +60,11 @@ A Blueprint is a canonical `FabrCoreBlueprint` manifest containing agent configu
 package-owned top-level extensions. Blueprints can be applied directly through
 `POST /fabrcoreapi/Agent/blueprint` or stored per principal through
 `/fabrcoreapi/Blueprint` CRUD and `/{name}/apply`. Registered `IBlueprintExpander`
-implementations expand extensions server-side; Surface owns the top-level `swarm` extension.
+implementations expand extensions server-side; Surface owns the top-level `squads` extension.
 
 `AgentBlueprintRequest` and `EnsureBlueprintAgentsAsync` remain agents-only SDK compatibility
 surfaces; do not use them for new extension-aware workflows. Use **fabrcore-server** for the
-canonical resource API and **fabrcore-swarm** for squad definitions.
+canonical resource API and **fabrcore-surface** for squad definitions.
 
 ## Architecture Overview
 
@@ -94,7 +94,7 @@ FabrCore layers on top of Orleans (distributed actor model) and Microsoft.Extens
 - **FabrCore.Services.Contracts** — open Memory, GraphRAG, and cluster-capability transport contracts
 - **FabrCore.Services.Memory** — optional SQL Server 2025-backed durable agent memory
 - **FabrCore.Services.GraphRag** — optional SQL Server 2025-backed scoped knowledge services
-- **FabrCore.Surface** — optional OSS Blazor command center, Adaptive Cards, and Swarm
+- **FabrCore.Surface** — optional OSS Blazor command center, Adaptive Cards, and squads
 
 ## Prerequisites
 

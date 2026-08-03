@@ -1,6 +1,6 @@
 using FabrCore.Surface.Contracts;
 using FabrCore.Surface.Ai.Orchestration;
-using FabrCore.Surface.Ai.Swarm;
+using FabrCore.Surface.Ai.Tasks;
 
 namespace FabrCore.Surface.Services;
 
@@ -92,9 +92,7 @@ public sealed class SurfaceOptions
     public HashSet<string> HiddenAgentTypes { get; } = new(StringComparer.OrdinalIgnoreCase)
     {
         "surface",
-        SurfaceSwarmAgentTypes.Orchestrator,
-        SurfaceSwarmAgentTypes.Planner,
-        SurfaceSwarmAgentTypes.TaskRunner,
+        SurfaceTaskAgentTypes.TaskRunner,
         SurfaceOrchestrationAgentTypes.SquadOrchestrator
     };
 

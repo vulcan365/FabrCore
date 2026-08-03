@@ -1,3 +1,4 @@
+#pragma warning disable MAAI001 // Harness providers are for evaluation purposes only and may change.
 using System.Text.Json;
 using System.Text;
 using System.Security.Claims;
@@ -12,7 +13,7 @@ using FabrCore.Surface;
 using FabrCore.Surface.Abstractions;
 using FabrCore.Surface.Actions;
 using FabrCore.Surface.Ai.Orchestration;
-using FabrCore.Surface.Ai.Swarm;
+using FabrCore.Surface.Ai.Squads;
 using FabrCore.Surface.Ai.Tasks;
 using FabrCore.Surface.Brain;
 using FabrCore.Surface.Builders;
@@ -24,6 +25,7 @@ using FabrCore.Surface.Identity;
 using FabrCore.Surface.Services;
 using FabrCore.Surface.Templating;
 using FabrCore.Surface.Validation;
+using Microsoft.Agents.AI;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
@@ -883,7 +885,6 @@ public sealed class SurfaceContractTests
         Assert.NotNull(provider.GetRequiredService<SurfacePrincipalAccessor>());
         Assert.NotNull(provider.GetRequiredService<SurfaceWorkspaceService>());
         Assert.NotNull(provider.GetRequiredService<ISurfaceDiscoveryClient>());
-        Assert.NotNull(provider.GetRequiredService<ISurfaceBasicSquadService>());
         Assert.NotNull(provider.GetRequiredService<ISurfaceSquadService>());
         Assert.NotNull(provider.GetRequiredService<ISurfaceSquadConfigClient>());
     }
@@ -947,13 +948,12 @@ public sealed class SurfaceContractTests
     }
 
     [Fact]
-    public void SurfaceSwarmAgentAliasesAreDiscoverableByFabrCoreRegistry()
+    public void SurfaceSquadAgentAliasesAreDiscoverableByFabrCoreRegistry()
     {
         var registry = new FabrCoreRegistry(NullLogger<FabrCoreRegistry>.Instance);
         var aliases = registry.GetAgentTypes().SelectMany(entry => entry.Aliases).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        Assert.Contains(SurfaceSwarmAgentTypes.Orchestrator, aliases);
-        Assert.Contains(SurfaceSwarmAgentTypes.Planner, aliases);
+        Assert.Contains(SurfaceTaskAgentTypes.TaskRunner, aliases);
         Assert.Contains(SurfaceOrchestrationAgentTypes.SquadOrchestrator, aliases);
     }
 
@@ -1046,7 +1046,7 @@ public sealed class SurfaceContractTests
     }
 
     [Fact]
-    public void SurfaceBasicSquadServiceKeepsNestedSquadMemberDiscovery()
+    public void SurfaceSquadServiceKeepsNestedSquadMemberDiscovery()
     {
         var definition = new SurfaceSquadDefinition
         {
@@ -1058,7 +1058,7 @@ public sealed class SurfaceContractTests
                 {
                     Handle = SurfaceSquadHandleBuilder.BuildOrchestratorAlias("Research Squad"),
                     Name = "Research Squad",
-                    AgentType = SurfaceSwarmAgentTypes.Orchestrator,
+                    AgentType = SurfaceOrchestrationAgentTypes.SquadOrchestrator,
                     Models = "default",
                     Description = "Researches contracts, case notes, and source documents for this workflow.",
                     Role = SurfaceSquadMemberRole.Executor
@@ -1066,12 +1066,12 @@ public sealed class SurfaceContractTests
             ]
         };
 
-        var squad = SurfaceBasicSquadService.BuildSquad("owner1", definition);
+        var squad = SurfaceSquadService.BuildSquad("owner1", definition);
         var member = Assert.Single(squad.Agents);
 
         Assert.Equal("owner1:squad-research-squad", member.Handle);
         Assert.Equal("Research Squad", member.Name);
-        Assert.Equal(SurfaceSwarmAgentTypes.Orchestrator, member.AgentType);
+        Assert.Equal(SurfaceOrchestrationAgentTypes.SquadOrchestrator, member.AgentType);
         Assert.Equal("Researches contracts, case notes, and source documents for this workflow.", member.Description);
     }
 
@@ -1280,7 +1280,7 @@ public sealed class SurfaceContractTests
         var context = new FakeSurfacePrincipalContext("owner1");
         context.TrackedAgents.Add(new TrackedAgentInfo("owner1:assistant", "AssistantAgent"));
         context.TrackedAgents.Add(new TrackedAgentInfo("owner1:analyst", "AnalystAgent"));
-        context.TrackedAgents.Add(new TrackedAgentInfo("owner1:ops-squad", SurfaceSwarmAgentTypes.Orchestrator));
+        context.TrackedAgents.Add(new TrackedAgentInfo("owner1:ops-squad", SurfaceOrchestrationAgentTypes.SquadOrchestrator));
         var workspace = CreateWorkspace(context, new SurfaceOptions { ShowRunningAgentsByDefault = true });
 
         await workspace.InitializeAsync(new FabrCore.Surface.Identity.SurfacePrincipalContext("owner1", "Principal One", true, "test"));
@@ -1309,7 +1309,7 @@ public sealed class SurfaceContractTests
         var context = new FakeSurfacePrincipalContext("owner1");
         context.TrackedAgents.Add(new TrackedAgentInfo("owner1:assistant", "AssistantAgent"));
         context.TrackedAgents.Add(new TrackedAgentInfo("owner1:analyst", "AnalystAgent"));
-        context.TrackedAgents.Add(new TrackedAgentInfo("owner1:ops-squad", SurfaceSwarmAgentTypes.Orchestrator));
+        context.TrackedAgents.Add(new TrackedAgentInfo("owner1:ops-squad", SurfaceOrchestrationAgentTypes.SquadOrchestrator));
         var workspace = CreateWorkspace(context, new SurfaceOptions { ShowRunningAgentsByDefault = true });
 
         await workspace.InitializeAsync(new FabrCore.Surface.Identity.SurfacePrincipalContext("owner1", "Principal One", true, "test"));
@@ -1387,7 +1387,7 @@ public sealed class SurfaceContractTests
     {
         var context = new FakeSurfacePrincipalContext("owner1");
         context.TrackedAgents.Add(new TrackedAgentInfo("owner1:assistant", "AssistantAgent"));
-        context.TrackedAgents.Add(new TrackedAgentInfo("owner1:ops-squad", SurfaceSwarmAgentTypes.Orchestrator));
+        context.TrackedAgents.Add(new TrackedAgentInfo("owner1:ops-squad", SurfaceOrchestrationAgentTypes.SquadOrchestrator));
         var workspace = CreateWorkspace(context, new SurfaceOptions { ShowRunningAgentsByDefault = true });
 
         await workspace.InitializeAsync(new FabrCore.Surface.Identity.SurfacePrincipalContext("owner1", "Principal One", true, "test"));
@@ -1709,7 +1709,7 @@ public sealed class SurfaceContractTests
     {
         var context = new FakeSurfacePrincipalContext("owner1");
         context.TrackedAgents.Add(new TrackedAgentInfo("owner1:assistant", "AssistantAgent"));
-        context.TrackedAgents.Add(new TrackedAgentInfo("owner1:task-ops", SurfaceSwarmAgentTypes.TaskRunner));
+        context.TrackedAgents.Add(new TrackedAgentInfo("owner1:task-ops", SurfaceTaskAgentTypes.TaskRunner));
         var workspace = CreateWorkspace(context, new SurfaceOptions { ShowRunningAgentsByDefault = true });
 
         await workspace.InitializeAsync(new FabrCore.Surface.Identity.SurfacePrincipalContext("owner1", "Principal One", true, "test"));
@@ -1921,7 +1921,7 @@ public sealed class SurfaceContractTests
     }
 
     [Fact]
-    public async Task SurfaceWorkspaceCreateSquadCreatesSwarmShell()
+    public async Task SurfaceWorkspaceCreateSquadDefaultsToOrchestratorRouter()
     {
         var context = new FakeSurfacePrincipalContext("owner1");
         var workspace = CreateWorkspace(context, new SurfaceOptions { EnableAgentCreate = true });
@@ -1930,23 +1930,16 @@ public sealed class SurfaceContractTests
         var result = await workspace.CreateSquadAsync(new SurfaceSquadDefinition
         {
             Name = "Ops Desk",
-            OrchestratorModel = "default",
-            PlannerModel = "planner"
+            OrchestratorModel = "default"
         });
 
+        Assert.Equal(SurfaceSquadType.Orchestrator, result.Squad.SquadType);
         Assert.Equal("owner1:squad-ops-desk", result.Squad.OrchestratorHandle);
-        Assert.Equal("owner1:squad-ops-desk-planner", result.Squad.PlannerHandle);
         Assert.Empty(result.Squad.Agents);
 
-        Assert.Collection(context.CreatedAgentConfigurations,
-            planner => Assert.Equal(SurfaceSwarmAgentTypes.Planner, planner.AgentType),
-            supervisor => Assert.Equal(SurfaceSwarmAgentTypes.Supervisor, supervisor.AgentType),
-            verifier => Assert.Equal(SurfaceSwarmAgentTypes.Verifier, verifier.AgentType),
-            orchestrator =>
-            {
-                Assert.Equal(SurfaceSwarmAgentTypes.Orchestrator, orchestrator.AgentType);
-                Assert.True(orchestrator.Args.ContainsKey(SurfaceSquadArgs.SquadDefinition));
-            });
+        var created = Assert.Single(context.CreatedAgentConfigurations);
+        Assert.Equal(SurfaceOrchestrationAgentTypes.SquadOrchestrator, created.AgentType);
+        Assert.True(created.Args.ContainsKey(SurfaceSquadArgs.SquadDefinition));
 
         var channel = Assert.Single(workspace.Squads);
         Assert.Equal("Ops Desk", channel.Name);
@@ -1964,8 +1957,7 @@ public sealed class SurfaceContractTests
         {
             SquadType = SurfaceSquadType.Orchestrator,
             Name = "Ops Desk",
-            OrchestratorModel = "default",
-            PlannerModel = "planner"
+            OrchestratorModel = "default"
         });
 
         Assert.Equal(SurfaceSquadType.Orchestrator, result.Squad.SquadType);
@@ -1991,9 +1983,7 @@ public sealed class SurfaceContractTests
             Name = "Ops Desk",
             TaskOptions = new SurfaceTaskSquadOptions
             {
-                WorkerModelName = "worker",
-                PlannerModelName = "planner",
-                FastModelName = "fast"
+                WorkerModelName = "worker"
             },
             Agents =
             [
@@ -2020,7 +2010,7 @@ public sealed class SurfaceContractTests
 
         Assert.Equal(3, context.CreatedAgentConfigurations.Count);
         var runner = Assert.Single(context.CreatedAgentConfigurations, config =>
-            string.Equals(config.AgentType, SurfaceSwarmAgentTypes.TaskRunner, StringComparison.OrdinalIgnoreCase));
+            string.Equals(config.AgentType, SurfaceTaskAgentTypes.TaskRunner, StringComparison.OrdinalIgnoreCase));
         Assert.Equal("owner1:squad-ops-desk", runner.Handle);
         Assert.Equal("worker", runner.Models);
         Assert.Contains("\"squadType\":\"task\"", runner.Args[SurfaceSquadArgs.SquadDefinition], StringComparison.OrdinalIgnoreCase);
@@ -2049,24 +2039,21 @@ public sealed class SurfaceContractTests
                     AgentType = "assistant-agent"
                 }
             ],
-            Swarm = new SwarmBlueprintExtension
-            {
-                Squads =
-                [
-                    new SurfaceSquadDefinition
-                    {
-                        Name = "Ops Desk",
-                        Agents =
-                        [
-                            new SurfaceSquadAgentDefinition
-                            {
-                                Name = "sme",
-                                AgentType = "subject-matter-expert"
-                            }
-                        ]
-                    }
-                ]
-            }
+            Squads =
+            [
+                new SurfaceSquadDefinition
+                {
+                    Name = "Ops Desk",
+                    Agents =
+                    [
+                        new SurfaceSquadAgentDefinition
+                        {
+                            Name = "sme",
+                            AgentType = "subject-matter-expert"
+                        }
+                    ]
+                }
+            ]
         });
 
         Assert.Empty(squadConfigClient.Squads);
@@ -2078,14 +2065,14 @@ public sealed class SurfaceContractTests
         Assert.Equal("v1", request.Request.Version);
         Assert.Single(request.Request.Agents);
         Assert.Equal("assistant", request.Request.Agents[0].Handle);
-        Assert.Equal("Ops Desk", Assert.Single(request.Request.Swarm.Squads).Name);
+        Assert.Equal("Ops Desk", Assert.Single(request.Request.Squads).Name);
         Assert.Equal(0, result.SquadsCreated);
         Assert.Equal(0, result.SquadsSkipped);
-        Assert.Equal(6, result.AgentConfigurationsRequested);
+        Assert.Equal(3, result.AgentConfigurationsRequested);
     }
 
     [Fact]
-    public async Task SurfaceBlueprintProvisionerPreservesLinkedAgentsInSwarmExtension()
+    public async Task SurfaceBlueprintProvisionerPreservesLinkedAgentsInSquadsExtension()
     {
         var blueprintClient = new FakeSurfaceBlueprintClient();
         var squadConfigClient = new FakeSurfaceSquadConfigClient();
@@ -2105,42 +2092,39 @@ public sealed class SurfaceContractTests
                     AgentType = "assistant-agent"
                 }
             ],
-            Swarm = new SwarmBlueprintExtension
-            {
-                Squads =
-                [
-                    new SurfaceSquadDefinition
-                    {
-                        Name = "Ops Desk",
-                        Agents =
-                        [
-                            new SurfaceSquadAgentDefinition
-                            {
-                                Handle = "assistant",
-                                Name = "Assistant",
-                                AgentType = "assistant-agent"
-                            }
-                        ]
-                    }
-                ]
-            }
+            Squads =
+            [
+                new SurfaceSquadDefinition
+                {
+                    Name = "Ops Desk",
+                    Agents =
+                    [
+                        new SurfaceSquadAgentDefinition
+                        {
+                            Handle = "assistant",
+                            Name = "Assistant",
+                            AgentType = "assistant-agent"
+                        }
+                    ]
+                }
+            ]
         });
 
         var request = Assert.Single(blueprintClient.AppliedRequests);
         Assert.Single(request.Request.Agents);
-        var linked = Assert.Single(Assert.Single(request.Request.Swarm.Squads).Agents);
+        var linked = Assert.Single(Assert.Single(request.Request.Squads).Agents);
         Assert.Equal("assistant", linked.Handle);
         Assert.Equal("Assistant", linked.Name);
         Assert.Equal(0, result.SquadsCreated);
-        Assert.Equal(5, result.AgentConfigurationsRequested);
+        Assert.Equal(2, result.AgentConfigurationsRequested);
     }
 
     [Fact]
     public async Task SurfaceBlueprintProvisionerDoesNotUseLegacySquadStorage()
     {
-        var existing = SurfaceSwarmInterop.ToSurfaceSquad(SurfaceSquadService.BuildSquad(
+        var existing = SurfaceSquadService.BuildSquad(
             "owner1",
-            SurfaceSwarmInterop.ToSwarmDefinition(new SurfaceSquadDefinition { Name = "Ops Desk" })));
+            new SurfaceSquadDefinition { Name = "Ops Desk" });
         var blueprintClient = new FakeSurfaceBlueprintClient();
         var squadConfigClient = new FakeSurfaceSquadConfigClient([existing]);
         var provisioner = new SurfaceBlueprintProvisioner(
@@ -2151,16 +2135,13 @@ public sealed class SurfaceContractTests
         var result = await provisioner.ApplyAsync("owner1", new SurfaceBlueprintDocument
         {
             Name = "workspace",
-            Swarm = new SwarmBlueprintExtension
-            {
-                Squads = [new SurfaceSquadDefinition { Name = "Ops Desk" }]
-            }
+            Squads = [new SurfaceSquadDefinition { Name = "Ops Desk" }]
         });
 
         Assert.Equal(0, squadConfigClient.SaveCount);
         Assert.Equal(0, result.SquadsCreated);
         Assert.Equal(0, result.SquadsSkipped);
-        Assert.Equal(4, result.AgentConfigurationsRequested);
+        Assert.Equal(1, result.AgentConfigurationsRequested);
         Assert.Single(blueprintClient.AppliedRequests);
     }
 
@@ -2222,24 +2203,21 @@ public sealed class SurfaceContractTests
         blueprintClient.StoredBlueprint = new SurfaceBlueprintDocument
         {
             Name = "workspace",
-            Swarm = new SwarmBlueprintExtension
-            {
-                Squads =
-                [
-                    new SurfaceSquadDefinition
-                    {
-                        Name = "Ops Desk",
-                        Agents =
-                        [
-                            new SurfaceSquadAgentDefinition
-                            {
-                                Name = "sme",
-                                AgentType = "subject-matter-expert"
-                            }
-                        ]
-                    }
-                ]
-            }
+            Squads =
+            [
+                new SurfaceSquadDefinition
+                {
+                    Name = "Ops Desk",
+                    Agents =
+                    [
+                        new SurfaceSquadAgentDefinition
+                        {
+                            Name = "sme",
+                            AgentType = "subject-matter-expert"
+                        }
+                    ]
+                }
+            ]
         };
 
         await workspace.RefreshFromStorageAsync();
@@ -2364,26 +2342,23 @@ public sealed class SurfaceContractTests
         var blueprint = new SurfaceBlueprintDocument
         {
             Name = "test",
-            Swarm = new SwarmBlueprintExtension
-            {
-                Squads =
-                [
-                    new SurfaceSquadDefinition
-                    {
-                        SquadType = SurfaceSquadType.Task,
-                        Name = "Job",
-                        Agents =
-                        [
-                            new SurfaceSquadAgentDefinition
-                            {
-                                Name = "data-intel",
-                                AgentType = "data-intel-agent",
-                                Role = SurfaceSquadMemberRole.SubjectMatterExpert
-                            }
-                        ]
-                    }
-                ]
-            }
+            Squads =
+            [
+                new SurfaceSquadDefinition
+                {
+                    SquadType = SurfaceSquadType.Task,
+                    Name = "Job",
+                    Agents =
+                    [
+                        new SurfaceSquadAgentDefinition
+                        {
+                            Name = "data-intel",
+                            AgentType = "data-intel-agent",
+                            Role = SurfaceSquadMemberRole.SubjectMatterExpert
+                        }
+                    ]
+                }
+            ]
         };
 
         var json = JsonSerializer.Serialize(blueprint, SurfaceJson.Options);
@@ -2396,17 +2371,15 @@ public sealed class SurfaceContractTests
         var ex = Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<SurfaceBlueprintDocument>("""
             {
               "name": "test",
-              "swarm": {
-                "squads": [
-                  {
-                    "squadType": 2,
-                    "name": "Job",
-                    "agents": [
-                      { "name": "data-intel", "agentType": "data-intel-agent", "role": 1 }
-                    ]
-                  }
-                ]
-              }
+              "squads": [
+                {
+                  "squadType": 2,
+                  "name": "Job",
+                  "agents": [
+                    { "name": "data-intel", "agentType": "data-intel-agent", "role": 1 }
+                  ]
+                }
+              ]
             }
             """, SurfaceJson.Options));
         Assert.Contains("SurfaceSquadType", ex.Message);
@@ -2439,7 +2412,7 @@ public sealed class SurfaceContractTests
 
         var saved = Assert.Single(squadConfigClient.Squads);
         Assert.Equal("Ops Desk", saved.Name);
-        Assert.Equal(SurfaceSquadType.Swarm, saved.SquadType);
+        Assert.Equal(SurfaceSquadType.Orchestrator, saved.SquadType);
         Assert.Equal("Operations support", saved.Description);
         Assert.Equal("owner1:squad-ops-desk", saved.OrchestratorHandle);
         Assert.Equal("owner1:squad-ops-desk-sme", Assert.Single(saved.Agents).Handle);
@@ -2485,7 +2458,7 @@ public sealed class SurfaceContractTests
             Name = "Ops Desk",
             TaskOptions = new SurfaceTaskSquadOptions
             {
-                PlannerModelName = "planner",
+                WorkerModelName = "planner",
                 ClientAgentOverlay = "Use the runbook."
             },
             Agents =
@@ -2501,7 +2474,7 @@ public sealed class SurfaceContractTests
 
         var saved = Assert.Single(squadConfigClient.Squads);
         Assert.Equal(SurfaceSquadType.Task, saved.SquadType);
-        Assert.Equal("planner", saved.TaskOptions.PlannerModelName);
+        Assert.Equal("planner", saved.TaskOptions.WorkerModelName);
         Assert.Equal("Use the runbook.", saved.TaskOptions.ClientAgentOverlay);
         Assert.Equal(SurfaceSquadMemberRole.SubjectMatterExpert, Assert.Single(saved.Agents).Role);
     }
@@ -2519,7 +2492,6 @@ public sealed class SurfaceContractTests
                 Slug = "ops-desk",
                 PrincipalHandle = "owner1",
                 OrchestratorHandle = "owner1:squad-ops-desk",
-                PlannerHandle = "owner1:squad-ops-desk-planner",
                 Description = "Operations support",
                 Agents =
                 [
@@ -2558,7 +2530,6 @@ public sealed class SurfaceContractTests
             Slug = "ops-desk",
             PrincipalHandle = "owner1",
             OrchestratorHandle = "owner1:squad-ops-desk",
-            PlannerHandle = "owner1:squad-ops-desk-planner",
             TaskOptions = new SurfaceTaskSquadOptions
             {
                 WorkerModelName = "worker-model"
@@ -2567,7 +2538,7 @@ public sealed class SurfaceContractTests
         context.AgentConfigurations[channel.OrchestratorHandle] = new AgentConfiguration
         {
             Handle = channel.OrchestratorHandle,
-            AgentType = SurfaceSwarmAgentTypes.TaskRunner
+            AgentType = SurfaceTaskAgentTypes.TaskRunner
         };
         var squadConfigClient = new FakeSurfaceSquadConfigClient([channel]);
         var workspace = CreateWorkspace(
@@ -2595,7 +2566,6 @@ public sealed class SurfaceContractTests
             Slug = "ops-desk",
             PrincipalHandle = "owner1",
             OrchestratorHandle = "owner1:squad-ops-desk",
-            PlannerHandle = "owner1:squad-ops-desk-planner",
             TaskOptions = new SurfaceTaskSquadOptions
             {
                 WorkerModelName = "worker-model",
@@ -2615,7 +2585,7 @@ public sealed class SurfaceContractTests
             && call.DetailLevel == HealthDetailLevel.Basic);
         var config = Assert.Single(context.CreatedAgentConfigurations);
         Assert.Equal(channel.OrchestratorHandle, config.Handle);
-        Assert.Equal(SurfaceSwarmAgentTypes.TaskRunner, config.AgentType);
+        Assert.Equal(SurfaceTaskAgentTypes.TaskRunner, config.AgentType);
         Assert.Equal("worker-model", config.Models);
         Assert.Equal("Coordinate the work.", config.SystemPrompt);
         Assert.True(config.ForceReconfigure);
@@ -2656,12 +2626,9 @@ public sealed class SurfaceContractTests
         Assert.Equal("sme", agent.Name);
         Assert.Equal("owner1:assistant", agent.Handle);
         Assert.Equal("assistant-agent", agent.AgentType);
-        Assert.Equal(4, context.CreatedAgentConfigurations.Count);
-        Assert.All(context.CreatedAgentConfigurations, config =>
-        {
-            Assert.True(config.ForceReconfigure);
-            Assert.Contains("owner1:assistant", config.Args[SurfaceSquadArgs.SquadDefinition]);
-        });
+        var config = Assert.Single(context.CreatedAgentConfigurations);
+        Assert.True(config.ForceReconfigure);
+        Assert.Contains("owner1:assistant", config.Args[SurfaceSquadArgs.SquadDefinition]);
     }
 
     [Fact]
@@ -2777,12 +2744,9 @@ public sealed class SurfaceContractTests
         Assert.Empty(workspace.SelectedSquad?.Agents ?? []);
         Assert.Empty(Assert.Single(squadConfigClient.Squads).Agents);
         Assert.Equal(3, squadConfigClient.SaveCount);
-        Assert.Equal(4, context.CreatedAgentConfigurations.Count);
-        Assert.All(context.CreatedAgentConfigurations, config =>
-        {
-            Assert.True(config.ForceReconfigure);
-            Assert.DoesNotContain("owner1:assistant", config.Args[SurfaceSquadArgs.SquadDefinition], StringComparison.OrdinalIgnoreCase);
-        });
+        var config = Assert.Single(context.CreatedAgentConfigurations);
+        Assert.True(config.ForceReconfigure);
+        Assert.DoesNotContain("owner1:assistant", config.Args[SurfaceSquadArgs.SquadDefinition], StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -2804,7 +2768,7 @@ public sealed class SurfaceContractTests
         });
 
         Assert.Equal("owner1:squad-ops-desk-sme", Assert.Single(result.Squad.Agents).Handle);
-        Assert.Equal(5, context.CreatedAgentConfigurations.Count);
+        Assert.Equal(2, context.CreatedAgentConfigurations.Count);
         var member = Assert.Single(context.CreatedAgentConfigurations, config =>
             string.Equals(config.AgentType, "subject-matter-expert", StringComparison.OrdinalIgnoreCase));
         Assert.Equal("owner1:squad-ops-desk-sme", member.Handle);
@@ -2844,7 +2808,7 @@ public sealed class SurfaceContractTests
     }
 
     [Fact]
-    public async Task SurfaceWorkspaceSwarmChatRoutesMentionsAndDefaultsToOrchestrator()
+    public async Task SurfaceWorkspaceSquadChatRoutesMentionsAndDefaultsToOrchestrator()
     {
         var context = new FakeSurfacePrincipalContext("owner1");
         var workspace = CreateWorkspace(context, new SurfaceOptions
@@ -2903,7 +2867,7 @@ public sealed class SurfaceContractTests
         Assert.Empty(context.SentMessages);
         Assert.Contains(workspace.Timeline, item =>
             item.Kind == SurfaceTimelineItemKind.Error
-            && item.Text!.Contains("No planner is available", StringComparison.OrdinalIgnoreCase));
+            && item.Text!.Contains("@planner", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -2970,7 +2934,7 @@ public sealed class SurfaceContractTests
     }
 
     [Fact]
-    public async Task SurfaceWorkspaceSwarmDirectMentionResponseStaysInSquadTimeline()
+    public async Task SurfaceWorkspaceSquadDirectMentionResponseStaysInSquadTimeline()
     {
         var context = new FakeSurfacePrincipalContext("owner1");
         var workspace = CreateWorkspace(context, new SurfaceOptions
@@ -3015,7 +2979,7 @@ public sealed class SurfaceContractTests
     }
 
     [Fact]
-    public async Task SurfaceWorkspaceSwarmChatRejectsUnknownMention()
+    public async Task SurfaceWorkspaceSquadChatRejectsUnknownMention()
     {
         var context = new FakeSurfacePrincipalContext("owner1");
         var workspace = CreateWorkspace(context, new SurfaceOptions { EnableAgentCreate = true });
@@ -3050,7 +3014,7 @@ public sealed class SurfaceContractTests
         {
             FromHandle = "owner1:squad-ops-desk-planner",
             ToHandle = "owner1",
-            MessageType = SurfaceSquadMessageTypes.PlanningResponse,
+            MessageType = SurfaceSquadMessageTypes.AgentResponse,
             Message = "Plan ready",
             Args = new Dictionary<string, string>
             {
@@ -3145,8 +3109,7 @@ public sealed class SurfaceContractTests
                     Name = "Ops Desk",
                     Slug = "ops-desk",
                     PrincipalHandle = "owner1",
-                    OrchestratorHandle = "owner1:squad-ops-desk",
-                    PlannerHandle = "owner1:squad-ops-desk-planner"
+                    OrchestratorHandle = "owner1:squad-ops-desk"
                 }
             });
 
@@ -3175,109 +3138,323 @@ public sealed class SurfaceContractTests
     }
 
     [Fact]
-    public async Task SurfaceTaskRunnerSchedulesTimerContinuationAfterPlanning()
+    public void SurfaceTaskHarnessProjectsSquadMembersIntoNamedDelegates()
     {
-        var channel = new SurfaceSquad
-        {
-            SquadType = SurfaceSquadType.Task,
-            Name = "Ops Desk",
-            Slug = "ops-desk",
-            PrincipalHandle = "owner1",
-            OrchestratorHandle = "owner1:squad-ops-desk",
-            PlannerHandle = "owner1:squad-ops-desk-planner",
-            Agents =
-            [
-                new SurfaceSquadAgent
-                {
-                    Name = "executor",
-                    Handle = "owner1:executor",
-                    AgentType = "executor-agent",
-                    Role = SurfaceSquadMemberRole.Executor
-                }
-            ]
-        };
-        var config = new AgentConfiguration
-        {
-            Handle = channel.OrchestratorHandle,
-            AgentType = SurfaceSwarmAgentTypes.TaskRunner,
-            Models = "default",
-            Args = new Dictionary<string, string>
+        var squad = TaskHarnessSquad(
+            new SurfaceSquadAgent
             {
-                [SurfaceSquadArgs.SquadDefinition] = SurfaceSquadRuntime.Serialize(new SurfaceSquadRuntime
-                {
-                    Squad = channel
-                })
-            }
+                Name = "Customer Records",
+                Handle = "owner1:crm",
+                AgentType = "crm-agent",
+                Role = SurfaceSquadMemberRole.Executor
+            },
+            new SurfaceSquadAgent
+            {
+                Name = "Policy Desk",
+                Handle = "owner1:policy",
+                AgentType = "policy-sme",
+                Role = SurfaceSquadMemberRole.SubjectMatterExpert
+            },
+            new SurfaceSquadAgent
+            {
+                Name = "Offline Helper",
+                Handle = "owner1:offline",
+                AgentType = "helper-agent",
+                Role = SurfaceSquadMemberRole.Executor
+            });
+
+        var capabilities = new List<SurfaceSquadAgentCapability>
+        {
+            new() { Name = "Customer Records", Handle = "owner1:crm", Description = "Owns CRM customers.", IsConfigured = true },
+            new() { Name = "Policy Desk", Handle = "owner1:policy", Description = "Knows the runbook.", IsConfigured = true },
+            new() { Name = "Offline Helper", Handle = "owner1:offline", Description = "Agent Offline Helper", UnavailableReason = "Agent is not configured." }
         };
-        var host = new FakeAgentHost(channel.OrchestratorHandle);
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
-        services.AddSingleton<IFabrCoreChatClientService>(
-            new FakeChatClientService(FakeChatClient.WithTextResponse("""
-                {"tasks":[{"description":"Do the work","agentName":"executor"}]}
-                """)));
-        var provider = services.BuildServiceProvider();
-        var agent = new SurfaceTaskRunnerAgent(config, provider, host);
+
+        var host = new FakeAgentHost(squad.OrchestratorHandle);
+        var bus = new SurfaceSquadConversationBus(host, new SurfaceSquadRuntime { Squad = squad });
+
+        var delegates = SurfaceSquadMemberAgent.BuildAgents(
+            squad,
+            capabilities,
+            bus,
+            host,
+            clientAgentOverlay: null,
+            TimeSpan.FromSeconds(30),
+            out var excluded);
+
+        Assert.Equal(["Customer Records", "Policy Desk"], delegates.Select(d => d.Name ?? string.Empty).ToArray());
+        Assert.Contains("Owns CRM customers.", delegates[0].Description);
+        Assert.Contains("Role: Executor", delegates[0].Description);
+        Assert.Contains("Role: Subject matter expert", delegates[1].Description);
+        Assert.Contains("advisory only", delegates[1].Description);
+        Assert.Contains("Offline Helper", Assert.Single(excluded));
+    }
+
+    [Fact]
+    public void SurfaceTaskHarnessResolvesUniqueNonEmptyDelegateNames()
+    {
+        // BackgroundAgentsProvider throws on blank or case-insensitively duplicate names.
+        var squad = TaskHarnessSquad(
+            new SurfaceSquadAgent { Name = "Analyst", Handle = "owner1:a1", AgentType = "x", Role = SurfaceSquadMemberRole.Executor },
+            new SurfaceSquadAgent { Name = "analyst", Handle = "owner1:a2", AgentType = "x", Role = SurfaceSquadMemberRole.Executor },
+            new SurfaceSquadAgent { Name = "   ", Handle = "owner1:fallback-alias", AgentType = "x", Role = SurfaceSquadMemberRole.Executor });
+
+        var host = new FakeAgentHost(squad.OrchestratorHandle);
+        var bus = new SurfaceSquadConversationBus(host, new SurfaceSquadRuntime { Squad = squad });
+
+        var delegates = SurfaceSquadMemberAgent.BuildAgents(
+            squad, [], bus, host, clientAgentOverlay: null, TimeSpan.FromSeconds(30), out _);
+
+        Assert.Equal(["Analyst", "analyst-2", "fallback-alias"], delegates.Select(d => d.Name ?? string.Empty).ToArray());
+        Assert.All(delegates, d => Assert.False(string.IsNullOrWhiteSpace(d.Name)));
+
+        // The real provider must accept this roster.
+        _ = new BackgroundAgentsProvider(delegates);
+    }
+
+    [Fact]
+    public async Task SurfaceTaskHarnessDelegationUsesTaskDelegationOverTheSquadBus()
+    {
+        var squad = TaskHarnessSquad(new SurfaceSquadAgent
+        {
+            Name = "Customer Records",
+            Handle = "owner1:crm",
+            AgentType = "crm-agent",
+            Role = SurfaceSquadMemberRole.Executor
+        });
+
+        var host = new FakeAgentHost(squad.OrchestratorHandle);
+        host.Responders["owner1:crm"] = _ => "Found 3 customers.";
+        var bus = new SurfaceSquadConversationBus(host, new SurfaceSquadRuntime { Squad = squad });
+
+        var delegates = SurfaceSquadMemberAgent.BuildAgents(
+            squad, [], bus, host, clientAgentOverlay: "Use the runbook.", TimeSpan.FromSeconds(30), out _);
+
+        var response = await delegates[0].RunAsync("List active customers.");
+
+        Assert.Equal("Found 3 customers.", response.Text);
+
+        var request = Assert.Single(host.ReceivedRequests);
+        Assert.Equal("owner1:crm", request.ToHandle);
+        Assert.Equal(SurfaceSquadMessageTypes.TaskDelegation, request.MessageType);
+        Assert.Equal(MessageKind.Request, request.Kind);
+        Assert.StartsWith("Use the runbook.", request.Message);
+        Assert.Contains("List active customers.", request.Message);
+        Assert.Equal("Customer Records", request.State![SurfaceSquadArgs.AgentName]);
+        Assert.Equal(squad.OrchestratorHandle, request.State[SurfaceSquadArgs.SquadHandle]);
+
+        // Both legs are mirrored onto the principal's timeline.
+        var mirrors = host.SentMessages.Where(m => m.Args?.ContainsKey(SurfaceSquadArgs.Mirror) == true).ToList();
+        Assert.Collection(
+            mirrors,
+            requestMirror => Assert.Equal(SurfaceSquadMessageTypes.AgentRequest, requestMirror.MessageType),
+            responseMirror => Assert.Equal(SurfaceSquadMessageTypes.AgentResponse, responseMirror.MessageType));
+        Assert.All(mirrors, m => Assert.Equal("owner1", m.ToHandle));
+    }
+
+    [Fact]
+    public async Task SurfaceTaskHarnessDelegationFailsWhenTheMemberExceedsTheTimeout()
+    {
+        var squad = TaskHarnessSquad(new SurfaceSquadAgent
+        {
+            Name = "Slow Agent",
+            Handle = "owner1:slow",
+            AgentType = "slow-agent",
+            Role = SurfaceSquadMemberRole.Executor
+        });
+
+        var host = new FakeAgentHost(squad.OrchestratorHandle);
+        host.Delays["owner1:slow"] = TimeSpan.FromSeconds(30);
+        var bus = new SurfaceSquadConversationBus(host, new SurfaceSquadRuntime { Squad = squad });
+
+        var delegates = SurfaceSquadMemberAgent.BuildAgents(
+            squad, [], bus, host, clientAgentOverlay: null, TimeSpan.FromMilliseconds(50), out _);
+
+        await Assert.ThrowsAsync<TimeoutException>(() => delegates[0].RunAsync("Do the thing"));
+    }
+
+    [Fact]
+    public async Task SurfaceTaskHarnessExposesTodoAndBackgroundProvidersThroughGetService()
+    {
+        // TodoCompletionLoopEvaluator and BackgroundTaskCompletionLoopEvaluator resolve their providers
+        // via AIAgent.GetService through the whole decorator chain. If this breaks, the loop never terminates.
+        var (agent, _) = await CreateTaskHarnessAgentAsync(FakeChatClient.WithTextResponse("done"));
+
+        await agent.OnInitialize();
+
+        Assert.NotNull(agent.HarnessAgent);
+        Assert.NotNull(agent.HarnessAgent!.GetService<TodoProvider>());
+        Assert.NotNull(agent.HarnessAgent.GetService<BackgroundAgentsProvider>());
+    }
+
+    [Fact]
+    public async Task SurfaceTaskHarnessRunsTodosAndDelegationsToCompletion()
+    {
+        var chatClient = FakeChatClient.Scripted(
+            FakeChatClient.ToolCall("c1", "todos_add", """{"todos":[{"title":"Pull the customer list"}]}"""),
+            FakeChatClient.ToolCall("c2", "background_agents_start_task", """{"agentName":"Customer Records","input":"List active customers.","description":"Pull customers"}"""),
+            FakeChatClient.Text("Delegated the fetch."),
+            FakeChatClient.ToolCall("c3", "todos_complete", """{"items":[{"id":1,"reason":"Customer list returned"}]}"""),
+            FakeChatClient.Text("There are 3 active customers."));
+
+        var (agent, host) = await CreateTaskHarnessAgentAsync(chatClient);
+        host.Responders["owner1:crm"] = _ => "Found 3 customers.";
 
         await agent.OnInitialize();
         var response = await agent.OnMessage(new AgentMessage
         {
             FromHandle = "owner1",
-            ToHandle = channel.OrchestratorHandle,
+            ToHandle = "owner1:squad-ops-desk",
             MessageType = SurfaceSquadMessageTypes.Chat,
             Kind = MessageKind.Request,
-            Message = "start"
+            Message = "How many active customers do we have?"
         });
 
-        Assert.Contains("Started working", response.Message);
-        var timer = Assert.Single(host.RegisteredTimers);
-        Assert.Equal("surface-task-runner-tick", timer.TimerName);
-        Assert.Equal(SurfaceSquadMessageTypes.TaskTick, timer.MessageType);
-        Assert.DoesNotContain(host.SentMessages, message =>
-            message.ToHandle == channel.OrchestratorHandle
-            && message.MessageType == SurfaceSquadMessageTypes.TaskTick);
+        Assert.Equal("There are 3 active customers.", response.Message);
+
+        // The loop terminated on its own — no timer trampoline, and every todo was closed.
+        Assert.Empty(host.RegisteredTimers);
+        Assert.Empty(await agent.HarnessAgent!.GetService<TodoProvider>()!.GetRemainingTodosAsync(agent.HarnessSession!));
+
+        // The delegation actually reached the member agent.
+        var delegation = Assert.Single(host.ReceivedRequests);
+        Assert.Equal("owner1:crm", delegation.ToHandle);
+        Assert.Equal(SurfaceSquadMessageTypes.TaskDelegation, delegation.MessageType);
+
+        // The consolidated answer is mirrored to the principal.
+        Assert.Contains(host.SentMessages, m =>
+            m.ToHandle == "owner1"
+            && m.MessageType == SurfaceSquadMessageTypes.Chat
+            && m.Message == "There are 3 active customers.");
     }
 
     [Fact]
-    public async Task SurfaceTaskRunnerResetsUnreadablePersistedStateOnInitialize()
+    public async Task SurfaceTaskHarnessReportsUnfinishedTodosWhenTheIterationBudgetRunsOut()
     {
-        var channel = new SurfaceSquad
+        // The model adds a todo and never completes it. The loop must stop at MaxLoopIterations
+        // and say so, rather than reporting success.
+        var chatClient = FakeChatClient.Scripted(
+            FakeChatClient.ToolCall("c1", "todos_add", """{"todos":[{"title":"Never finished"}]}"""),
+            FakeChatClient.Text("Working on it."));
+
+        var (agent, _) = await CreateTaskHarnessAgentAsync(chatClient, maxLoopIterations: 2);
+
+        await agent.OnInitialize();
+        var response = await agent.OnMessage(new AgentMessage
+        {
+            FromHandle = "owner1",
+            ToHandle = "owner1:squad-ops-desk",
+            MessageType = SurfaceSquadMessageTypes.Chat,
+            Kind = MessageKind.Request,
+            Message = "Do the thing"
+        });
+
+        Assert.Contains("were not completed within the iteration budget", response.Message);
+        Assert.Contains("Never finished", response.Message);
+    }
+
+    [Fact]
+    public async Task SurfaceTaskHarnessSendsSquadPersonaAndDelegateRosterToTheModel()
+    {
+        // The retired runner injected PersonaPrompt into the planner prompt only, and never applied
+        // config.SystemPrompt to any LLM call at all. Both must reach the coordinator now.
+        var squad = TaskHarnessSquad(
+            new SurfaceSquadAgent { Name = "Customer Records", Handle = "owner1:crm", AgentType = "crm-agent", Role = SurfaceSquadMemberRole.Executor },
+            new SurfaceSquadAgent { Name = "Policy Desk", Handle = "owner1:policy", AgentType = "policy-sme", Role = SurfaceSquadMemberRole.SubjectMatterExpert });
+        squad.TaskOptions.PersonaPrompt = "Always cite the runbook.";
+
+        var chatClient = FakeChatClient.WithTextResponse("done");
+        var (agent, _) = await CreateTaskHarnessAgentAsync(chatClient, squad);
+
+        await agent.OnInitialize();
+        await agent.OnMessage(new AgentMessage
+        {
+            FromHandle = "owner1",
+            ToHandle = squad.OrchestratorHandle,
+            MessageType = SurfaceSquadMessageTypes.Chat,
+            Kind = MessageKind.Request,
+            Message = "Do the thing"
+        });
+
+        var prompt = string.Join(
+            "\n",
+            [chatClient.RequestOptions[0]?.Instructions ?? string.Empty, .. chatClient.Requests[0].Select(m => m.Text)]);
+
+        Assert.Contains("Always cite the runbook.", prompt);
+        Assert.Contains("Ops Desk", prompt);
+
+        // Provider instructions and the registry-derived roster are both present.
+        Assert.Contains("todos_add", prompt);
+        Assert.Contains("background_agents_", prompt);
+        Assert.Contains("Customer Records", prompt);
+        Assert.Contains("Policy Desk", prompt);
+        Assert.Contains("advisory only", prompt);
+    }
+
+    [Fact]
+    public async Task SurfaceTaskHarnessDeclinesGoalsWhenTheSquadHasNoUsableMembers()
+    {
+        var squad = TaskHarnessSquad();
+        var (agent, _) = await CreateTaskHarnessAgentAsync(FakeChatClient.WithTextResponse("done"), squad: squad);
+
+        await agent.OnInitialize();
+        var response = await agent.OnMessage(new AgentMessage
+        {
+            FromHandle = "owner1",
+            ToHandle = squad.OrchestratorHandle,
+            MessageType = SurfaceSquadMessageTypes.Chat,
+            Kind = MessageKind.Request,
+            Message = "Do the thing"
+        });
+
+        Assert.Null(agent.HarnessAgent);
+        Assert.Contains("Add at least one executor agent", response.Message);
+    }
+
+    private static SurfaceSquad TaskHarnessSquad(params SurfaceSquadAgent[] agents)
+        => new()
         {
             SquadType = SurfaceSquadType.Task,
             Name = "Ops Desk",
             Slug = "ops-desk",
             PrincipalHandle = "owner1",
             OrchestratorHandle = "owner1:squad-ops-desk",
-            PlannerHandle = "owner1:squad-ops-desk-planner"
+            Agents = [.. agents]
         };
+
+    private static Task<(SurfaceTaskHarnessAgent Agent, FakeAgentHost Host)> CreateTaskHarnessAgentAsync(
+        FakeChatClient chatClient,
+        SurfaceSquad? squad = null,
+        int maxLoopIterations = 10)
+    {
+        squad ??= TaskHarnessSquad(new SurfaceSquadAgent
+        {
+            Name = "Customer Records",
+            Handle = "owner1:crm",
+            AgentType = "crm-agent",
+            Role = SurfaceSquadMemberRole.Executor
+        });
+        squad.TaskOptions.MaxLoopIterations = maxLoopIterations;
+
         var config = new AgentConfiguration
         {
-            Handle = channel.OrchestratorHandle,
-            AgentType = SurfaceSwarmAgentTypes.TaskRunner,
+            Handle = squad.OrchestratorHandle,
+            AgentType = SurfaceTaskAgentTypes.TaskRunner,
             Models = "default",
             Args = new Dictionary<string, string>
             {
-                [SurfaceSquadArgs.SquadDefinition] = SurfaceSquadRuntime.Serialize(new SurfaceSquadRuntime
-                {
-                    Squad = channel
-                })
+                [SurfaceSquadArgs.SquadDefinition] = SurfaceSquadRuntime.Serialize(new SurfaceSquadRuntime { Squad = squad })
             }
         };
-        var host = new FakeAgentHost(channel.OrchestratorHandle);
-        host.CustomState["surface-task-runner-state"] = Json("42");
+
+        var host = new FakeAgentHost(squad.OrchestratorHandle);
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
-        services.AddSingleton<IFabrCoreChatClientService>(
-            new FakeChatClientService(FakeChatClient.WithTextResponse("""{"tasks":[]}""")));
+        services.AddSingleton<IFabrCoreChatClientService>(new FakeChatClientService(chatClient));
         var provider = services.BuildServiceProvider();
-        var agent = new SurfaceTaskRunnerAgent(config, provider, host);
 
-        await agent.OnInitialize();
-
-        Assert.DoesNotContain("surface-task-runner-state", host.CustomState.Keys);
-        Assert.Empty(host.RegisteredTimers);
+        return Task.FromResult((new SurfaceTaskHarnessAgent(config, provider, host), host));
     }
 
     [Fact]
@@ -4093,17 +4270,17 @@ public sealed class SurfaceContractTests
             ApplyCount++;
             AppliedRequests.Add((principalId, request));
             var agents = request.Agents.ToList();
-            if (request.Swarm.Squads.Count > 0)
+            if (request.Squads.Count > 0)
             {
-                var swarm = JsonSerializer.SerializeToElement(request.Swarm, SurfaceJson.Options);
-                var expansion = new SurfaceSwarmBlueprintExpander()
+                var squads = JsonSerializer.SerializeToElement(request.Squads, SurfaceJson.Options);
+                var expansion = new SurfaceSquadBlueprintExpander()
                     .ExpandAsync(
                         new FabrCore.Core.Blueprints.BlueprintExpansionContext
                         {
                             PrincipalId = principalId,
                             Blueprint = request
                         },
-                        swarm,
+                        squads,
                         cancellationToken)
                     .AsTask()
                     .GetAwaiter()
@@ -4436,18 +4613,14 @@ public sealed class SurfaceContractTests
                 Slug = channel.Slug,
                 PrincipalHandle = channel.PrincipalHandle,
                 OrchestratorHandle = channel.OrchestratorHandle,
-                PlannerHandle = channel.PlannerHandle,
                 Description = channel.Description,
                 TaskOptions = new SurfaceTaskSquadOptions
                 {
-                    FastModelName = channel.TaskOptions.FastModelName,
                     WorkerModelName = channel.TaskOptions.WorkerModelName,
-                    PlannerModelName = channel.TaskOptions.PlannerModelName,
                     PersonaPrompt = channel.TaskOptions.PersonaPrompt,
                     ClientAgentOverlay = channel.TaskOptions.ClientAgentOverlay,
                     DelegationTimeoutSeconds = channel.TaskOptions.DelegationTimeoutSeconds,
-                    MaxTaskAttempts = channel.TaskOptions.MaxTaskAttempts,
-                    MaxValidationAttempts = channel.TaskOptions.MaxValidationAttempts
+                    MaxLoopIterations = channel.TaskOptions.MaxLoopIterations
                 },
                 Agents = channel.Agents.Select(agent => new SurfaceSquadAgent
                 {
@@ -4574,10 +4747,34 @@ public sealed class SurfaceContractTests
 
         public Dictionary<string, JsonElement> CustomState { get; } = [];
 
+        /// <summary>Requests observed by <see cref="SendAndReceiveMessage"/>, in order.</summary>
+        public List<AgentMessage> ReceivedRequests { get; } = [];
+
+        /// <summary>Per-target reply text. Targets without an entry echo an empty response.</summary>
+        public Dictionary<string, Func<AgentMessage, string>> Responders { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Per-target artificial latency, used to exercise delegation timeouts.</summary>
+        public Dictionary<string, TimeSpan> Delays { get; } = new(StringComparer.OrdinalIgnoreCase);
+
         public string GetHandle() => Handle;
 
-        public Task<AgentMessage> SendAndReceiveMessage(AgentMessage request)
-            => Task.FromResult(request.Response());
+        public async Task<AgentMessage> SendAndReceiveMessage(AgentMessage request)
+        {
+            ReceivedRequests.Add(request);
+
+            if (request.ToHandle is { Length: > 0 } target && Delays.TryGetValue(target, out var delay))
+            {
+                await Task.Delay(delay);
+            }
+
+            var response = request.Response();
+            if (request.ToHandle is { Length: > 0 } handle && Responders.TryGetValue(handle, out var responder))
+            {
+                response.Message = responder(request);
+            }
+
+            return response;
+        }
 
         public Task SendMessage(AgentMessage request)
         {
@@ -4690,20 +4887,61 @@ public sealed class SurfaceContractTests
     private sealed class FakeChatClient : IChatClient
     {
         private readonly string responseText;
+        private readonly Queue<ChatResponse> scripted = new();
 
         private FakeChatClient(string responseText)
         {
             this.responseText = responseText;
         }
 
+        /// <summary>Requests seen by the client, in order. Useful for asserting on composed instructions.</summary>
+        public List<List<ChatMessage>> Requests { get; } = [];
+
+        /// <summary>The <see cref="ChatOptions"/> supplied with each request, in order.</summary>
+        public List<ChatOptions?> RequestOptions { get; } = [];
+
         public static FakeChatClient WithTextResponse(string responseText)
             => new(responseText);
+
+        /// <summary>
+        /// Returns each supplied response in turn, then falls back to a terminal text response.
+        /// Use with <see cref="ToolCall"/> to drive an agent through a tool-calling sequence.
+        /// </summary>
+        public static FakeChatClient Scripted(params ChatResponse[] responses)
+        {
+            var client = new FakeChatClient("Done.");
+            foreach (var response in responses)
+            {
+                client.scripted.Enqueue(response);
+            }
+
+            return client;
+        }
+
+        public static ChatResponse Text(string text)
+            => new(new ChatMessage(ChatRole.Assistant, text));
+
+        public static ChatResponse ToolCall(string callId, string name, string argumentsJson)
+        {
+            var arguments = JsonSerializer
+                .Deserialize<Dictionary<string, JsonElement>>(argumentsJson)!
+                .ToDictionary(pair => pair.Key, pair => (object?)pair.Value);
+
+            return new ChatResponse(new ChatMessage(ChatRole.Assistant, [new FunctionCallContent(callId, name, arguments)]));
+        }
 
         public Task<ChatResponse> GetResponseAsync(
             IEnumerable<ChatMessage> chatMessages,
             ChatOptions? options = null,
             CancellationToken cancellationToken = default)
-            => Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, responseText)));
+        {
+            Requests.Add([.. chatMessages]);
+            RequestOptions.Add(options);
+
+            return Task.FromResult(scripted.Count > 0
+                ? scripted.Dequeue()
+                : new ChatResponse(new ChatMessage(ChatRole.Assistant, responseText)));
+        }
 
         public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
             IEnumerable<ChatMessage> chatMessages,
