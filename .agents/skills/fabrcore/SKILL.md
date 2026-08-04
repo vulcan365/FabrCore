@@ -4,7 +4,8 @@ description: >
   FabrCore overview, architecture, prerequisites, NuGet packages, and project templates for
   distributed .NET/Orleans AI agent systems. Use for general FabrCore questions, getting started,
   or choosing a specialized skill. Route agent code to fabrcore-agent; Microsoft Agent Framework
-  to fabrcore-agentframework; plugins/tools to fabrcore-plugins-tools; hosting/API to
+  to fabrcore-agentframework; todo lists, iteration loops, and background delegation to
+  fabrcore-harness; plugins/tools to fabrcore-plugins-tools; hosting/API to
   fabrcore-server; Orleans to fabrcore-orleans; ordinary messages/orchestration to
   fabrcore-messaging; durable proactive/out-of-turn delivery and relay providers to
   fabrcore-principal-delivery; authorization/audit to fabrcore-acl; MCP to fabrcore-mcp;
@@ -32,6 +33,8 @@ Build distributed AI agent systems with FabrCore — an open-source .NET 10 fram
 | Agent Blueprint | Canonical stored/apply manifest | `FabrCoreBlueprint`, `IBlueprintExpander`, `/fabrcoreapi/Blueprint` | fabrcore-server |
 | Agent Eviction | Hard-delete an agent instance | `AgentEvictionResult`, `DELETE /fabrcoreapi/Agent/{handle}` | fabrcore-server, fabrcore-orleans |
 | Agent Framework | LLM agent runtime | `AIAgent`, `AgentSession` | fabrcore-agentframework |
+| Agent Harness | Todos, iteration loop, background delegation | `CreateFabrCoreHarnessAgent()`, `FabrCoreHarnessResult`, `HarnessLoopMode` | fabrcore-harness |
+| Background Delegation | Model-driven fan-out to other agents | `FabrCoreBackgroundAgent`, `AgentRosterBuilder` | fabrcore-harness |
 | Plugin | Stateful tool collection | `IFabrCorePlugin` | fabrcore-plugins-tools |
 | Standalone Tool | Single static method | `[ToolAlias]` attribute | fabrcore-plugins-tools |
 | Registry Metadata | Capabilities & notes | `[FabrCoreCapabilities]`, `[FabrCoreNote]` | fabrcore-agent, fabrcore-plugins-tools |

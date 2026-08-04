@@ -1,0 +1,270 @@
+#pragma warning disable MAAI001 // Harness providers (LoopAgent, BackgroundAgentsProvider, loop evaluators) are for evaluation purposes only and may change.
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
+
+namespace FabrCore.Sdk;
+
+/// <summary>
+/// A FabrCore-assembled agent harness: todo tracking, an iteration loop, and delegation to background
+/// agents, composed over a caller-supplied <see cref="IChatClient"/>.
+/// </summary>
+/// <remarks>
+/// <para>
+/// This is FabrCore's own assembler over the Microsoft Agent Framework's harness providers, not a wrapper
+/// around <c>HarnessAgent</c>. Nothing is composed unless FabrCore composes it, so an upstream default-on
+/// feature can never reach a tenant. Tool names stay Microsoft's (<c>todos_add</c>,
+/// <c>background_agents_start_task</c>, …) so prompts remain portable.
+/// </para>
+/// <para>
+/// Composition, outermost to innermost:
+/// <list type="number">
+/// <item><description><c>LoopAgent</c> — only when <see cref="FabrCoreHarnessOptions.LoopMode"/> or
+/// <see cref="FabrCoreHarnessOptions.AdditionalLoopEvaluators"/> yields at least one evaluator.</description></item>
+/// <item><description><c>OpenTelemetryAgent</c> — parity with <c>CreateChatClientAgent</c>, sensitive data on by default.</description></item>
+/// <item><description><see cref="ChatClientAgent"/> with the todo and background-agent context providers.</description></item>
+/// </list>
+/// The chat client keeps <c>ChatClientAgent</c>'s default middleware so FabrCore's
+/// <c>TokenTrackingChatClient</c> stays the innermost client and run-safety sees every call.
+/// </para>
+/// <para>
+/// Deliberately absent: file memory, file access, filesystem skill discovery, hosted web search, in-run
+/// compaction, and tool approval. The first four are rejected outright for a shared silo; compaction stays
+/// FabrCore-owned; tool approval is a later phase.
+/// </para>
+/// </remarks>
+public sealed class FabrCoreHarnessAgent : DelegatingAIAgent
+{
+    /// <summary>
+    /// The harness preamble prepended to an agent's own instructions when
+    /// <see cref="FabrCoreHarnessOptions.HarnessInstructions"/> is not set.
+    /// </summary>
+    public const string DefaultInstructions =
+        """
+        You are a capable AI assistant working inside the FabrCore runtime. You use tools to complete tasks.
+
+        ## How to work
+
+        - Think the task through before acting. Break complex work into clear steps.
+        - Track multi-step work with the todo tools: add the steps up front, then complete each one as you finish it. Never mark a todo complete for work that did not actually happen.
+        - Say what you learned and what you are doing next between tool calls, so the person following along can see your reasoning.
+        - Avoid making more than 4 tool calls in a row without explaining what you are doing.
+        - If a tool call fails or returns something unexpected, adapt. Do not repeat the same call and expect a different result.
+        - When background agents are available, delegate independent work to them and start that work concurrently rather than one item at a time. Read their replies critically — a reply is not proof the work was done correctly.
+        - Finish with a clear, consolidated answer to what was actually asked, not a list of the steps you took.
+        """;
+
+    private readonly TodoProvider? todos;
+    private readonly BackgroundAgentsProvider? backgroundAgents;
+    private readonly int loopEvaluatorCount;
+
+    /// <summary>
+    /// Assembles a harness agent over <paramref name="chatClient"/>.
+    /// </summary>
+    /// <param name="chatClient">The chat client. Inside FabrCore this should come from <c>GetChatClient</c> so token tracking and run safety stay in the pipeline.</param>
+    /// <param name="options">Composition options. <see langword="null"/> yields a todo-enabled, single-shot agent.</param>
+    /// <param name="loggerFactory">Optional logger factory.</param>
+    /// <param name="services">Optional service provider used when building the agent pipeline.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="chatClient"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">A requested loop mode is missing the provider or setting it depends on.</exception>
+    public FabrCoreHarnessAgent(
+        IChatClient chatClient,
+        FabrCoreHarnessOptions? options = null,
+        ILoggerFactory? loggerFactory = null,
+        IServiceProvider? services = null)
+        : this(Compose(chatClient, options, loggerFactory, services))
+    {
+    }
+
+    private FabrCoreHarnessAgent(Composition composition)
+        : base(composition.Agent)
+    {
+        todos = composition.Todos;
+        backgroundAgents = composition.BackgroundAgents;
+        loopEvaluatorCount = composition.LoopEvaluatorCount;
+    }
+
+    /// <summary>The todo provider, or <see langword="null"/> when todos are disabled.</summary>
+    public TodoProvider? Todos => todos;
+
+    /// <summary>The background-agent provider, or <see langword="null"/> when no background agents were supplied.</summary>
+    public BackgroundAgentsProvider? BackgroundAgents => backgroundAgents;
+
+    /// <summary>True when a loop decorator is driving re-invocation; false for a single-shot agent.</summary>
+    public bool IsLooping => loopEvaluatorCount > 0;
+
+    private static Composition Compose(
+        IChatClient chatClient,
+        FabrCoreHarnessOptions? options,
+        ILoggerFactory? loggerFactory,
+        IServiceProvider? services)
+    {
+        ArgumentNullException.ThrowIfNull(chatClient);
+
+        var providers = new List<AIContextProvider>();
+
+        TodoProvider? todoProvider = null;
+        if (options?.DisableTodoProvider is not true)
+        {
+            todoProvider = new TodoProvider(options?.TodoProviderOptions);
+            providers.Add(todoProvider);
+        }
+
+        // Materialize once: the provider validates names on construction and the loop-mode check below
+        // needs to know whether any delegates exist without re-enumerating a lazy sequence.
+        var delegates = options?.BackgroundAgents?.ToList();
+
+        BackgroundAgentsProvider? backgroundProvider = null;
+        if (delegates is { Count: > 0 })
+        {
+            backgroundProvider = new BackgroundAgentsProvider(delegates, options?.BackgroundAgentsProviderOptions);
+            providers.Add(backgroundProvider);
+        }
+
+        if (options?.AIContextProviders is { } extraProviders)
+        {
+            providers.AddRange(extraProviders);
+        }
+
+        var evaluators = BuildEvaluators(options, todoProvider is not null, backgroundProvider is not null);
+
+        var chatOptions = options?.ChatOptions?.Clone() ?? new ChatOptions();
+        chatOptions.Instructions = CombineInstructions(
+            options?.HarnessInstructions ?? DefaultInstructions,
+            options?.ChatOptions?.Instructions);
+
+        // ChatClientAgentOptions exposes no knob for FunctionInvokingChatClient.MaximumIterationsPerRequest.
+        // Pre-wrapping is the least invasive route: WithDefaultAgentMiddleware skips inserting its own
+        // function-invocation client when the supplied one already exposes it, so the remaining default
+        // decorators (approval binding, approval bypass) keep their normal positions.
+        var innerChatClient = chatClient;
+        if (options?.MaximumIterationsPerRequest is int maxIterationsPerRequest)
+        {
+            innerChatClient = chatClient
+                .AsBuilder()
+                .UseFunctionInvocation(loggerFactory, ficc => ficc.MaximumIterationsPerRequest = maxIterationsPerRequest)
+                .Build(services);
+        }
+
+        var agentOptions = new ChatClientAgentOptions
+        {
+            Id = options?.Id,
+            Name = options?.Name,
+            Description = options?.Description,
+            ChatOptions = chatOptions,
+            ChatHistoryProvider = options?.ChatHistoryProvider,
+            AIContextProviders = providers.Count > 0 ? providers : null
+        };
+
+        var builder = new ChatClientAgent(innerChatClient, agentOptions).AsBuilder();
+
+        if (options?.DisableOpenTelemetry is not true)
+        {
+            var enableSensitiveData = options?.EnableSensitiveTelemetryData ?? true;
+            builder.UseOpenTelemetry(
+                options?.OpenTelemetrySourceName,
+                cfg => cfg.EnableSensitiveData = enableSensitiveData);
+        }
+
+        AIAgent agent = builder.Build(services);
+
+        if (evaluators.Count > 0)
+        {
+            var loopOptions = options?.LoopAgentOptions ?? new LoopAgentOptions
+            {
+                MaxIterations = options?.LoopMaxIterations is int max ? Math.Max(1, max) : null,
+                NonStreamingReturnsLastResponseOnly = true
+            };
+
+            agent = new LoopAgent(agent, evaluators, loopOptions, loggerFactory);
+        }
+
+        return new Composition(agent, todoProvider, backgroundProvider, evaluators.Count);
+    }
+
+    private static List<LoopEvaluator> BuildEvaluators(
+        FabrCoreHarnessOptions? options,
+        bool hasTodoProvider,
+        bool hasBackgroundAgents)
+    {
+        var evaluators = new List<LoopEvaluator>();
+        var mode = options?.LoopMode ?? HarnessLoopMode.None;
+
+        if (mode.HasFlag(HarnessLoopMode.Todo))
+        {
+            if (!hasTodoProvider)
+            {
+                throw new ArgumentException(
+                    "HarnessLoopMode.Todo requires the todo provider, but DisableTodoProvider is set.",
+                    nameof(options));
+            }
+
+            // Do not configure Modes: it makes an AgentModeProvider mandatory at evaluation time,
+            // and modes are not part of this harness.
+            evaluators.Add(new TodoCompletionLoopEvaluator());
+        }
+
+        if (mode.HasFlag(HarnessLoopMode.Background))
+        {
+            if (!hasBackgroundAgents)
+            {
+                throw new ArgumentException(
+                    "HarnessLoopMode.Background requires at least one background agent, but none were supplied.",
+                    nameof(options));
+            }
+
+            evaluators.Add(new BackgroundTaskCompletionLoopEvaluator());
+        }
+
+        if (mode.HasFlag(HarnessLoopMode.Marker))
+        {
+            if (string.IsNullOrWhiteSpace(options?.LoopCompletionMarker))
+            {
+                throw new ArgumentException(
+                    "HarnessLoopMode.Marker requires LoopCompletionMarker to be set.",
+                    nameof(options));
+            }
+
+            evaluators.Add(new CompletionMarkerLoopEvaluator(options.LoopCompletionMarker));
+        }
+
+        if (mode.HasFlag(HarnessLoopMode.Judge))
+        {
+            if (options?.LoopJudgeChatClient is null)
+            {
+                throw new ArgumentException(
+                    "HarnessLoopMode.Judge requires LoopJudgeChatClient to be set.",
+                    nameof(options));
+            }
+
+            evaluators.Add(new AIJudgeLoopEvaluator(options.LoopJudgeChatClient, options.LoopJudgeOptions));
+        }
+
+        if (options?.AdditionalLoopEvaluators is { } additional)
+        {
+            evaluators.AddRange(additional);
+        }
+
+        return evaluators;
+    }
+
+    private static string? CombineInstructions(string? harnessInstructions, string? agentInstructions)
+    {
+        var harness = string.IsNullOrWhiteSpace(harnessInstructions) ? null : harnessInstructions;
+        var agent = string.IsNullOrWhiteSpace(agentInstructions) ? null : agentInstructions;
+
+        return (harness, agent) switch
+        {
+            (null, null) => null,
+            (null, not null) => agent,
+            (not null, null) => harness,
+            _ => $"{harness}\n\n{agent}"
+        };
+    }
+
+    private sealed record Composition(
+        AIAgent Agent,
+        TodoProvider? Todos,
+        BackgroundAgentsProvider? BackgroundAgents,
+        int LoopEvaluatorCount);
+}

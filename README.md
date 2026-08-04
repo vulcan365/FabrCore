@@ -156,6 +156,7 @@ Full documentation is available in the [`docs/skills`](docs/skills/) directory:
 | [FabrCore Overview](docs/skills/fabrcore/SKILL.md) | Architecture, prerequisites, and project templates |
 | [Agent Development](docs/skills/fabrcore-agent/SKILL.md) | Building agents with lifecycle methods, state, timers, and reminders |
 | [Microsoft Agent Framework](docs/skills/fabrcore-agentframework/SKILL.md) | `ChatClientAgent`, sessions, thread patterns, and `Microsoft.Extensions.AI` |
+| [Agent Harness](docs/skills/fabrcore-harness/SKILL.md) | Model-managed todo lists, iteration loops, background delegation, and durable sessions |
 | [Server Setup](docs/skills/fabrcore-server/SKILL.md) | Orleans silo, REST API, WebSocket, LLM providers, and system agents |
 | [Plugins and Tools](docs/skills/fabrcore-plugins-tools/SKILL.md) | Stateful plugins, stateless tools, and DI integration |
 | [MCP Integration](docs/skills/fabrcore-mcp/SKILL.md) | Model Context Protocol servers via Stdio and HTTP transports |

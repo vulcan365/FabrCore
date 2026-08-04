@@ -14,12 +14,15 @@ description: >
   "Orleans observer", or "Orleans mTLS".
   Do NOT use for: agent development — use fabrcore-agent.
   Do NOT use for: server setup — use fabrcore-server.
+  Do NOT use for: the agent harness feature (FabrCoreHarnessAgent, todo lists, loop, background delegation) — use fabrcore-harness. "Test harness" here means FabrCoreTestHarness, an unrelated test fixture.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
 ---
 
 # FabrCore Testing Skill
 
 Test FabrCore agents and libraries using MSTest with a lightweight in-memory test host — no Orleans silo required.
+
+**Naming note:** "harness" in this skill means `FabrCoreTestHarness`, a test fixture that wires DI and creates agents. It is unrelated to the FabrCore *agent* harness — the todo/loop/delegation runtime feature — which is **fabrcore-harness**.
 
 ## Quick Reference
 

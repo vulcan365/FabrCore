@@ -92,7 +92,7 @@ namespace FabrCore.Sdk
     }
 
 
-    public abstract class FabrCoreAgentProxy : IFabrCoreAgentProxy
+    public abstract partial class FabrCoreAgentProxy : IFabrCoreAgentProxy
     {
         private static readonly ActivitySource ActivitySource = new("FabrCore.Sdk.AgentProxy");
         private static readonly Meter Meter = new("FabrCore.Sdk.AgentProxy");

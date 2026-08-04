@@ -7,8 +7,9 @@ description: >
   SetStatusMessage, SendToUserAsync, proactive/out-of-turn notifications, AgentConfiguration,
   GetStateAsync, TryGetStateAsync, FlushStateAsync, RegisterTimer, RegisterReminder,
   SystemMessageTypes, and verifiable execution. Use fabrcore-agentframework for AIAgent or
-  AgentSession internals; fabrcore-plugins-tools/fabrcore-mcp for tools or MCP; and
-  fabrcore-principal-delivery for durable outbox internals and relay-provider authoring.
+  AgentSession internals; fabrcore-harness for todo lists, iteration loops, or background
+  delegation (CreateFabrCoreHarnessAgent); fabrcore-plugins-tools/fabrcore-mcp for tools or MCP;
+  and fabrcore-principal-delivery for durable outbox internals and relay-provider authoring.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
 ---
 
@@ -193,6 +194,8 @@ protected Task<ChatClientAgentResult> CreateChatClientAgent(
 - `Agent` (`AIAgent`) — The configured agent instance
 - `Session` (`AgentSession`) — The conversation session
 - `ChatHistoryProvider` (`FabrCoreChatHistoryProvider?`) — For compaction support
+
+**`CreateFabrCoreHarnessAgent`** is the drop-in sibling for agents that need to work a multi-step plan rather than answer one message. Same call shape, but the model gets a todo list, an iteration loop re-invokes it until that list is clear, and it can delegate to other FabrCore agents — with the whole session persisted across grain deactivation. See **fabrcore-harness**.
 
 ### OnMessage(AgentMessage)
 
