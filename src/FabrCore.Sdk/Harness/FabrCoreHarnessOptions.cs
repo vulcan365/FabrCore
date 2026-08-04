@@ -15,8 +15,10 @@ namespace FabrCore.Sdk;
 /// those defaults are unsafe in a shared multi-tenant silo and are not offered even as options.
 /// </para>
 /// <para>
-/// Compaction, projection, and run-safety budgets stay owned by FabrCore and are configured through
-/// <c>ModelConfiguration</c> and the existing <c>_Compaction*</c> / <c>_Projection*</c> args, not here.
+/// The whole compaction ladder is configured through <c>ModelConfiguration</c> and the
+/// <c>_Context*</c> / <c>_Compaction*</c> / <c>_Projection*</c> args, not here. Layer 1 arrives as a
+/// <c>CompactionProvider</c> in <see cref="AIContextProviders"/>; the history-compaction and run-safety
+/// rungs are registered by the proxy against the chat history provider. See <see cref="CompactionLadder"/>.
 /// </para>
 /// </remarks>
 public sealed class FabrCoreHarnessOptions

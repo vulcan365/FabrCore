@@ -28,9 +28,13 @@ namespace FabrCore.Sdk;
 /// <c>TokenTrackingChatClient</c> stays the innermost client and run-safety sees every call.
 /// </para>
 /// <para>
-/// Deliberately absent: file memory, file access, filesystem skill discovery, hosted web search, in-run
-/// compaction, and tool approval. The first four are rejected outright for a shared silo; compaction stays
-/// FabrCore-owned; tool approval is a later phase.
+/// Deliberately absent: file memory, file access, filesystem skill discovery, hosted web search, and tool
+/// approval. The first four are rejected outright for a shared silo; tool approval is a later phase.
+/// </para>
+/// <para>
+/// Compaction is composed by the caller, not here. <c>CreateFabrCoreHarnessAgent</c> passes a
+/// <c>CompactionProvider</c> through <see cref="FabrCoreHarnessOptions.AIContextProviders"/> as layer 1 of
+/// the ladder, and registers the history-compaction rungs separately — see <see cref="CompactionLadder"/>.
 /// </para>
 /// </remarks>
 public sealed class FabrCoreHarnessAgent : DelegatingAIAgent

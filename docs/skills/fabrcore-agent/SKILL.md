@@ -2,7 +2,9 @@
 name: fabrcore-agent
 description: >
   Build FabrCoreAgentProxy agents and implement lifecycle, state, compaction, timers, reminders,
-  health, telemetry, storage, and configuration. Use for FabrCoreAgentProxy, AgentAlias,
+  health, telemetry, storage, and configuration. Covers the two-layer compaction ladder: context
+  compaction, history compaction, ContextCompaction, ContextCompactionEnabled, CompactionLadder,
+  the projection fuse, and run-safety budgets. Use for FabrCoreAgentProxy, AgentAlias,
   OnInitialize, OnMessage, OnMessageBusy, OnEvent, OnCompaction, CreateChatClientAgent,
   SetStatusMessage, SendToUserAsync, proactive/out-of-turn notifications, AgentConfiguration,
   GetStateAsync, TryGetStateAsync, FlushStateAsync, RegisterTimer, RegisterReminder,
@@ -468,43 +470,93 @@ Important pitfall for agents: when resolving `IFabrCoreStorageProvider` directly
 
 Do not reference Orleans storage APIs (`IGrainStorage`, `GrainId`, `IGrainState<T>`) from agent code. FabrCore keeps those Host-internal so agents and SDK consumers do not depend on Orleans storage internals.
 
-## Chat History Compaction
+## Context Management: the compaction ladder
 
-Compaction runs automatically after every `OnMessage`. When stored chat history exceeds the configured token threshold, older messages are summarized via an LLM call and replaced with a compact summary.
+FabrCore bounds context with **five ordered rungs**, cheapest and most reversible first. Everything is anchored to one setting — `ContextWindowTokens` — so the rungs stay in order without tuning them individually.
 
-FabrCore also runs a parent-agent run-safety guard before each LLM call made through `TokenTrackingChatClient`. This guard labels actual prompt estimates separately from cumulative turn usage, can checkpoint compaction during long tool loops, and can stop a call before sending an oversized prompt.
+```
+0.50  layer 1  evict old tool results       free, reversible, no LLM call
+0.80  layer 1  truncate oldest groups       free, reversible, no LLM call
+0.87  layer 2  summarize + rewrite thread   one LLM call, permanent
+0.90  ---      projection fuse              blunt clip, insurance only
+1.00  ---      run-safety stop              FabrCoreRunStoppedException
+```
 
-**No agent code is needed** — compaction is handled by the framework. Settings resolve in order: **defaults → host model config (fabrcore.json, or cloud server when enabled) → agent Args overrides**.
+The two layers are distinguished by one question: **does it change what's on disk?**
 
-**Model-level** (on each model entry in `fabrcore.json`, or in the cluster config when the host uses a cloud server):
+| | Layer 1 — *context* compaction | Layer 2 — *history* compaction |
+|---|---|---|
+| Runs | Before every model call, in the tool loop | Preflight + post-turn |
+| Bounds | What this LLM call sees | What is persisted in `MessageThreads` |
+| Reversible | Yes — groups marked excluded | No — the thread is rewritten |
+| Costs an LLM call | No | Yes (map-reduce summary) |
+| Implemented by | `Microsoft.Agents.AI.Compaction.CompactionProvider` | `CompactionService` |
+| Override hook | `CompactionStrategy` (code) | `OnCompaction` (virtual) |
+
+Layer 1's state is deliberately **not persisted**. Its group index holds a full copy of every message it has seen; persisting it would duplicate the conversation into the agent state blob and let a stale index outlive a layer 2 rewrite. The strategy is deterministic and LLM-free, so rebuilding it each activation is free.
+
+**No agent code is needed.** Set `ContextWindowTokens` and `MaxOutputTokens` on the model and both layers self-configure. Settings resolve in order: **defaults → host model config (fabrcore.json, or cloud server when enabled) → agent Args overrides**.
+
+### Resolved-ladder diagnostics
+
+Every agent logs its resolved ladder once, at information level, when compaction initializes:
+
+```
+Compaction ladder for 'my-agent' provider 'thread-1' (model config 'default'):
+  evict@92000 → truncate@147200 → history@174000 → fuse@180000 → stop@200000
+```
+
+Disabled rungs render as `history:off` / `fuse:off` so a missing bound is visible rather than implied. `context:unconfigured` means `ContextWindowTokens` or `MaxOutputTokens` is missing and the agent is running with **no in-run context bound**. A `[OUT OF ORDER]` suffix means a later rung fires before an earlier one, making the earlier rung decorative — nearly always a misconfiguration.
+
+Layer 2 also emits monitor events: `compaction.history.started`, `compaction.history.completed`, `compaction.history.failed`, each tagged with `trigger` (`preflight` or `post-turn`). Layer 1 emits OpenTelemetry spans through `CompactionTelemetry` instead.
+
+### Model-level settings
+
+On each model entry in `fabrcore.json`, or in the cluster config when the host uses a cloud server:
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `ContextWindowTokens` | `25000` | Total context window size in tokens |
-| `CompactionEnabled` | `true` | Enable/disable compaction |
-| `CompactionKeepLastN` | `20` | Keep this many recent messages |
-| `CompactionThreshold` | `0.75` | Trigger at this fraction of context window |
-| `PerTurnMaxInputTokens` | unset | Stop a single `OnMessage` turn after cumulative input exceeds this budget |
-| `MaxPromptInputTokens` | `ContextWindowTokens` when compaction is enabled | Stop a single LLM call before sending an oversized prompt |
-| `MidTurnCompactionEnabled` | same as `CompactionEnabled` | Allow pre-call compaction checkpoints during tool loops |
+| `ContextWindowTokens` | unset | **The anchor.** Total context window in tokens |
+| `MaxOutputTokens` | unset | Output reserve. Layer 1 needs this and `ContextWindowTokens` |
+| `ContextCompactionEnabled` | `true` | Enable/disable layer 1 (in-run context compaction) |
+| `ContextEvictThreshold` | `0.5` | Fraction of input budget at which old tool results collapse |
+| `ContextTruncateThreshold` | `0.8` | Fraction of input budget at which oldest groups drop |
+| `CompactionEnabled` | `true` | Enable/disable layer 2 (history compaction) |
+| `CompactionKeepLastN` | `20` | Keep this many recent messages when rewriting the thread |
+| `CompactionThreshold` | `0.87` with layer 1, `0.75` without | Fraction of the window at which the thread is summarized |
+| `CompactionStaleAfterMinutes` | `60` | Preflight-compact a dormant over-threshold thread before the next turn |
+| `PerTurnMaxInputTokens` | unset | Stop a turn after cumulative input exceeds this budget |
+| `MaxPromptInputTokens` | `ContextWindowTokens` | Stop a single LLM call before sending an oversized prompt |
 | `RunawayBudgetBehavior` | `StopWithDiagnostic` | Behavior when a run-safety budget is exceeded |
 
-**Agent-level overrides** (in `AgentConfiguration.Args`, prefixed with `_`):
+The **input budget** for layer 1 is `ContextWindowTokens - MaxOutputTokens`; its two thresholds are fractions of that. Layer 2's threshold is a fraction of `ContextWindowTokens` itself.
 
-| Key | Description |
-|-----|-------------|
-| `_CompactionEnabled` | Override enable/disable |
-| `_CompactionMaxContextTokens` | Override context window size |
-| `_CompactionKeepLastN` | Override keep-last-N |
-| `_CompactionThreshold` | Override threshold ratio |
-| `_PerTurnMaxInputTokens` | Override cumulative per-turn input budget |
-| `_MaxPromptInputTokens` | Override single-call prompt budget |
-| `_MidTurnCompactionEnabled` | Override mid-turn compaction checkpointing |
-| `_RunawayBudgetBehavior` | Override runaway budget behavior |
+### Agent-level overrides
 
-### Custom Compaction
+In `AgentConfiguration.Args`, prefixed with `_`:
 
-Override `OnCompaction` to customize the compaction strategy:
+| Key | Layer | Description |
+|-----|-------|-------------|
+| `_ContextCompactionEnabled` | 1 | Turn off in-run context compaction |
+| `_ContextWindowTokens` | 1 | Override the window for this agent |
+| `_ContextMaxOutputTokens` | 1 | Override the output reserve |
+| `_ContextEvictThreshold` | 1 | Move the tool-eviction rung |
+| `_ContextTruncateThreshold` | 1 | Move the truncation rung |
+| `_CompactionEnabled` | 2 | Turn off history compaction |
+| `_CompactionMaxContextTokens` | 2 | Override the anchor used by layer 2 |
+| `_CompactionKeepLastN` | 2 | Override keep-last-N |
+| `_CompactionThreshold` | 2 | Move the history rung |
+| `_CompactionStaleAfterMinutes` | 2 | Override preflight staleness |
+| `_ProjectionEnabled` / `_ProjectionMaxContextTokens` / `_ProjectionThreshold` / `_ProjectionMinKeepLastN` | fuse | Move or disable the fuse |
+| `_PerTurnMaxInputTokens` | stop | Override cumulative per-turn input budget |
+| `_MaxPromptInputTokens` | stop | Override single-call prompt budget |
+| `_RunawayBudgetBehavior` | stop | Override runaway budget behavior |
+
+> **Retired:** `MidTurnCompactionEnabled` / `_MidTurnCompactionEnabled` no longer do anything. Mid-turn history compaction rewrote the persisted thread inside the tool loop, which corrupts a live layer 1 group index. Layer 1 replaces that job with a per-call mechanism that costs nothing and touches no storage. The setting is still accepted so existing `fabrcore.json` files keep loading; the value is ignored.
+
+### Customizing layer 2
+
+Override `OnCompaction` to change how the persisted thread is consolidated — a different prompt, model, or summarization strategy. This is **not** the hook for bounding a single LLM call; that is layer 1.
 
 ```csharp
 public override async Task<CompactionResult?> OnCompaction(
@@ -512,11 +564,19 @@ public override async Task<CompactionResult?> OnCompaction(
     CompactionConfig compactionConfig,
     int estimatedTokens = 0)
 {
-    // Custom compaction logic — use your own prompt, model, or strategy
-    // Or call the base implementation which delegates to CompactionService:
+    // Custom consolidation logic — your own prompt, model, or strategy.
+    // Or call the base implementation, which delegates to CompactionService:
     return await base.OnCompaction(chatHistoryProvider, compactionConfig, estimatedTokens);
 }
 ```
+
+`FabrCore.Services.Memory` overrides this hook to extract durable graph memories before summarizing — see the `fabrcore-services-memory` skill.
+
+### Two things that surprise people
+
+- **Two summary formats coexist in one thread.** Layer 1 inserts `[Tool Calls]` and `[Summary]` messages into the request; layer 2 writes `[Compacted History]` into storage. Seeing both in a transcript is expected.
+- **Layer 1's work is invisible in stored history.** Exclusions live in the session index, not in `MessageThreads`. Comparing "what the model saw" against stored messages will show a mismatch — that is the design, not a bug. Watch the `compaction.history.*` monitor events and `CompactionTelemetry` spans instead.
+- **Disabling layer 2 alone unbounds the state blob.** The model stays inside its window while stored history grows forever. FabrCore logs a warning when it sees this combination.
 
 ## Timers and Reminders
 

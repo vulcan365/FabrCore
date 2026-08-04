@@ -6,11 +6,26 @@ using System.Text;
 
 namespace FabrCore.Sdk;
 
+/// <summary>
+/// Layer 2 of the compaction ladder: <b>history compaction</b>.
+/// </summary>
+/// <remarks>
+/// Bounds what is <i>persisted</i> in <c>MessageThreads</c>, which is what keeps the Orleans state blob
+/// from growing without limit. Costs one LLM call and permanently rewrites the thread, so it sits above
+/// layer 1 (<see cref="ContextCompaction"/>) on the ladder — the free reversible rung always fires first.
+/// See <see cref="CompactionLadder"/> for the full ordering.
+/// </remarks>
 public record CompactionConfig
 {
     public bool Enabled { get; init; } = true;
     public int KeepLastN { get; init; } = 20;
     public int MaxContextTokens { get; init; } = 25000;
+
+    /// <summary>
+    /// Fraction of <see cref="MaxContextTokens"/> at which history compaction fires. The proxy resolves
+    /// this to 0.87 when context compaction is active and 0.75 when it is not; this bare default applies
+    /// only to configs constructed directly.
+    /// </summary>
     public double Threshold { get; init; } = 0.75;
 
     /// <summary>
@@ -25,11 +40,15 @@ public record CompactionConfig
 }
 
 /// <summary>
-/// Projection config controls the sliding window applied when the history provider
-/// hands chat messages to the LLM. Storage is untouched — this only affects reads.
-/// This is the safety net that bounds how many tokens any single LLM call can see,
-/// regardless of how large the persisted thread has grown.
+/// Rung 4 of the compaction ladder: the <b>projection fuse</b>. A sliding window applied when the history
+/// provider hands chat messages to the LLM. Storage is untouched — this only affects reads.
 /// </summary>
+/// <remarks>
+/// When context compaction is active this is demoted to insurance: anchored to the model window at 0.9,
+/// above every other rung, so it only fires in pathological cases. Left at the older inherited values it
+/// would clip first and make the layers above it decorative. Without context compaction it keeps the
+/// legacy behaviour of inheriting the history-compaction settings and acts as the real safety net.
+/// </remarks>
 public record ProjectionConfig
 {
     public bool Enabled { get; init; } = true;

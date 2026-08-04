@@ -40,7 +40,7 @@ Constants live on `FabrCore.Sdk.HarnessArgs` (`src/FabrCore.Sdk/Harness/HarnessA
 
 ## Parsing rules
 
-These follow the established `_Compaction*` / `_Projection*` convention:
+These follow the established `_Context*` / `_Compaction*` / `_Projection*` convention:
 
 - **Unparseable values fall back silently.** `"_HarnessTodo": "maybe"` leaves todos enabled; no
   warning, no throw. Deliberate — a typo in config must not take an agent down.
@@ -149,10 +149,14 @@ harness = await CreateFabrCoreHarnessAgent(
 
 ## Model configuration
 
-The harness needs no new `fabrcore.json` keys. Compaction, projection, and run-safety budgets are
-unchanged and still read `ContextWindowTokens`, `MaxOutputTokens`, `PerTurnMaxInputTokens`,
-`MaxPromptInputTokens`, and the `_Compaction*` / `_Projection*` args — see
-**fabrcore-agent → Chat History Compaction**.
+The harness needs no harness-specific `fabrcore.json` keys. The compaction ladder reads
+`ContextWindowTokens` and `MaxOutputTokens` as its anchor, plus `ContextCompactionEnabled`,
+`PerTurnMaxInputTokens`, `MaxPromptInputTokens`, and the `_Context*` / `_Compaction*` /
+`_Projection*` args — see **fabrcore-agent → Context Management: the compaction ladder**.
+
+Set both `ContextWindowTokens` and `MaxOutputTokens`. Without them layer 1 cannot be composed and a
+harness agent runs its whole tool loop with no in-run context bound; the startup log says
+`context:unconfigured` when this happens.
 
 One interaction worth knowing: loop iterations and delegations multiply LLM calls, so a harness
 agent reaches a per-turn token budget sooner than a single-shot agent on the same model. If runs

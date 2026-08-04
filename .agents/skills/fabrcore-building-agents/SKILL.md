@@ -800,30 +800,37 @@ await fabrcoreAgentHost.UnregisterReminder("daily-report");
 
 ---
 
-## Part 8: Chat History Compaction
+## Part 8: Context Management
 
-When conversations get long, `TryCompactAsync()` summarizes older messages to stay within the context window:
+You write no compaction code. FabrCore bounds context with five ordered rungs, cheapest first, all
+anchored to `ContextWindowTokens` on the model configuration:
 
-```csharp
-public override async Task<AgentMessage> OnMessage(AgentMessage message)
-{
-    // Safe to call every message — returns null if not needed
-    var compaction = await TryCompactAsync();
-    if (compaction?.WasCompacted == true)
-    {
-        logger.LogInformation("Compacted: {Original} → {Compacted} messages",
-            compaction.OriginalMessageCount, compaction.CompactedMessageCount);
-    }
-
-    // Process message normally...
-}
+```
+0.50  layer 1  evict old tool results       free, reversible, no LLM call
+0.80  layer 1  truncate oldest groups       free, reversible, no LLM call
+0.87  layer 2  summarize + rewrite thread   one LLM call, permanent
+0.90  ---      projection fuse              blunt clip, insurance only
+1.00  ---      run-safety stop              FabrCoreRunStoppedException
 ```
 
-Compaction is configured via `AgentConfiguration.Args`:
-- `CompactionEnabled` — `"true"` (default) or `"false"`
-- `CompactionThreshold` — fraction of context window that triggers compaction (default `"0.75"`)
-- `CompactionKeepLastN` — number of recent messages always preserved (default `"20"`)
-- `CompactionMaxContextTokens` — override max tokens (defaults to model config's `ContextWindowTokens`)
+**Layer 1 (context compaction)** bounds what a single LLM call sees. It runs before every model call
+in the tool loop and never touches persisted history. **Layer 2 (history compaction)** bounds what is
+persisted in `MessageThreads`, which is what keeps the Orleans state blob from growing forever.
+
+Set `ContextWindowTokens` and `MaxOutputTokens` on the model and both layers configure themselves.
+The agent logs its resolved ladder once at startup:
+
+```
+Compaction ladder for 'my-agent' provider 'thread-1' (model config 'default'):
+  evict@92000 → truncate@147200 → history@174000 → fuse@180000 → stop@200000
+```
+
+Per-agent overrides go in `AgentConfiguration.Args` with an underscore prefix — `_ContextCompactionEnabled`,
+`_ContextEvictThreshold`, `_ContextTruncateThreshold` for layer 1; `_CompactionEnabled`,
+`_CompactionThreshold`, `_CompactionKeepLastN`, `_CompactionMaxContextTokens` for layer 2.
+
+To customize how the persisted thread is consolidated, override `OnCompaction` — that is the layer 2
+hook, not a per-call hook. See the **fabrcore-agent** skill for the full settings reference.
 
 ---
 

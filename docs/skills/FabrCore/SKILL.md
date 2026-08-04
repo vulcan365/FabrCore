@@ -92,7 +92,7 @@ FabrCore layers on top of Orleans (distributed actor model) and Microsoft.Extens
 ```
 
 - **FabrCore.Core** — Interfaces (`IAgentGrain`, `IPrincipalGrain`), models (`AgentConfiguration`, `AgentMessage`, `EventMessage`, `AgentHealthStatus`, `AgentEvictionResult`), verifiable execution contracts, Orleans surrogates
-- **FabrCore.Sdk** — Agent base class (`FabrCoreAgentProxy`), plugin system, tool registry, chat client factory, MCP integration, compaction, state persistence, Host API client, typed entity storage contracts, blueprint ensure client types, LLM evidence integration
+- **FabrCore.Sdk** — Agent base class (`FabrCoreAgentProxy`), plugin system, tool registry, chat client factory, MCP integration, the two-layer compaction ladder (`ContextCompaction` + `CompactionService`), state persistence, Host API client, typed entity storage contracts, blueprint ensure client types, LLM evidence integration
 - **FabrCore.Host** — Orleans grains (`AgentGrain`, `PrincipalGrain`), REST API controllers, streaming, WebSocket, agent service, verifiable execution recording/signing/verification
 - **FabrCore.Services.Contracts** — open Memory, GraphRAG, and cluster-capability transport contracts
 - **FabrCore.Services.Memory** — optional SQL Server 2025-backed durable agent memory

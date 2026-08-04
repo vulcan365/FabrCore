@@ -509,13 +509,15 @@ namespace FabrCore.Sdk
                     MaxOutputTokens = result.MaxOutputTokens,
                     ReasoningEffort = result.ReasoningEffort,
                     ContextWindowTokens = result.ContextWindowTokens,
+                    ContextCompactionEnabled = result.ContextCompactionEnabled,
+                    ContextEvictThreshold = result.ContextEvictThreshold,
+                    ContextTruncateThreshold = result.ContextTruncateThreshold,
                     CompactionEnabled = result.CompactionEnabled,
                     CompactionKeepLastN = result.CompactionKeepLastN,
                     CompactionThreshold = result.CompactionThreshold,
                     CompactionStaleAfterMinutes = result.CompactionStaleAfterMinutes,
                     PerTurnMaxInputTokens = result.PerTurnMaxInputTokens,
                     MaxPromptInputTokens = result.MaxPromptInputTokens,
-                    MidTurnCompactionEnabled = result.MidTurnCompactionEnabled,
                     RunawayBudgetBehavior = result.RunawayBudgetBehavior
                 };
             }
@@ -602,13 +604,19 @@ namespace FabrCore.Sdk
             public int? MaxOutputTokens { get; set; }
             public string? ReasoningEffort { get; set; }
             public int? ContextWindowTokens { get; set; }
+            public bool? ContextCompactionEnabled { get; set; }
+            public double? ContextEvictThreshold { get; set; }
+            public double? ContextTruncateThreshold { get; set; }
             public bool? CompactionEnabled { get; set; }
             public int? CompactionKeepLastN { get; set; }
             public double? CompactionThreshold { get; set; }
             public int? CompactionStaleAfterMinutes { get; set; }
             public int? PerTurnMaxInputTokens { get; set; }
             public int? MaxPromptInputTokens { get; set; }
+
+            /// <summary>Accepted for wire compatibility with older hosts. Ignored — mid-turn history compaction was retired.</summary>
             public bool? MidTurnCompactionEnabled { get; set; }
+
             public string? RunawayBudgetBehavior { get; set; }
         }
 

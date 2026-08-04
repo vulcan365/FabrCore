@@ -76,7 +76,7 @@ protected Task<FabrCoreHarnessResult> CreateFabrCoreHarnessAgent(
     Action<FabrCoreHarnessOptions>? configure = null);
 ```
 
-**Use `CreateFabrCoreHarnessAgent` inside an agent.** It is the drop-in sibling of `CreateChatClientAgent` and supplies everything the pure assembler cannot know about: the token-tracked chat client, the Orleans-backed history provider, compaction and projection registration, config-driven settings, and durable session snapshots.
+**Use `CreateFabrCoreHarnessAgent` inside an agent.** It is the drop-in sibling of `CreateChatClientAgent` and supplies everything the pure assembler cannot know about: the token-tracked chat client, the Orleans-backed history provider, the full compaction ladder (layer 1 context compaction plus the history/fuse/stop rungs), config-driven settings, and durable session snapshots.
 
 Reach for `AsFabrCoreHarnessAgent` only outside a `FabrCoreAgentProxy` — a console tool, a test, a service that already holds its own `IChatClient`. Sessions are not persisted on that path unless you wire `IHarnessSessionStore` yourself.
 
@@ -231,15 +231,19 @@ Microsoft's `AsHarnessAgent` composes more. The following are **absent by design
 
 | Upstream feature | Why not |
 |-----------------|---------|
-| File memory (default-on upstream) | Its default store is silo-local disk — shared across every tenant in the process. Durable notes belong in the memory service; compaction insurance is already FabrCore's job |
+| File memory (default-on upstream) | Its default store is silo-local disk — shared across every tenant in the process. Durable notes belong in the memory service; compaction insurance is already the ladder's job |
 | File access | Same reason. Agents that genuinely need files use host storage services or a scoped MCP server, both governed by the normal tool pipeline |
 | Skills (`SKILL.md` discovery) | Upstream discovers from `Directory.GetCurrentDirectory()`, which on a silo is the shared process directory — wrong tenant boundary and a supply-chain risk |
 | Hosted web search (default-on upstream) | Fails outright on providers that do not support hosted tools |
 | Agent modes (`plan` / `execute`) | Not yet built |
 | Tool approval | Not yet built. Approval belongs on FabrCore channels with a durable pending state, which is a larger piece of work |
-| In-run `CompactionProvider` | Compaction stays FabrCore-owned. The existing preflight, post-turn, mid-turn, and projection paths are unchanged — see **fabrcore-agent → Chat History Compaction** |
 
-The last three are sequenced work, tracked in `docs/harness-adoption-plan.md`. The first four are decisions.
+The last two are sequenced work, tracked in `docs/harness-adoption-plan.md`. The first four are decisions.
+
+In-run `CompactionProvider` **is** composed — `CreateFabrCoreHarnessAgent` passes one as layer 1 of the
+compaction ladder, and it matters more here than anywhere else because harness agents run long tool loops.
+Its session state is stripped before the snapshot is persisted, so the group index never reaches durable
+storage. See **fabrcore-agent → Context Management: the compaction ladder**.
 
 ## Reference Routing
 

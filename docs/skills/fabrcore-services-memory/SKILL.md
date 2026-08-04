@@ -202,7 +202,7 @@ If compaction triggers but no memories are extracted, check for these log messag
 - **`"Failed to resolve chat client 'default'"`** — The `Models.CompactionModelName` doesn't match any entry in `fabrcore.json`. Fix: add a matching model entry or set `CompactionModelName` to an existing model name.
 - **`"Chat client 'X' not available, skipping LLM selection"`** — The `Models.RelevanceModelName` doesn't match. Recall falls back to recency-based selection (still works, but less accurate).
 - **`"Tier 2: memory extraction failed, continuing with Tier 3"`** — Extraction threw an exception (API error, timeout, JSON parse failure). Check the inner exception in the log.
-- **No log messages at all about compaction** — Compaction never triggered. Check that `CompactionEnabled = true` and `MaxContextTokens` / `Threshold` in the model configuration are set correctly. The token count must exceed `MaxContextTokens * Threshold` after an `OnMessage` for compaction to fire.
+- **No log messages at all about compaction** — History compaction never triggered. Check the resolved ladder line FabrCore logs at startup (`Compaction ladder for '<handle>' ...`): it shows exactly where the `history@` rung sits. Confirm `CompactionEnabled = true` and that `ContextWindowTokens` / `CompactionThreshold` are set as intended. Stored tokens must exceed `ContextWindowTokens * CompactionThreshold` for it to fire. Note that with layer 1 active the history rung defaults to **0.87** of the window, not 0.75, so it fires later than it used to — that is deliberate, so the free in-run rungs act first. Set `CompactionThreshold` explicitly to override.
 
 ## Three-Temperature Memory Model
 
@@ -212,7 +212,7 @@ If compaction triggers but no memories are extracted, check for these log messag
 | **Warm** | Normal `mem.MemoryEntity` rows, `Visibility="Warm"` | LLM relevance selection (up to 5 per query) | Up to 200 scanned per query |
 | **Cold** | `mem.MemoryChunk` rows + demoted entities, `Visibility="Cold"` | Vector search only, never bulk-loaded | Unlimited |
 
-**Important:** Hot memory is NOT chat history. Chat history is transient and lost on session end or compaction. Hot memory is a persistent, bounded index of one-line pointers to warm memories — it survives across sessions and is re-injected after compaction so the agent always knows what it remembers.
+**Important:** Hot memory is NOT chat history. Chat history is transient and lost on session end or history compaction. Hot memory is a persistent, bounded index of one-line pointers to warm memories — it survives across sessions and is re-injected after compaction so the agent always knows what it remembers.
 
 ### Column Mapping
 
@@ -466,7 +466,7 @@ public class MyMemoryAgent : FabrCoreAgentProxy
 ### How It Works
 
 1. **OnMessage** — `RecallAsync` retrieves relevant warm memories, `FormatRecallContext` wraps them in `<memory-context>` markers (so they aren't re-extracted during compaction), and the enriched message is sent to the LLM.
-2. **OnCompaction** — When the framework detects token usage exceeding the threshold (after any `OnMessage`), it calls `OnCompaction`. The `MemoryCompactionHandler` runs a three-tier cascade:
+2. **OnCompaction** — `OnCompaction` is the **layer 2 (history compaction)** hook: it fires when the *persisted* thread grows past its threshold, at preflight or after an `OnMessage`. It is not called per LLM call — bounding a single call is layer 1's job and involves no memory extraction. The `MemoryCompactionHandler` runs a three-tier cascade:
    - **Tier 1**: Compress large tool results (free, no LLM call)
    - **Tier 2**: Extract durable memories from older messages and save them to the memory store (LLM call)
    - **Tier 3**: Create a structured handover summary of remaining older messages (LLM call)

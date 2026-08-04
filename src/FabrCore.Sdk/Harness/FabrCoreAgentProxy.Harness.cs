@@ -51,6 +51,11 @@ public abstract partial class FabrCoreAgentProxy
         var chatClient = await GetChatClient(chatClientConfigName);
         var historyProvider = FabrCoreChatHistoryProvider.Create(fabrcoreAgentHost, threadId, logger);
 
+        // Layer 1 of the ladder. A harness agent runs long tool loops, so bounding every call in the loop
+        // matters more here than anywhere else — this is the rung that keeps a 40-iteration run inside the
+        // window without a single LLM call or any change to persisted history.
+        var contextCompactionProvider = await TryCreateContextCompactionProviderAsync(chatClientConfigName);
+
         var options = new FabrCoreHarnessOptions
         {
             Name = handle,
@@ -61,6 +66,7 @@ public abstract partial class FabrCoreAgentProxy
                 Tools = tools
             },
             ChatHistoryProvider = historyProvider,
+            AIContextProviders = contextCompactionProvider is not null ? [contextCompactionProvider] : null,
             LoopMaxIterations = DefaultHarnessLoopMaxIterations,
             MaximumIterationsPerRequest = DefaultHarnessMaxIterationsPerRequest
         };
@@ -171,8 +177,9 @@ public abstract partial class FabrCoreAgentProxy
 
         var (session, restored, delegationsLost) = await RestoreOrCreateHarnessSessionAsync(agent, threadId, persistSession);
 
-        // Register for compaction and projection exactly as CreateChatClientAgent does, so harness agents
-        // inherit the same storage hygiene as every other agent.
+        // Register for history compaction and the projection fuse exactly as CreateChatClientAgent does,
+        // so harness agents inherit the same storage hygiene as every other agent. Layer 1 was composed
+        // above; this registers rungs 3–5.
         _chatHistoryProvider = historyProvider;
         _chatClientConfigName = chatClientConfigName;
         var compactionRegistration = new ChatHistoryCompactionRegistration

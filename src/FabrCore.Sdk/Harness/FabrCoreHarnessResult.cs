@@ -175,6 +175,13 @@ public sealed class FabrCoreHarnessResult
         try
         {
             var payload = await Agent.SerializeSessionAsync(Session);
+
+            // Drop the layer 1 group index before persisting. It holds a full copy of every message it
+            // has seen, so keeping it would duplicate the conversation into the state blob and let a
+            // stale index outlive a layer 2 rewrite of the thread — re-sending messages history
+            // compaction had already summarized away. Rebuilding it next activation is free.
+            payload = ContextCompaction.StripSessionState(payload, logger);
+
             var bytes = Encoding.UTF8.GetByteCount(payload.GetRawText());
 
             if (bytes > SnapshotMaxBytes)

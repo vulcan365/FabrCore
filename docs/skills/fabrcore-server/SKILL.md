@@ -331,13 +331,16 @@ It is read by FabrCore's local model configuration store, not added to the appli
       "TimeoutSeconds": 120,         // Optional: HTTP timeout (default 120)
       "MaxOutputTokens": 16384,      // Optional: max tokens in response
       "ReasoningEffort": "none",    // Optional: none | low | medium | high | xhigh
-      "ContextWindowTokens": 128000, // Optional: total context window size
-      "CompactionEnabled": true,     // Optional: enable compaction (default true)
-      "CompactionKeepLastN": 20,     // Optional: messages to keep (default 20)
-      "CompactionThreshold": 0.75,   // Optional: trigger threshold (default 0.75)
+      "ContextWindowTokens": 128000, // Optional: total context window — the compaction ladder anchor
+      "ContextCompactionEnabled": true,   // Optional: layer 1, in-run context compaction (default true)
+      "ContextEvictThreshold": 0.5,       // Optional: evict old tool results at this fraction of input budget
+      "ContextTruncateThreshold": 0.8,    // Optional: truncate oldest groups at this fraction of input budget
+      "CompactionEnabled": true,     // Optional: layer 2, history compaction (default true)
+      "CompactionKeepLastN": 20,     // Optional: messages to keep when rewriting the thread (default 20)
+      "CompactionThreshold": 0.87,   // Optional: 0.87 with layer 1 active, 0.75 without
+      "CompactionStaleAfterMinutes": 60, // Optional: preflight-compact a dormant over-threshold thread
       "PerTurnMaxInputTokens": 120000, // Optional: cumulative input budget per agent turn
       "MaxPromptInputTokens": 128000,  // Optional: hard ceiling for one prompt
-      "MidTurnCompactionEnabled": true, // Optional: checkpoint compaction inside tool loops
       "RunawayBudgetBehavior": "StopWithDiagnostic"
     }
   ],
@@ -421,8 +424,10 @@ Any OpenAI-compatible endpoint can be used by setting `Provider: "OpenAI"` and a
       "Provider": "OpenAI",
       "Model": "gpt-4o-mini",
       "ApiKeyAlias": "openai",
+      "ContextWindowTokens": 128000,
+      "MaxOutputTokens": 16384,
       "CompactionKeepLastN": 10,
-      "CompactionThreshold": 0.6
+      "CompactionThreshold": 0.8
     },
     {
       "Name": "reasoning",

@@ -10,6 +10,15 @@ public enum RunStopReason
     None = 0,
     PromptTooLarge = 1,
     TurnBudgetExceeded = 2,
+
+    /// <summary>
+    /// No longer produced. Mid-turn history compaction was retired in favour of context compaction,
+    /// which bounds every call in the tool loop without rewriting the persisted thread mid-run.
+    /// </summary>
+    /// <remarks>
+    /// Retained so stop reasons recorded on historical messages still parse.
+    /// </remarks>
+    [Obsolete("Mid-turn history compaction was retired; this reason is never produced. See ContextCompaction.")]
     MidTurnCompactionFailed = 3
 }
 
@@ -20,27 +29,23 @@ public sealed class FabrCoreRunStoppedException : Exception
         string message,
         long actualPromptInputTokens,
         long turnCumulativeInputTokens,
-        int llmCalls,
-        int checkpointCount)
+        int llmCalls)
         : base(message)
     {
         Reason = reason;
         ActualPromptInputTokens = actualPromptInputTokens;
         TurnCumulativeInputTokens = turnCumulativeInputTokens;
         LlmCalls = llmCalls;
-        CheckpointCount = checkpointCount;
     }
 
     public RunStopReason Reason { get; }
     public long ActualPromptInputTokens { get; }
     public long TurnCumulativeInputTokens { get; }
     public int LlmCalls { get; }
-    public int CheckpointCount { get; }
 }
 
 public sealed record ChatRunSafetyConfig
 {
-    public bool MidTurnCompactionEnabled { get; init; }
     public int PerTurnMaxInputTokens { get; init; }
     public int MaxPromptInputTokens { get; init; }
     public string RunawayBudgetBehavior { get; init; } = "StopWithDiagnostic";
@@ -51,8 +56,23 @@ public sealed record ChatRunSafetyConfig
 }
 
 /// <summary>
-/// Tracks prompt-size and cumulative-token guardrails for one agent turn.
+/// Rung 5 of the compaction ladder: the budget stop. Tracks prompt-size and cumulative-token guardrails
+/// for one agent turn and aborts the run rather than letting it overspend.
 /// </summary>
+/// <remarks>
+/// <para>
+/// This scope no longer compacts anything. Bounding what a single call sees is layer 1's job
+/// (<see cref="ContextCompaction"/>, which runs before every call in the tool loop and is free and
+/// reversible); bounding what is persisted is layer 2's job (<see cref="CompactionService"/>, between
+/// turns). Run safety is what remains when both have already done their work and the run is still too
+/// expensive — at that point the correct action is to stop with a diagnostic, not to rewrite history
+/// mid-run underneath a live context index.
+/// </para>
+/// <para>
+/// <see cref="IsCompacting"/> is still honoured: layer 2's summarization LLM call runs inside this scope
+/// and must not be charged against the turn budget it is trying to protect.
+/// </para>
+/// </remarks>
 public sealed class ChatRunSafetyScope : IDisposable
 {
     private static readonly AsyncLocal<ChatRunSafetyScope?> CurrentScope = new();
@@ -60,18 +80,12 @@ public sealed class ChatRunSafetyScope : IDisposable
     private readonly IAgentMessageMonitor? _monitor;
     private readonly ILogger? _logger;
 
-    private FabrCoreChatHistoryProvider? _provider;
-    private CompactionConfig? _compactionConfig;
-    private CompactionService? _compactionService;
-    private string? _modelConfigName;
-    private bool _isCompacting;
-    private bool _checkpointAttemptedThisPrompt;
+    private int _compactionDepth;
 
     private long _turnCumulativeInputTokens;
     private long _actualPromptInputTokens;
     private long _maxPromptInputTokensPerCall;
     private int _llmCalls;
-    private int _checkpointCount;
 
     private ChatRunSafetyScope(
         string? agentHandle,
@@ -100,8 +114,12 @@ public sealed class ChatRunSafetyScope : IDisposable
     public long ActualPromptInputTokens => Interlocked.Read(ref _actualPromptInputTokens);
     public long MaxPromptInputTokensPerCall => Interlocked.Read(ref _maxPromptInputTokensPerCall);
     public int LlmCalls => Volatile.Read(ref _llmCalls);
-    public int CheckpointCount => Volatile.Read(ref _checkpointCount);
-    public bool IsCompacting => _isCompacting;
+
+    /// <summary>
+    /// True while a history-compaction LLM call is in flight. Calls made in this window bypass the
+    /// budget guards — compaction exists to reduce spend and must never be aborted by the spend limit.
+    /// </summary>
+    public bool IsCompacting => Volatile.Read(ref _compactionDepth) > 0;
 
     public static ChatRunSafetyScope Begin(
         string? agentHandle,
@@ -116,18 +134,11 @@ public sealed class ChatRunSafetyScope : IDisposable
         return scope;
     }
 
-    public void RegisterCheckpointProvider(
-        FabrCoreChatHistoryProvider provider,
-        CompactionConfig compactionConfig,
-        CompactionService? compactionService,
-        string modelConfigName)
-    {
-        _provider = provider;
-        _compactionConfig = compactionConfig;
-        _compactionService = compactionService;
-        _modelConfigName = modelConfigName;
-        _checkpointAttemptedThisPrompt = false;
-    }
+    /// <summary>
+    /// Marks the enclosed work as history compaction, exempting its LLM calls from the budget guards.
+    /// Re-entrant; the exemption lifts when the outermost scope is disposed.
+    /// </summary>
+    public IDisposable BeginHistoryCompaction() => new HistoryCompactionScope(this);
 
     public async Task<ChatRunSafetyCallInfo> PrepareCallAsync(
         IReadOnlyList<ChatMessage> requestMessages,
@@ -138,25 +149,14 @@ public sealed class ChatRunSafetyScope : IDisposable
         Interlocked.Exchange(ref _actualPromptInputTokens, actualPromptTokens);
         UpdateMax(ref _maxPromptInputTokensPerCall, actualPromptTokens);
 
-        var threshold = GetCompactionThreshold();
         await RecordDiagnosticAsync("pre-call-check", new Dictionary<string, string>
         {
             ["streaming"] = streaming.ToString(),
             ["actual_prompt_input_tokens"] = actualPromptTokens.ToString(),
             ["turn_cumulative_input_tokens"] = TurnCumulativeInputTokens.ToString(),
             ["max_prompt_input_tokens"] = Config.MaxPromptInputTokens.ToString(),
-            ["per_turn_max_input_tokens"] = Config.PerTurnMaxInputTokens.ToString(),
-            ["compaction_threshold_tokens"] = threshold.ToString()
+            ["per_turn_max_input_tokens"] = Config.PerTurnMaxInputTokens.ToString()
         });
-
-        if (Config.MidTurnCompactionEnabled
-            && threshold > 0
-            && actualPromptTokens > threshold
-            && !_checkpointAttemptedThisPrompt)
-        {
-            await TryCheckpointAsync(actualPromptTokens, threshold, cancellationToken);
-            _checkpointAttemptedThisPrompt = true;
-        }
 
         if (Config.MaxPromptInputTokens > 0 && actualPromptTokens > Config.MaxPromptInputTokens)
         {
@@ -164,8 +164,7 @@ public sealed class ChatRunSafetyScope : IDisposable
             await RecordDiagnosticAsync("prompt-too-large", new Dictionary<string, string>
             {
                 ["actual_prompt_input_tokens"] = actualPromptTokens.ToString(),
-                ["max_prompt_input_tokens"] = Config.MaxPromptInputTokens.ToString(),
-                ["checkpoint_count"] = CheckpointCount.ToString()
+                ["max_prompt_input_tokens"] = Config.MaxPromptInputTokens.ToString()
             });
 
             if (Config.StopWithDiagnostic)
@@ -202,7 +201,6 @@ public sealed class ChatRunSafetyScope : IDisposable
             Interlocked.Add(ref _turnCumulativeInputTokens, consumed);
 
         Interlocked.Increment(ref _llmCalls);
-        _checkpointAttemptedThisPrompt = false;
     }
 
     public void ApplyTo(Dictionary<string, string> args)
@@ -213,70 +211,8 @@ public sealed class ChatRunSafetyScope : IDisposable
             args["_turn_cumulative_input_tokens"] = TurnCumulativeInputTokens.ToString();
         if (MaxPromptInputTokensPerCall > 0)
             args["_max_prompt_input_tokens_per_call"] = MaxPromptInputTokensPerCall.ToString();
-        if (CheckpointCount > 0)
-            args["_fabrcore_checkpoint_count"] = CheckpointCount.ToString();
         if (StopReason != RunStopReason.None)
             args["_fabrcore_run_stop_reason"] = StopReason.ToString();
-    }
-
-    private async Task TryCheckpointAsync(long actualPromptTokens, int threshold, CancellationToken cancellationToken)
-    {
-        if (_provider is null || _compactionConfig is null || _compactionService is null || string.IsNullOrWhiteSpace(_modelConfigName))
-            return;
-
-        await RecordDiagnosticAsync("mid-turn-compaction-started", new Dictionary<string, string>
-        {
-            ["actual_prompt_input_tokens"] = actualPromptTokens.ToString(),
-            ["compaction_threshold_tokens"] = threshold.ToString(),
-            ["thread_id"] = _provider.ThreadId
-        });
-
-        _isCompacting = true;
-        try
-        {
-            var result = await _compactionService.CompactIfNeededAsync(
-                _provider,
-                _compactionConfig,
-                _modelConfigName,
-                ct: cancellationToken);
-
-            if (result.WasCompacted)
-                Interlocked.Increment(ref _checkpointCount);
-
-            await RecordDiagnosticAsync("mid-turn-compaction-completed", new Dictionary<string, string>
-            {
-                ["was_compacted"] = result.WasCompacted.ToString(),
-                ["tokens_before_compaction"] = result.EstimatedTokensBefore.ToString(),
-                ["tokens_after_compaction"] = result.EstimatedTokensAfter.ToString(),
-                ["messages_before_compaction"] = result.OriginalMessageCount.ToString(),
-                ["messages_after_compaction"] = result.CompactedMessageCount.ToString(),
-                ["checkpoint_count"] = CheckpointCount.ToString(),
-                ["thread_id"] = _provider.ThreadId
-            });
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            StopReason = RunStopReason.MidTurnCompactionFailed;
-            _logger?.LogWarning(ex, "Mid-turn compaction checkpoint failed for {AgentHandle}", AgentHandle);
-            await RecordDiagnosticAsync("mid-turn-compaction-failed", new Dictionary<string, string>
-            {
-                ["error"] = ex.Message,
-                ["actual_prompt_input_tokens"] = actualPromptTokens.ToString(),
-                ["thread_id"] = _provider.ThreadId
-            });
-        }
-        finally
-        {
-            _isCompacting = false;
-        }
-    }
-
-    private int GetCompactionThreshold()
-    {
-        if (_compactionConfig is null || _compactionConfig.MaxContextTokens <= 0)
-            return 0;
-
-        return (int)(_compactionConfig.MaxContextTokens * _compactionConfig.Threshold);
     }
 
     private void ThrowStopped(RunStopReason reason, long actualPromptTokens)
@@ -286,8 +222,7 @@ public sealed class ChatRunSafetyScope : IDisposable
             $"FabrCore stopped the agent run before the next LLM call: {reason}.",
             actualPromptTokens,
             TurnCumulativeInputTokens,
-            LlmCalls,
-            CheckpointCount);
+            LlmCalls);
     }
 
     private Task RecordDiagnosticAsync(string type, Dictionary<string, string> args)
@@ -363,6 +298,27 @@ public sealed class ChatRunSafetyScope : IDisposable
         {
             if (Interlocked.CompareExchange(ref target, candidate, current) == current)
                 break;
+        }
+    }
+
+    private sealed class HistoryCompactionScope : IDisposable
+    {
+        private readonly ChatRunSafetyScope _owner;
+        private bool _disposed;
+
+        public HistoryCompactionScope(ChatRunSafetyScope owner)
+        {
+            _owner = owner;
+            Interlocked.Increment(ref owner._compactionDepth);
+        }
+
+        public void Dispose()
+        {
+            if (_disposed)
+                return;
+
+            _disposed = true;
+            Interlocked.Decrement(ref _owner._compactionDepth);
         }
     }
 }
