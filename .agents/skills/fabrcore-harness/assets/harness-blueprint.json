@@ -11,6 +11,8 @@
       "description": "Researches operational questions end to end.",
       "streams": [],
       "args": {
+        "_HarnessMode": "true",
+        "_HarnessDefaultMode": "plan",
         "_HarnessLoop": "todo,background",
         "_HarnessLoopMaxIterations": "8",
         "_HarnessBackgroundAgents": "crm,policy-desk",

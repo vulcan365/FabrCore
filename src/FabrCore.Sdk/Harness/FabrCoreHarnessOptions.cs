@@ -10,7 +10,7 @@ namespace FabrCore.Sdk;
 /// <remarks>
 /// <para>
 /// This is the FabrCore counterpart to <c>HarnessAgentOptions</c>, deliberately narrower. It exposes
-/// only the capabilities FabrCore composes: todos, the iteration loop, and background delegation.
+/// only the capabilities FabrCore composes: todos, operating modes, the iteration loop, and background delegation.
 /// There is no file memory, no file access, no filesystem skill discovery, and no hosted web search —
 /// those defaults are unsafe in a shared multi-tenant silo and are not offered even as options.
 /// </para>
@@ -56,6 +56,36 @@ public sealed class FabrCoreHarnessOptions
 
     /// <summary>Extra context providers appended after the harness's own.</summary>
     public IEnumerable<AIContextProvider>? AIContextProviders { get; set; }
+
+    /// <summary>
+    /// Explicit skill source. When set, the harness composes an <see cref="AgentSkillsProvider"/>.
+    /// No current-directory or filesystem fallback is ever used.
+    /// </summary>
+    public AgentSkillsSource? AgentSkillsSource { get; set; }
+
+    /// <summary>Optional configuration for the composed read-only skill provider.</summary>
+    public AgentSkillsProviderOptions? AgentSkillsProviderOptions { get; set; }
+
+    /// <summary>Set to <see langword="true"/> to omit the <c>mode_*</c> tools and operating-mode instructions.</summary>
+    public bool DisableAgentModeProvider { get; set; }
+
+    /// <summary>
+    /// Optional mode configuration. When omitted, FabrCore supplies durable <c>plan</c> and <c>execute</c>
+    /// modes whose planning instructions use todos rather than file memory.
+    /// </summary>
+    public AgentModeProviderOptions? AgentModeProviderOptions { get; set; }
+
+    /// <summary>
+    /// Mode selected when <see cref="HarnessMessageArgs.PlanMode"/> is <c>true</c>.
+    /// Must name one of the effective <see cref="AgentModeProviderOptions.Modes"/>.
+    /// </summary>
+    public string PlanningModeName { get; set; } = "plan";
+
+    /// <summary>
+    /// Mode selected when <see cref="HarnessMessageArgs.PlanMode"/> is <c>false</c> and the only mode in
+    /// which the built-in todo evaluator drives re-invocation.
+    /// </summary>
+    public string ExecutionModeName { get; set; } = "execute";
 
     /// <summary>Set to <see langword="true"/> to omit the <c>todos_*</c> tools.</summary>
     public bool DisableTodoProvider { get; set; }

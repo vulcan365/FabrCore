@@ -1,782 +1,330 @@
-using FabrCore.Core;
-using FabrCore.Core.Interfaces;
-using FabrCore.Host.Configuration;
-using Microsoft.Extensions.Logging;
-using OpenTelemetry.Trace;
-using Orleans;
-using System.Diagnostics;
-using System.Diagnostics.Metrics;
+using System.Collections.Concurrent;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
+using FabrCore.Core;
+using FabrCore.Core.Acl;
+using FabrCore.Core.Auditing;
+using FabrCore.Core.Interfaces;
+using FabrCore.Core.WebSockets;
+using FabrCore.Host.Configuration;
+using Microsoft.Extensions.Logging;
+using Orleans;
 
-namespace FabrCore.Host.WebSocket
+namespace FabrCore.Host.WebSocket;
+
+/// <summary>One authenticated FabrCore WebSocket v2 session.</summary>
+public sealed class WebSocketSession : IPrincipalWebSocketObserver, IAsyncDisposable
 {
-    /// <summary>
-    /// WebSocket session that wraps PrincipalGrain for external WebSocket clients.
-    /// Handles commands via AgentMessage with MessageType="command".
-    /// </summary>
-    public class WebSocketSession : IPrincipalGrainObserver, IAsyncDisposable
+    private readonly System.Net.WebSockets.WebSocket socket;
+    private readonly IClusterClient clusterClient;
+    private readonly ILogger<WebSocketSession> logger;
+    private readonly IAuditProvider auditProvider;
+    private readonly string principalHandle;
+    private readonly FabrCoreHostOptions hostOptions;
+    private readonly FabrCoreWebSocketOptions options;
+    private readonly Channel<FabrCoreWebSocketFrame> outbound;
+    private readonly CancellationTokenSource stopping = new();
+    private readonly SemaphoreSlim concurrency;
+    private readonly ConcurrentDictionary<string, Task> operations = new(StringComparer.Ordinal);
+    private IPrincipalGrain? principalGrain;
+    private IPrincipalWebSocketObserver? observerReference;
+    private Task? outboundPump;
+    private string? clientId;
+    private readonly string connectionId = Guid.NewGuid().ToString("N");
+    private int overloadClosing;
+
+    public WebSocketSession(
+        System.Net.WebSockets.WebSocket socket,
+        IClusterClient clusterClient,
+        ILogger<WebSocketSession> logger,
+        IAuditProvider auditProvider,
+        string principalHandle,
+        FabrCoreHostOptions hostOptions,
+        FabrCoreWebSocketOptions options)
     {
-        private static readonly ActivitySource ActivitySource = new("FabrCore.Host.WebSocketSession");
-        private static readonly Meter Meter = new("FabrCore.Host.WebSocketSession");
-
-        // Metrics
-        private static readonly Counter<long> SessionsCreatedCounter = Meter.CreateCounter<long>(
-            "fabrcore.websocket.sessions.created",
-            description: "Number of WebSocket sessions created");
-
-        private static readonly Counter<long> SessionsClosedCounter = Meter.CreateCounter<long>(
-            "fabrcore.websocket.sessions.closed",
-            description: "Number of WebSocket sessions closed");
-
-        private static readonly Counter<long> MessagesReceivedCounter = Meter.CreateCounter<long>(
-            "fabrcore.websocket.messages.received",
-            description: "Number of messages received from WebSocket");
-
-        private static readonly Counter<long> MessagesSentCounter = Meter.CreateCounter<long>(
-            "fabrcore.websocket.messages.sent",
-            description: "Number of messages sent to WebSocket");
-
-        private static readonly Counter<long> CommandsProcessedCounter = Meter.CreateCounter<long>(
-            "fabrcore.websocket.commands.processed",
-            description: "Number of commands processed");
-
-        private static readonly Counter<long> ErrorCounter = Meter.CreateCounter<long>(
-            "fabrcore.websocket.errors",
-            description: "Number of errors encountered");
-
-        private static readonly Counter<long> OutboundDroppedCounter = Meter.CreateCounter<long>(
-            "fabrcore.websocket.messages.dropped",
-            description: "Outbound messages dropped due to full send queue or closed socket");
-
-        private static readonly Counter<long> OversizeRejectedCounter = Meter.CreateCounter<long>(
-            "fabrcore.websocket.messages.oversize_rejected",
-            description: "Inbound messages rejected for exceeding the max message size");
-
-        private readonly System.Net.WebSockets.WebSocket webSocket;
-        private readonly IClusterClient clusterClient;
-        private readonly ILogger<WebSocketSession> logger;
-        private IPrincipalGrain? principalGrain;
-        private IPrincipalGrainObserver? observerRef;
-        private readonly string handle;
-        private bool disposed;
-        private readonly CancellationTokenSource cancellationTokenSource;
-        private readonly SemaphoreSlim sendLock = new(1, 1);
-        private ActivityContext initialTraceContext;
-        private readonly int maxIncomingMessageBytes;
-        private readonly Channel<AgentMessage> outboundQueue;
-        private Task? outboundPumpTask;
-
-        /// <summary>
-        /// Sets a trace context captured from the WebSocket HTTP upgrade (traceparent/tracestate headers).
-        /// Used as the outer parent for ingress activities when an incoming AgentMessage carries no trace context of its own.
-        /// </summary>
-        public void SetInitialTraceContext(ActivityContext context) => initialTraceContext = context;
-
-        public WebSocketSession(
-            System.Net.WebSockets.WebSocket webSocket,
-            IClusterClient clusterClient,
-            ILogger<WebSocketSession> logger,
-            string userHandle,
-            FabrCoreHostOptions? hostOptions = null)
+        this.socket = socket;
+        this.clusterClient = clusterClient;
+        this.logger = logger;
+        this.auditProvider = auditProvider;
+        this.principalHandle = principalHandle;
+        this.hostOptions = hostOptions;
+        this.options = options;
+        concurrency = new SemaphoreSlim(options.MaxConcurrentRequests, options.MaxConcurrentRequests);
+        outbound = Channel.CreateBounded<FabrCoreWebSocketFrame>(new BoundedChannelOptions(hostOptions.OutboundQueueCapacity)
         {
-            this.webSocket = webSocket ?? throw new ArgumentNullException(nameof(webSocket));
-            this.clusterClient = clusterClient ?? throw new ArgumentNullException(nameof(clusterClient));
-            this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            this.handle = userHandle ?? throw new ArgumentNullException(nameof(userHandle));
-            this.cancellationTokenSource = new CancellationTokenSource();
+            FullMode = BoundedChannelFullMode.Wait,
+            SingleReader = true,
+            SingleWriter = false,
+        });
+    }
 
-            var options = hostOptions ?? new FabrCoreHostOptions();
-            this.maxIncomingMessageBytes = options.MaxIncomingMessageBytes;
-            this.outboundQueue = Channel.CreateBounded<AgentMessage>(
-                new BoundedChannelOptions(options.OutboundQueueCapacity)
-                {
-                    FullMode = BoundedChannelFullMode.DropOldest,
-                    SingleReader = true,
-                    SingleWriter = false,
-                });
+    public void SetInitialTraceContext(System.Diagnostics.ActivityContext context) { }
 
-            // user.id omitted from metric tags (unbounded cardinality); retained on activity/log context.
-            SessionsCreatedCounter.Add(1);
-            logger.LogInformation("WebSocketSession created for user: {userHandle}", handle);
+    public async Task StartAsync(CancellationToken cancellationToken = default)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, stopping.Token);
+        outboundPump = RunOutboundPumpAsync(linked.Token);
+
+        using var helloTimeout = CancellationTokenSource.CreateLinkedTokenSource(linked.Token);
+        helloTimeout.CancelAfter(options.HelloTimeout);
+        var first = await ReceiveFrameAsync(helloTimeout.Token);
+        if (first is null || first.Type != FabrCoreWebSocketFrameTypes.Hello || first.Payload is null)
+        {
+            await ProtocolViolationAsync("hello_required", "The first frame must be hello.", linked.Token);
+            return;
         }
 
-        /// <summary>
-        /// Start the WebSocket session message processing loop.
-        /// </summary>
-        public async Task StartAsync(CancellationToken cancellationToken = default)
+        var hello = first.Payload.Value.Deserialize<FabrCoreWebSocketHello>(FabrCoreWebSocketProtocol.JsonOptions);
+        if (hello is null || string.IsNullOrWhiteSpace(hello.ClientId))
         {
-            using var activity = ActivitySource.StartActivity("StartAsync", ActivityKind.Server);
-            activity?.SetTag("user.id", handle);
-
-            logger.LogInformation("Starting WebSocket session for user: {userHandle}", handle);
-
-            try
-            {
-                // Initialize the client grain connection
-                await InitializePrincipalGrainAsync();
-
-                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
-                    cancellationToken,
-                    cancellationTokenSource.Token);
-
-                // Start the outbound pump so observer callbacks never block on the socket.
-                outboundPumpTask = Task.Run(() => RunOutboundPumpAsync(linkedCts.Token), linkedCts.Token);
-
-                await ProcessMessagesAsync(linkedCts.Token);
-
-                activity?.SetStatus(ActivityStatusCode.Ok);
-            }
-            catch (Exception ex) when (ex is OperationCanceledException || ex is WebSocketException)
-            {
-                logger.LogInformation("WebSocket session ended for user {userHandle}: {Message}", handle, ex.Message);
-                activity?.SetStatus(ActivityStatusCode.Ok);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error in WebSocket session for user {userHandle}", handle);
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                activity?.AddException(ex);
-                ErrorCounter.Add(1,
-                    new KeyValuePair<string, object?>("error.type", "session_error"));
-                throw;
-            }
+            await ProtocolViolationAsync("invalid_hello", "hello.payload.clientId is required.", linked.Token);
+            return;
         }
 
-        /// <summary>
-        /// Initialize the PrincipalGrain connection and subscribe to the observer.
-        /// </summary>
-        private async Task InitializePrincipalGrainAsync()
+        clientId = hello.ClientId;
+        principalGrain = clusterClient.GetGrain<IPrincipalGrain>(principalHandle);
+        observerReference = clusterClient.CreateObjectReference<IPrincipalWebSocketObserver>(this);
+        var registration = await principalGrain.SubscribeWebSocket(observerReference, clientId, connectionId, hello.Checkpoint);
+
+        await QueueAsync(FabrCoreWebSocketFrame.Create(FabrCoreWebSocketFrameTypes.Welcome,
+            new FabrCoreWebSocketWelcome(principalHandle, registration.CurrentSequence,
+                registration.OldestAvailableSequence, registration.Replay.Count)), linked.Token);
+
+        if (registration.GapAfterSequence is long gapAfter && registration.OldestAvailableSequence is long oldest)
         {
-            using var activity = ActivitySource.StartActivity("InitializePrincipalGrain", ActivityKind.Internal);
-            activity?.SetTag("user.id", handle);
-
-            logger.LogInformation("Initializing PrincipalGrain for user: {userHandle}", handle);
-
-            try
-            {
-                // Get the grain with the handle as primary key
-                principalGrain = clusterClient.GetGrain<IPrincipalGrain>(handle);
-                logger.LogDebug("Client grain obtained for user: {userHandle}", handle);
-
-                // Create observer reference and subscribe to the grain
-                observerRef = clusterClient.CreateObjectReference<IPrincipalGrainObserver>(this);
-                logger.LogDebug("Observer reference created for user: {userHandle}", handle);
-
-                await principalGrain.Subscribe(observerRef);
-
-                logger.LogInformation("WebSocket session subscribed to PrincipalGrain for user: {userHandle}", handle);
-                activity?.SetStatus(ActivityStatusCode.Ok);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Failed to initialize PrincipalGrain for user: {userHandle}", handle);
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                activity?.AddException(ex);
-                ErrorCounter.Add(1,
-                    new KeyValuePair<string, object?>("error.type", "client_grain_init_failed"));
-                throw;
-            }
+            await QueueAsync(FabrCoreWebSocketFrame.Create(FabrCoreWebSocketFrameTypes.Gap,
+                new FabrCoreWebSocketGap(gapAfter, oldest, registration.CurrentSequence)), linked.Token);
+            await AuditAsync(AuditOutcome.Error, "websocket.replay.gap", "The client cursor fell behind retained deliveries.");
         }
 
-        private async Task ProcessMessagesAsync(CancellationToken cancellationToken)
+        foreach (var delivery in registration.Replay.OrderBy(x => x.Sequence))
+            await QueueAsync(ToDeliveryFrame(delivery), linked.Token);
+
+        while (socket.State == WebSocketState.Open && !linked.IsCancellationRequested)
         {
-            var buffer = new byte[1024 * 4];
-
-            while (webSocket.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
+            var frame = await ReceiveFrameAsync(linked.Token);
+            if (frame is null)
+                break;
+            if (frame.Type == FabrCoreWebSocketFrameTypes.Ack)
             {
-                using var activity = ActivitySource.StartActivity("ProcessMessage", ActivityKind.Server);
-
-                try
-                {
-                    var result = await ReceiveFullMessageAsync(buffer, cancellationToken);
-
-                    if (result.MessageType == WebSocketMessageType.Close)
-                    {
-                        logger.LogInformation("WebSocket close message received");
-                        await webSocket.CloseAsync(
-                            WebSocketCloseStatus.NormalClosure,
-                            "Closing",
-                            cancellationToken);
-                        break;
-                    }
-
-                    if (result.MessageType == WebSocketMessageType.Text && result.Message != null)
-                    {
-                        MessagesReceivedCounter.Add(1);
-                        activity?.SetTag("message.length", result.Message.Length);
-
-                        await HandleMessageAsync(result.Message, cancellationToken);
-                    }
-
-                    activity?.SetStatus(ActivityStatusCode.Ok);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "Error processing WebSocket message");
-                    activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                    activity?.AddException(ex);
-                    ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "message_processing_error"));
-
-                    // Send error back to client
-                    await SendErrorAsync(ex.Message, cancellationToken);
-                }
-            }
-        }
-
-        private async Task<(WebSocketMessageType MessageType, string? Message)> ReceiveFullMessageAsync(
-            byte[] buffer,
-            CancellationToken cancellationToken)
-        {
-            using var ms = new MemoryStream();
-            WebSocketReceiveResult result;
-            var totalBytes = 0;
-
-            do
-            {
-                result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
-
-                totalBytes += result.Count;
-                if (totalBytes > maxIncomingMessageBytes)
-                {
-                    OversizeRejectedCounter.Add(1);
-                    logger.LogWarning(
-                        "WebSocket message exceeded max size ({MaxBytes} bytes) for user {userHandle}. Closing session.",
-                        maxIncomingMessageBytes, handle);
-
-                    // Drain remaining fragments so the close handshake is clean, but cap the drain.
-                    while (!result.EndOfMessage && totalBytes < maxIncomingMessageBytes * 2)
-                    {
-                        result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
-                        totalBytes += result.Count;
-                    }
-
-                    if (webSocket.State == WebSocketState.Open)
-                    {
-                        await webSocket.CloseAsync(
-                            WebSocketCloseStatus.MessageTooBig,
-                            $"Message exceeded max size of {maxIncomingMessageBytes} bytes",
-                            cancellationToken);
-                    }
-
-                    throw new WebSocketException(
-                        WebSocketError.InvalidMessageType,
-                        $"Inbound message exceeded max size of {maxIncomingMessageBytes} bytes (received at least {totalBytes}).");
-                }
-
-                ms.Write(buffer, 0, result.Count);
-            }
-            while (!result.EndOfMessage);
-
-            if (result.MessageType == WebSocketMessageType.Text)
-            {
-                ms.Seek(0, SeekOrigin.Begin);
-                using var reader = new StreamReader(ms, Encoding.UTF8);
-                var message = await reader.ReadToEndAsync(cancellationToken);
-                return (result.MessageType, message);
-            }
-
-            return (result.MessageType, null);
-        }
-
-        private async Task HandleMessageAsync(string messageJson, CancellationToken cancellationToken)
-        {
-            using var activity = ActivitySource.StartActivity("HandleMessage", ActivityKind.Internal);
-
-            try
-            {
-                // Peek at the message type to determine how to deserialize
-                using var jsonDoc = JsonDocument.Parse(messageJson);
-                var messageType = jsonDoc.RootElement.TryGetProperty("MessageType", out var mtProp)
-                    ? mtProp.GetString()
-                    : jsonDoc.RootElement.TryGetProperty("messageType", out var mtProp2)
-                        ? mtProp2.GetString()
-                        : null;
-
-                activity?.SetTag("message.type", messageType);
-
-                if (messageType?.ToLower() == "event")
-                {
-                    var eventMessage = JsonSerializer.Deserialize<EventMessage>(messageJson);
-                    if (eventMessage == null)
-                        throw new InvalidOperationException("Failed to deserialize event message");
-
-                    await ProcessEventMessageAsync(eventMessage, cancellationToken);
-                }
+                if (frame.Sequence is not long sequence)
+                    await QueueErrorAsync(frame.Id, null, "invalid_ack", "ack.sequence is required.", false, linked.Token);
                 else
-                {
-                    var agentMessage = JsonSerializer.Deserialize<AgentMessage>(messageJson);
-                    if (agentMessage == null)
-                        throw new InvalidOperationException("Failed to deserialize message");
-
-                    using var ingress = agentMessage.StartIngressActivity(
-                        ActivitySource,
-                        messageType?.ToLower() == "command" ? "ReceiveCommand" : "ReceiveMessage",
-                        ActivityKind.Server,
-                        initialTraceContext);
-                    ingress?.SetTag("message.from", agentMessage.FromHandle);
-                    ingress?.SetTag("message.to", agentMessage.ToHandle);
-
-                    activity?.SetTag("message.from", agentMessage.FromHandle);
-                    activity?.SetTag("message.to", agentMessage.ToHandle);
-
-                    if (messageType?.ToLower() == "command")
-                    {
-                        await ProcessCommandAsync(agentMessage, cancellationToken);
-                    }
-                    else
-                    {
-                        await ProcessRegularMessageAsync(agentMessage, cancellationToken);
-                    }
-                }
-
-                activity?.SetStatus(ActivityStatusCode.Ok);
+                    await principalGrain.AcknowledgeWebSocket(clientId, sequence);
+                continue;
             }
-            catch (Exception ex)
+            if (frame.Type != FabrCoreWebSocketFrameTypes.Request)
             {
-                logger.LogError(ex, "Error handling message");
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                activity?.AddException(ex);
-                throw;
-            }
-        }
-
-        private async Task ProcessCommandAsync(AgentMessage command, CancellationToken cancellationToken)
-        {
-            using var activity = ActivitySource.StartActivity("ProcessCommand", ActivityKind.Internal);
-
-            var commandName = command.Message?.ToLower();
-            activity?.SetTag("command.name", commandName);
-            activity?.SetTag("user.id", handle);
-
-            logger.LogInformation("Processing command: {CommandName} for user: {userHandle}", commandName, handle);
-
-            CommandsProcessedCounter.Add(1,
-                new KeyValuePair<string, object?>("command.name", commandName));
-
-            try
-            {
-                switch (commandName)
-                {
-                    case "createagent":
-                        await HandleCreateAgentCommandAsync(command, cancellationToken);
-                        break;
-
-                    default:
-                        throw new InvalidOperationException($"Unknown command: {commandName}");
-                }
-
-                // Send success response
-                var response = new AgentMessage
-                {
-                    MessageType = "command_response",
-                    Message = "success",
-                    Kind = MessageKind.Response,
-                    TraceId = command.TraceId,
-                    State = new Dictionary<string, string>
-                    {
-                        ["command"] = commandName ?? "unknown",
-                        ["status"] = "success"
-                    }
-                };
-                response.StampFromActivity(Activity.Current);
-
-                await SendMessageAsync(response, cancellationToken);
-
-                activity?.SetStatus(ActivityStatusCode.Ok);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error processing command: {CommandName} for user: {userHandle}", commandName, handle);
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                activity?.AddException(ex);
-                ErrorCounter.Add(1,
-                    new KeyValuePair<string, object?>("error.type", "command_error"),
-                    new KeyValuePair<string, object?>("command.name", commandName));
-
-                // Send error response
-                var errorResponse = new AgentMessage
-                {
-                    MessageType = "command_response",
-                    Message = "error",
-                    Kind = MessageKind.Response,
-                    TraceId = command.TraceId,
-                    State = new Dictionary<string, string>
-                    {
-                        ["command"] = commandName ?? "unknown",
-                        ["status"] = "error",
-                        ["error"] = ex.Message
-                    }
-                };
-                errorResponse.StampFromActivity(Activity.Current);
-
-                await SendMessageAsync(errorResponse, cancellationToken);
-            }
-        }
-
-        private async Task HandleCreateAgentCommandAsync(AgentMessage command, CancellationToken cancellationToken)
-        {
-            using var activity = ActivitySource.StartActivity("HandleCreateAgent", ActivityKind.Internal);
-
-            if (principalGrain == null)
-            {
-                throw new InvalidOperationException("Client not initialized.");
-            }
-
-            // Parse agent configuration from command State or DataType/Data
-            AgentConfiguration? agentConfig = null;
-
-            if (command.Data != null && !string.IsNullOrEmpty(command.DataType))
-            {
-                if (command.DataType.ToLower() == "json" || command.DataType.ToLower() == "application/json")
-                {
-                    var configJson = Encoding.UTF8.GetString(command.Data);
-                    agentConfig = JsonSerializer.Deserialize<AgentConfiguration>(configJson);
-                }
-            }
-            else if (command.State != null)
-            {
-                // Build configuration from State dictionary
-                agentConfig = new AgentConfiguration
-                {
-                    Handle = command.State.GetValueOrDefault("agentHandle"),
-                    AgentType = command.State.GetValueOrDefault("agentType"),
-                    Models = command.State.GetValueOrDefault("models"),
-                    SystemPrompt = command.State.GetValueOrDefault("systemPrompt"),
-                    Description = command.State.GetValueOrDefault("description")
-                };
-
-                // Parse Args if provided as JSON string
-                if (command.State.TryGetValue("args", out var argsJson) && !string.IsNullOrEmpty(argsJson))
-                {
-                    var args = JsonSerializer.Deserialize<Dictionary<string, string>>(argsJson);
-                    if (args != null)
-                    {
-                        agentConfig.Args = args;
-                    }
-                }
-            }
-
-            if (agentConfig == null)
-            {
-                throw new ArgumentException("Agent configuration is required in command Data or State");
-            }
-
-            activity?.SetTag("agent.type", agentConfig.AgentType);
-            activity?.SetTag("agent.handle", agentConfig.Handle);
-            activity?.SetTag("client.handle", handle);
-
-            logger.LogInformation("Creating agent - Type: {AgentType}, Handle: {AgentHandle}",
-                agentConfig.AgentType, agentConfig.Handle);
-
-            await principalGrain.CreateAgent(agentConfig);
-
-            logger.LogInformation("Agent created successfully: {AgentHandle}", agentConfig.Handle);
-            activity?.SetStatus(ActivityStatusCode.Ok);
-        }
-
-        private async Task ProcessRegularMessageAsync(AgentMessage message, CancellationToken cancellationToken)
-        {
-            using var activity = ActivitySource.StartActivity("ProcessRegularMessage", ActivityKind.Internal);
-            activity?.SetTag("message.from", message.FromHandle);
-            activity?.SetTag("message.to", message.ToHandle);
-
-            if (principalGrain == null)
-            {
-                throw new InvalidOperationException("Client not initialized.");
-            }
-
-            logger.LogDebug("Processing regular message - From: {FromHandle}, To: {ToHandle}",
-                message.FromHandle, message.ToHandle);
-
-            try
-            {
-                // Determine if we should wait for response based on message properties
-                // If the message expects a response (Kind == Request), use SendAndReceiveMessage
-                if (message.Kind == MessageKind.Request)
-                {
-                    var response = await principalGrain.SendAndReceiveMessage(message);
-                    await SendMessageAsync(response, cancellationToken);
-                }
-                else
-                {
-                    // Fire and forget (OneWay or Response)
-                    await principalGrain.SendMessage(message);
-                }
-
-                activity?.SetStatus(ActivityStatusCode.Ok);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error processing regular message");
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                activity?.AddException(ex);
-                throw;
-            }
-        }
-
-        private async Task ProcessEventMessageAsync(EventMessage message, CancellationToken cancellationToken)
-        {
-            using var activity = ActivitySource.StartActivity("ProcessEventMessage", ActivityKind.Internal);
-            activity?.SetTag("event.source", message.Source);
-            activity?.SetTag("event.channel", message.Channel);
-
-            if (principalGrain == null)
-            {
-                throw new InvalidOperationException("Client not initialized.");
-            }
-
-            logger.LogDebug("Processing event message - Source: {Source}, Channel: {Channel}",
-                message.Source, message.Channel);
-
-            try
-            {
-                await principalGrain.SendEvent(message);
-
-                activity?.SetStatus(ActivityStatusCode.Ok);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error processing event message");
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                activity?.AddException(ex);
-                throw;
-            }
-        }
-
-        // IPrincipalGrainObserver implementation.
-        // Must NEVER throw — Orleans observer callbacks that throw can destabilize the
-        // ObserverManager on the grain side. We enqueue to a bounded channel and return
-        // immediately; the outbound pump serializes writes to the socket.
-        public void OnMessageReceived(AgentMessage message)
-        {
-            using var activity = ActivitySource.StartActivity("OnMessageReceived", ActivityKind.Consumer);
-            activity?.SetTag("client.handle", handle);
-            activity?.SetTag("message.from", message.FromHandle);
-            activity?.SetTag("message.to", message.ToHandle);
-
-            logger.LogDebug("Observer received message - From: {FromHandle}, To: {ToHandle}",
-                message.FromHandle, message.ToHandle);
-
-            if (disposed || cancellationTokenSource.IsCancellationRequested)
-            {
-                OutboundDroppedCounter.Add(1,
-                    new KeyValuePair<string, object?>("reason", "session_closed"));
-                activity?.SetStatus(ActivityStatusCode.Ok);
+                await ProtocolViolationAsync("invalid_frame_type", "Only request and ack frames are valid after hello.", linked.Token);
                 return;
             }
 
-            try
-            {
-                // BoundedChannel with DropOldest: TryWrite never fails unless the channel is
-                // completed, and the oldest queued message is dropped when at capacity.
-                if (!outboundQueue.Writer.TryWrite(message))
-                {
-                    OutboundDroppedCounter.Add(1,
-                        new KeyValuePair<string, object?>("reason", "channel_completed"));
-                    logger.LogWarning("Outbound queue refused message for user {userHandle} (channel completed)", handle);
-                }
-
-                activity?.SetStatus(ActivityStatusCode.Ok);
-            }
-            catch (Exception ex)
-            {
-                // Log-and-swallow: throwing into Orleans' observer pipeline is worse than dropping one message.
-                logger.LogError(ex, "Error enqueuing message to outbound queue for user {userHandle}", handle);
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                activity?.AddException(ex);
-                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "observer_error"));
-            }
-        }
-
-        private async Task RunOutboundPumpAsync(CancellationToken cancellationToken)
-        {
-            try
-            {
-                await foreach (var message in outboundQueue.Reader.ReadAllAsync(cancellationToken))
-                {
-                    if (cancellationToken.IsCancellationRequested)
-                        break;
-
-                    if (webSocket.State != WebSocketState.Open)
-                    {
-                        OutboundDroppedCounter.Add(1,
-                            new KeyValuePair<string, object?>("reason", "socket_not_open"));
-                        continue;
-                    }
-
-                    try
-                    {
-                        await SendMessageAsync(message, cancellationToken);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        break;
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogError(ex, "Outbound pump failed to send message for user {userHandle}", handle);
-                        ErrorCounter.Add(1,
-                            new KeyValuePair<string, object?>("error.type", "outbound_pump_send_error"));
-                    }
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                // Normal shutdown.
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Outbound pump faulted for user {userHandle}", handle);
-                ErrorCounter.Add(1,
-                    new KeyValuePair<string, object?>("error.type", "outbound_pump_faulted"));
-            }
-        }
-
-        private async Task SendMessageAsync(AgentMessage message, CancellationToken cancellationToken)
-        {
-            using var activity = ActivitySource.StartActivity("SendMessage", ActivityKind.Producer);
-
-            try
-            {
-                var json = JsonSerializer.Serialize(message);
-                var bytes = Encoding.UTF8.GetBytes(json);
-
-                await sendLock.WaitAsync(cancellationToken);
-                try
-                {
-                    if (webSocket.State == WebSocketState.Open)
-                    {
-                        await webSocket.SendAsync(
-                            new ArraySegment<byte>(bytes),
-                            WebSocketMessageType.Text,
-                            endOfMessage: true,
-                            cancellationToken);
-
-                        MessagesSentCounter.Add(1);
-                        logger.LogDebug("Message sent to WebSocket - Size: {Size} bytes", bytes.Length);
-                        activity?.SetStatus(ActivityStatusCode.Ok);
-                    }
-                    else
-                    {
-                        logger.LogWarning("WebSocket not open, cannot send message. State: {State}", webSocket.State);
-                    }
-                }
-                finally
-                {
-                    sendLock.Release();
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error sending message to WebSocket");
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                activity?.AddException(ex);
-                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "send_error"));
-                throw;
-            }
-        }
-
-        private async Task SendErrorAsync(string errorMessage, CancellationToken cancellationToken)
-        {
-            try
-            {
-                var errorMsg = new AgentMessage
-                {
-                    MessageType = "error",
-                    Message = errorMessage,
-                    Kind = MessageKind.Response
-                };
-                errorMsg.StampFromActivity(Activity.Current);
-
-                await SendMessageAsync(errorMsg, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error sending error message to WebSocket");
-            }
-        }
-
-        public async ValueTask DisposeAsync()
-        {
-            if (disposed)
-            {
-                return;
-            }
-
-            using var activity = ActivitySource.StartActivity("DisposeAsync", ActivityKind.Internal);
-            activity?.SetTag("client.handle", handle);
-
-            logger.LogInformation("Disposing WebSocket session: {Handle}", handle);
-
-            try
-            {
-                // Cancel any ongoing operations
-                cancellationTokenSource.Cancel();
-
-                // Signal the outbound pump to drain what it has and exit.
-                outboundQueue.Writer.TryComplete();
-                if (outboundPumpTask is not null)
-                {
-                    try
-                    {
-                        // Bounded wait so a stuck pump can't hold session teardown forever.
-                        using var pumpTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                        await outboundPumpTask.WaitAsync(pumpTimeout.Token);
-                    }
-                    catch (OperationCanceledException) { /* pump didn't finish in time — proceed */ }
-                    catch (Exception ex)
-                    {
-                        logger.LogWarning(ex, "Outbound pump reported an error during dispose");
-                    }
-                }
-
-                // Unsubscribe if we have an active subscription
-                if (principalGrain != null && observerRef != null)
-                {
-                    try
-                    {
-                        await principalGrain.Unsubscribe(observerRef);
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogWarning(ex, "Error unsubscribing during dispose");
-                    }
-                }
-
-                // Close the WebSocket
-                if (webSocket.State == WebSocketState.Open || webSocket.State == WebSocketState.CloseReceived)
-                {
-                    await webSocket.CloseAsync(
-                        WebSocketCloseStatus.NormalClosure,
-                        "Session disposed",
-                        CancellationToken.None);
-                }
-
-                webSocket.Dispose();
-                cancellationTokenSource.Dispose();
-                sendLock.Dispose();
-
-                disposed = true;
-
-                SessionsClosedCounter.Add(1);
-
-                logger.LogInformation("WebSocket session disposed: {Handle}", handle);
-                activity?.SetStatus(ActivityStatusCode.Ok);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error disposing WebSocket session: {Handle}", handle);
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                activity?.AddException(ex);
-                ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "dispose_error"));
-
-                disposed = true;
-            }
-
-            GC.SuppressFinalize(this);
+            var operationKey = frame.Id ?? Guid.NewGuid().ToString("N");
+            var task = HandleRequestAsync(frame, linked.Token);
+            operations[operationKey] = task;
+            _ = task.ContinueWith(completedTask => operations.TryRemove(operationKey, out var ignored), TaskScheduler.Default);
         }
     }
+
+    private async Task HandleRequestAsync(FabrCoreWebSocketFrame request, CancellationToken sessionToken)
+    {
+        await concurrency.WaitAsync(sessionToken);
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(sessionToken);
+            timeout.CancelAfter(options.RequestTimeout);
+            if (string.IsNullOrWhiteSpace(request.Id) || string.IsNullOrWhiteSpace(request.Operation))
+            {
+                await QueueErrorAsync(request.Id, request.Operation, "invalid_request", "request.id and request.operation are required.", false, timeout.Token);
+                return;
+            }
+
+            var result = await DispatchRequestAsync(request, timeout.Token).WaitAsync(timeout.Token);
+            await QueueResponseAsync(request, result, timeout.Token);
+        }
+        catch (UnsupportedWebSocketOperationException ex)
+        {
+            await QueueErrorAsync(request.Id, request.Operation, "unsupported_operation", ex.Message, false, sessionToken);
+        }
+        catch (AclDeniedException ex)
+        {
+            await QueueErrorAsync(request.Id, request.Operation, "forbidden", ex.Message, false, sessionToken);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            await QueueErrorAsync(request.Id, request.Operation, "forbidden", ex.Message, false, sessionToken);
+        }
+        catch (OperationCanceledException) when (!sessionToken.IsCancellationRequested)
+        {
+            await QueueErrorAsync(request.Id, request.Operation, "timeout", "The operation timed out.", true, sessionToken);
+        }
+        catch (ArgumentException ex)
+        {
+            await QueueErrorAsync(request.Id, request.Operation, "invalid_argument", ex.Message, false, sessionToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "WebSocket operation {Operation} failed for principal {Principal}", request.Operation, principalHandle);
+            await QueueErrorAsync(request.Id, request.Operation, "internal_error", "The operation failed.", false, sessionToken);
+        }
+        finally
+        {
+            concurrency.Release();
+        }
+    }
+
+    private Task<object?> DispatchRequestAsync(FabrCoreWebSocketFrame request, CancellationToken cancellationToken) =>
+        new WebSocketOperationDispatcher(principalGrain!, principalHandle).DispatchAsync(request);
+
+
+    public void OnDelivery(FabrCoreWebSocketDeliveryRecord delivery)
+    {
+        if (!outbound.Writer.TryWrite(ToDeliveryFrame(delivery)))
+            _ = CloseForOverloadAsync();
+    }
+
+    private static FabrCoreWebSocketFrame ToDeliveryFrame(FabrCoreWebSocketDeliveryRecord delivery)
+    {
+        var frame = FabrCoreWebSocketFrame.Create(FabrCoreWebSocketFrameTypes.Delivery, delivery.Message);
+        frame.Sequence = delivery.Sequence;
+        frame.DeliveryId = delivery.DeliveryId;
+        return frame;
+    }
+
+    private async Task<FabrCoreWebSocketFrame?> ReceiveFrameAsync(CancellationToken cancellationToken)
+    {
+        var buffer = new byte[4096];
+        using var memory = new MemoryStream();
+        WebSocketReceiveResult result;
+        do
+        {
+            result = await socket.ReceiveAsync(buffer, cancellationToken);
+            if (result.MessageType == WebSocketMessageType.Close)
+                return null;
+            if (result.MessageType != WebSocketMessageType.Text)
+                throw new WebSocketException(WebSocketError.InvalidMessageType);
+            if (memory.Length + result.Count > hostOptions.MaxIncomingMessageBytes)
+            {
+                await socket.CloseAsync(WebSocketCloseStatus.MessageTooBig, "Frame is too large.", cancellationToken);
+                return null;
+            }
+            memory.Write(buffer, 0, result.Count);
+        } while (!result.EndOfMessage);
+
+        try
+        {
+            var bytes = memory.ToArray();
+            using var document = JsonDocument.Parse(bytes);
+            if (!document.RootElement.TryGetProperty("version", out var version) ||
+                version.GetString() != FabrCoreWebSocketProtocol.Version)
+                throw new JsonException("Unsupported or missing protocol version.");
+            var frame = JsonSerializer.Deserialize<FabrCoreWebSocketFrame>(bytes, FabrCoreWebSocketProtocol.JsonOptions);
+            if (frame is null || frame.Version != FabrCoreWebSocketProtocol.Version)
+                throw new JsonException("Unsupported or missing protocol version.");
+            return frame;
+        }
+        catch (JsonException ex)
+        {
+            await ProtocolViolationAsync("invalid_frame", ex.Message, cancellationToken);
+            return null;
+        }
+    }
+
+    private async Task RunOutboundPumpAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await foreach (var frame in outbound.Reader.ReadAllAsync(cancellationToken))
+            {
+                var bytes = JsonSerializer.SerializeToUtf8Bytes(frame, FabrCoreWebSocketProtocol.JsonOptions);
+                await socket.SendAsync(bytes, WebSocketMessageType.Text, true, cancellationToken);
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (WebSocketException) { stopping.Cancel(); }
+    }
+
+    private ValueTask QueueAsync(FabrCoreWebSocketFrame frame, CancellationToken cancellationToken) =>
+        outbound.Writer.WriteAsync(frame, cancellationToken);
+
+    private Task QueueResponseAsync(FabrCoreWebSocketFrame request, object? result, CancellationToken cancellationToken)
+    {
+        var frame = FabrCoreWebSocketFrame.Create(FabrCoreWebSocketFrameTypes.Response, result);
+        frame.CorrelationId = request.Id;
+        frame.Operation = request.Operation;
+        return QueueAsync(frame, cancellationToken).AsTask();
+    }
+
+    private Task QueueErrorAsync(string? correlationId, string? operation, string code, string message, bool retryable, CancellationToken cancellationToken)
+    {
+        var frame = new FabrCoreWebSocketFrame
+        {
+            Type = FabrCoreWebSocketFrameTypes.Response,
+            CorrelationId = correlationId,
+            Operation = operation,
+            Error = new FabrCoreWebSocketError(code, message, retryable),
+        };
+        return QueueAsync(frame, cancellationToken).AsTask();
+    }
+
+    private async Task ProtocolViolationAsync(string code, string message, CancellationToken cancellationToken)
+    {
+        await AuditAsync(AuditOutcome.Denied, $"websocket.protocol.{code}", message);
+        if (socket.State == WebSocketState.Open)
+            await socket.CloseAsync(WebSocketCloseStatus.PolicyViolation, message, cancellationToken);
+        stopping.Cancel();
+    }
+
+    private async Task CloseForOverloadAsync()
+    {
+        if (Interlocked.Exchange(ref overloadClosing, 1) != 0)
+            return;
+        await AuditAsync(AuditOutcome.Error, "websocket.overload", "Outbound queue capacity was exceeded.");
+        try
+        {
+            if (socket.State == WebSocketState.Open)
+                await socket.CloseAsync((WebSocketCloseStatus)1013, "Try again later.", CancellationToken.None);
+        }
+        catch (WebSocketException) { }
+        stopping.Cancel();
+    }
+
+    private Task AuditAsync(AuditOutcome outcome, string permission, string reason) => auditProvider.RecordAsync(new AuditEvent
+    {
+        Category = AuditCategory.WebSocketSecurity,
+        Outcome = outcome,
+        SubjectPrincipal = principalHandle,
+        Permission = permission,
+        Reason = reason,
+        WasEnforced = outcome == AuditOutcome.Denied,
+    });
+
+    public async ValueTask DisposeAsync()
+    {
+        stopping.Cancel();
+        outbound.Writer.TryComplete();
+        if (principalGrain is not null && clientId is not null)
+        {
+            try { await principalGrain.UnsubscribeWebSocket(clientId, connectionId); }
+            catch (Exception ex) { logger.LogDebug(ex, "WebSocket unsubscribe failed during disposal."); }
+        }
+        try { await Task.WhenAll(operations.Values).WaitAsync(TimeSpan.FromSeconds(2)); }
+        catch (Exception) { }
+        if (outboundPump is not null)
+        {
+            try { await outboundPump.WaitAsync(TimeSpan.FromSeconds(2)); }
+            catch (Exception) { }
+        }
+        if (socket.State is WebSocketState.Open or WebSocketState.CloseReceived)
+        {
+            try { await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Session closed.", CancellationToken.None); }
+            catch (WebSocketException) { }
+        }
+        socket.Dispose();
+        concurrency.Dispose();
+        stopping.Dispose();
+    }
+
 }

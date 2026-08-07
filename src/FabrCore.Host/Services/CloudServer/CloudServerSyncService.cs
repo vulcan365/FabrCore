@@ -241,7 +241,7 @@ internal sealed class CloudServerSyncService : BackgroundService
             capabilities["host.admin.scope"] = "cluster";
             capabilities["host.admin.maxBodyBytes"] = remoteAdministration.MaxBodyBytes.ToString(
                 System.Globalization.CultureInfo.InvariantCulture);
-            capabilities["host.admin.features"] = "runtime,blueprints,acl,audit,monitor,evidence";
+            capabilities["host.admin.features"] = "runtime,blueprints,skills,acl,audit,monitor,evidence";
         }
 
         if (serviceProvider.GetService<IMemoryAdminService>() is not null)

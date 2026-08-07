@@ -11,8 +11,8 @@ using Microsoft.Extensions.Logging;
 /// {{AGENT_DESCRIPTION}}
 /// </summary>
 /// <remarks>
-/// A harness agent: the model keeps its own todo list, the loop re-invokes it until that list is
-/// clear, and it delegates work to the agents named in the <c>_HarnessBackgroundAgents</c> arg.
+/// A harness agent: plan mode builds a durable todo list, execute mode drives that list to completion,
+/// and the model delegates work to the agents named in the <c>_HarnessBackgroundAgents</c> arg.
 /// See the fabrcore-harness skill for the full configuration surface.
 /// </remarks>
 [AgentAlias("{{AGENT_ALIAS}}")]
@@ -83,9 +83,10 @@ public class {{AGENT_NAME}} : FabrCoreAgentProxy
         string text;
         try
         {
-            // ALWAYS run through the result, never harness.Agent.RunAsync — this wrapper snapshots
-            // the session afterwards, and that snapshot is what carries todos across turns.
-            var run = await harness.RunAsync(message.Message);
+            // ALWAYS run through the result, never harness.Agent.RunAsync — this wrapper applies
+            // AgentMessage.Args["_plan-mode"] and snapshots the session afterwards. Missing, invalid,
+            // or true means plan; false means execute.
+            var run = await harness.RunAsync(message);
             text = string.IsNullOrWhiteSpace(run.Text)
                 ? "Finished, but produced no summary."
                 : run.Text;
@@ -155,6 +156,8 @@ public class {{AGENT_NAME}} : FabrCoreAgentProxy
 //   "models": "default",
 //   "systemPrompt": "{{AGENT_SYSTEM_PROMPT}}",
 //   "args": {
+//     "_HarnessMode": "true",
+//     "_HarnessDefaultMode": "plan",
 //     "_HarnessLoop": "todo,background",
 //     "_HarnessLoopMaxIterations": "8",
 //     "_HarnessBackgroundAgents": "crm,policy-desk"

@@ -2,6 +2,7 @@
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using FabrCore.Core;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -13,9 +14,9 @@ namespace FabrCore.Sdk;
 /// </summary>
 /// <remarks>
 /// Returned by <c>FabrCoreAgentProxy.CreateFabrCoreHarnessAgent</c>. Run through
-/// <see cref="RunAsync(string, AgentRunOptions?, CancellationToken)"/> rather than calling
-/// <see cref="Agent"/> directly — the wrapper snapshots the session afterwards, which is what carries
-/// todos across user turns and grain deactivation.
+/// <see cref="RunAsync(AgentMessage, AgentRunOptions?, CancellationToken)"/> rather than calling
+/// <see cref="Agent"/> directly — the wrapper applies per-message mode selection and snapshots the session
+/// afterwards, which is what carries todos and operating mode across user turns and grain deactivation.
 /// </remarks>
 public sealed class FabrCoreHarnessResult
 {
@@ -69,6 +70,9 @@ public sealed class FabrCoreHarnessResult
     /// <summary>The todo provider, or <see langword="null"/> when todos are disabled.</summary>
     public TodoProvider? Todos => Agent.Todos;
 
+    /// <summary>The operating-mode provider, or <see langword="null"/> when modes are disabled.</summary>
+    public AgentModeProvider? Modes => Agent.Modes;
+
     /// <summary>The background-agent provider, or <see langword="null"/> when none were configured.</summary>
     public BackgroundAgentsProvider? BackgroundAgents => Agent.BackgroundAgents;
 
@@ -87,7 +91,31 @@ public sealed class FabrCoreHarnessResult
     /// </summary>
     public bool IsSessionPersistent => store is not null;
 
-    /// <summary>Runs the harness on a single user message, then snapshots the session.</summary>
+    /// <summary>
+    /// Runs the harness on an inbound FabrCore message, applying <see cref="HarnessMessageArgs.PlanMode"/>
+    /// before invoking the agent, then snapshots the session.
+    /// </summary>
+    public async Task<AgentResponse> RunAsync(
+        AgentMessage message,
+        AgentRunOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        try
+        {
+            await ApplyMessageModeAsync(message, cancellationToken);
+            return await Agent.RunAsync(message.Message ?? string.Empty, Session, options, cancellationToken);
+        }
+        finally
+        {
+            await SnapshotSessionAsync();
+        }
+    }
+
+    /// <summary>
+    /// Runs the harness on a single user message, then snapshots the session. This overload cannot read
+    /// <see cref="AgentMessage.Args"/> and therefore preserves the session's current/default operating mode.
+    /// </summary>
     public Task<AgentResponse> RunAsync(
         string message,
         AgentRunOptions? options = null,
@@ -134,6 +162,33 @@ public sealed class FabrCoreHarnessResult
         }
     }
 
+    /// <summary>
+    /// Streams a run for an inbound FabrCore message after applying <see cref="HarnessMessageArgs.PlanMode"/>.
+    /// </summary>
+    public async IAsyncEnumerable<AgentResponseUpdate> RunStreamingAsync(
+        AgentMessage message,
+        AgentRunOptions? options = null,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        try
+        {
+            await ApplyMessageModeAsync(message, cancellationToken);
+            await foreach (var update in Agent.RunStreamingAsync(
+                message.Message ?? string.Empty,
+                Session,
+                options,
+                cancellationToken))
+            {
+                yield return update;
+            }
+        }
+        finally
+        {
+            await SnapshotSessionAsync();
+        }
+    }
+
     /// <summary>Todo items not yet completed. Empty when todos are disabled.</summary>
     public async Task<IReadOnlyList<TodoItem>> GetRemainingTodosAsync(CancellationToken cancellationToken = default)
         => Todos is null ? [] : await Todos.GetRemainingTodosAsync(Session, cancellationToken);
@@ -142,9 +197,49 @@ public sealed class FabrCoreHarnessResult
     public async Task<IReadOnlyList<TodoItem>> GetAllTodosAsync(CancellationToken cancellationToken = default)
         => Todos is null ? [] : await Todos.GetAllTodosAsync(Session, cancellationToken);
 
+    /// <summary>Returns the current operating mode, or <see langword="null"/> when modes are disabled.</summary>
+    public async Task<string?> GetModeAsync(CancellationToken cancellationToken = default)
+        => Modes is null ? null : await Modes.GetModeAsync(Session, cancellationToken);
+
+    /// <summary>Sets the current operating mode and immediately snapshots the updated session.</summary>
+    /// <exception cref="InvalidOperationException">Operating modes are disabled for this harness.</exception>
+    public async Task SetModeAsync(string mode, CancellationToken cancellationToken = default)
+    {
+        var provider = Modes ?? throw new InvalidOperationException(
+            "Operating modes are disabled for this harness agent.");
+
+        await provider.SetModeAsync(Session, mode, cancellationToken);
+        await SnapshotSessionAsync();
+    }
+
+    /// <summary>Switches to the configured planning or execution mode and immediately snapshots the session.</summary>
+    /// <exception cref="InvalidOperationException">Operating modes are disabled for this harness.</exception>
+    public Task SetPlanModeAsync(bool planning, CancellationToken cancellationToken = default) =>
+        SetModeAsync(planning ? Agent.PlanningModeName : Agent.ExecutionModeName, cancellationToken);
+
     /// <summary>Delegations still running right now. Empty when no background agents are configured.</summary>
     public IReadOnlyList<BackgroundTaskInfo> GetRunningDelegations()
         => BackgroundAgents?.GetIncompleteTasks(Session) ?? [];
+
+    private async Task ApplyMessageModeAsync(AgentMessage message, CancellationToken cancellationToken)
+    {
+        if (Modes is null)
+        {
+            return;
+        }
+
+        var planning = true;
+        if (message.Args?.TryGetValue(HarnessMessageArgs.PlanMode, out var configured) is true
+            && bool.TryParse(configured, out var parsed))
+        {
+            planning = parsed;
+        }
+
+        await Modes.SetModeAsync(
+            Session,
+            planning ? Agent.PlanningModeName : Agent.ExecutionModeName,
+            cancellationToken);
+    }
 
     /// <summary>
     /// A one-line note about delegations lost to the last restore, or <see langword="null"/> when there were

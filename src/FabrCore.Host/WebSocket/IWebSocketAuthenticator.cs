@@ -4,16 +4,14 @@ namespace FabrCore.Host.WebSocket
 {
     /// <summary>
     /// Pluggable authenticator invoked before a WebSocket upgrade is accepted.
-    /// The default implementation reads
-    /// <c>x-fabrcore-userhandle</c> header or <c>userhandle</c> query param). Production
-    /// hosts should override via <see cref="FabrCoreServerOptions"/> with an
-    /// implementation that validates JWT/cookies against their identity provider.
+    /// The default implementation redeems the single-use ticket supplied as a
+    /// <c>fabrcore.ticket.*</c> WebSocket subprotocol.
     /// </summary>
     public interface IWebSocketAuthenticator
     {
         /// <summary>
         /// Inspect the upgrade request. Return a result indicating whether the
-        /// connection is allowed and, if so, which user handle to associate with
+        /// connection is allowed and, if so, which principal handle to associate with
         /// the session.
         /// </summary>
         Task<WebSocketAuthResult> AuthenticateAsync(HttpContext context);

@@ -5,6 +5,7 @@ using FabrCore.Core.Acl;
 using FabrCore.Core.Auditing;
 using FabrCore.Core.Blueprints;
 using FabrCore.Core.Monitoring;
+using FabrCore.Core.Skills;
 using FabrCore.Core.VerifiableExecution;
 using FabrCore.Host.Configuration;
 using FabrCore.Host.Security;
@@ -13,6 +14,7 @@ using FabrCore.Services.Contracts.Capabilities;
 using FabrCore.Services.GraphRag.Administration;
 using FabrCore.Services.Memory.Administration;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,6 +29,7 @@ namespace FabrCore.Host.Api.Controllers;
 public sealed class RemoteAdminController(
     IFabrCoreAgentService agents,
     IFabrCoreBlueprintService blueprints,
+    IFabrCoreSkillCatalogService skills,
     IAclEntityStore acl,
     IAclSnapshotProvider aclSnapshot,
     IAuditProvider audit,
@@ -89,7 +92,7 @@ public sealed class RemoteAdminController(
                     Name = "host-admin",
                     Version = typeof(RemoteAdminController).Assembly.GetName().Version?.ToString(),
                     ApiVersion = "1",
-                    Features = ["runtime", "blueprints", "acl", "audit", "monitor", "evidence", "capabilities"],
+                    Features = ["runtime", "blueprints", "skills", "acl", "audit", "monitor", "evidence", "capabilities"],
                     DataScope = "cluster",
                     MaxRequestBodyBytes = remoteAdministrationOptions.Value.MaxBodyBytes
                 }
@@ -201,6 +204,138 @@ public sealed class RemoteAdminController(
                 ? NotFound()
                 : Ok(await blueprints.ApplyAsync(principalId, blueprint, detailLevel, cancellationToken));
         });
+
+    [HttpGet("principals/{principalId}/skills")]
+    public async Task<IActionResult> ListSkills(string principalId, CancellationToken cancellationToken)
+    {
+        if (RejectSpoofedTargetHeaders() is { } rejected) return rejected;
+        return Ok(await skills.ListAsync(principalId, cancellationToken));
+    }
+
+    [HttpGet("principals/{principalId}/skills/{name}/versions/{version}")]
+    public async Task<IActionResult> GetSkill(
+        string principalId,
+        string name,
+        string version,
+        CancellationToken cancellationToken)
+    {
+        if (RejectSpoofedTargetHeaders() is { } rejected) return rejected;
+        try
+        {
+            var manifest = await skills.GetAsync(principalId, name, version, cancellationToken);
+            return manifest is null ? NotFound() : Ok(manifest);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { Error = ex.Message });
+        }
+    }
+
+    [HttpPut("principals/{principalId}/skills/{name}/versions/{version}")]
+    public async Task<IActionResult> PublishSkill(
+        string principalId,
+        string name,
+        string version,
+        CancellationToken cancellationToken)
+    {
+        if (RejectSpoofedTargetHeaders() is { } rejected) return rejected;
+
+        var reference = $"{name}@{version}";
+        var maximumBodyBytes = remoteAdministrationOptions.Value.MaxBodyBytes;
+        if (Request.ContentLength is > 0 && Request.ContentLength > maximumBodyBytes)
+        {
+            await RecordAsync(principalId, $"skills/{reference}/publish", AuditOutcome.Denied,
+                new Dictionary<string, string> { ["skillReference"] = reference });
+            return StatusCode(StatusCodes.Status413PayloadTooLarge,
+                new { Error = $"Skill archive exceeds the {maximumBodyBytes}-byte request limit." });
+        }
+
+        try
+        {
+            await using var archive = new MemoryStream();
+            await CopyBoundedAsync(Request.Body, archive, maximumBodyBytes, cancellationToken);
+            if (archive.Length == 0)
+            {
+                await RecordAsync(principalId, $"skills/{reference}/publish", AuditOutcome.Denied,
+                    new Dictionary<string, string> { ["skillReference"] = reference });
+                return BadRequest(new { Error = "A ZIP archive request body is required." });
+            }
+
+            archive.Position = 0;
+            var result = await skills.PublishAsync(
+                principalId, name, version, archive, cancellationToken);
+            await RecordAsync(principalId, $"skills/{reference}/publish", AuditOutcome.Success,
+                new Dictionary<string, string>
+                {
+                    ["skillReference"] = reference,
+                    ["digest"] = result.Manifest.DigestSha256,
+                    ["idempotent"] = result.AlreadyExisted.ToString()
+                });
+
+            return StatusCode(
+                result.AlreadyExisted ? StatusCodes.Status200OK : StatusCodes.Status201Created,
+                result);
+        }
+        catch (SkillArchiveTooLargeException ex)
+        {
+            await RecordAsync(principalId, $"skills/{reference}/publish", AuditOutcome.Denied,
+                new Dictionary<string, string> { ["skillReference"] = reference });
+            return StatusCode(StatusCodes.Status413PayloadTooLarge, new { Error = ex.Message });
+        }
+        catch (FabrCoreSkillConflictException ex)
+        {
+            await RecordAsync(principalId, $"skills/{reference}/publish", AuditOutcome.Denied,
+                new Dictionary<string, string> { ["skillReference"] = reference });
+            return Conflict(new { Error = ex.Message });
+        }
+        catch (Exception ex) when (ex is FabrCoreSkillValidationException or ArgumentException)
+        {
+            await RecordAsync(principalId, $"skills/{reference}/publish", AuditOutcome.Denied,
+                new Dictionary<string, string> { ["skillReference"] = reference });
+            return BadRequest(new { Error = ex.Message });
+        }
+        catch
+        {
+            await RecordAsync(principalId, $"skills/{reference}/publish", AuditOutcome.Error,
+                new Dictionary<string, string> { ["skillReference"] = reference });
+            throw;
+        }
+    }
+
+    [HttpDelete("principals/{principalId}/skills/{name}/versions/{version}")]
+    public async Task<IActionResult> DeleteSkill(
+        string principalId,
+        string name,
+        string version,
+        CancellationToken cancellationToken)
+    {
+        if (RejectSpoofedTargetHeaders() is { } rejected) return rejected;
+        var reference = $"{name}@{version}";
+        try
+        {
+            var manifest = await skills.DeleteAsync(principalId, name, version, cancellationToken);
+            await RecordAsync(principalId, $"skills/{reference}/delete",
+                manifest is null ? AuditOutcome.Denied : AuditOutcome.Success,
+                new Dictionary<string, string>
+                {
+                    ["skillReference"] = reference,
+                    ["digest"] = manifest?.DigestSha256 ?? string.Empty
+                });
+            return manifest is null ? NotFound() : NoContent();
+        }
+        catch (ArgumentException ex)
+        {
+            await RecordAsync(principalId, $"skills/{reference}/delete", AuditOutcome.Denied,
+                new Dictionary<string, string> { ["skillReference"] = reference });
+            return BadRequest(new { Error = ex.Message });
+        }
+        catch
+        {
+            await RecordAsync(principalId, $"skills/{reference}/delete", AuditOutcome.Error,
+                new Dictionary<string, string> { ["skillReference"] = reference });
+            throw;
+        }
+    }
 
     [HttpGet("access")]
     public async Task<IActionResult> GetAccess(CancellationToken cancellationToken)
@@ -454,11 +589,28 @@ public sealed class RemoteAdminController(
         return null;
     }
 
-    private Task RecordAsync(string? targetPrincipal, string operation, AuditOutcome outcome)
+    private Task RecordAsync(
+        string? targetPrincipal,
+        string operation,
+        AuditOutcome outcome,
+        IReadOnlyDictionary<string, string>? additionalDetails = null)
     {
         var actor = Request.Headers[ActorHeader].FirstOrDefault()
                     ?? User.Identity?.Name
                     ?? "cluster-admin";
+        var details = new Dictionary<string, string>
+        {
+            ["operation"] = operation,
+            ["commandId"] = Request.Headers[CommandHeader].FirstOrDefault() ?? string.Empty
+        };
+        if (additionalDetails is not null)
+        {
+            foreach (var (key, value) in additionalDetails)
+            {
+                details[key] = value;
+            }
+        }
+
         return audit.RecordAsync(new AuditEvent
         {
             Category = AuditCategory.RemoteAdministration,
@@ -468,13 +620,38 @@ public sealed class RemoteAdminController(
             Resource = operation,
             Permission = "remote.admin",
             TraceId = Activity.Current?.TraceId.ToString(),
-            Details = new Dictionary<string, string>
-            {
-                ["operation"] = operation,
-                ["commandId"] = Request.Headers[CommandHeader].FirstOrDefault() ?? string.Empty
-            }
+            Details = details
         });
     }
+
+    private static async Task CopyBoundedAsync(
+        Stream input,
+        Stream output,
+        int maximumBytes,
+        CancellationToken cancellationToken)
+    {
+        var buffer = new byte[81920];
+        long totalBytes = 0;
+        while (true)
+        {
+            var read = await input.ReadAsync(buffer, cancellationToken);
+            if (read == 0)
+            {
+                return;
+            }
+
+            totalBytes += read;
+            if (totalBytes > maximumBytes)
+            {
+                throw new SkillArchiveTooLargeException(
+                    $"Skill archive exceeds the {maximumBytes}-byte request limit.");
+            }
+
+            await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+        }
+    }
+
+    private sealed class SkillArchiveTooLargeException(string message) : Exception(message);
 }
 
 public sealed class RemoteAdminEnforcementModeRequest

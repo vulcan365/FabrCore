@@ -1,6 +1,6 @@
 # Harness Session Durability
 
-Todos, delegation records, and loop position live in the Microsoft Agent Framework's `AgentSession`
+Todos, the current operating mode, delegation records, and loop position live in the Microsoft Agent Framework's `AgentSession`
 state bag. FabrCore does not persist that bag for ordinary agents, so without the machinery
 described here every harness feature would reset on each grain activation — the agent would look
 amnesiac while appearing to work.
@@ -15,6 +15,8 @@ amnesiac while appearing to work.
 | Payload | `AIAgent.SerializeSessionAsync(session)` — `{ conversationId, stateBag }` |
 | Written by | `FabrCoreHarnessResult.RunAsync`, on the completion path of every turn |
 | Read by | `CreateFabrCoreHarnessAgent`, during `OnInitialize` |
+
+The `AgentModeProvider` state is ordinary additive state-bag data, so adding modes does not change the snapshot envelope version. `SetModeAsync` and `SetPlanModeAsync` snapshot immediately; message-driven changes use the existing run-finally snapshot.
 
 **Conversation history is not in the snapshot.** `FabrCoreChatHistoryProvider` persists messages to
 Orleans `MessageThreads`, not the state bag, so the payload holds only harness provider state. Two
@@ -125,10 +127,10 @@ across a deactivation.
 |-----------|------------------------|
 | Blueprint re-apply | **None.** The agent is already tracked; `ForceReconfigure` is forced false. See `references/configuration.md` |
 | `POST /agent/create` with `ForceReconfigure: true` | Reconfigures and rebuilds the proxy. The snapshot survives in custom state and is restored by the new `OnInitialize` |
-| Agent reset | `OnReset` runs, then **all custom state is cleared** — todos and delegation records go with it. Conversation history is cleared too |
+| Agent reset | `OnReset` runs, then **all custom state is cleared** — todos, operating mode, and delegation records go with it. Conversation history is cleared too |
 | `ClearThreadAsync(threadId)` | Clears conversation history but **leaves the snapshot**. The agent forgets the conversation while still holding the todo list — call `ClearHarnessSessionAsync()` too if you want both gone |
 | Agent eviction | Everything is destroyed |
-| `FabrCoreHarnessResult.ClearHarnessSessionAsync()` | Deletes the snapshot and starts a fresh session. Conversation history untouched |
+| `FabrCoreHarnessResult.ClearHarnessSessionAsync()` | Deletes the snapshot and starts a fresh session at the configured default mode. Conversation history untouched |
 
 The thread-clear row is the trap. "Clear the conversation" in a UI usually means both:
 

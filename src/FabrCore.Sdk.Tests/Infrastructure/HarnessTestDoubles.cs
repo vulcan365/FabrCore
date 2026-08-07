@@ -12,6 +12,8 @@ internal sealed class FakeChatClient : IChatClient
 {
     private readonly string responseText;
     private readonly Queue<ChatResponse> scripted = new();
+    private Exception? responseException;
+    private bool cancelResponses;
 
     private FakeChatClient(string responseText)
     {
@@ -28,6 +30,16 @@ internal sealed class FakeChatClient : IChatClient
     public int CallCount => Requests.Count;
 
     public static FakeChatClient WithTextResponse(string responseText) => new(responseText);
+
+    public static FakeChatClient Throwing(Exception exception) => new(string.Empty)
+    {
+        responseException = exception
+    };
+
+    public static FakeChatClient Canceled() => new(string.Empty)
+    {
+        cancelResponses = true
+    };
 
     /// <summary>Returns each supplied response in turn, then falls back to a terminal text response.</summary>
     public static FakeChatClient Scripted(params ChatResponse[] responses)
@@ -65,6 +77,16 @@ internal sealed class FakeChatClient : IChatClient
     {
         Requests.Add([.. chatMessages]);
         RequestOptions.Add(options);
+
+        if (responseException is not null)
+        {
+            return Task.FromException<ChatResponse>(responseException);
+        }
+
+        if (cancelResponses)
+        {
+            return Task.FromCanceled<ChatResponse>(new CancellationToken(canceled: true));
+        }
 
         return Task.FromResult(scripted.Count > 0
             ? scripted.Dequeue()
@@ -254,4 +276,50 @@ internal sealed class FakeChatClientService : IFabrCoreChatClientService
             Model = name,
             ApiKeyAlias = "test"
         });
+}
+
+/// <summary>Principal-partitioned typed storage with read counters for skill-source tests.</summary>
+internal sealed class FakePrincipalStorageProvider : IPrincipalScopedFabrCoreStorageProvider
+{
+    private readonly Dictionary<string, object?> values = new(StringComparer.Ordinal);
+
+    public Dictionary<string, int> ReadCounts { get; } = new(StringComparer.Ordinal);
+
+    public void Seed<T>(string principalId, string container, string key, T value) =>
+        values[Address(principalId, container, key)] = value;
+
+    public Task<T?> GetAsync<T>(
+        string principalId,
+        string container,
+        string entityKey,
+        CancellationToken cancellationToken = default)
+    {
+        var address = Address(principalId, container, entityKey);
+        ReadCounts[address] = ReadCounts.GetValueOrDefault(address) + 1;
+        return Task.FromResult(values.TryGetValue(address, out var value) ? (T?)value : default);
+    }
+
+    public Task UpsertAsync<T>(
+        string principalId,
+        string container,
+        string entityKey,
+        T value,
+        CancellationToken cancellationToken = default)
+    {
+        values[Address(principalId, container, entityKey)] = value;
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> DeleteAsync(
+        string principalId,
+        string container,
+        string entityKey,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(values.Remove(Address(principalId, container, entityKey)));
+
+    public int ReadsFor(string principalId, string container, string key) =>
+        ReadCounts.GetValueOrDefault(Address(principalId, container, key));
+
+    private static string Address(string principalId, string container, string key) =>
+        $"{principalId}|{container}|{key}";
 }

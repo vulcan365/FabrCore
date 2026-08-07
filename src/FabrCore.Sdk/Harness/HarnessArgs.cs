@@ -9,6 +9,15 @@ namespace FabrCore.Sdk;
 /// </remarks>
 public static class HarnessArgs
 {
+    /// <summary>Csv of principal-local, immutable <c>name@version</c> skill references.</summary>
+    public const string Skills = "_HarnessSkills";
+
+    /// <summary>Bool. Enables the <c>mode_*</c> tools and operating-mode instructions. Default true.</summary>
+    public const string Mode = "_HarnessMode";
+
+    /// <summary>String. Initial mode for a fresh harness session. Default <c>plan</c>.</summary>
+    public const string DefaultMode = "_HarnessDefaultMode";
+
     /// <summary>Bool. Enables the <c>todos_*</c> tools. Default true.</summary>
     public const string Todo = "_HarnessTodo";
 

@@ -42,6 +42,7 @@ jobs:
             'src/FabrCore.Sdk.Tests/FabrCore.Sdk.Tests.csproj',
             'src/FabrCore.Host.Tests/FabrCore.Host.Tests.csproj',
             'src/FabrCore.Client.Orleans.Tests/FabrCore.Client.Orleans.Tests.csproj',
+            'src/FabrCore.Client.WebSocket.Tests/FabrCore.Client.WebSocket.Tests.csproj',
             'src/FabrCore.Services.Microsoft365Copilot.Tests/FabrCore.Services.Microsoft365Copilot.Tests.csproj',
             'src/FabrCore.Surface.Tests/FabrCore.Surface.Tests.csproj',
             'samples/FabrCore.SampleApp.Tests/FabrCore.SampleApp.Tests.csproj'
@@ -76,6 +77,7 @@ jobs:
             'FabrCore.Core',
             'FabrCore.Sdk',
             'FabrCore.Client.Orleans',
+            'FabrCore.Client.WebSocket',
             'FabrCore.Services.Contracts',
             'FabrCore.Host',
             'FabrCore.Host.SqlServer',

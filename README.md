@@ -56,6 +56,7 @@ FabrCore provides the building blocks for creating, hosting, and connecting to A
 |---------|-------------|
 | **[FabrCore.Core](https://www.nuget.org/packages/FabrCore.Core)** | Core interfaces, data models, and grain abstractions |
 | **[FabrCore.Sdk](https://www.nuget.org/packages/FabrCore.Sdk)** | Agent SDK -- `FabrCoreAgentProxy`, plugins, tools, MCP, monitoring |
+| **FabrCore.Client.WebSocket** | Typed WebSocket v2 client with tickets, reconnect, durable delivery checkpoints, and explicit acknowledgements |
 | **[FabrCore.Host](https://www.nuget.org/packages/FabrCore.Host)** | Server host -- Orleans silo, REST API, chat completions, WebSocket (in-memory Localhost mode built in) |
 | **[FabrCore.Host.SqlServer](https://www.nuget.org/packages/FabrCore.Host.SqlServer)** | SQL Server clustering, persistence, and reminders for the host, with automatic Orleans table deployment |
 | **[FabrCore.Host.AzureStorage](https://www.nuget.org/packages/FabrCore.Host.AzureStorage)** | Azure Storage clustering (tables), persistence (blob/tables), reminders, and streams (queues) for the host, with automatic resource provisioning |
@@ -83,7 +84,7 @@ then start the sample and open `/surface`.
 dotnet add package FabrCore.Host
 ```
 
-`FabrCore.Host` pulls in `FabrCore.Sdk` and `FabrCore.Core` transitively. Client applications should connect through the Host HTTP/WebSocket API.
+`FabrCore.Host` pulls in `FabrCore.Sdk` and `FabrCore.Core` transitively. Client applications should connect through the Host HTTP/WebSocket API. `FabrCore.Client.WebSocket` provides the typed production v2 live client; agent creation and Blueprint provisioning remain HTTP-only.
 
 ### 2. Create an agent
 

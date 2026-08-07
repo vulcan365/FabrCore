@@ -185,12 +185,23 @@ sufficient:
       "MaxIncomingMessageBytes": 1048576,
       "OutboundQueueCapacity": 256,
       "WebSocketKeepAliveInterval": "00:02:00",
-      "AllowedWebSocketOrigins": [],
+      "AllowedWebSocketOrigins": ["https://app.example.com"],
       "GatewayDiscovery": {
         "RefreshPeriod": "00:00:30",
         "AdvertisedGateways": [],
         "RequireOrleansTls": false
       }
+    },
+    "WebSocket": {
+      "TicketLifetime": "00:00:30",
+      "TicketRegistryShards": 32,
+      "MaxConcurrentRequests": 8,
+      "RequestTimeout": "00:05:00",
+      "DeliveryRetention": "1.00:00:00",
+      "MaxDeliveriesPerPrincipal": 10000,
+      "MaxClientsPerPrincipal": 16,
+      "InactiveClientExpiration": "1.00:00:00",
+      "AllowDevelopmentPrincipalSelection": false
     },
     "Orleans": {
       "ClusterId": "fabrcore-cluster",
@@ -497,7 +508,7 @@ The agent grain key becomes `"system:{config.Handle}"`, and the system principal
 
 Base path: `/fabrcoreapi/`. All agent-scoped endpoints require the `x-user-handle` header to identify the caller principal.
 
-Compatibility naming: several REST and SDK surfaces still use `user`/`users` in the route, header, or parameter name. Treat `x-user-handle`, `x-fabrcore-userhandle`, `userhandle`, and diagnostics `users` routes as compatibility names for **principal** handles/entries.
+Compatibility naming: several REST and SDK surfaces still use `user`/`users` in the route, header, or parameter name. On those HTTP/SDK surfaces, treat `x-user-handle`, `x-fabrcore-userhandle`, `userhandle`, and diagnostics `users` routes as compatibility names for **principal** handles/entries. WebSocket v2 does not use these identity selectors.
 
 > **Typed C# client:** `IFabrCoreHostApiClient` in `FabrCore.Sdk` wraps the common endpoint groups below (Agent, Storage, Discovery, Embeddings, File, ModelConfig, Diagnostics). Most agent-scoped methods take a fully-qualified `"principalHandle:agentHandle"` handle and the client extracts the principal handle into the `x-user-handle` header automatically. Blueprint ensure and storage methods take an explicit principal handle. If a newly added endpoint is not yet surfaced by the typed client, call its REST route directly.
 
@@ -1085,13 +1096,15 @@ surfaces. Prefer `FabrCoreBlueprint` for new code, especially squad or Forge fle
 
 ---
 
-## WebSocket
+## WebSocket v2
 
-Connect at `/ws` for real-time bidirectional communication. Requires principal handle via `x-fabrcore-userhandle` header or `userhandle` query parameter; both names are compatibility names for the principal handle.
+`/ws` is the authenticated live-principal transport. Obtain a 30-second, single-use ticket from authenticated `POST /fabrcoreapi/ws/ticket`, then offer `fabrcore.v2` and `fabrcore.ticket.<token>` as subprotocols. The first frame must be `hello` with a stable `clientId` and optional checkpoint. Production browser origins require a non-empty `AllowedWebSocketOrigins`; headless clients may omit Origin.
 
-The WebSocket ingress honors the W3C `traceparent` header — if a client sets it, the resulting `AgentMessage` ingress span parents on the caller's trace via `AgentMessageTelemetry.StartIngressActivity` (see `src/FabrCore.Host/WebSocket/WebSocketSession.cs:314`). Error responses are stamped from `Activity.Current` at lines 384, 413, 700.
+The camel-case envelope supports `message.send`, `event.send`, `agent.reset`, `agent.health.get`, `agents.tracked.list`, `agent.tracked.check`, and `agents.shared.list`. `message.send` uses explicit `async` or `requestResponse` delivery mode independent of `AgentMessage.Kind`. Sender/source fields are replaced with the authenticated principal.
 
-WebSocket clients receive normal responses and system/control messages as `AgentMessage` objects. Use `message.IsSystemMessage` to branch `_status`, `_thinking`, `_error`, or any other underscore-prefixed control traffic into progress/error UI instead of normal chat transcript rendering. Use `SystemMessageTypes.IsSystemMessage(messageType)` only when working with raw `MessageType` strings or non-`AgentMessage` DTOs.
+Agent creation, reconfiguration, Blueprint application, and arbitrary provisioning are intentionally not WebSocket capabilities. Use the HTTP/Blueprint APIs before connecting. The legacy raw-`AgentMessage`, `command/createagent`, header, and query contracts are removed.
+
+Server-to-client `delivery` frames are durable, ordered, and at-least-once per stable client id. Clients explicitly ACK sequence numbers; reconnect may replay duplicates. A `gap` requires HTTP resynchronization. `FabrCore.Client.WebSocket` supplies typed methods, checkpoints, ACKs, fresh-ticket reconnect, and `ResyncRequired` notification.
 
 ## OpenTelemetry exporter setup
 

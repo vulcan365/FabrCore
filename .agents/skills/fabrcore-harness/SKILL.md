@@ -32,11 +32,12 @@ Everything lives in `src/FabrCore.Sdk/Harness/`. It is purely additive: `CreateC
 
 A plain `ChatClientAgent` answers one message. Its tool loop can run many tool calls, but when the model stops emitting tool calls the turn is over — whether or not the work is actually done. That is the right shape for a chat agent and the wrong shape for "audit these 40 records", "research this and write it up", or "coordinate three specialists".
 
-The harness closes that gap with three cooperating pieces:
+The harness closes that gap with four cooperating pieces:
 
 | Piece | What the model gets | What it changes |
 |-------|--------------------|-----------------|
 | **Todos** | `todos_add`, `todos_complete`, `todos_remove`, `todos_get_remaining`, `todos_get_all` | The plan becomes typed state the host can read, not prose buried in the transcript |
+| **Modes** | `mode_get`, `mode_set` | `plan` builds an approval-ready todo list; `execute` performs it |
 | **Loop** | nothing — it is invisible to the model | When the model stops with work outstanding, the agent is re-invoked instead of returning |
 | **Background agents** | `background_agents_start_task`, `background_agents_wait_for_first_completion`, `background_agents_get_task_results`, `background_agents_get_all_tasks`, `background_agents_continue_task`, `background_agents_clear_completed_task` | The model fans work out to real, ACL-governed, monitored FabrCore agents and collects results |
 
@@ -103,7 +104,7 @@ public class ResearcherAgent : FabrCoreAgentProxy
 
     public override async Task<AgentMessage> OnMessage(AgentMessage message)
     {
-        var run = await harness.RunAsync(message.Message ?? string.Empty);
+        var run = await harness.RunAsync(message);
 
         var response = message.Response();
         response.Message = run.Text;
@@ -123,7 +124,7 @@ public override async Task<AgentMessage> OnMessage(AgentMessage message)
 {
     SetStatusMessage("Planning...");
 
-    var run = await harness.RunAsync(message.Message ?? string.Empty);
+    var run = await harness.RunAsync(message);
     var text = run.Text;
 
     // Delegations stranded by a restart — see references/durability.md.
@@ -155,11 +156,25 @@ Outermost to innermost:
 |-------|-------------|
 | `LoopAgent` | At least one loop evaluator is configured |
 | `OpenTelemetryAgent` | Always, unless `DisableOpenTelemetry` — sensitive data on, matching `CreateChatClientAgent` |
-| `ChatClientAgent` | Always, carrying `TodoProvider` and `BackgroundAgentsProvider` as context providers |
+| `ChatClientAgent` | Always, carrying `TodoProvider`, `AgentModeProvider`, and `BackgroundAgentsProvider` as context providers |
+| `AgentModeProvider` | On by default; `_HarnessMode=false` disables it |
 | `ChatClientAgent` default middleware | Always — approval binding, approval bypass, function invocation |
 | `TokenTrackingChatClient` → `ModelDefaultsChatClient` → provider | Supplied by `GetChatClient`, so run-safety budgets and cost tracking see every call |
 
-`FabrCoreHarnessAgent` is a `sealed DelegatingAIAgent`, so `GetService<T>()` and session serialization forward through the whole stack. That forwarding is load-bearing: the loop evaluators locate their providers with `context.Agent.GetService<TodoProvider>()`, and an evaluator that cannot find its provider throws. If you add a decorator of your own, it must forward `GetService`.
+`FabrCoreHarnessAgent` is a `sealed DelegatingAIAgent`, so `GetService<T>()` and session serialization forward through the whole stack. That forwarding is load-bearing: the loop evaluators locate their providers with `context.Agent.GetService<TodoProvider>()` and `GetService<AgentModeProvider>()`, and an evaluator that cannot find its provider throws. If you add a decorator of your own, it must forward `GetService`.
+
+## Operating Modes
+
+Modes are on by default. FabrCore supplies `plan` and `execute` instructions that keep the plan in the durable todo list—never a memory file. Plan mode may explore and clarify, but stops before executing. Execute mode works autonomously and lets incomplete todos drive the outer loop.
+
+Use `harness.RunAsync(message)`, passing the complete `AgentMessage`. The wrapper reads `message.Args["_plan-mode"]` before every run:
+
+| Value | Starting mode |
+|-------|---------------|
+| missing, invalid, or `true` | `plan` |
+| `false` | `execute` |
+
+The flag chooses the starting mode; the model may still call `mode_set` during the run. String and `ChatMessage` overloads cannot see `AgentMessage.Args` and preserve the session's current/default mode. Hosts can read or change it with `GetModeAsync`, `SetModeAsync`, and `SetPlanModeAsync`; external setters snapshot immediately.
 
 ## The Loop
 
@@ -167,7 +182,7 @@ Outermost to innermost:
 
 | Mode | Continues while | Requires |
 |------|----------------|----------|
-| `Todo` | Incomplete todos remain | The todo provider (on by default) |
+| `Todo` | Incomplete todos remain while the agent is in `execute`; every mode when modes are disabled | The todo provider (on by default) |
 | `Background` | Delegations are still running | At least one background agent |
 | `Marker` | The response lacks a completion marker | `LoopCompletionMarker` — matched ordinally, case-sensitively |
 | `Judge` | A judge model rules the request unanswered | `LoopJudgeChatClient` — an `IChatClient`, not an agent. Costs an extra LLM call per evaluation |
@@ -199,7 +214,7 @@ To supply delegates in code instead — squad members, agents with their own tra
 
 ## Session Durability
 
-Harness state — todos, delegation records, loop position — lives in the `AgentSession` state bag, which FabrCore does not otherwise persist. `CreateFabrCoreHarnessAgent` restores it on activation and `RunAsync` snapshots it after every turn, under agent custom state key `_harness_session:{threadId}`.
+Harness state — todos, operating mode, delegation records, and loop position — lives in the `AgentSession` state bag, which FabrCore does not otherwise persist. `CreateFabrCoreHarnessAgent` restores it on activation and `RunAsync` snapshots it after every turn, under agent custom state key `_harness_session:{threadId}`.
 
 Conversation history is **not** in the snapshot — it stays in Orleans `MessageThreads` via `FabrCoreChatHistoryProvider` — so snapshots are kilobyte-scale and a lost snapshot never costs conversation continuity.
 
@@ -235,10 +250,9 @@ Microsoft's `AsHarnessAgent` composes more. The following are **absent by design
 | File access | Same reason. Agents that genuinely need files use host storage services or a scoped MCP server, both governed by the normal tool pipeline |
 | Skills (`SKILL.md` discovery) | Upstream discovers from `Directory.GetCurrentDirectory()`, which on a silo is the shared process directory — wrong tenant boundary and a supply-chain risk |
 | Hosted web search (default-on upstream) | Fails outright on providers that do not support hosted tools |
-| Agent modes (`plan` / `execute`) | Not yet built |
 | Tool approval | Not yet built. Approval belongs on FabrCore channels with a durable pending state, which is a larger piece of work |
 
-The last two are sequenced work, tracked in `docs/harness-adoption-plan.md`. The first four are decisions.
+Tool approval remains sequenced work tracked in `docs/harness-adoption-plan.md`; the other rows are deliberate server-safety decisions.
 
 In-run `CompactionProvider` **is** composed — `CreateFabrCoreHarnessAgent` passes one as layer 1 of the
 compaction ladder, and it matters more here than anywhere else because harness agents run long tool loops.
@@ -266,4 +280,4 @@ Read only what the task needs:
 - **Every turn writes the whole grain state blob** — the snapshot flush is a `WriteStateAsync`. Acceptable for agents doing real work; set `_HarnessSessionPersistence=false` for a high-frequency agent that does not need state carried across turns.
 - **Background agent names must be non-empty and case-insensitively unique** — `AgentRosterBuilder` guarantees this. If you build delegates by hand, so must you.
 - **Arg keys are case-sensitive** — `_HarnessLoop` works, `_harnessloop` is silently ignored.
-- **Harness types are `[Experimental]` upstream** — files in `src/FabrCore.Sdk/Harness/` open with `#pragma warning disable MAAI001`. Do the same in agent code that names `TodoProvider`, `LoopAgent`, or `BackgroundAgentsProvider` directly.
+- **Harness types are `[Experimental]` upstream** — files in `src/FabrCore.Sdk/Harness/` open with `#pragma warning disable MAAI001`. Do the same in agent code that names `TodoProvider`, `AgentModeProvider`, `LoopAgent`, or `BackgroundAgentsProvider` directly.

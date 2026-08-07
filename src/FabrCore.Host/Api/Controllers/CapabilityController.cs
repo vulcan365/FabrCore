@@ -43,7 +43,7 @@ public sealed class CapabilityController(
             ApiVersion = "1",
             DataScope = "cluster",
             MaxRequestBodyBytes = document.MaxRequestBodyBytes,
-            Features = ["runtime", "blueprints", "acl", "audit", "monitor", "evidence"]
+            Features = ["runtime", "blueprints", "skills", "acl", "audit", "monitor", "evidence"]
         });
 
         if (services.GetService<IMemoryAdminService>() is not null)

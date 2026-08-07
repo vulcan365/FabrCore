@@ -1,5 +1,6 @@
 #pragma warning disable MAAI001 // Harness providers (LoopAgent, BackgroundAgentsProvider, loop evaluators) are for evaluation purposes only and may change.
 using System.Text.Json;
+using FabrCore.Core.Skills;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,7 +17,7 @@ public abstract partial class FabrCoreAgentProxy
     private const int DefaultHarnessMaxIterationsPerRequest = 40;
 
     /// <summary>
-    /// Creates a harness agent — todo tracking, an iteration loop, and delegation to other FabrCore agents —
+    /// Creates a harness agent — todo tracking, plan/execute modes, an iteration loop, and delegation to other FabrCore agents —
     /// wired to this agent's chat client, Orleans-backed chat history, and durable custom state.
     /// </summary>
     /// <remarks>
@@ -75,6 +76,19 @@ public abstract partial class FabrCoreAgentProxy
         if (args.TryGetValue(HarnessArgs.Todo, out var todoStr) && bool.TryParse(todoStr, out var todoEnabled))
         {
             options.DisableTodoProvider = !todoEnabled;
+        }
+
+        if (args.TryGetValue(HarnessArgs.Mode, out var modeStr) && bool.TryParse(modeStr, out var modeEnabled))
+        {
+            options.DisableAgentModeProvider = !modeEnabled;
+        }
+
+        if (args.TryGetValue(HarnessArgs.DefaultMode, out var defaultModeStr) && !string.IsNullOrWhiteSpace(defaultModeStr))
+        {
+            options.AgentModeProviderOptions = new AgentModeProviderOptions
+            {
+                DefaultMode = defaultModeStr.Trim()
+            };
         }
 
         if (args.TryGetValue(HarnessArgs.LoopMaxIterations, out var loopMaxStr)
@@ -139,6 +153,41 @@ public abstract partial class FabrCoreAgentProxy
             options.BackgroundAgents = FabrCoreBackgroundAgent.FromRoster(roster, fabrcoreAgentHost, delegationTimeout);
         }
 
+        FabrCoreStoredAgentSkillsSource? storedSkillsSource = null;
+        if (args.TryGetValue(HarnessArgs.Skills, out var skillSpec) && !string.IsNullOrWhiteSpace(skillSpec))
+        {
+            var references = new List<FabrCoreSkillReference>();
+            var errors = new List<string>();
+            foreach (var token in skillSpec.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (FabrCoreSkillReference.TryParse(token, out var reference, out var reason))
+                {
+                    references.Add(reference!);
+                }
+                else
+                {
+                    errors.Add(reason ?? $"Invalid skill reference '{token}'.");
+                }
+            }
+
+            if (errors.Count > 0 || references.Count == 0)
+            {
+                throw new ArgumentException(
+                    $"Invalid {HarnessArgs.Skills} configuration: {string.Join("; ", errors)}",
+                    nameof(config));
+            }
+
+            var storage = serviceProvider.GetService<IPrincipalScopedFabrCoreStorageProvider>()
+                ?? throw new InvalidOperationException(
+                    $"{HarnessArgs.Skills} requires {nameof(IPrincipalScopedFabrCoreStorageProvider)} to be registered.");
+
+            storedSkillsSource = new FabrCoreStoredAgentSkillsSource(
+                storage,
+                fabrcoreAgentHost.GetUserHandle(),
+                references);
+            options.AgentSkillsSource = storedSkillsSource;
+        }
+
         // Null means the loop was never configured, which is different from being switched off explicitly.
         HarnessLoopMode? loopModeFromArgs = args.TryGetValue(HarnessArgs.Loop, out var loopSpec)
             ? ParseHarnessLoopMode(loopSpec, handle, logger)
@@ -147,6 +196,14 @@ public abstract partial class FabrCoreAgentProxy
         options.LoopMode = loopModeFromArgs ?? HarnessLoopMode.None;
 
         configure?.Invoke(options);
+
+        // The args-derived source is immutable and storage-backed. Preflight every manifest after the
+        // callback so setting AgentSkillsSource to null or replacing it remains a true last-writer-wins override.
+        if (storedSkillsSource is not null
+            && ReferenceEquals(options.AgentSkillsSource, storedSkillsSource))
+        {
+            await storedSkillsSource.InitializeAsync();
+        }
 
         // Materialize once so the count checks below and the provider see the same set.
         var delegates = options.BackgroundAgents?.ToList();
@@ -191,11 +248,13 @@ public abstract partial class FabrCoreAgentProxy
         await EnsureCompactionInitializedAsync(compactionRegistration);
 
         logger.LogInformation(
-            "Created FabrCore harness agent - Handle: {Handle}, Config: {Config}, ThreadId: {ThreadId}, Todos: {Todos}, Loop: {Loop}, MaxIterations: {MaxIterations}, Delegates: {DelegateCount}, SessionRestored: {SessionRestored}, DelegationsLost: {DelegationsLost}",
+            "Created FabrCore harness agent - Handle: {Handle}, Config: {Config}, ThreadId: {ThreadId}, Todos: {Todos}, Modes: {Modes}, Skills: {Skills}, Loop: {Loop}, MaxIterations: {MaxIterations}, Delegates: {DelegateCount}, SessionRestored: {SessionRestored}, DelegationsLost: {DelegationsLost}",
             handle,
             chatClientConfigName,
             threadId,
             !options.DisableTodoProvider,
+            !options.DisableAgentModeProvider,
+            options.AgentSkillsSource is not null,
             options.LoopMode,
             options.LoopMaxIterations,
             delegates?.Count ?? 0,

@@ -1,6 +1,9 @@
 #pragma warning disable MAAI001 // Harness providers (LoopAgent, BackgroundAgentsProvider, loop evaluators) are for evaluation purposes only and may change.
 using System.Text.Json;
+using System.Security.Cryptography;
+using System.Text;
 using FabrCore.Core;
+using FabrCore.Core.Skills;
 using FabrCore.Sdk.Tests.Infrastructure;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -35,8 +38,252 @@ public sealed class FabrCoreHarnessTests
 
         Assert.IsNotNull(agent.Harness);
         Assert.IsNotNull(agent.Harness.Agent.GetService<TodoProvider>());
+        Assert.IsNotNull(agent.Harness.Agent.GetService<AgentModeProvider>());
         Assert.IsNotNull(agent.Harness.Agent.GetService<BackgroundAgentsProvider>());
         Assert.IsTrue(agent.Harness.Agent.IsLooping);
+    }
+
+    [TestMethod]
+    public async Task ModesAreEnabledByDefaultWithFabrCorePlanningInstructions()
+    {
+        var chatClient = FakeChatClient.WithTextResponse("Plan ready.");
+        var (agent, _, _) = CreateAgent(chatClient);
+
+        await agent.OnInitialize();
+        await agent.OnMessage(Ask("Plan the work"));
+
+        Assert.IsNotNull(agent.Harness!.Modes);
+        Assert.AreEqual("plan", await agent.Harness.GetModeAsync());
+        var instructions = chatClient.RequestOptions[0]?.Instructions ?? string.Empty;
+        StringAssert.Contains(instructions, "durable todo list");
+        Assert.IsFalse(instructions.Contains("memory file", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [TestMethod]
+    public async Task MessagePlanModeSelectsTheStartingModeOnEveryRun()
+    {
+        var (agent, _, _) = CreateAgent(FakeChatClient.WithTextResponse("Done."));
+        await agent.OnInitialize();
+
+        await agent.OnMessage(Ask("Execute", planMode: false));
+        Assert.AreEqual("execute", await agent.Harness!.GetModeAsync());
+
+        await agent.OnMessage(Ask("Missing means plan"));
+        Assert.AreEqual("plan", await agent.Harness.GetModeAsync());
+
+        var invalid = Ask("Invalid also means plan");
+        invalid.Args![HarnessMessageArgs.PlanMode] = "not-a-bool";
+        await agent.OnMessage(invalid);
+        Assert.AreEqual("plan", await agent.Harness.GetModeAsync());
+
+        await agent.OnMessage(Ask("Explicit plan", planMode: true));
+        Assert.AreEqual("plan", await agent.Harness.GetModeAsync());
+    }
+
+    [TestMethod]
+    public async Task ModesCanBeDisabledWithoutDisablingTheTodoLoop()
+    {
+        var chatClient = FakeChatClient.Scripted(
+            FakeChatClient.ToolCall("c1", "todos_add", """{"todos":[{"title":"Still loops"}]}"""),
+            FakeChatClient.Text("Working."));
+        var (agent, _, _) = CreateAgent(chatClient, args: new Dictionary<string, string>
+        {
+            [HarnessArgs.Mode] = "false",
+            [HarnessArgs.LoopMaxIterations] = "2"
+        });
+
+        await agent.OnInitialize();
+        await agent.OnMessage(Ask("Work"));
+
+        Assert.IsNull(agent.Harness!.Modes);
+        Assert.IsNull(await agent.Harness.GetModeAsync());
+        Assert.IsTrue(chatClient.CallCount > 2, "Without modes, incomplete todos must retain the old loop behavior.");
+    }
+
+    [TestMethod]
+    public async Task BlueprintDefaultModeAndConfigurePrecedenceAreApplied()
+    {
+        var (fromArgs, _, _) = CreateAgent(args: new Dictionary<string, string>
+        {
+            [HarnessArgs.DefaultMode] = "execute"
+        });
+        await fromArgs.OnInitialize();
+        Assert.AreEqual("execute", await fromArgs.Harness!.GetModeAsync());
+
+        var (fromCode, _, _) = CreateAgent(
+            args: new Dictionary<string, string> { [HarnessArgs.DefaultMode] = "execute" },
+            configure: options => options.AgentModeProviderOptions = new AgentModeProviderOptions
+            {
+                DefaultMode = "plan"
+            });
+        await fromCode.OnInitialize();
+        Assert.AreEqual("plan", await fromCode.Harness!.GetModeAsync());
+    }
+
+    [TestMethod]
+    public async Task CustomModesUseExplicitPlanningAndExecutionMappings()
+    {
+        var (agent, _, _) = CreateAgent(
+            configure: options =>
+            {
+                options.PlanningModeName = "draft";
+                options.ExecutionModeName = "run";
+                options.AgentModeProviderOptions = new AgentModeProviderOptions
+                {
+                    DefaultMode = "draft",
+                    Modes =
+                    [
+                        new AgentModeProviderOptions.AgentMode("draft", "Prepare the durable plan."),
+                        new AgentModeProviderOptions.AgentMode("run", "Execute the approved plan.")
+                    ]
+                };
+            });
+
+        await agent.OnInitialize();
+        await agent.OnMessage(Ask("Run it", planMode: false));
+
+        Assert.AreEqual("run", await agent.Harness!.GetModeAsync());
+    }
+
+    [TestMethod]
+    public async Task InvalidModeMappingsAndDefaultsFailInitializationClearly()
+    {
+        var (badMapping, _, _) = CreateAgent(configure: options =>
+        {
+            options.PlanningModeName = "draft";
+            options.AgentModeProviderOptions = new AgentModeProviderOptions
+            {
+                Modes =
+                [
+                    new AgentModeProviderOptions.AgentMode("plan", "Plan."),
+                    new AgentModeProviderOptions.AgentMode("execute", "Execute.")
+                ]
+            };
+        });
+        var mappingError = await Assert.ThrowsExactlyAsync<ArgumentException>(badMapping.OnInitialize);
+        StringAssert.Contains(mappingError.Message, "PlanningModeName 'draft'");
+
+        var (badDefault, _, _) = CreateAgent(args: new Dictionary<string, string>
+        {
+            [HarnessArgs.DefaultMode] = "teleport"
+        });
+        var defaultError = await Assert.ThrowsExactlyAsync<ArgumentException>(badDefault.OnInitialize);
+        StringAssert.Contains(defaultError.Message, "Default mode \"teleport\"");
+    }
+
+    [TestMethod]
+    public async Task StoredSkillsResolveThroughTheDecoratorChainAndLoadResourcesLazily()
+    {
+        var storage = CreateStoredSkill("owner1", "policy-review", "1.0.0", "references/checklist.md", "Check every policy.");
+        var chatClient = FakeChatClient.Scripted(
+            FakeChatClient.ToolCall("s1", "load_skill", """{"skillName":"policy-review"}"""),
+            FakeChatClient.ToolCall("s2", "read_skill_resource", """{"skillName":"policy-review","resourceName":"references/checklist.md"}"""),
+            FakeChatClient.ToolCall("s3", "read_skill_resource", """{"skillName":"policy-review","resourceName":"references/checklist.md"}"""),
+            FakeChatClient.Text("Policy checked."));
+
+        var (agent, _, _) = CreateAgent(
+            chatClient,
+            args: new Dictionary<string, string> { [HarnessArgs.Skills] = "policy-review@1.0.0" },
+            storage: storage);
+
+        await agent.OnInitialize();
+        var response = await agent.OnMessage(Ask("Review this policy"));
+
+        Assert.AreEqual("Policy checked.", response.Message);
+        Assert.IsNotNull(agent.Harness!.Agent.Skills);
+        Assert.IsNotNull(agent.Harness.Agent.GetService<AgentSkillsProvider>());
+        StringAssert.Contains(chatClient.RequestOptions[0]!.Instructions!, "policy-review");
+        Assert.AreEqual(
+            1,
+            storage.ReadsFor(
+                "owner1",
+                FabrCoreSkillStorage.Container,
+                FabrCoreSkillStorage.ResourceKey("policy-review", "1.0.0", ResourceId("references/checklist.md"))),
+            "The immutable resource should be cached after its first read.");
+    }
+
+    [TestMethod]
+    public async Task MissingPinnedSkillFailsAgentInitialization()
+    {
+        var storage = new FakePrincipalStorageProvider();
+        var (agent, _, _) = CreateAgent(
+            args: new Dictionary<string, string> { [HarnessArgs.Skills] = "missing-skill@1.0.0" },
+            storage: storage);
+
+        var error = await Assert.ThrowsExactlyAsync<InvalidOperationException>(agent.OnInitialize);
+        StringAssert.Contains(error.Message, "missing-skill@1.0.0: not found");
+    }
+
+    [TestMethod]
+    public async Task SkillInitializationReportsEveryMissingAndCorruptReference()
+    {
+        var storage = new FakePrincipalStorageProvider();
+        storage.Seed(
+            "owner1",
+            FabrCoreSkillStorage.Container,
+            FabrCoreSkillStorage.ManifestKey("corrupt-skill", "1.0.0"),
+            new FabrCoreSkillManifest
+            {
+                Name = "corrupt-skill",
+                Version = "1.0.0",
+                Description = "Corrupt test skill.",
+                SkillMarkdown = "---\nname: corrupt-skill\ndescription: Corrupt test skill.\n---\nDo work.",
+                DigestSha256 = "not-a-sha256",
+                TotalUncompressedBytes = 77
+            });
+        var (agent, _, _) = CreateAgent(
+            args: new Dictionary<string, string>
+            {
+                [HarnessArgs.Skills] = "missing-skill@1.0.0,corrupt-skill@1.0.0"
+            },
+            storage: storage);
+
+        var error = await Assert.ThrowsExactlyAsync<InvalidOperationException>(agent.OnInitialize);
+
+        StringAssert.Contains(error.Message, "missing-skill@1.0.0: not found");
+        StringAssert.Contains(error.Message, "corrupt-skill@1.0.0: package digest is invalid");
+    }
+
+    [TestMethod]
+    public async Task StoredSkillCannotResolveAcrossPrincipalPartitions()
+    {
+        var storage = CreateStoredSkill("owner2", "policy-review", "1.0.0", null, null);
+        var (agent, _, _) = CreateAgent(
+            args: new Dictionary<string, string> { [HarnessArgs.Skills] = "policy-review@1.0.0" },
+            storage: storage);
+
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(agent.OnInitialize);
+        Assert.AreEqual(0, storage.ReadsFor(
+            "owner2", FabrCoreSkillStorage.Container, FabrCoreSkillStorage.ManifestKey("policy-review", "1.0.0")));
+        Assert.AreEqual(1, storage.ReadsFor(
+            "owner1", FabrCoreSkillStorage.Container, FabrCoreSkillStorage.ManifestKey("policy-review", "1.0.0")));
+    }
+
+    [TestMethod]
+    public async Task ConfigureCanDisableAnArgsDerivedSkillSource()
+    {
+        var (agent, _, _) = CreateAgent(
+            args: new Dictionary<string, string> { [HarnessArgs.Skills] = "missing-skill@1.0.0" },
+            storage: new FakePrincipalStorageProvider(),
+            configure: options => options.AgentSkillsSource = null);
+
+        await agent.OnInitialize();
+
+        Assert.IsNull(agent.Harness!.Agent.Skills);
+    }
+
+    [TestMethod]
+    public async Task ConfigureCanReplaceAnArgsDerivedSkillSource()
+    {
+        var replacement = new EmptySkillSource();
+        var (agent, _, _) = CreateAgent(
+            args: new Dictionary<string, string> { [HarnessArgs.Skills] = "missing-skill@1.0.0" },
+            storage: new FakePrincipalStorageProvider(),
+            configure: options => options.AgentSkillsSource = replacement);
+
+        await agent.OnInitialize();
+
+        Assert.IsNotNull(agent.Harness!.Agent.Skills);
     }
 
     [TestMethod]
@@ -105,7 +352,7 @@ public sealed class FabrCoreHarnessTests
         host.Responders["owner1:crm"] = _ => "Found 3 customers.";
 
         await agent.OnInitialize();
-        var response = await agent.OnMessage(Ask("How many active customers do we have?"));
+        var response = await agent.OnMessage(Ask("How many active customers do we have?", planMode: false));
 
         Assert.AreEqual("There are 3 active customers.", response.Message);
 
@@ -133,7 +380,7 @@ public sealed class FabrCoreHarnessTests
         });
 
         await agent.OnInitialize();
-        await agent.OnMessage(Ask("Do the thing"));
+        await agent.OnMessage(Ask("Do the thing", planMode: false));
 
         var remaining = await agent.Harness!.GetRemainingTodosAsync();
         Assert.AreEqual(1, remaining.Count);
@@ -144,6 +391,40 @@ public sealed class FabrCoreHarnessTests
         Assert.IsTrue(
             chatClient.CallCount > 2,
             $"Expected the loop to re-invoke; the model was called {chatClient.CallCount} time(s).");
+    }
+
+    [TestMethod]
+    public async Task PlanningModeKeepsOpenTodosWithoutDrivingTheLoop()
+    {
+        var chatClient = FakeChatClient.Scripted(
+            FakeChatClient.ToolCall("c1", "todos_add", """{"todos":[{"title":"Approved later"}]}"""),
+            FakeChatClient.Text("Here is the plan."));
+        var (agent, _, _) = CreateAgent(chatClient);
+
+        await agent.OnInitialize();
+        await agent.OnMessage(Ask("Plan it"));
+
+        Assert.AreEqual(2, chatClient.CallCount, "The function loop may add the todo, but the outer todo loop must stop in plan mode.");
+        Assert.AreEqual(1, (await agent.Harness!.GetRemainingTodosAsync()).Count);
+    }
+
+    [TestMethod]
+    public async Task ModelCanSwitchFromPlanToExecuteAndEnableTodoContinuation()
+    {
+        var chatClient = FakeChatClient.Scripted(
+            FakeChatClient.ToolCall("c1", "todos_add", """{"todos":[{"title":"Execute after approval"}]}"""),
+            FakeChatClient.ToolCall("c2", "mode_set", """{"mode":"execute"}"""),
+            FakeChatClient.Text("Approved; starting."),
+            FakeChatClient.ToolCall("c3", "todos_complete", """{"items":[{"id":1,"reason":"done"}]}"""),
+            FakeChatClient.Text("Finished."));
+        var (agent, _, _) = CreateAgent(chatClient);
+
+        await agent.OnInitialize();
+        var response = await agent.OnMessage(Ask("The plan is approved; continue."));
+
+        Assert.AreEqual("Finished.", response.Message);
+        Assert.AreEqual("execute", await agent.Harness!.GetModeAsync());
+        Assert.AreEqual(0, (await agent.Harness.GetRemainingTodosAsync()).Count);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -301,6 +582,73 @@ public sealed class FabrCoreHarnessTests
 
         Assert.IsFalse(host.CustomState.ContainsKey(SessionKey));
         Assert.AreEqual(0, (await agent.Harness.GetRemainingTodosAsync()).Count);
+    }
+
+    [TestMethod]
+    public async Task ExternalModeSettersPersistImmediatelyAndClearRestoresTheDefault()
+    {
+        var host = new FakeAgentHost(CoordinatorHandle);
+        var (first, _, _) = CreateAgent(host: host);
+        await first.OnInitialize();
+
+        await first.Harness!.SetModeAsync("execute");
+        Assert.IsTrue(host.CustomState.ContainsKey(SessionKey));
+
+        var (restored, _, _) = CreateAgent(host: host);
+        await restored.OnInitialize();
+        Assert.IsTrue(restored.Harness!.SessionRestored);
+        Assert.AreEqual("execute", await restored.Harness.GetModeAsync());
+
+        await restored.Harness.ClearHarnessSessionAsync();
+        Assert.AreEqual("plan", await restored.Harness.GetModeAsync());
+    }
+
+    [TestMethod]
+    public async Task StreamingAgentMessageAppliesModeAndSnapshotsTheSession()
+    {
+        var host = new FakeAgentHost(CoordinatorHandle);
+        var (agent, _, _) = CreateAgent(FakeChatClient.WithTextResponse("Streamed."), host: host);
+        await agent.OnInitialize();
+
+        var text = new StringBuilder();
+        await foreach (var update in agent.Harness!.RunStreamingAsync(Ask("Run", planMode: false)))
+        {
+            text.Append(update.Text);
+        }
+
+        Assert.AreEqual("Streamed.", text.ToString());
+        Assert.AreEqual("execute", await agent.Harness.GetModeAsync());
+        Assert.IsTrue(host.CustomState.ContainsKey(SessionKey));
+    }
+
+    [TestMethod]
+    public async Task AgentMessageRunSnapshotsModeWhenTheModelFailsOrCancels()
+    {
+        foreach (var client in new[]
+        {
+            FakeChatClient.Throwing(new InvalidOperationException("model failed")),
+            FakeChatClient.Canceled()
+        })
+        {
+            var host = new FakeAgentHost(CoordinatorHandle);
+            var (agent, _, _) = CreateAgent(client, host: host);
+            await agent.OnInitialize();
+
+            try
+            {
+                await agent.Harness!.RunAsync(Ask("Run", planMode: false));
+                Assert.Fail("The scripted client should not complete successfully.");
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or TaskCanceledException)
+            {
+            }
+
+            Assert.IsTrue(host.CustomState.ContainsKey(SessionKey));
+
+            var (restored, _, _) = CreateAgent(host: host);
+            await restored.OnInitialize();
+            Assert.AreEqual("execute", await restored.Harness!.GetModeAsync());
+        }
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -476,19 +824,27 @@ public sealed class FabrCoreHarnessTests
     // Helpers
     // ---------------------------------------------------------------------------------------------
 
-    private static AgentMessage Ask(string message) => new()
+    private static AgentMessage Ask(string message, bool? planMode = null)
     {
-        FromHandle = "owner1",
-        ToHandle = CoordinatorHandle,
-        Kind = MessageKind.Request,
-        Message = message
-    };
+        return new AgentMessage
+        {
+            FromHandle = "owner1",
+            ToHandle = CoordinatorHandle,
+            Kind = MessageKind.Request,
+            Message = message,
+            Args = planMode.HasValue
+                ? new Dictionary<string, string> { [HarnessMessageArgs.PlanMode] = planMode.Value.ToString() }
+                : new Dictionary<string, string>()
+        };
+    }
 
     private static (HarnessTestAgent Agent, FakeAgentHost Host, FakeChatClient ChatClient) CreateAgent(
         FakeChatClient? chatClient = null,
         Dictionary<string, string>? args = null,
         FakeAgentHost? host = null,
-        string systemPrompt = "You are a test agent.")
+        string systemPrompt = "You are a test agent.",
+        FakePrincipalStorageProvider? storage = null,
+        Action<FabrCoreHarnessOptions>? configure = null)
     {
         chatClient ??= FakeChatClient.WithTextResponse("Done.");
         host ??= new FakeAgentHost(CoordinatorHandle);
@@ -502,33 +858,113 @@ public sealed class FabrCoreHarnessTests
             Args = args ?? []
         };
 
-        var services = new ServiceCollection()
+        var serviceCollection = new ServiceCollection()
             .AddLogging()
             .AddSingleton<IConfiguration>(new ConfigurationBuilder().Build())
-            .AddSingleton<IFabrCoreChatClientService>(new FakeChatClientService(chatClient))
-            .BuildServiceProvider();
+            .AddSingleton<IFabrCoreChatClientService>(new FakeChatClientService(chatClient));
+        if (storage is not null)
+        {
+            serviceCollection.AddSingleton<IPrincipalScopedFabrCoreStorageProvider>(storage);
+        }
 
-        return (new HarnessTestAgent(config, services, host), host, chatClient);
+        var services = serviceCollection.BuildServiceProvider();
+
+        return (new HarnessTestAgent(config, services, host, configure), host, chatClient);
     }
+
+    private static FakePrincipalStorageProvider CreateStoredSkill(
+        string principalId,
+        string name,
+        string version,
+        string? resourceName,
+        string? resourceContent)
+    {
+        var storage = new FakePrincipalStorageProvider();
+        var resources = new List<FabrCoreSkillResourceDescriptor>();
+        if (resourceName is not null && resourceContent is not null)
+        {
+            var bytes = Encoding.UTF8.GetBytes(resourceContent);
+            var descriptor = new FabrCoreSkillResourceDescriptor
+            {
+                Name = resourceName,
+                ResourceId = ResourceId(resourceName),
+                MediaType = "text/markdown",
+                Length = bytes.Length,
+                DigestSha256 = Digest(bytes)
+            };
+            resources.Add(descriptor);
+            storage.Seed(
+                principalId,
+                FabrCoreSkillStorage.Container,
+                FabrCoreSkillStorage.ResourceKey(name, version, descriptor.ResourceId),
+                new FabrCoreSkillResourceDocument
+                {
+                    Name = resourceName,
+                    MediaType = descriptor.MediaType,
+                    Content = resourceContent,
+                    DigestSha256 = descriptor.DigestSha256
+                });
+        }
+
+        var markdown = $"---\nname: {name}\ndescription: Reviews policy documents.\n---\nFollow the policy workflow.";
+        storage.Seed(
+            principalId,
+            FabrCoreSkillStorage.Container,
+            FabrCoreSkillStorage.ManifestKey(name, version),
+            new FabrCoreSkillManifest
+            {
+                Name = name,
+                Version = version,
+                Description = "Reviews policy documents.",
+                SkillMarkdown = markdown,
+                Resources = resources,
+                PublishedUtc = DateTimeOffset.UtcNow,
+                DigestSha256 = Digest(Encoding.UTF8.GetBytes(markdown + resourceContent)),
+                TotalUncompressedBytes = Encoding.UTF8.GetByteCount(markdown)
+                    + resources.Sum(resource => resource.Length)
+            });
+        return storage;
+    }
+
+    private static string ResourceId(string name) => Digest(Encoding.UTF8.GetBytes(name));
+    private static string Digest(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
 
     private sealed class HarnessTestAgent : FabrCoreAgentProxy
     {
-        public HarnessTestAgent(AgentConfiguration config, IServiceProvider serviceProvider, IFabrCoreAgentHost host)
+        private readonly Action<FabrCoreHarnessOptions>? configure;
+
+        public HarnessTestAgent(
+            AgentConfiguration config,
+            IServiceProvider serviceProvider,
+            IFabrCoreAgentHost host,
+            Action<FabrCoreHarnessOptions>? configure)
             : base(config, serviceProvider, host)
         {
+            this.configure = configure;
         }
 
         public FabrCoreHarnessResult? Harness { get; private set; }
 
         public override async Task OnInitialize()
-            => Harness = await CreateFabrCoreHarnessAgent(config.Models ?? "default", "main");
+            => Harness = await CreateFabrCoreHarnessAgent(
+                config.Models ?? "default",
+                "main",
+                configure: configure);
 
         public override async Task<AgentMessage> OnMessage(AgentMessage message)
         {
-            var run = await Harness!.RunAsync(message.Message ?? string.Empty);
+            var run = await Harness!.RunAsync(message);
             var response = message.Response();
             response.Message = run.Text;
             return response;
         }
+    }
+
+    private sealed class EmptySkillSource : AgentSkillsSource
+    {
+        public override Task<IList<AgentSkill>> GetSkillsAsync(
+            AgentSkillsSourceContext context,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IList<AgentSkill>>([]);
     }
 }

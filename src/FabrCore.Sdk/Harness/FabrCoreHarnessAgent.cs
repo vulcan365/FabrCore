@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 namespace FabrCore.Sdk;
 
 /// <summary>
-/// A FabrCore-assembled agent harness: todo tracking, an iteration loop, and delegation to background
+/// A FabrCore-assembled agent harness: todo tracking, operating modes, an iteration loop, and delegation to background
 /// agents, composed over a caller-supplied <see cref="IChatClient"/>.
 /// </summary>
 /// <remarks>
@@ -22,7 +22,7 @@ namespace FabrCore.Sdk;
 /// <item><description><c>LoopAgent</c> — only when <see cref="FabrCoreHarnessOptions.LoopMode"/> or
 /// <see cref="FabrCoreHarnessOptions.AdditionalLoopEvaluators"/> yields at least one evaluator.</description></item>
 /// <item><description><c>OpenTelemetryAgent</c> — parity with <c>CreateChatClientAgent</c>, sensitive data on by default.</description></item>
-/// <item><description><see cref="ChatClientAgent"/> with the todo and background-agent context providers.</description></item>
+/// <item><description><see cref="ChatClientAgent"/> with the todo, mode, skill, and background-agent context providers.</description></item>
 /// </list>
 /// The chat client keeps <c>ChatClientAgent</c>'s default middleware so FabrCore's
 /// <c>TokenTrackingChatClient</c> stays the innermost client and run-safety sees every call.
@@ -59,7 +59,9 @@ public sealed class FabrCoreHarnessAgent : DelegatingAIAgent
         """;
 
     private readonly TodoProvider? todos;
+    private readonly AgentModeProvider? modes;
     private readonly BackgroundAgentsProvider? backgroundAgents;
+    private readonly AgentSkillsProvider? skills;
     private readonly int loopEvaluatorCount;
 
     /// <summary>
@@ -84,15 +86,31 @@ public sealed class FabrCoreHarnessAgent : DelegatingAIAgent
         : base(composition.Agent)
     {
         todos = composition.Todos;
+        modes = composition.Modes;
         backgroundAgents = composition.BackgroundAgents;
+        skills = composition.Skills;
+        PlanningModeName = composition.PlanningModeName;
+        ExecutionModeName = composition.ExecutionModeName;
         loopEvaluatorCount = composition.LoopEvaluatorCount;
     }
 
     /// <summary>The todo provider, or <see langword="null"/> when todos are disabled.</summary>
     public TodoProvider? Todos => todos;
 
+    /// <summary>The operating-mode provider, or <see langword="null"/> when modes are disabled.</summary>
+    public AgentModeProvider? Modes => modes;
+
+    /// <summary>The mode selected by <see cref="HarnessMessageArgs.PlanMode"/> when its value is true.</summary>
+    public string PlanningModeName { get; }
+
+    /// <summary>The mode selected by <see cref="HarnessMessageArgs.PlanMode"/> when its value is false.</summary>
+    public string ExecutionModeName { get; }
+
     /// <summary>The background-agent provider, or <see langword="null"/> when no background agents were supplied.</summary>
     public BackgroundAgentsProvider? BackgroundAgents => backgroundAgents;
+
+    /// <summary>The explicitly configured skill provider, or <see langword="null"/>.</summary>
+    public AgentSkillsProvider? Skills => skills;
 
     /// <summary>True when a loop decorator is driving re-invocation; false for a single-shot agent.</summary>
     public bool IsLooping => loopEvaluatorCount > 0;
@@ -114,6 +132,20 @@ public sealed class FabrCoreHarnessAgent : DelegatingAIAgent
             providers.Add(todoProvider);
         }
 
+        var planningModeName = options?.PlanningModeName ?? "plan";
+        var executionModeName = options?.ExecutionModeName ?? "execute";
+
+        AgentModeProvider? modeProvider = null;
+        if (options?.DisableAgentModeProvider is not true)
+        {
+            var modeOptions = BuildModeOptions(
+                options?.AgentModeProviderOptions,
+                planningModeName,
+                executionModeName);
+            modeProvider = new AgentModeProvider(modeOptions);
+            providers.Add(modeProvider);
+        }
+
         // Materialize once: the provider validates names on construction and the loop-mode check below
         // needs to know whether any delegates exist without re-enumerating a lazy sequence.
         var delegates = options?.BackgroundAgents?.ToList();
@@ -130,7 +162,34 @@ public sealed class FabrCoreHarnessAgent : DelegatingAIAgent
             providers.AddRange(extraProviders);
         }
 
-        var evaluators = BuildEvaluators(options, todoProvider is not null, backgroundProvider is not null);
+        AgentSkillsProvider? skillsProvider = null;
+        if (options?.AgentSkillsSource is { } skillsSource)
+        {
+            var skillsOptions = options.AgentSkillsProviderOptions ?? new AgentSkillsProviderOptions
+            {
+                DisableLoadSkillApproval = true,
+                DisableReadSkillResourceApproval = true,
+                DisableRunSkillScriptApproval = true,
+                SkillsInstructionPrompt =
+                    """
+                    You have access to trusted, read-only skills containing domain-specific instructions and resources.
+                    <available_skills>
+                    {skills}
+                    </available_skills>
+                    When a task aligns with a skill, use `load_skill`, follow its instructions, and use
+                    `read_skill_resource` for a listed resource when needed. Skill scripts are unavailable.
+                    """
+            };
+            skillsProvider = new AgentSkillsProvider(skillsSource, skillsOptions, loggerFactory);
+            providers.Add(skillsProvider);
+        }
+
+        var evaluators = BuildEvaluators(
+            options,
+            todoProvider is not null,
+            modeProvider is not null,
+            executionModeName,
+            backgroundProvider is not null);
 
         var chatOptions = options?.ChatOptions?.Clone() ?? new ChatOptions();
         chatOptions.Instructions = CombineInstructions(
@@ -183,12 +242,22 @@ public sealed class FabrCoreHarnessAgent : DelegatingAIAgent
             agent = new LoopAgent(agent, evaluators, loopOptions, loggerFactory);
         }
 
-        return new Composition(agent, todoProvider, backgroundProvider, evaluators.Count);
+        return new Composition(
+            agent,
+            todoProvider,
+            modeProvider,
+            backgroundProvider,
+            skillsProvider,
+            planningModeName,
+            executionModeName,
+            evaluators.Count);
     }
 
     private static List<LoopEvaluator> BuildEvaluators(
         FabrCoreHarnessOptions? options,
         bool hasTodoProvider,
+        bool hasModeProvider,
+        string executionModeName,
         bool hasBackgroundAgents)
     {
         var evaluators = new List<LoopEvaluator>();
@@ -203,9 +272,12 @@ public sealed class FabrCoreHarnessAgent : DelegatingAIAgent
                     nameof(options));
             }
 
-            // Do not configure Modes: it makes an AgentModeProvider mandatory at evaluation time,
-            // and modes are not part of this harness.
-            evaluators.Add(new TodoCompletionLoopEvaluator());
+            evaluators.Add(hasModeProvider
+                ? new TodoCompletionLoopEvaluator(new TodoCompletionLoopEvaluatorOptions
+                {
+                    Modes = [executionModeName]
+                })
+                : new TodoCompletionLoopEvaluator());
         }
 
         if (mode.HasFlag(HarnessLoopMode.Background))
@@ -252,6 +324,77 @@ public sealed class FabrCoreHarnessAgent : DelegatingAIAgent
         return evaluators;
     }
 
+    private static AgentModeProviderOptions BuildModeOptions(
+        AgentModeProviderOptions? configured,
+        string planningModeName,
+        string executionModeName)
+    {
+        if (string.IsNullOrWhiteSpace(planningModeName))
+        {
+            throw new ArgumentException("PlanningModeName must not be null, empty, or whitespace.", nameof(FabrCoreHarnessOptions));
+        }
+
+        if (string.IsNullOrWhiteSpace(executionModeName))
+        {
+            throw new ArgumentException("ExecutionModeName must not be null, empty, or whitespace.", nameof(FabrCoreHarnessOptions));
+        }
+
+        if (string.Equals(planningModeName, executionModeName, StringComparison.Ordinal))
+        {
+            throw new ArgumentException("PlanningModeName and ExecutionModeName must be different.", nameof(FabrCoreHarnessOptions));
+        }
+
+        IReadOnlyList<AgentModeProviderOptions.AgentMode> effectiveModes = configured?.Modes ??
+        [
+            new AgentModeProviderOptions.AgentMode(planningModeName, DefaultPlanningModeInstructions),
+            new AgentModeProviderOptions.AgentMode(executionModeName, DefaultExecutionModeInstructions)
+        ];
+
+        var names = effectiveModes.Select(mode => mode?.Name).ToHashSet(StringComparer.Ordinal);
+        if (!names.Contains(planningModeName))
+        {
+            throw new ArgumentException(
+                $"PlanningModeName '{planningModeName}' is not present in AgentModeProviderOptions.Modes.",
+                nameof(FabrCoreHarnessOptions));
+        }
+
+        if (!names.Contains(executionModeName))
+        {
+            throw new ArgumentException(
+                $"ExecutionModeName '{executionModeName}' is not present in AgentModeProviderOptions.Modes.",
+                nameof(FabrCoreHarnessOptions));
+        }
+
+        return new AgentModeProviderOptions
+        {
+            Instructions = configured?.Instructions,
+            Modes = effectiveModes,
+            DefaultMode = configured?.DefaultMode ?? planningModeName
+        };
+    }
+
+    private const string DefaultPlanningModeInstructions =
+        """
+        Use this mode to understand the request and produce a plan for approval before execution.
+
+        1. Analyze the request and use tools only for bounded exploration needed to remove uncertainty.
+        2. Ask concise clarifying questions when the answer materially changes the plan.
+        3. Create or update the durable todo list so it is the authoritative plan; do not write the plan to a file.
+        4. Present the plan, important assumptions, and expected result to the user.
+        5. Do not execute the planned work until the user approves it or explicitly asks you to switch to execute mode.
+        """;
+
+    private const string DefaultExecutionModeInstructions =
+        """
+        Use this mode to complete the user's request autonomously.
+
+        1. Answer a genuinely simple question directly.
+        2. For multi-step work, create any missing todos and treat the durable todo list as the work plan.
+        3. Work through every todo using the available tools and best judgment; do not wait for feedback unless progress is genuinely blocked.
+        4. Mark a todo complete only after its work has actually succeeded, and adapt when a tool fails or returns an unexpected result.
+        5. Finish with a consolidated result and identify anything left incomplete when a runtime or iteration budget stops the run.
+        """;
+
     private static string? CombineInstructions(string? harnessInstructions, string? agentInstructions)
     {
         var harness = string.IsNullOrWhiteSpace(harnessInstructions) ? null : harnessInstructions;
@@ -269,6 +412,10 @@ public sealed class FabrCoreHarnessAgent : DelegatingAIAgent
     private sealed record Composition(
         AIAgent Agent,
         TodoProvider? Todos,
+        AgentModeProvider? Modes,
         BackgroundAgentsProvider? BackgroundAgents,
+        AgentSkillsProvider? Skills,
+        string PlanningModeName,
+        string ExecutionModeName,
         int LoopEvaluatorCount);
 }

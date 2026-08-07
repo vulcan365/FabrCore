@@ -242,6 +242,13 @@ public sealed class FabrCoreAgentServiceTrackingTests
 
         public Task Unsubscribe(IPrincipalGrainObserver observer) => throw new NotSupportedException();
 
+        public Task<FabrCore.Core.WebSockets.FabrCoreWebSocketRegistration> SubscribeWebSocket(
+            IPrincipalWebSocketObserver observer, string clientId, string connectionId, long? checkpoint) => throw new NotSupportedException();
+
+        public Task UnsubscribeWebSocket(string clientId, string connectionId) => throw new NotSupportedException();
+
+        public Task AcknowledgeWebSocket(string clientId, long sequence) => throw new NotSupportedException();
+
         public Task<AgentMessage> SendAndReceiveMessage(AgentMessage request) => throw new NotSupportedException();
 
         public Task SendMessage(AgentMessage request) => throw new NotSupportedException();
@@ -279,6 +286,9 @@ public sealed class FabrCoreAgentServiceTrackingTests
         }
 
         public Task<AgentHealthStatus> ResetAgent(string handle) => throw new NotSupportedException();
+
+        public Task<AgentHealthStatus> GetAgentHealth(string handle, HealthDetailLevel detailLevel = HealthDetailLevel.Basic)
+            => throw new NotSupportedException();
 
         public Task<bool> UntrackAgent(string handle) => throw new NotSupportedException();
 

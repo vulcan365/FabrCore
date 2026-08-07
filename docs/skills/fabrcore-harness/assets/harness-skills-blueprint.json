@@ -1,0 +1,23 @@
+{
+  "name": "policy-review-assistant",
+  "description": "A harness agent pinned to the administrator-published policy-review skill.",
+  "version": "1.0.0",
+  "agents": [
+    {
+      "handle": "policy-assistant",
+      "agentType": "your-harness-agent-alias",
+      "models": "default",
+      "systemPrompt": "Review requested actions against policy and identify unresolved evidence.",
+      "description": "Reviews actions against the pinned policy workflow.",
+      "streams": [],
+      "args": {
+        "_HarnessSkills": "policy-review@1.0.0",
+        "_HarnessLoop": "todo",
+        "_HarnessLoopMaxIterations": "8"
+      },
+      "plugins": [],
+      "tools": [],
+      "mcpServers": []
+    }
+  ]
+}

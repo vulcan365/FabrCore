@@ -1,12 +1,116 @@
-# FabrCore release notes: v1.0.0–v1.6.3
+# FabrCore release notes
 
-These notes cover the repository changes introduced by `v1.0.0` relative to `v0.10.2`
-through the latest `v1.6.3` tag. They are derived from the tagged Git history and tree
-diffs, including changes delivered through merge commits.
+These notes cover the current unreleased changes after `v1.6.3` and the tagged repository
+history from `v1.0.0` onward. They are derived from Git history and tree diffs, including
+changes delivered through merge commits.
 
-[Full comparison: v1.0.0...v1.6.3](https://github.com/vulcan365/FabrCore/compare/v1.0.0...v1.6.3)
+[Current comparison: v1.6.3...develop](https://github.com/vulcan365/FabrCore/compare/v1.6.3...develop)
 
-## Highlights
+## Unreleased - changes since v1.6.3
+
+Snapshot date: 2026-08-05
+
+### Highlights
+
+- Added a FabrCore-native agent harness built on Microsoft Agent Framework harness primitives.
+  Agents can maintain model-managed todo lists, keep working through bounded iteration loops,
+  and delegate work to other FabrCore agents while preserving session state across grain
+  deactivation.
+- Added a two-layer compaction ladder: reversible, per-call context compaction bounds what the
+  model sees, while history compaction continues to summarize persisted `MessageThreads`
+  between turns.
+- Replaced the Surface Swarm runtime with simpler blueprint-defined `orchestrator` and `task`
+  squads. Task squads use harness todo, background-agent, and loop primitives to coordinate
+  executor and subject-matter-expert members.
+
+### Added
+
+- Added production WebSocket v2 with authenticated one-time tickets, explicit operation/delivery envelopes, durable ordered at-least-once delivery and replay, acknowledgements and gap detection, plus the typed reconnecting `FabrCore.Client.WebSocket` client. Agent creation and Blueprint provisioning remain HTTP-only.
+
+- Added `CreateFabrCoreHarnessAgent` for `FabrCoreAgentProxy` implementations and
+  `AsFabrCoreHarnessAgent` for direct `IChatClient` composition.
+- Added `FabrCoreHarnessOptions`, `FabrCoreHarnessResult`, `HarnessLoopMode`, `HarnessArgs`,
+  `HarnessSessionSnapshot`, `FabrCoreBackgroundAgent`, and `AgentRosterBuilder`.
+- Added durable harness `plan` / `execute` modes, `_plan-mode` selection on inbound
+  `AgentMessage` values, mode-aware todo looping, and SDK helpers for inspecting or changing mode.
+- Added configurable todo, background-delegation, completion-marker, and AI-judge loop modes,
+  with a bounded iteration budget and APIs for reporting unfinished work.
+- Added durable per-thread harness snapshots for todos and delegation records. Unreadable or
+  incompatible snapshots start fresh, and delegations that were in flight during deactivation
+  are explicitly reported as lost.
+- Added health-probed background-agent rosters, collision-safe delegate names, descriptions and
+  capabilities from the FabrCore registry, delegation timeouts, and ACL-governed FabrCore
+  messaging.
+- Added `ContextCompaction`, `ContextCompactionConfig`, and `CompactionLadder`. The default ladder
+  evicts old tool results at 50% of the input budget, truncates old groups at 80%, history-compacts
+  at 87% of the context window, applies a projection fuse at 90%, and stops oversized runs at the
+  model window.
+- Added model settings `ContextCompactionEnabled`, `ContextEvictThreshold`, and
+  `ContextTruncateThreshold`, together with `_Context*` agent argument overrides.
+- Added resolved-ladder diagnostics and `compaction.history.started`,
+  `compaction.history.completed`, and `compaction.history.failed` monitor events.
+- Added Surface task-squad contracts and runtime support, including task options for the worker
+  model, persona prompt, delegation overlay, delegation timeout, and maximum loop iterations.
+- Added focused SDK tests for harness composition, durable sessions, delegation behavior,
+  configuration parsing, and compaction-ladder ordering.
+
+### Changed
+
+- Changed Surface blueprints from the nested `swarm.squads` extension to a top-level `squads`
+  extension. Supported squad types are now `orchestrator` and `task`.
+- Reworked task squads around `SurfaceTaskHarnessAgent`. A task run tracks model-owned todos,
+  delegates concurrently to executor members, consults subject-matter-expert members, and loops
+  until no todos or delegations remain, subject to the configured iteration cap.
+- Changed history compaction to run only before or after a turn. When context compaction is active,
+  its default threshold is now 87%; without layer 1, it retains the legacy 75% default.
+- Changed read-side projection into a high-watermark fuse when context compaction is configured,
+  leaving the cheaper context and history compaction rungs to run first.
+- Changed the run-safety scope to stop over-budget work only; it no longer rewrites persisted
+  history inside a live tool loop.
+- Updated `Microsoft.Agents.AI` and `Microsoft.Agents.AI.OpenAi` from `1.15.0` to `1.16.0`.
+- Updated affected test projects to Microsoft.NET.Test.Sdk `18.8.1`, MSTest `4.3.3`, and
+  Microsoft.Testing.Extensions.TrxReport `2.3.3`.
+
+### Upgrade and compatibility notes
+
+- Native harness modes are enabled by default. Pass `AgentMessage.Args["_plan-mode"] = "false"`
+  for execution runs, or set `_HarnessMode=false` to retain the previous mode-independent todo loop.
+
+- Migrate Surface blueprint documents from:
+
+  ```json
+  { "swarm": { "squads": [/* ... */] } }
+  ```
+
+  to:
+
+  ```json
+  { "squads": [/* ... */] }
+  ```
+
+  Replace `squadType: "swarm"` with either `orchestrator` for one-hop routing or `task` for
+  harness-driven multi-step coordination.
+- The `FabrCore.Surface.Ai.Swarm` API surface, `SurfaceSwarm*` types, Swarm services and options,
+  and the former `SurfaceTaskRunnerAgent` were removed. Update integrations to
+  `FabrCore.Surface.Ai.Squads`, `FabrCore.Surface.Ai.Tasks`, `ISurfaceSquadService`, and
+  `SurfaceTaskHarnessAgent` as applicable.
+- `MidTurnCompactionEnabled` and `_MidTurnCompactionEnabled` are retired. The model property remains
+  deserializable but is obsolete and ignored; use `ContextCompactionEnabled` or
+  `_ContextCompactionEnabled` instead.
+- `FabrCoreRunStoppedException.CheckpointCount`, the constructor checkpoint-count parameter, and
+  the `_fabrcore_checkpoint_count` response diagnostic were removed because run safety no longer
+  performs compaction checkpoints.
+- Set both `ContextWindowTokens` and `MaxOutputTokens` to enable layer 1. If either value is missing,
+  FabrCore continues without in-run context compaction and reports `context:unconfigured` in the
+  resolved ladder diagnostic.
+- Harness APIs inherit the Microsoft Agent Framework experimental designation. Always execute via
+  `FabrCoreHarnessResult.RunAsync`; calling the inner agent directly bypasses durable snapshotting.
+- Harness snapshots preserve todos and delegation records, but work already running in another
+  agent cannot be resumed after grain deactivation and is reported as lost on restore.
+
+[Compare v1.6.3...develop](https://github.com/vulcan365/FabrCore/compare/v1.6.3...develop)
+
+## v1.0.0-v1.6.3 highlights
 
 - Added durable agent-to-principal delivery and proactive Microsoft 365 Copilot messaging.
 - Split Orleans hosting into provider packages and added provider-neutral Orleans client
