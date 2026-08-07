@@ -123,7 +123,7 @@ Response envelope:
         "name": "ops-agents",
         "version": "7",
         "agents": [],
-        "swarm": { "squads": [] }
+        "squads": []
       }
     }
   ]
@@ -166,7 +166,7 @@ Request body:
     "host": "1.5.0",
     "memory.admin": "1",
     "graphrag.admin": "1",
-    "blueprint.swarm": "1"
+    "blueprint.squads": "1"
   },
   "timestamp": "2026-07-23T18:00:00Z"
 }

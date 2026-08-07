@@ -18,15 +18,13 @@ document shared by local development, Surface, and Forge fleet delivery.
       "systemPrompt": "Help the principal with their workspace."
     }
   ],
-  "swarm": {
-    "squads": []
-  }
+  "squads": []
 }
 ```
 
 `agents` contains normal `AgentConfiguration` records. Other top-level properties are captured
 in `FabrCoreBlueprint.Extensions`. The package that owns an extension registers an
-`IBlueprintExpander`; Surface registers the `swarm` expander.
+`IBlueprintExpander`; Surface registers the `squads` expander.
 
 ## Apply or store
 

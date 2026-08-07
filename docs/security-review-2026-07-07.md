@@ -246,9 +246,11 @@ and ACL control.
 
 ---
 
-### F-07 — WebSocket / SSE identity and origin handling · **High**
+### F-07 — WebSocket / SSE identity and origin handling · **WebSocket remediated; SSE follow-up remains**
 
 **Where:** `DefaultWebSocketAuthenticator.cs`; `FabrCoreHostOptions.AllowedWebSocketOrigins`
+
+**2026-08-06 status:** `/ws` now uses authenticated, sharded Orleans-backed, single-use 30-second tickets, rejects the System principal, requires `fabrcore.v2`, and requires an Origin allowlist outside Development. Ticket values are never audited or logged. Header/query principal selection is gated by an explicit Development-only option. Review SSE identity separately.
 (empty = allow all); `MonitorStreamController`.
 
 **Impact:** Browsers cannot send custom headers on WS upgrade, so identity often lands in the query

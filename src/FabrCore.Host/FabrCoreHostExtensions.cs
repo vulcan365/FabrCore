@@ -492,6 +492,7 @@ namespace FabrCore.Host
                     sp.GetRequiredService<OrleansEntityStorageProvider>());
                 builder.Services.AddSingleton<IFabrCoreStorageProvider>(sp =>
                     sp.GetRequiredService<OrleansEntityStorageProvider>());
+                builder.Services.AddSingleton<IFabrCoreSkillCatalogService, FabrCoreSkillCatalogService>();
                 logger.LogDebug("FabrCore typed entity storage configured");
 
                 // Configure File Storage
@@ -576,6 +577,12 @@ namespace FabrCore.Host
                 // Bind tunable options (see FabrCoreHostOptions / AgentGrainOptions / PrincipalGrainOptions).
                 builder.Services.Configure<Configuration.FabrCoreHostOptions>(
                     builder.Configuration.GetSection(Configuration.FabrCoreHostOptions.SectionName));
+                builder.Services.AddOptions<Configuration.FabrCoreWebSocketOptions>()
+                    .Bind(builder.Configuration.GetSection(Configuration.FabrCoreWebSocketOptions.SectionName))
+                    .ValidateOnStart();
+                builder.Services.TryAddEnumerable(
+                    ServiceDescriptor.Singleton<Microsoft.Extensions.Options.IValidateOptions<Configuration.FabrCoreWebSocketOptions>,
+                        Configuration.FabrCoreWebSocketOptionsValidator>());
                 builder.Services.AddOptions<Configuration.GatewayDiscoveryOptions>()
                     .Configure(discovery =>
                         discovery.RequireOrleansTls = !builder.Environment.IsDevelopment())
@@ -608,8 +615,12 @@ namespace FabrCore.Host
                 builder.Services.Configure<Configuration.PrincipalDeliveryOptions>(
                     builder.Configuration.GetSection(Configuration.PrincipalDeliveryOptions.SectionName));
 
-                // Pluggable WebSocket authenticator. Default preserves legacy header/query behavior;
-                // production apps override via AddFabrCoreServices().Services.AddSingleton<IWebSocketAuthenticator, MyAuthN>().
+                // Pluggable WebSocket authentication and principal resolution. The default
+                // uses authenticated one-time tickets; hosts still own identity-provider setup.
+                builder.Services.TryAddSingleton<WebSocket.IWebSocketPrincipalResolver, WebSocket.DefaultWebSocketPrincipalResolver>();
+                builder.Services.TryAddSingleton<WebSocket.WebSocketTicketService>();
+                builder.Services.TryAddSingleton<WebSocket.IWebSocketTicketService>(sp =>
+                    sp.GetRequiredService<WebSocket.WebSocketTicketService>());
                 builder.Services.TryAddSingleton<WebSocket.IWebSocketAuthenticator, WebSocket.DefaultWebSocketAuthenticator>();
 
                 // Token cost calculator — default reads FabrCore:ModelPricing from config. Hosts

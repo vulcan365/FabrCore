@@ -4,13 +4,15 @@ description: >
   FabrCore overview, architecture, prerequisites, NuGet packages, and project templates for
   distributed .NET/Orleans AI agent systems. Use for general FabrCore questions, getting started,
   or choosing a specialized skill. Route agent code to fabrcore-agent; Microsoft Agent Framework
-  to fabrcore-agentframework; plugins/tools to fabrcore-plugins-tools; hosting/API to
+  to fabrcore-agentframework; todo lists, plan/execute modes, iteration loops, background delegation, and managed
+  Agent Skills to
+  fabrcore-harness; plugins/tools to fabrcore-plugins-tools; hosting/API to
   fabrcore-server; Orleans to fabrcore-orleans; ordinary messages/orchestration to
   fabrcore-messaging; durable proactive/out-of-turn delivery and relay providers to
   fabrcore-principal-delivery; authorization/audit to fabrcore-acl; MCP to fabrcore-mcp;
   verifiable execution/SPIFFE to fabrcore-spiffe; Microsoft 365 Copilot/Teams integration to
   fabrcore-microsoft365copilot; Memory to fabrcore-services-memory; GraphRAG to
-  fabrcore-graphrag; Surface UI to fabrcore-surface; supervised squads to fabrcore-swarm;
+  fabrcore-graphrag; Surface UI and squads to fabrcore-surface;
   tests to fabrcore-testing; and August 2026 OSS/Forge ownership or cross-repo changes to
   fabrcore-oss-aug2026.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
@@ -32,6 +34,9 @@ Build distributed AI agent systems with FabrCore — an open-source .NET 10 fram
 | Agent Blueprint | Canonical stored/apply manifest | `FabrCoreBlueprint`, `IBlueprintExpander`, `/fabrcoreapi/Blueprint` | fabrcore-server |
 | Agent Eviction | Hard-delete an agent instance | `AgentEvictionResult`, `DELETE /fabrcoreapi/Agent/{handle}` | fabrcore-server, fabrcore-orleans |
 | Agent Framework | LLM agent runtime | `AIAgent`, `AgentSession` | fabrcore-agentframework |
+| Agent Harness | Todos, plan/execute modes, iteration loop, background delegation | `CreateFabrCoreHarnessAgent()`, `FabrCoreHarnessResult`, `HarnessLoopMode` | fabrcore-harness |
+| Harness Skills | Principal-scoped, exact-version managed Agent Skills | `_HarnessSkills`, `FabrCoreStoredAgentSkillsSource`, `AgentSkillsProvider` | fabrcore-harness, fabrcore-server |
+| Background Delegation | Model-driven fan-out to other agents | `FabrCoreBackgroundAgent`, `AgentRosterBuilder` | fabrcore-harness |
 | Plugin | Stateful tool collection | `IFabrCorePlugin` | fabrcore-plugins-tools |
 | Standalone Tool | Single static method | `[ToolAlias]` attribute | fabrcore-plugins-tools |
 | Registry Metadata | Capabilities & notes | `[FabrCoreCapabilities]`, `[FabrCoreNote]` | fabrcore-agent, fabrcore-plugins-tools |
@@ -49,7 +54,7 @@ Build distributed AI agent systems with FabrCore — an open-source .NET 10 fram
 | Memory | Durable scoped agent memory | `AddAgentMemoryServices()`, `IAgentMemoryService` | fabrcore-services-memory |
 | GraphRAG | Scoped knowledge ingestion/search | `AddGraphRagServices()`, `IKnowledgeSearchService` | fabrcore-graphrag |
 | Surface | OSS command-center UI | `AddFabrCoreSurface()`, `SurfaceChatLink` | fabrcore-surface |
-| Swarm | Blueprint-defined supervised squads | `SurfaceSquadType.Swarm`, `swarm.squads` | fabrcore-swarm |
+| Squads | Blueprint-defined agent squads | `SurfaceSquadType`, `squads` extension | fabrcore-surface |
 | Configuration | Agent definition | `AgentConfiguration` | fabrcore-server |
 | Telemetry | W3C TraceContext on every message | `AgentMessageTelemetry`, `StampFromActivity`, `StartIngressActivity` | fabrcore-messaging (surface), fabrcore-server (exporter setup) |
 | Verifiable Execution | Signed/tamper-evident agent/event evidence | `IVerifiableExecutionStore`, `IVerifiableExecutionSigner`, `VerifiableExecutionEnvelope` | fabrcore-spiffe |
@@ -60,11 +65,11 @@ A Blueprint is a canonical `FabrCoreBlueprint` manifest containing agent configu
 package-owned top-level extensions. Blueprints can be applied directly through
 `POST /fabrcoreapi/Agent/blueprint` or stored per principal through
 `/fabrcoreapi/Blueprint` CRUD and `/{name}/apply`. Registered `IBlueprintExpander`
-implementations expand extensions server-side; Surface owns the top-level `swarm` extension.
+implementations expand extensions server-side; Surface owns the top-level `squads` extension.
 
 `AgentBlueprintRequest` and `EnsureBlueprintAgentsAsync` remain agents-only SDK compatibility
 surfaces; do not use them for new extension-aware workflows. Use **fabrcore-server** for the
-canonical resource API and **fabrcore-swarm** for squad definitions.
+canonical resource API and **fabrcore-surface** for squad definitions.
 
 ## Architecture Overview
 
@@ -89,12 +94,12 @@ FabrCore layers on top of Orleans (distributed actor model) and Microsoft.Extens
 ```
 
 - **FabrCore.Core** — Interfaces (`IAgentGrain`, `IPrincipalGrain`), models (`AgentConfiguration`, `AgentMessage`, `EventMessage`, `AgentHealthStatus`, `AgentEvictionResult`), verifiable execution contracts, Orleans surrogates
-- **FabrCore.Sdk** — Agent base class (`FabrCoreAgentProxy`), plugin system, tool registry, chat client factory, MCP integration, compaction, state persistence, Host API client, typed entity storage contracts, blueprint ensure client types, LLM evidence integration
+- **FabrCore.Sdk** — Agent base class (`FabrCoreAgentProxy`), plugin system, tool registry, chat client factory, MCP integration, the two-layer compaction ladder (`ContextCompaction` + `CompactionService`), state persistence, Host API client, typed entity storage contracts, blueprint ensure client types, LLM evidence integration
 - **FabrCore.Host** — Orleans grains (`AgentGrain`, `PrincipalGrain`), REST API controllers, streaming, WebSocket, agent service, verifiable execution recording/signing/verification
 - **FabrCore.Services.Contracts** — open Memory, GraphRAG, and cluster-capability transport contracts
 - **FabrCore.Services.Memory** — optional SQL Server 2025-backed durable agent memory
 - **FabrCore.Services.GraphRag** — optional SQL Server 2025-backed scoped knowledge services
-- **FabrCore.Surface** — optional OSS Blazor command center, Adaptive Cards, and Swarm
+- **FabrCore.Surface** — optional OSS Blazor command center, Adaptive Cards, and squads
 
 ## Prerequisites
 

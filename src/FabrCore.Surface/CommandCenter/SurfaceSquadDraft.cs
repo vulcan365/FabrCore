@@ -1,10 +1,10 @@
-using FabrCore.Surface.Ai.Swarm;
+using FabrCore.Surface.Ai.Squads;
 
 namespace FabrCore.Surface.CommandCenter;
 
 public sealed class SurfaceSquadDraft
 {
-    public SurfaceSquadType SquadType { get; set; } = SurfaceSquadType.Swarm;
+    public SurfaceSquadType SquadType { get; set; } = SurfaceSquadType.Orchestrator;
 
     public string Name { get; set; } = string.Empty;
 
@@ -12,13 +12,7 @@ public sealed class SurfaceSquadDraft
 
     public string OrchestratorModel { get; set; } = "default";
 
-    public string PlannerModel { get; set; } = "default";
-
     public string OrchestratorSystemPrompt { get; set; } = string.Empty;
-
-    public string PlannerSystemPrompt { get; set; } = string.Empty;
-
-    public string FastModel { get; set; } = "default";
 
     public string TaskPersonaPrompt { get; set; } = string.Empty;
 
@@ -26,9 +20,7 @@ public sealed class SurfaceSquadDraft
 
     public int DelegationTimeoutSeconds { get; set; } = 120;
 
-    public int MaxTaskAttempts { get; set; } = 2;
-
-    public int MaxValidationAttempts { get; set; } = 2;
+    public int MaxLoopIterations { get; set; } = 10;
 
     public bool ForceReconfigure { get; set; }
 
@@ -45,22 +37,17 @@ public sealed class SurfaceSquadDraft
             Name = Required(Name, "Squad name"),
             Description = Optional(Description),
             OrchestratorModel = string.IsNullOrWhiteSpace(OrchestratorModel) ? "default" : OrchestratorModel.Trim(),
-            PlannerModel = string.IsNullOrWhiteSpace(PlannerModel) ? "default" : PlannerModel.Trim(),
             OrchestratorSystemPrompt = Optional(OrchestratorSystemPrompt),
-            PlannerSystemPrompt = Optional(PlannerSystemPrompt),
             ForceReconfigure = ForceReconfigure,
             TaskOptions = new SurfaceTaskSquadOptions
             {
-                FastModelName = string.IsNullOrWhiteSpace(FastModel) ? "default" : FastModel.Trim(),
                 WorkerModelName = string.IsNullOrWhiteSpace(OrchestratorModel) ? "default" : OrchestratorModel.Trim(),
-                PlannerModelName = string.IsNullOrWhiteSpace(PlannerModel) ? "default" : PlannerModel.Trim(),
                 PersonaPrompt = SquadType == SurfaceSquadType.Task
                     ? Optional(OrchestratorSystemPrompt)
                     : Optional(TaskPersonaPrompt),
                 ClientAgentOverlay = Optional(ClientAgentOverlay),
                 DelegationTimeoutSeconds = DelegationTimeoutSeconds > 0 ? DelegationTimeoutSeconds : 120,
-                MaxTaskAttempts = MaxTaskAttempts > 0 ? MaxTaskAttempts : 2,
-                MaxValidationAttempts = MaxValidationAttempts > 0 ? MaxValidationAttempts : 2
+                MaxLoopIterations = MaxLoopIterations > 0 ? MaxLoopIterations : 10
             },
             Agents = Agents
                 .Where(agent => !string.IsNullOrWhiteSpace(agent.Name)

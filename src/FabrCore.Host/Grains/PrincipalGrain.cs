@@ -4,6 +4,7 @@ using FabrCore.Core.Interfaces;
 using FabrCore.Core.Monitoring;
 using FabrCore.Core.Streaming;
 using FabrCore.Core.VerifiableExecution;
+using FabrCore.Core.WebSockets;
 using FabrCore.Host.Configuration;
 using FabrCore.Host.Services;
 using FabrCore.Host.Streaming;
@@ -85,6 +86,7 @@ namespace FabrCore.Host.Grains
         private readonly IAgentMessageMonitor _messageMonitor;
         private readonly VerifiableExecutionRecorder _verifiableExecution;
         private readonly ObserverManager<IPrincipalGrainObserver> observerManager;
+        private readonly Dictionary<string, (string ConnectionId, IPrincipalWebSocketObserver Observer)> webSocketObservers = new(StringComparer.Ordinal);
         private readonly Queue<AgentMessage> pendingMessages = new();
         private readonly Dictionary<string, TrackedAgentInfo> _trackedAgents = new();
         private readonly IPersistentState<PrincipalGrainState> _state;
@@ -201,6 +203,56 @@ namespace FabrCore.Host.Grains
 
             return Task.CompletedTask;
         }
+
+        public async Task<FabrCoreWebSocketRegistration> SubscribeWebSocket(
+            IPrincipalWebSocketObserver observer,
+            string clientId,
+            string connectionId,
+            long? checkpoint)
+        {
+            var deliveryGrain = clusterClient.GetGrain<IWebSocketDeliveryGrain>(this.GetPrimaryKeyString());
+            var registration = await deliveryGrain.RegisterClient(clientId, checkpoint);
+            webSocketObservers[clientId] = (connectionId, observer);
+
+            // Messages queued before the first v2 registration remain live pending work,
+            // not historical replay. Persist them into the v2 log before notifying.
+            if (pendingMessages.Count > 0)
+            {
+                var replayIds = registration.Replay.Select(x => x.Message.Id).ToHashSet(StringComparer.Ordinal);
+                var pending = pendingMessages.ToArray();
+                pendingMessages.Clear();
+                foreach (var message in pending)
+                {
+                    if (replayIds.Contains(message.Id))
+                        continue;
+                    var delivery = await deliveryGrain.Append(message);
+                    if (delivery is not null)
+                    {
+                        await deliveryGrain.MarkDelivered(clientId, delivery.Sequence);
+                        registration.Replay.Add(delivery);
+                    }
+                }
+                await PersistPendingAndDeliveryStateAsync();
+            }
+
+            if (registration.Replay.Count > 0)
+            {
+                registration.CurrentSequence = Math.Max(registration.CurrentSequence, registration.Replay[^1].Sequence);
+                registration.OldestAvailableSequence ??= registration.Replay[0].Sequence;
+            }
+            return registration;
+        }
+
+        public Task UnsubscribeWebSocket(string clientId, string connectionId)
+        {
+            if (webSocketObservers.TryGetValue(clientId, out var current) && current.ConnectionId == connectionId)
+                webSocketObservers.Remove(clientId);
+            return Task.CompletedTask;
+        }
+
+        public Task AcknowledgeWebSocket(string clientId, long sequence) =>
+            clusterClient.GetGrain<IWebSocketDeliveryGrain>(this.GetPrimaryKeyString())
+                .Acknowledge(clientId, sequence);
 
         public async Task SetContextValue(string key, string? value)
         {
@@ -816,8 +868,20 @@ namespace FabrCore.Host.Grains
 
             try
             {
-                // If no observers are subscribed, queue the message for later delivery
-                if (!PrincipalDeliveryStateMachine.ShouldDeliverToObservers(observerManager.Count))
+                var deliveryGrain = clusterClient.GetGrain<IWebSocketDeliveryGrain>(principalHandle);
+                var durableDelivery = await deliveryGrain.Append(request);
+                if (durableDelivery is not null && webSocketObservers.Count > 0)
+                {
+                    foreach (var (clientId, registration) in webSocketObservers.ToArray())
+                    {
+                        await deliveryGrain.MarkDelivered(clientId, durableDelivery.Sequence);
+                        registration.Observer.OnDelivery(durableDelivery);
+                    }
+                    ObserverNotificationsCounter.Add(webSocketObservers.Count);
+                }
+
+                // If no live observers are subscribed, preserve pending/external relay behavior.
+                if (!PrincipalDeliveryStateMachine.ShouldDeliverToObservers(observerManager.Count + webSocketObservers.Count))
                 {
                     pendingMessages.Enqueue(request);
                     logger.LogInformation("No observers subscribed, message queued - PrincipalHandle: {PrincipalHandle}, QueueLength: {QueueLength}",
@@ -835,8 +899,10 @@ namespace FabrCore.Host.Grains
                 }
                 else
                 {
-                    // Notify all observers
-                    observerManager.Notify(observer => observer.OnMessageReceived(request));
+                    // Notify legacy in-process observers. v2 observers were notified from
+                    // the durable record above and never receive raw AgentMessage frames.
+                    if (observerManager.Count > 0)
+                        observerManager.Notify(observer => observer.OnMessageReceived(request));
 
                     ObserverNotificationsCounter.Add(1);
 
@@ -1328,6 +1394,14 @@ namespace FabrCore.Host.Grains
                 ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "reset_failed"));
                 throw;
             }
+        }
+
+        public async Task<AgentHealthStatus> GetAgentHealth(string handle, HealthDetailLevel detailLevel = HealthDetailLevel.Basic)
+        {
+            var principalHandle = this.GetPrimaryKeyString();
+            var resolvedHandle = ResolveAgentHandle(handle, principalHandle);
+            AuthorizeOrThrow(resolvedHandle, FabrActions.AgentRead);
+            return await clusterClient.GetGrain<IAgentGrain>(resolvedHandle).GetHealth(detailLevel);
         }
 
         public async Task<bool> UntrackAgent(string handle)

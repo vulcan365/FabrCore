@@ -87,33 +87,28 @@ Reserve `AgentMessage.Channel` for the underlying FabrCore message routing field
 
 Squads use `SurfaceSquadType` with these values:
 
-- `Swarm`
 - `Orchestrator`
 - `Task`
 
-Blueprints provision grouped agents through the top-level `swarm` extension and its
-`squads` array:
+Blueprints provision grouped agents through the top-level `squads` extension array:
 
 ```json
 {
   "name": "support-workspace",
-  "swarm": {
-    "squads": [
-      {
-        "squadType": "task",
-        "name": "Ops Desk",
-        "orchestratorModel": "default",
-        "plannerModel": "default",
-        "agents": [
-          {
-            "name": "data-intel",
-            "agentType": "data-intel-agent",
-            "role": "executor"
-          }
-        ]
-      }
-    ]
-  }
+  "squads": [
+    {
+      "squadType": "task",
+      "name": "Ops Desk",
+      "orchestratorModel": "default",
+      "agents": [
+        {
+          "name": "data-intel",
+          "agentType": "data-intel-agent",
+          "role": "executor"
+        }
+      ]
+    }
+  ]
 }
 ```
 

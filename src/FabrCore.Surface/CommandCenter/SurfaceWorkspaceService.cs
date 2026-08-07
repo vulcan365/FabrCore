@@ -1,6 +1,7 @@
 using FabrCore.Core;
 using FabrCore.Surface.Ai.Orchestration;
-using FabrCore.Surface.Ai.Swarm;
+using FabrCore.Surface.Ai.Squads;
+using FabrCore.Surface.Ai.Tasks;
 using FabrCore.Surface.Identity;
 using FabrCore.Surface.Services;
 using FabrCore.Sdk;
@@ -23,8 +24,7 @@ public sealed class SurfaceWorkspaceService : IAsyncDisposable
     private readonly ISurfacePreferencesClient? preferencesClient;
     private readonly ISurfaceSquadConfigClient? squadConfigClient;
     private readonly SurfaceBlueprintProvisioner? blueprintProvisioner;
-    private readonly ISurfaceBasicSquadService squadService;
-    private readonly ISurfaceSquadService swarmService;
+    private readonly ISurfaceSquadService squadService;
     private readonly SurfaceTranscriptStore transcriptStore;
     private readonly List<SurfaceAgentSummary> agents = [];
     private readonly List<SurfaceAgentSummary> allAgents = [];
@@ -44,11 +44,10 @@ public sealed class SurfaceWorkspaceService : IAsyncDisposable
         ISurfacePrincipalContextFactory? contextFactory = null,
         IServiceProvider? serviceProvider = null,
         ISurfaceDiscoveryClient? discoveryClient = null,
-        ISurfaceBasicSquadService? squadService = null,
+        ISurfaceSquadService? squadService = null,
         ISurfacePreferencesClient? preferencesClient = null,
         ISurfaceSquadConfigClient? squadConfigClient = null,
-        SurfaceBlueprintProvisioner? blueprintProvisioner = null,
-        ISurfaceSquadService? swarmService = null)
+        SurfaceBlueprintProvisioner? blueprintProvisioner = null)
     {
         this.contextFactory = contextFactory ?? serviceProvider?.GetService<ISurfacePrincipalContextFactory>();
         this.options = options.Value;
@@ -59,11 +58,8 @@ public sealed class SurfaceWorkspaceService : IAsyncDisposable
         this.squadConfigClient = squadConfigClient ?? serviceProvider?.GetService<ISurfaceSquadConfigClient>();
         this.blueprintProvisioner = blueprintProvisioner ?? serviceProvider?.GetService<SurfaceBlueprintProvisioner>();
         this.squadService = squadService
-                                    ?? serviceProvider?.GetService<ISurfaceBasicSquadService>()
-                                    ?? new SurfaceBasicSquadService();
-        this.swarmService = swarmService
-                            ?? serviceProvider?.GetService<ISurfaceSquadService>()
-                            ?? new SurfaceSquadService();
+                                    ?? serviceProvider?.GetService<ISurfaceSquadService>()
+                                    ?? new SurfaceSquadService();
         this.transcriptStore = serviceProvider?.GetService<SurfaceTranscriptStore>()
                                ?? new SurfaceTranscriptStore();
         this.transcriptStore.Changed += OnTranscriptChanged;
@@ -437,24 +433,7 @@ public sealed class SurfaceWorkspaceService : IAsyncDisposable
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        SurfaceSquadCreateResult result;
-        if (definition.SquadType == SurfaceSquadType.Swarm)
-        {
-            var swarmResult = await swarmService.CreateSquadAsync(
-                context,
-                Principal.PrincipalId,
-                SurfaceSwarmInterop.ToSwarmDefinition(definition),
-                cancellationToken);
-            result = new SurfaceSquadCreateResult
-            {
-                Squad = SurfaceSwarmInterop.ToSurfaceSquad(swarmResult.Squad),
-                AgentHealth = swarmResult.AgentHealth
-            };
-        }
-        else
-        {
-            result = await squadService.CreateSquadAsync(context, Principal.PrincipalId, definition, cancellationToken);
-        }
+        var result = await squadService.CreateSquadAsync(context, Principal.PrincipalId, definition, cancellationToken);
 
         result.Squad.SquadType = definition.SquadType;
         UpsertSquad(result.Squad);
@@ -474,7 +453,7 @@ public sealed class SurfaceWorkspaceService : IAsyncDisposable
     {
         if (context is null || Principal?.PrincipalId is null)
         {
-            throw new InvalidOperationException("Surface workspace must be initialized before adding swarm agents.");
+            throw new InvalidOperationException("Surface workspace must be initialized before adding squad agents.");
         }
 
         var squad = ResolveSelectedSquad()
@@ -492,13 +471,7 @@ public sealed class SurfaceWorkspaceService : IAsyncDisposable
             Description = summary.Health?.Configuration?.Description
         };
 
-        var updated = SurfaceSwarmInterop.IsSwarm(squad)
-            ? SurfaceSwarmInterop.ToSurfaceSquad(await swarmService.AddExistingAgentAsync(
-                context,
-                SurfaceSwarmInterop.ToSwarmSquad(squad),
-                SurfaceSwarmInterop.ToSwarmAgent(squadAgent),
-                cancellationToken))
-            : await squadService.AddExistingAgentAsync(context, squad, squadAgent, cancellationToken);
+        var updated = await squadService.AddExistingAgentAsync(context, squad, squadAgent, cancellationToken);
         UpsertSquad(updated);
         await SaveSquadAsync(updated, cancellationToken);
         SelectSquad(updated.OrchestratorHandle);
@@ -512,19 +485,13 @@ public sealed class SurfaceWorkspaceService : IAsyncDisposable
     {
         if (context is null || Principal?.PrincipalId is null)
         {
-            throw new InvalidOperationException("Surface workspace must be initialized before removing swarm agents.");
+            throw new InvalidOperationException("Surface workspace must be initialized before removing squad agents.");
         }
 
         var squad = ResolveSelectedSquad()
                       ?? throw new InvalidOperationException("Select a squad before removing an agent.");
 
-        var updated = SurfaceSwarmInterop.IsSwarm(squad)
-            ? SurfaceSwarmInterop.ToSurfaceSquad(await swarmService.RemoveAgentAsync(
-                context,
-                SurfaceSwarmInterop.ToSwarmSquad(squad),
-                agentHandle,
-                cancellationToken))
-            : await squadService.RemoveAgentAsync(context, squad, agentHandle, cancellationToken);
+        var updated = await squadService.RemoveAgentAsync(context, squad, agentHandle, cancellationToken);
         UpsertSquad(updated);
         await SaveSquadAsync(updated, cancellationToken);
         SelectSquad(updated.OrchestratorHandle);
@@ -538,29 +505,12 @@ public sealed class SurfaceWorkspaceService : IAsyncDisposable
     {
         if (context is null || Principal?.PrincipalId is null)
         {
-            throw new InvalidOperationException("Surface workspace must be initialized before creating swarm agents.");
+            throw new InvalidOperationException("Surface workspace must be initialized before creating squad agents.");
         }
 
         var squad = ResolveSelectedSquad()
                       ?? throw new InvalidOperationException("Select a squad before creating an agent.");
-        SurfaceSquadCreateResult result;
-        if (SurfaceSwarmInterop.IsSwarm(squad))
-        {
-            var swarmResult = await swarmService.CreateSquadAgentAsync(
-                context,
-                SurfaceSwarmInterop.ToSwarmSquad(squad),
-                SurfaceSwarmInterop.ToSwarmAgentDefinition(agentDefinition),
-                cancellationToken);
-            result = new SurfaceSquadCreateResult
-            {
-                Squad = SurfaceSwarmInterop.ToSurfaceSquad(swarmResult.Squad),
-                AgentHealth = swarmResult.AgentHealth
-            };
-        }
-        else
-        {
-            result = await squadService.CreateSquadAgentAsync(context, squad, agentDefinition, cancellationToken);
-        }
+        var result = await squadService.CreateSquadAgentAsync(context, squad, agentDefinition, cancellationToken);
 
         UpsertSquad(result.Squad);
         await SaveSquadAsync(result.Squad, cancellationToken);
@@ -1069,16 +1019,10 @@ public sealed class SurfaceWorkspaceService : IAsyncDisposable
         }
 
         foreach (var tracked in trackedAgents.Where(agent =>
-                     string.Equals(agent.AgentType, SurfaceSwarmAgentTypes.Orchestrator, StringComparison.OrdinalIgnoreCase)
-                     || string.Equals(agent.AgentType, SurfaceOrchestrationAgentTypes.SquadOrchestrator, StringComparison.OrdinalIgnoreCase)))
+                     string.Equals(agent.AgentType, SurfaceOrchestrationAgentTypes.SquadOrchestrator, StringComparison.OrdinalIgnoreCase)))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var isSwarmOrchestrator = string.Equals(
-                tracked.AgentType,
-                SurfaceSwarmAgentTypes.Orchestrator,
-                StringComparison.OrdinalIgnoreCase);
             var squad = TryReadSquadFromConfiguration(tracked.Health?.Configuration)
-                          ?? (isSwarmOrchestrator ? await TryReadSquadFromDetailedHealthAsync(tracked.Handle) : null)
                           ?? savedSquads.FirstOrDefault(existing =>
                               string.Equals(existing.OrchestratorHandle, tracked.Handle, StringComparison.OrdinalIgnoreCase))
                           ?? previousSquads.FirstOrDefault(existing =>
@@ -1112,46 +1056,10 @@ public sealed class SurfaceWorkspaceService : IAsyncDisposable
     }
 
     private static SurfaceSquadRouteResult ResolveSquadRoute(SurfaceSquad squad, string text)
-    {
-        if (!SurfaceSwarmInterop.IsSwarm(squad))
-        {
-            return SurfaceSquadRouteParser.Resolve(squad, text);
-        }
-
-        var route = SurfaceSwarmSquadRouteParser.Resolve(SurfaceSwarmInterop.ToSwarmSquad(squad), text);
-        return new SurfaceSquadRouteResult(route.Success, route.TargetHandle, route.Message, route.Mention, route.Error);
-    }
-
-    private async Task<SurfaceSquad?> TryReadSquadFromDetailedHealthAsync(string handle)
-    {
-        if (context is null)
-        {
-            return null;
-        }
-
-        try
-        {
-            var health = await context.GetAgentHealth(handle, HealthDetailLevel.Detailed);
-            return TryReadSquadFromConfiguration(health.Configuration);
-        }
-        catch (Exception ex)
-        {
-            logger.LogDebug(ex, "Failed to read Surface squad definition from detailed health for {Handle}.", handle);
-            return null;
-        }
-    }
+        => SurfaceSquadRouteParser.Resolve(squad, text);
 
     private static SurfaceSquad? TryReadSquadFromConfiguration(AgentConfiguration? configuration)
-    {
-        var squad = SurfaceBasicSquadService.TryReadSquad(configuration);
-        if (squad is not null)
-        {
-            return squad;
-        }
-
-        var swarmSquad = SurfaceSquadService.TryReadSquad(configuration);
-        return swarmSquad is null ? null : SurfaceSwarmInterop.ToSurfaceSquad(swarmSquad);
-    }
+        => SurfaceSquadService.TryReadSquad(configuration);
 
     private static SurfaceSquad BuildFallbackSquad(string orchestratorHandle, string agentType)
     {
@@ -1159,18 +1067,13 @@ public sealed class SurfaceWorkspaceService : IAsyncDisposable
         var (principal, alias) = HandleUtilities.ParseHandle(orchestratorHandle);
         return new SurfaceSquad
         {
-            SquadType = string.Equals(agentType, SurfaceOrchestrationAgentTypes.SquadOrchestrator, StringComparison.OrdinalIgnoreCase)
-                ? SurfaceSquadType.Orchestrator
-                : string.Equals(agentType, SurfaceSwarmAgentTypes.TaskRunner, StringComparison.OrdinalIgnoreCase)
-                    ? SurfaceSquadType.Task
-                    : string.Equals(agentType, SurfaceSwarmAgentTypes.Orchestrator, StringComparison.OrdinalIgnoreCase)
-                        ? SurfaceSquadType.Swarm
-                        : SurfaceSquadType.Swarm,
+            SquadType = string.Equals(agentType, SurfaceTaskAgentTypes.TaskRunner, StringComparison.OrdinalIgnoreCase)
+                ? SurfaceSquadType.Task
+                : SurfaceSquadType.Orchestrator,
             Name = displayName,
             Slug = SurfaceSquadHandleBuilder.ToSlug(alias),
             PrincipalHandle = principal,
-            OrchestratorHandle = orchestratorHandle,
-            PlannerHandle = $"{orchestratorHandle}-planner"
+            OrchestratorHandle = orchestratorHandle
         };
     }
 
@@ -1179,13 +1082,9 @@ public sealed class SurfaceWorkspaceService : IAsyncDisposable
         {
             Handle = squad.OrchestratorHandle,
             DisplayName = squad.Name,
-            AgentType = squad.SquadType == SurfaceSquadType.Orchestrator
-                ? SurfaceOrchestrationAgentTypes.SquadOrchestrator
-                : squad.SquadType == SurfaceSquadType.Task
-                    ? SurfaceSwarmAgentTypes.TaskRunner
-                : squad.SquadType == SurfaceSquadType.Swarm
-                    ? SurfaceSwarmAgentTypes.Orchestrator
-                : SurfaceSwarmAgentTypes.Orchestrator,
+            AgentType = squad.SquadType == SurfaceSquadType.Task
+                ? SurfaceTaskAgentTypes.TaskRunner
+                : SurfaceOrchestrationAgentTypes.SquadOrchestrator,
             Health = new AgentHealthStatus
             {
                 Handle = squad.OrchestratorHandle,
@@ -1294,7 +1193,7 @@ public sealed class SurfaceWorkspaceService : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to load Surface swarm squad configs for principal {PrincipalId}.", Principal.PrincipalId);
+            logger.LogWarning(ex, "Failed to load Surface squad configs for principal {PrincipalId}.", Principal.PrincipalId);
         }
 
         squadsLoaded = true;
@@ -1381,17 +1280,7 @@ public sealed class SurfaceWorkspaceService : IAsyncDisposable
 
         try
         {
-            if (SurfaceSwarmInterop.IsSwarm(squad))
-            {
-                await swarmService.EnsureSquadConfiguredAsync(
-                    context,
-                    SurfaceSwarmInterop.ToSwarmSquad(squad),
-                    cancellationToken);
-            }
-            else
-            {
-                await squadService.EnsureSquadConfiguredAsync(context, squad, cancellationToken);
-            }
+            await squadService.EnsureSquadConfiguredAsync(context, squad, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -1401,19 +1290,6 @@ public sealed class SurfaceWorkspaceService : IAsyncDisposable
 
     private static IEnumerable<string> GetSquadShellHandles(SurfaceSquad squad)
     {
-        if (squad.SquadType == SurfaceSquadType.Swarm
-            && !string.IsNullOrWhiteSpace(squad.PlannerHandle))
-        {
-            yield return squad.PlannerHandle;
-        }
-
-        if (squad.SquadType == SurfaceSquadType.Swarm
-            && !string.IsNullOrWhiteSpace(squad.OrchestratorHandle))
-        {
-            yield return SurfaceSwarmInterop.SupervisorHandle(squad);
-            yield return SurfaceSwarmInterop.VerifierHandle(squad);
-        }
-
         if (!string.IsNullOrWhiteSpace(squad.OrchestratorHandle))
         {
             yield return squad.OrchestratorHandle;
@@ -1461,7 +1337,7 @@ public sealed class SurfaceWorkspaceService : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to save Surface swarm squad configs for principal {PrincipalId}.", principalId);
+            logger.LogWarning(ex, "Failed to save Surface squad configs for principal {PrincipalId}.", principalId);
         }
     }
 
@@ -1528,7 +1404,6 @@ public sealed class SurfaceWorkspaceService : IAsyncDisposable
             Slug = squad.Slug,
             PrincipalHandle = squad.PrincipalHandle,
             OrchestratorHandle = squad.OrchestratorHandle,
-            PlannerHandle = squad.PlannerHandle,
             Description = squad.Description,
             TaskOptions = CloneTaskOptions(squad.TaskOptions),
             Agents = squad.Agents.Select(agent => new SurfaceSquadAgent
@@ -1544,14 +1419,11 @@ public sealed class SurfaceWorkspaceService : IAsyncDisposable
     private static SurfaceTaskSquadOptions CloneTaskOptions(SurfaceTaskSquadOptions? options)
         => new()
         {
-            FastModelName = string.IsNullOrWhiteSpace(options?.FastModelName) ? "default" : options.FastModelName.Trim(),
             WorkerModelName = string.IsNullOrWhiteSpace(options?.WorkerModelName) ? "default" : options.WorkerModelName.Trim(),
-            PlannerModelName = string.IsNullOrWhiteSpace(options?.PlannerModelName) ? "default" : options.PlannerModelName.Trim(),
             PersonaPrompt = string.IsNullOrWhiteSpace(options?.PersonaPrompt) ? null : options.PersonaPrompt.Trim(),
             ClientAgentOverlay = string.IsNullOrWhiteSpace(options?.ClientAgentOverlay) ? null : options.ClientAgentOverlay.Trim(),
             DelegationTimeoutSeconds = options?.DelegationTimeoutSeconds > 0 ? options.DelegationTimeoutSeconds : 120,
-            MaxTaskAttempts = options?.MaxTaskAttempts > 0 ? options.MaxTaskAttempts : 2,
-            MaxValidationAttempts = options?.MaxValidationAttempts > 0 ? options.MaxValidationAttempts : 2
+            MaxLoopIterations = options?.MaxLoopIterations > 0 ? options.MaxLoopIterations : 10
         };
 
     private bool AddTimelineItem(SurfaceTimelineItem item, bool notify = true)

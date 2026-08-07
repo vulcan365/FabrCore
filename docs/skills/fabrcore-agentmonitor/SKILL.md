@@ -636,8 +636,15 @@ builder.AddFabrCoreServer(options =>
 | Agent `IChatClient` call from `OnEvent` | `MonitoredLlmCall` | — | Yes | `OriginContext = OnEvent:<type>`; no `ParentMessageId` |
 | Agent `IChatClient` call from a timer / reminder tick | `MonitoredLlmCall` | — | Yes | `OriginContext = Timer:<name>` or `Reminder:<name>` (the harness also sends a synthetic `AgentMessage` via `OnMessage`, so calls land inside that scope) |
 | Streaming LLM call (`GetStreamingResponseAsync`) | `MonitoredLlmCall` | — | Yes | Aggregated at stream completion; `Streaming = true` |
-| `CompactionService` summarization LLM call | `MonitoredLlmCall` | — | Yes | `OriginContext = Compaction`; inherits parent `AgentHandle` / `TraceId` from the surrounding `OnMessage` scope when present |
+| `CompactionService` summarization LLM call | `MonitoredLlmCall` | — | Yes | `OriginContext = Compaction`; inherits parent `AgentHandle` / `TraceId` from the surrounding `OnMessage` scope when present. Exempt from run-safety budgets — compaction must never be aborted by the limit it is working to keep the run under |
 | Background LLM call wrapped in `LlmCallContext.Begin(...)` | `MonitoredLlmCall` | — | Yes | `OriginContext` is whatever the caller supplied; `AgentHandle` comes from the context or the chat client constructor fallback |
+| History compaction (layer 2) starts, finishes, or fails | `MonitoredEvent` | — | — | `compaction.history.started` / `.completed` / `.failed`, with `trigger` = `preflight` or `post-turn`, plus token and message counts before and after |
+| Run-safety guard checks or trips | `MonitoredEvent` | — | — | `run-safety.pre-call-check` / `.prompt-too-large` / `.turn-budget-exceeded` |
+
+Layer 1 (in-run context compaction) does **not** emit monitor events — it emits OpenTelemetry spans through
+`CompactionTelemetry` instead. That is also why layer 1 exclusions never appear in stored history: they live in
+the session group index, not in `MessageThreads`. Comparing "what the model saw" against stored messages will
+show a mismatch by design. See **fabrcore-agent → Context Management: the compaction ladder**.
 
 System messages (`_status` heartbeats, `_thinking` progress updates, `_error` messages, and any other underscore-prefixed control messages) are captured like any other message. Agent chat stream delivery ignores these before `OnMessage`/`OnMessageBusy`, while clients may render them. Use `_thinking` for user-facing progress updates; do not use non-prefixed `thinking` for FabrCore system traffic.
 

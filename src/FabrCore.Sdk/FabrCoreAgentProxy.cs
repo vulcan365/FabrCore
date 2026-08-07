@@ -92,7 +92,7 @@ namespace FabrCore.Sdk
     }
 
 
-    public abstract class FabrCoreAgentProxy : IFabrCoreAgentProxy
+    public abstract partial class FabrCoreAgentProxy : IFabrCoreAgentProxy
     {
         private static readonly ActivitySource ActivitySource = new("FabrCore.Sdk.AgentProxy");
         private static readonly Meter Meter = new("FabrCore.Sdk.AgentProxy");
@@ -173,8 +173,11 @@ namespace FabrCore.Sdk
         {
             public required FabrCoreChatHistoryProvider Provider { get; init; }
             public required string ChatClientConfigName { get; init; }
+            public ContextCompactionConfig? ContextCompactionConfig { get; set; }
             public CompactionConfig? CompactionConfig { get; set; }
             public ProjectionConfig? ProjectionConfig { get; set; }
+            public ChatRunSafetyConfig? RunSafetyConfig { get; set; }
+            public CompactionLadder? Ladder { get; set; }
             public bool Initialized { get; set; }
         }
 
@@ -184,12 +187,20 @@ namespace FabrCore.Sdk
         private CompactionService? _compactionService;
         private CompactionConfig? _compactionConfig;
         private ProjectionConfig? _projectionConfig;
+        private ContextCompactionConfig? _contextCompactionConfig;
+        private CompactionLadder? _compactionLadder;
 
-        /// <summary>The lazily-resolved CompactionService instance, available after the first TryCompactAsync() call.</summary>
+        /// <summary>The lazily-resolved history-compaction service, available after compaction has been initialized.</summary>
         protected CompactionService? CompactionServiceInstance => _compactionService;
 
-        /// <summary>The chat client configuration name used for compaction LLM calls.</summary>
+        /// <summary>The chat client configuration name used for history-compaction LLM calls.</summary>
         protected string? CompactionChatClientConfigName => _chatClientConfigName;
+
+        /// <summary>
+        /// The resolved compaction ladder for the most recently initialized history provider, or
+        /// <see langword="null"/> before compaction has been initialized. Useful for diagnostics and tests.
+        /// </summary>
+        protected CompactionLadder? CompactionLadderInfo => _compactionLadder;
 
         /// <summary>Optional verifiable execution recorder for agent, plugin, and external-effect evidence.</summary>
         protected FabrCore.Core.VerifiableExecution.IVerifiableExecutionContext? VerifiableExecution =>
@@ -331,6 +342,17 @@ namespace FabrCore.Sdk
                 Name = fabrcoreAgentHost.GetHandle(),
                 ChatHistoryProvider = historyProvider
             };
+
+            // Layer 1 of the ladder: bound every call in the tool loop before anything expensive happens.
+            // Added before configureOptions so a caller supplying its own providers can still see and
+            // reorder ours rather than silently replacing them.
+            var contextCompactionProvider = await TryCreateContextCompactionProviderAsync(chatClientConfigName);
+            if (contextCompactionProvider is not null)
+            {
+                options.AIContextProviders = options.AIContextProviders is { } existing
+                    ? [.. existing, contextCompactionProvider]
+                    : [contextCompactionProvider];
+            }
 
             // Allow caller to configure options (including AIContextProviders)
             configureOptions?.Invoke(options);
@@ -476,15 +498,39 @@ namespace FabrCore.Sdk
 
         #region Compaction
 
+        /// <summary>Default history-compaction threshold when context compaction is not active.</summary>
+        private const double DefaultHistoryThreshold = 0.75;
+
         /// <summary>
-        /// Called when compaction is triggered (token threshold exceeded).
-        /// Called only when the token threshold is exceeded and compaction is needed.
-        /// Override to implement custom compaction logic (e.g., different prompts, models, or summarization strategies).
-        /// The default implementation uses CompactionService to summarize old messages via LLM.
+        /// Default history-compaction threshold when context compaction is active. Deliberately above
+        /// layer 1's truncation point so the free reversible rung always fires first.
         /// </summary>
+        private const double DefaultHistoryThresholdWithContextCompaction = 0.87;
+
+        /// <summary>Default projection threshold when projection is demoted to a fuse behind context compaction.</summary>
+        private const double DefaultProjectionFuseThreshold = 0.9;
+
+        /// <summary>
+        /// Called when <b>history compaction</b> (layer 2) is triggered — the persisted thread has grown
+        /// past its threshold and needs summarizing and rewriting.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This is not the hook for bounding a single LLM call. That is layer 1, context compaction, which
+        /// runs before every call in the tool loop, costs no LLM call, and never touches storage — see
+        /// <see cref="ContextCompaction"/>. By the time this is called, layer 1 has already been evicting
+        /// and truncating for a while and the durable thread still needs consolidating.
+        /// </para>
+        /// <para>
+        /// Override to change how that consolidation happens — different prompts, a different model, or a
+        /// different summarization strategy. <c>FabrCore.Services.Memory</c> overrides it to convert
+        /// conversation mass into durable graph memories before summarizing. The default implementation
+        /// uses <see cref="CompactionService"/>'s map-reduce summarizer.
+        /// </para>
+        /// </remarks>
         /// <param name="chatHistoryProvider">The chat history provider containing messages to compact.</param>
-        /// <param name="compactionConfig">Compaction configuration (thresholds, keep count, etc.).</param>
-        /// <param name="estimatedTokens">The estimated token count that triggered compaction.</param>
+        /// <param name="compactionConfig">History compaction configuration (thresholds, keep count, etc.).</param>
+        /// <param name="estimatedTokens">The estimated stored token count that triggered compaction.</param>
         /// <returns>The compaction result, or null if compaction was skipped.</returns>
         public virtual async Task<CompactionResult?> OnCompaction(
             FabrCoreChatHistoryProvider chatHistoryProvider,
@@ -496,6 +542,10 @@ namespace FabrCore.Sdk
 
             // Set status so the grain's heartbeat loop shows "Compacting.." instead of "Thinking.."
             _statusMessage = "Compacting..";
+
+            // Exempt the summarization call from the turn budget: history compaction exists to reduce
+            // spend and must never be aborted by the spend limit it is working to keep the run under.
+            using var _ = ChatRunSafetyScope.Current?.BeginHistoryCompaction();
             try
             {
                 return await _compactionService.CompactIfNeededAsync(
@@ -508,10 +558,35 @@ namespace FabrCore.Sdk
         }
 
         /// <summary>
-        /// Lazily resolves CompactionService from DI, builds CompactionConfig and
-        /// ProjectionConfig, and attaches the projection to the chat history provider
-        /// so the sliding-window safety net is active before the first LLM call.
-        /// Safe to call multiple times; subsequent calls are no-ops.
+        /// Builds the layer 1 context-compaction provider for a model configuration, or returns
+        /// <see langword="null"/> when the model configuration does not supply both a context window and
+        /// an output reserve. Callers add the result to their agent's context providers.
+        /// </summary>
+        private async Task<AIContextProvider?> TryCreateContextCompactionProviderAsync(
+            string chatClientConfigName)
+        {
+            var contextConfig = await BuildContextCompactionConfigAsync(chatClientConfigName);
+            _contextCompactionConfig = contextConfig;
+
+            var provider = ContextCompaction.TryCreateProvider(contextConfig, loggerFactory);
+
+            if (provider is null && contextConfig.Enabled)
+            {
+                logger.LogWarning(
+                    "Context compaction is not configured for '{Handle}' (model config '{ModelConfig}'): ContextWindowTokens={Window}, MaxOutputTokens={Output}. " +
+                    "The agent runs with no in-run context bound — only history compaction, the projection fuse, and the run-safety stop protect it. " +
+                    "Set both values on the model configuration to enable it.",
+                    config.Handle, chatClientConfigName,
+                    contextConfig.MaxContextWindowTokens, contextConfig.MaxOutputTokens);
+            }
+
+            return provider;
+        }
+
+        /// <summary>
+        /// Lazily resolves the history-compaction service from DI, resolves the full compaction ladder,
+        /// and attaches the projection fuse to the chat history provider so it is active before the first
+        /// LLM call. Safe to call multiple times; subsequent calls are no-ops.
         /// </summary>
         private async Task EnsureCompactionInitializedAsync()
         {
@@ -524,22 +599,32 @@ namespace FabrCore.Sdk
         private async Task EnsureCompactionInitializedAsync(ChatHistoryCompactionRegistration registration)
         {
             if (registration.Initialized)
-            {
-                if (registration.CompactionConfig is not null)
-                {
-                    ChatRunSafetyScope.Current?.RegisterCheckpointProvider(
-                        registration.Provider,
-                        registration.CompactionConfig,
-                        _compactionService,
-                        registration.ChatClientConfigName);
-                }
                 return;
-            }
 
             _compactionService ??= serviceProvider.GetService<CompactionService>();
-            registration.CompactionConfig = await BuildCompactionConfigAsync(registration.ChatClientConfigName);
-            registration.ProjectionConfig = BuildProjectionConfig(registration.CompactionConfig);
+
+            // Resolve top-down: the context rungs decide where the history rung defaults to, which in
+            // turn decides where the fuse sits. Anything explicitly configured still wins at each step.
+            // Built per registration rather than reusing _contextCompactionConfig — an agent can hold
+            // providers on different model configs, and each needs its own window and output reserve.
+            registration.ContextCompactionConfig =
+                await BuildContextCompactionConfigAsync(registration.ChatClientConfigName);
+            registration.CompactionConfig = await BuildCompactionConfigAsync(
+                registration.ChatClientConfigName, registration.ContextCompactionConfig);
+            registration.ProjectionConfig = BuildProjectionConfig(
+                registration.CompactionConfig, registration.ContextCompactionConfig);
+            registration.RunSafetyConfig = await BuildRunSafetyConfigAsync(
+                registration.ChatClientConfigName, registration.CompactionConfig, registration.ContextCompactionConfig);
             registration.Provider.ActiveProjection = registration.ProjectionConfig;
+
+            registration.Ladder = new CompactionLadder
+            {
+                Context = registration.ContextCompactionConfig,
+                History = registration.CompactionConfig,
+                Projection = registration.ProjectionConfig,
+                RunSafety = registration.RunSafetyConfig
+            };
+
             registration.Initialized = true;
 
             // Keep the legacy fields pointed at the most recently initialized provider
@@ -548,23 +633,43 @@ namespace FabrCore.Sdk
             _chatClientConfigName = registration.ChatClientConfigName;
             _compactionConfig = registration.CompactionConfig;
             _projectionConfig = registration.ProjectionConfig;
+            _contextCompactionConfig = registration.ContextCompactionConfig;
+            _compactionLadder = registration.Ladder;
+
+            // One line, every rung, resolved values. Most compaction confusion is "which value won" —
+            // answer it before anyone has to ask.
+            logger.LogInformation(
+                "Compaction ladder for '{Handle}' provider '{ThreadId}' (model config '{ModelConfig}'): {Ladder}",
+                config.Handle, registration.Provider.ThreadId, registration.ChatClientConfigName,
+                registration.Ladder.Describe());
+
+            if (registration.Ladder.IsOutOfOrder)
+            {
+                logger.LogWarning(
+                    "Compaction ladder for '{Handle}' is out of order: {Ladder}. A later rung fires before an earlier one, " +
+                    "which makes the earlier rung decorative. Check ContextTruncateThreshold, CompactionThreshold and the projection settings.",
+                    config.Handle, registration.Ladder.Describe());
+            }
+
+            if (registration.ContextCompactionConfig.IsUsable && !registration.CompactionConfig.Enabled)
+            {
+                logger.LogWarning(
+                    "History compaction is disabled for '{Handle}' while context compaction is active. " +
+                    "The model stays within its window, but stored history in thread '{ThreadId}' will grow without bound " +
+                    "and every state write rewrites the whole grain blob.",
+                    config.Handle, registration.Provider.ThreadId);
+            }
 
             logger.LogDebug(
-                "Compaction initialized for '{Handle}' provider '{ThreadId}' using model config '{ModelConfig}': Enabled={Enabled}, MaxContextTokens={MaxTokens}, Threshold={Threshold}, KeepLastN={KeepLastN}, StaleAfterMinutes={Stale}",
-                config.Handle, registration.Provider.ThreadId, registration.ChatClientConfigName,
+                "History compaction for '{Handle}' provider '{ThreadId}': Enabled={Enabled}, MaxContextTokens={MaxTokens}, Threshold={Threshold}, KeepLastN={KeepLastN}, StaleAfterMinutes={Stale}",
+                config.Handle, registration.Provider.ThreadId,
                 registration.CompactionConfig.Enabled, registration.CompactionConfig.MaxContextTokens, registration.CompactionConfig.Threshold,
                 registration.CompactionConfig.KeepLastN, registration.CompactionConfig.StaleAfterMinutes);
             logger.LogDebug(
-                "Projection initialized for '{Handle}' provider '{ThreadId}': Enabled={Enabled}, MaxContextTokens={MaxTokens}, Threshold={Threshold}, MinKeepLastN={MinKeep}",
+                "Projection fuse for '{Handle}' provider '{ThreadId}': Enabled={Enabled}, MaxContextTokens={MaxTokens}, Threshold={Threshold}, MinKeepLastN={MinKeep}",
                 config.Handle, registration.Provider.ThreadId,
                 registration.ProjectionConfig.Enabled, registration.ProjectionConfig.MaxContextTokens, registration.ProjectionConfig.Threshold,
                 registration.ProjectionConfig.MinKeepLastN);
-
-            ChatRunSafetyScope.Current?.RegisterCheckpointProvider(
-                registration.Provider,
-                registration.CompactionConfig,
-                _compactionService,
-                registration.ChatClientConfigName);
         }
 
         /// <summary>
@@ -614,13 +719,13 @@ namespace FabrCore.Sdk
                 if (estimatedTokens <= threshold)
                 {
                     logger.LogDebug(
-                        "Compaction not needed for '{Handle}' provider '{ThreadId}': ~{EstimatedTokens} estimated tokens <= {Threshold} threshold ({MessageCount} messages)",
+                        "History compaction not needed for '{Handle}' provider '{ThreadId}': ~{EstimatedTokens} estimated stored tokens <= {Threshold} threshold ({MessageCount} messages)",
                         config.Handle, registration.Provider.ThreadId, estimatedTokens, threshold, messages.Count);
                     return null;
                 }
 
                 logger.LogInformation(
-                    "Compaction needed for '{Handle}' provider '{ThreadId}': ~{EstimatedTokens} estimated tokens exceeds {Threshold} threshold ({Ratio:P0} of {Max})",
+                    "History compaction needed for '{Handle}' provider '{ThreadId}': ~{EstimatedTokens} estimated stored tokens exceeds {Threshold} threshold ({Ratio:P0} of {Max})",
                     config.Handle, registration.Provider.ThreadId, estimatedTokens, threshold, compactionConfig.Threshold, compactionConfig.MaxContextTokens);
 
                 if (onCompacting is not null)
@@ -631,26 +736,81 @@ namespace FabrCore.Sdk
                 _compactionConfig = compactionConfig;
                 _projectionConfig = registration.ProjectionConfig;
 
+                await RecordCompactionEventAsync("history.started", registration, new Dictionary<string, string>
+                {
+                    ["trigger"] = "post-turn",
+                    ["estimated_stored_tokens"] = estimatedTokens.ToString(),
+                    ["threshold_tokens"] = threshold.ToString(),
+                    ["message_count"] = messages.Count.ToString()
+                });
+
                 // Delegate to OnCompaction — only called when threshold is exceeded
                 var result = await OnCompaction(registration.Provider, compactionConfig, estimatedTokens);
 
                 if (result?.WasCompacted == true)
                 {
                     logger.LogInformation(
-                        "Compacted history for '{Handle}' provider '{ThreadId}': {Before} → {After} messages (~{TokensBefore} → ~{TokensAfter} tokens)",
+                        "History compacted for '{Handle}' provider '{ThreadId}': {Before} → {After} messages (~{TokensBefore} → ~{TokensAfter} tokens)",
                         config.Handle, registration.Provider.ThreadId,
                         result.OriginalMessageCount, result.CompactedMessageCount,
                         result.EstimatedTokensBefore, result.EstimatedTokensAfter);
                 }
 
+                await RecordCompactionEventAsync("history.completed", registration, new Dictionary<string, string>
+                {
+                    ["trigger"] = "post-turn",
+                    ["was_compacted"] = (result?.WasCompacted == true).ToString(),
+                    ["messages_before"] = (result?.OriginalMessageCount ?? 0).ToString(),
+                    ["messages_after"] = (result?.CompactedMessageCount ?? 0).ToString(),
+                    ["tokens_before"] = (result?.EstimatedTokensBefore ?? 0).ToString(),
+                    ["tokens_after"] = (result?.EstimatedTokensAfter ?? 0).ToString()
+                });
+
                 return result;
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Compaction failed for '{Handle}' provider '{ThreadId}' — continuing without compaction",
+                logger.LogWarning(ex, "History compaction failed for '{Handle}' provider '{ThreadId}' — continuing without compaction",
                     config.Handle, registration.Provider.ThreadId);
+
+                await RecordCompactionEventAsync("history.failed", registration, new Dictionary<string, string>
+                {
+                    ["trigger"] = "post-turn",
+                    ["error"] = ex.Message
+                });
+
                 return null;
             }
+        }
+
+        /// <summary>
+        /// Records a layer-tagged compaction event on the agent monitor. Event types are
+        /// <c>compaction.history.*</c>; layer 1 emits its own OpenTelemetry spans through
+        /// <c>CompactionTelemetry</c> and is not duplicated here.
+        /// </summary>
+        private Task RecordCompactionEventAsync(
+            string type,
+            ChatHistoryCompactionRegistration registration,
+            Dictionary<string, string> args)
+        {
+            var monitor = serviceProvider.GetService<FabrCore.Core.Monitoring.IAgentMessageMonitor>();
+            if (monitor is null)
+                return Task.CompletedTask;
+
+            args["thread_id"] = registration.Provider.ThreadId;
+            args["model_config"] = registration.ChatClientConfigName;
+            args["parent_message_id"] = LlmUsageScope.Current?.ParentMessageId ?? "";
+
+            return monitor.RecordEventAsync(new FabrCore.Core.Monitoring.MonitoredEvent
+            {
+                AgentHandle = fabrcoreAgentHost.GetHandle(),
+                Type = $"compaction.{type}",
+                Source = "FabrCore.Sdk",
+                Subject = LlmUsageScope.Current?.ParentMessageId,
+                Args = args,
+                EventTime = DateTimeOffset.UtcNow,
+                TraceId = LlmUsageScope.Current?.TraceId
+            });
         }
 
         /// <summary>
@@ -702,7 +862,7 @@ namespace FabrCore.Sdk
                 if (estimatedTokens <= threshold)
                 {
                     logger.LogDebug(
-                        "Preflight compaction skipped for '{Handle}' provider '{ThreadId}': stored history under threshold (~{Tokens} <= {Threshold})",
+                        "Preflight history compaction skipped for '{Handle}' provider '{ThreadId}': stored history under threshold (~{Tokens} <= {Threshold})",
                         config.Handle, registration.Provider.ThreadId, estimatedTokens, threshold);
                     return null;
                 }
@@ -710,7 +870,7 @@ namespace FabrCore.Sdk
                 var newest = messages[messages.Count - 1].Timestamp;
                 var newestAge = DateTime.UtcNow - newest;
                 logger.LogInformation(
-                    "Preflight compaction for '{Handle}' provider '{ThreadId}': stored history has ~{Tokens} estimated tokens (>{Threshold}); newest message age {Minutes:F1}m — compacting before LLM call",
+                    "Preflight history compaction for '{Handle}' provider '{ThreadId}': stored history has ~{Tokens} estimated tokens (>{Threshold}); newest message age {Minutes:F1}m — compacting before LLM call",
                     config.Handle, registration.Provider.ThreadId, estimatedTokens, threshold, newestAge.TotalMinutes);
 
                 _chatHistoryProvider = registration.Provider;
@@ -718,28 +878,122 @@ namespace FabrCore.Sdk
                 _compactionConfig = compactionConfig;
                 _projectionConfig = registration.ProjectionConfig;
 
+                await RecordCompactionEventAsync("history.started", registration, new Dictionary<string, string>
+                {
+                    ["trigger"] = "preflight",
+                    ["estimated_stored_tokens"] = estimatedTokens.ToString(),
+                    ["threshold_tokens"] = threshold.ToString(),
+                    ["newest_message_age_minutes"] = newestAge.TotalMinutes.ToString("F1")
+                });
+
                 var result = await OnCompaction(registration.Provider, compactionConfig, estimatedTokens);
 
                 if (result?.WasCompacted == true)
                 {
                     logger.LogInformation(
-                        "Preflight compaction complete for '{Handle}' provider '{ThreadId}': {Before} → {After} messages (~{TokensBefore} → ~{TokensAfter} tokens)",
+                        "Preflight history compaction complete for '{Handle}' provider '{ThreadId}': {Before} → {After} messages (~{TokensBefore} → ~{TokensAfter} tokens)",
                         config.Handle, registration.Provider.ThreadId,
                         result.OriginalMessageCount, result.CompactedMessageCount,
                         result.EstimatedTokensBefore, result.EstimatedTokensAfter);
                 }
 
+                await RecordCompactionEventAsync("history.completed", registration, new Dictionary<string, string>
+                {
+                    ["trigger"] = "preflight",
+                    ["was_compacted"] = (result?.WasCompacted == true).ToString(),
+                    ["messages_before"] = (result?.OriginalMessageCount ?? 0).ToString(),
+                    ["messages_after"] = (result?.CompactedMessageCount ?? 0).ToString(),
+                    ["tokens_before"] = (result?.EstimatedTokensBefore ?? 0).ToString(),
+                    ["tokens_after"] = (result?.EstimatedTokensAfter ?? 0).ToString()
+                });
+
                 return result;
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Preflight compaction failed for '{Handle}' provider '{ThreadId}' — continuing without compaction (projection will still protect the call)",
+                logger.LogWarning(ex, "Preflight history compaction failed for '{Handle}' provider '{ThreadId}' — continuing without compaction (the projection fuse will still protect the call)",
                     config.Handle, registration.Provider.ThreadId);
+
+                await RecordCompactionEventAsync("history.failed", registration, new Dictionary<string, string>
+                {
+                    ["trigger"] = "preflight",
+                    ["error"] = ex.Message
+                });
+
                 return null;
             }
         }
 
-        private async Task<CompactionConfig> BuildCompactionConfigAsync(string chatClientConfigName)
+        /// <summary>
+        /// Resolves layer 1 (context compaction) from defaults → model configuration → agent args.
+        /// </summary>
+        private async Task<ContextCompactionConfig> BuildContextCompactionConfigAsync(string chatClientConfigName)
+        {
+            var args = config.Args ?? new Dictionary<string, string>();
+
+            // Defaults
+            var enabled = true;
+            var windowTokens = 0;
+            var outputTokens = 0;
+            var evictThreshold = ContextCompaction.DefaultEvictThreshold;
+            var truncateThreshold = ContextCompaction.DefaultTruncateThreshold;
+
+            // Model configuration overrides defaults
+            try
+            {
+                var modelConfig = await chatClientService.GetModelConfigurationAsync(chatClientConfigName);
+                if (modelConfig.ContextWindowTokens is { } ctxTokens)
+                    windowTokens = ctxTokens;
+                if (modelConfig.MaxOutputTokens is { } outTokens)
+                    outputTokens = outTokens;
+                if (modelConfig.ContextCompactionEnabled is { } mcEnabled)
+                    enabled = mcEnabled;
+                if (modelConfig.ContextEvictThreshold is { } mcEvict)
+                    evictThreshold = mcEvict;
+                if (modelConfig.ContextTruncateThreshold is { } mcTruncate)
+                    truncateThreshold = mcTruncate;
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "Could not load model configuration for context compaction settings fallback");
+            }
+
+            // Agent args override model config (prefixed with _)
+            if (args.TryGetValue("_ContextCompactionEnabled", out var enabledStr) && bool.TryParse(enabledStr, out var enabledVal))
+                enabled = enabledVal;
+            if (args.TryGetValue("_ContextWindowTokens", out var windowStr) && int.TryParse(windowStr, out var windowVal))
+                windowTokens = windowVal;
+            if (args.TryGetValue("_ContextMaxOutputTokens", out var outputStr) && int.TryParse(outputStr, out var outputVal))
+                outputTokens = outputVal;
+            if (args.TryGetValue("_ContextEvictThreshold", out var evictStr)
+                && double.TryParse(evictStr, System.Globalization.CultureInfo.InvariantCulture, out var evictVal))
+                evictThreshold = evictVal;
+            if (args.TryGetValue("_ContextTruncateThreshold", out var truncateStr)
+                && double.TryParse(truncateStr, System.Globalization.CultureInfo.InvariantCulture, out var truncateVal))
+                truncateThreshold = truncateVal;
+
+            return new ContextCompactionConfig
+            {
+                Enabled = enabled,
+                MaxContextWindowTokens = windowTokens,
+                MaxOutputTokens = outputTokens,
+                EvictThreshold = evictThreshold,
+                TruncateThreshold = truncateThreshold
+            };
+        }
+
+        /// <summary>
+        /// Resolves layer 2 (history compaction) from defaults → model configuration → agent args.
+        /// </summary>
+        /// <remarks>
+        /// The default threshold depends on whether layer 1 is active: with context compaction bounding
+        /// every call, history compaction defaults above layer 1's truncation point and acts as the
+        /// between-turns consolidator. Without it, history compaction is the first responder and keeps the
+        /// original 0.75 default. An explicit setting always wins.
+        /// </remarks>
+        private async Task<CompactionConfig> BuildCompactionConfigAsync(
+            string chatClientConfigName,
+            ContextCompactionConfig contextCompaction)
         {
             var args = config.Args ?? new Dictionary<string, string>();
 
@@ -747,10 +1001,10 @@ namespace FabrCore.Sdk
             var enabled = true;
             var maxContextTokens = 25000;
             var keepLastN = 20;
-            var threshold = 0.75;
             var staleAfterMinutes = 60;
+            double? threshold = null;
 
-            // Layer 2: Model configuration overrides defaults
+            // Model configuration overrides defaults
             try
             {
                 var modelConfig = await chatClientService.GetModelConfigurationAsync(chatClientConfigName);
@@ -767,10 +1021,10 @@ namespace FabrCore.Sdk
             }
             catch (Exception ex)
             {
-                logger.LogDebug(ex, "Could not load model configuration for compaction settings fallback");
+                logger.LogDebug(ex, "Could not load model configuration for history compaction settings fallback");
             }
 
-            // Layer 3: Agent args override model config (prefixed with _)
+            // Agent args override model config (prefixed with _)
             if (args.TryGetValue("_CompactionEnabled", out var enabledStr) && bool.TryParse(enabledStr, out var enabledVal))
                 enabled = enabledVal;
             if (args.TryGetValue("_CompactionMaxContextTokens", out var maxStr) && int.TryParse(maxStr, out var maxVal))
@@ -788,25 +1042,32 @@ namespace FabrCore.Sdk
                 Enabled = enabled,
                 KeepLastN = keepLastN,
                 MaxContextTokens = maxContextTokens,
-                Threshold = threshold,
+                Threshold = threshold ?? (contextCompaction.IsUsable
+                    ? DefaultHistoryThresholdWithContextCompaction
+                    : DefaultHistoryThreshold),
                 StaleAfterMinutes = staleAfterMinutes
             };
         }
 
-        private async Task<ChatRunSafetyConfig> BuildRunSafetyConfigAsync(string chatClientConfigName, CompactionConfig compactionConfig)
+        private async Task<ChatRunSafetyConfig> BuildRunSafetyConfigAsync(
+            string chatClientConfigName,
+            CompactionConfig compactionConfig,
+            ContextCompactionConfig contextCompaction)
         {
             var args = config.Args ?? new Dictionary<string, string>();
 
-            var midTurnCompactionEnabled = compactionConfig.Enabled;
             var perTurnMaxInputTokens = 0;
-            var maxPromptInputTokens = compactionConfig.Enabled ? compactionConfig.MaxContextTokens : 0;
             var runawayBudgetBehavior = "StopWithDiagnostic";
+
+            // The stop is the last rung: anchor it to the real window when we know it, so it sits above
+            // every compaction rung rather than cutting in underneath them.
+            var maxPromptInputTokens = contextCompaction.MaxContextWindowTokens > 0
+                ? contextCompaction.MaxContextWindowTokens
+                : compactionConfig.Enabled ? compactionConfig.MaxContextTokens : 0;
 
             try
             {
                 var modelConfig = await chatClientService.GetModelConfigurationAsync(chatClientConfigName);
-                if (modelConfig.MidTurnCompactionEnabled is { } modelMidTurn)
-                    midTurnCompactionEnabled = modelMidTurn;
                 if (modelConfig.PerTurnMaxInputTokens is { } modelPerTurn)
                     perTurnMaxInputTokens = modelPerTurn;
                 if (modelConfig.MaxPromptInputTokens is { } modelMaxPrompt)
@@ -819,8 +1080,6 @@ namespace FabrCore.Sdk
                 logger.LogDebug(ex, "Could not load model configuration for run safety settings fallback");
             }
 
-            if (args.TryGetValue("_MidTurnCompactionEnabled", out var midTurnStr) && bool.TryParse(midTurnStr, out var midTurnVal))
-                midTurnCompactionEnabled = midTurnVal;
             if (args.TryGetValue("_PerTurnMaxInputTokens", out var perTurnStr) && int.TryParse(perTurnStr, out var perTurnVal))
                 perTurnMaxInputTokens = perTurnVal;
             if (args.TryGetValue("_MaxPromptInputTokens", out var maxPromptStr) && int.TryParse(maxPromptStr, out var maxPromptVal))
@@ -830,7 +1089,6 @@ namespace FabrCore.Sdk
 
             return new ChatRunSafetyConfig
             {
-                MidTurnCompactionEnabled = midTurnCompactionEnabled,
                 PerTurnMaxInputTokens = perTurnMaxInputTokens,
                 MaxPromptInputTokens = maxPromptInputTokens,
                 RunawayBudgetBehavior = runawayBudgetBehavior
@@ -838,18 +1096,27 @@ namespace FabrCore.Sdk
         }
 
         /// <summary>
-        /// Builds projection config from agent args, falling back to the equivalent
-        /// compaction values so users who tuned compaction automatically get consistent
-        /// projection behavior. Agent-arg overrides use the <c>_Projection*</c> prefix.
+        /// Builds the read-side projection — rung 4 of the ladder.
         /// </summary>
-        private ProjectionConfig BuildProjectionConfig(CompactionConfig compaction)
+        /// <remarks>
+        /// When context compaction is active, projection is demoted to a <b>fuse</b>: anchored to the model
+        /// window at <see cref="DefaultProjectionFuseThreshold"/>, well above every other rung, so it only
+        /// ever fires in pathological cases. Left at the old inherited values it would clip first and make
+        /// the layers above it decorative. Without context compaction it keeps the legacy behaviour of
+        /// inheriting the history-compaction settings. Agent-arg overrides use the <c>_Projection*</c> prefix.
+        /// </remarks>
+        private ProjectionConfig BuildProjectionConfig(
+            CompactionConfig compaction,
+            ContextCompactionConfig contextCompaction)
         {
             var args = config.Args ?? new Dictionary<string, string>();
 
-            // Inherit from compaction config by default
-            var enabled = compaction.Enabled;
-            var maxContextTokens = compaction.MaxContextTokens;
-            var threshold = compaction.Threshold;
+            var fuseMode = contextCompaction.IsUsable;
+
+            // Fuse mode: insurance below the provider hard limit. Legacy mode: inherit from compaction.
+            var enabled = fuseMode || compaction.Enabled;
+            var maxContextTokens = fuseMode ? contextCompaction.MaxContextWindowTokens : compaction.MaxContextTokens;
+            var threshold = fuseMode ? DefaultProjectionFuseThreshold : compaction.Threshold;
             var minKeepLastN = 2;
 
             if (args.TryGetValue("_ProjectionEnabled", out var enabledStr) && bool.TryParse(enabledStr, out var enabledVal))
@@ -1342,10 +1609,15 @@ namespace FabrCore.Sdk
                     traceId: message.TraceId,
                     originContext: $"OnMessage:{message.Id}"))
                 {
+                    // Resolving the ladder also resolves the run-safety rung, so reuse it rather than
+                    // rebuilding it — that is what keeps the stop anchored above the compaction rungs.
                     await EnsureCompactionInitializedAsync();
                     var runSafetyModelConfig = _chatClientConfigName ?? config.Models ?? "default";
-                    var runSafetyCompaction = _compactionConfig ?? await BuildCompactionConfigAsync(runSafetyModelConfig);
-                    var runSafetyConfig = await BuildRunSafetyConfigAsync(runSafetyModelConfig, runSafetyCompaction);
+                    var runSafetyConfig = _compactionLadder?.RunSafety
+                        ?? await BuildRunSafetyConfigAsync(
+                            runSafetyModelConfig,
+                            _compactionConfig ?? await BuildCompactionConfigAsync(runSafetyModelConfig, _contextCompactionConfig ?? new ContextCompactionConfig()),
+                            _contextCompactionConfig ?? await BuildContextCompactionConfigAsync(runSafetyModelConfig));
                     var monitor = serviceProvider.GetService<FabrCore.Core.Monitoring.IAgentMessageMonitor>();
                     using var runSafetyScope = ChatRunSafetyScope.Begin(
                         agentHandle: fabrcoreAgentHost.GetHandle(),
@@ -1355,24 +1627,15 @@ namespace FabrCore.Sdk
                         monitor: monitor,
                         logger: logger);
 
-                    if (_chatHistoryProvider is not null && _compactionConfig is not null)
-                    {
-                        runSafetyScope.RegisterCheckpointProvider(
-                            _chatHistoryProvider,
-                            _compactionConfig,
-                            _compactionService,
-                            _chatClientConfigName ?? runSafetyModelConfig);
-                    }
-
                     try
                     {
-                        // Preflight: compact any registered history provider that is already
-                        // over budget before OnMessage can make an LLM call.
+                        // Preflight: history-compact any registered provider whose stored thread is
+                        // already over budget before OnMessage can make an LLM call.
                         await TryPreflightCompactAsync();
 
                         response = await OnMessage(message);
 
-                        // Auto-compact chat history if threshold exceeded
+                        // Consolidate the persisted thread if it grew past the history threshold.
                         await TryCompactAsync();
                     }
                     catch (FabrCoreRunStoppedException ex)
@@ -1385,7 +1648,6 @@ namespace FabrCore.Sdk
                         response.Args["_actual_prompt_input_tokens"] = ex.ActualPromptInputTokens.ToString();
                         response.Args["_turn_cumulative_input_tokens"] = ex.TurnCumulativeInputTokens.ToString();
                         response.Args["_fabrcore_llm_calls"] = ex.LlmCalls.ToString();
-                        response.Args["_fabrcore_checkpoint_count"] = ex.CheckpointCount.ToString();
                     }
 
                     // Attach LLM usage metrics to the response

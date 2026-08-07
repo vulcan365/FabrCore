@@ -3,7 +3,7 @@ name: fabrcore-oss-aug2026
 description: >
   Maintain the FabrCore OSS and Forge repository split introduced in August 2026. Use when
   moving or changing projects across C:\repos\FabrCore and C:\repos\fabrcore-v365, deciding
-  whether code belongs in OSS or Forge, updating canonical blueprints or Swarm, changing the
+  whether code belongs in OSS or Forge, updating canonical blueprints or squads, changing the
   Cloud Server/connect protocol, consuming OSS packages from the commercial solution, updating
   migration-era build/release files, or preventing old V365 architecture from being reintroduced.
 ---
@@ -36,9 +36,11 @@ operations, and commercial adapters in Forge.
 - Use `FabrCoreBlueprint` as the canonical blueprint envelope.
 - Apply blueprints through the Host-owned CRUD/apply path. Expand package-owned extensions with
   `IBlueprintExpander`.
-- Use the top-level `swarm` extension containing `squads`.
-- Use `SurfaceSquadType.Swarm`, `swarm.*` messages, and `squad-*` handles.
-- Do not add `SwarmV2`, `swarm2.*`, `squad2-*`, `surface.squads`, or parallel old/new shapes.
+- Use the top-level `squads` extension array.
+- Use `SurfaceSquadType` (`orchestrator`, `task`), `squad.*` messages, and `squad-*` handles.
+- Do not reintroduce the removed Swarm runtime (`SurfaceSquadType.Swarm`, the `"swarm"`
+  extension, `swarm.*` messages), and do not add `SwarmV2`, `swarm2.*`, `squad2-*`,
+  `surface.squads`, or parallel old/new shapes.
 - Keep Memory and GraphRAG contracts in `FabrCore.Services.Contracts`.
 - Do not link-compile contracts or add type forwarders to the OSS service packages.
 - Keep the OSS GraphRAG markdown converter vendor-neutral. Put Vulcan365 conversion in
@@ -52,7 +54,7 @@ operations, and commercial adapters in Forge.
 ## Product boundary
 
 Do not weaken OSS to manufacture commercial value. OSS must remain usable with local
-configuration, blueprint provisioning, ACL enforcement, Memory, GraphRAG, Surface, and Swarm.
+configuration, blueprint provisioning, ACL enforcement, Memory, GraphRAG, and Surface squads.
 
 Forge owns the monetizable operating experience:
 

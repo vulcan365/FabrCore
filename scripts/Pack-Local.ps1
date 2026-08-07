@@ -12,6 +12,7 @@ $packages = @(
     "FabrCore.Core",
     "FabrCore.Sdk",
     "FabrCore.Client.Orleans",
+    "FabrCore.Client.WebSocket",
     "FabrCore.Services.Contracts",
     "FabrCore.Host",
     "FabrCore.Host.SqlServer",

@@ -1,0 +1,52 @@
+{
+  "name": "ops-desk",
+  "description": "A harness coordinator and the two specialists it delegates to.",
+  "version": "1.0.0",
+  "agents": [
+    {
+      "handle": "assistant",
+      "agentType": "your-harness-agent-alias",
+      "models": "default",
+      "systemPrompt": "You are the operations assistant. Prefer primary sources and say when you are unsure.",
+      "description": "Researches operational questions end to end.",
+      "streams": [],
+      "args": {
+        "_HarnessMode": "true",
+        "_HarnessDefaultMode": "plan",
+        "_HarnessLoop": "todo,background",
+        "_HarnessLoopMaxIterations": "8",
+        "_HarnessBackgroundAgents": "crm,policy-desk",
+        "_HarnessBackgroundTimeoutSeconds": "180",
+        "_HarnessMaxIterationsPerRequest": "40",
+        "_HarnessSessionPersistence": "true"
+      },
+      "plugins": [],
+      "tools": [],
+      "mcpServers": []
+    },
+    {
+      "handle": "crm",
+      "agentType": "your-crm-agent-alias",
+      "models": "default",
+      "systemPrompt": "Answer questions about customer records. Return facts, not advice.",
+      "description": "Answers questions about customer records.",
+      "streams": [],
+      "args": {},
+      "plugins": [],
+      "tools": [],
+      "mcpServers": []
+    },
+    {
+      "handle": "policy-desk",
+      "agentType": "your-policy-agent-alias",
+      "models": "default",
+      "systemPrompt": "Answer questions about internal policy. Cite the policy section.",
+      "description": "Advises on internal policy. Consult for guidance; do not assign execution work.",
+      "streams": [],
+      "args": {},
+      "plugins": [],
+      "tools": [],
+      "mcpServers": []
+    }
+  ]
+}

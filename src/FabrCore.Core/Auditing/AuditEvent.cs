@@ -22,7 +22,10 @@ namespace FabrCore.Core.Auditing
         Bootstrap,
 
         /// <summary>A privileged remote-administration operation performed through a trusted control plane.</summary>
-        RemoteAdministration
+        RemoteAdministration,
+
+        /// <summary>WebSocket tickets, protocol violations, replay gaps, and overload disconnects.</summary>
+        WebSocketSecurity
     }
 
     /// <summary>Outcome of the audited operation.</summary>

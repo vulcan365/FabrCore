@@ -1,4 +1,6 @@
 using FabrCore.Host.Configuration;
+using FabrCore.Core.Auditing;
+using FabrCore.Core.WebSockets;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -44,6 +46,8 @@ namespace FabrCore.Host.WebSocket
             IClusterClient clusterClient,
             ILoggerFactory loggerFactory,
             IOptions<FabrCoreHostOptions> hostOptions,
+            IOptions<FabrCoreWebSocketOptions> webSocketOptions,
+            IAuditProvider auditProvider,
             IWebSocketAuthenticator authenticator)
         {
             using var activity = ActivitySource.StartActivity("InvokeAsync", ActivityKind.Server);
@@ -81,7 +85,7 @@ namespace FabrCore.Host.WebSocket
 
                 try
                 {
-                    var webSocket = await context.WebSockets.AcceptWebSocketAsync();
+                    var webSocket = await context.WebSockets.AcceptWebSocketAsync(FabrCoreWebSocketProtocol.Subprotocol);
 
                     // user.id intentionally omitted from metric tags — it's unbounded
                     // cardinality. Trace/activity tags still carry it for drill-down.
@@ -91,7 +95,14 @@ namespace FabrCore.Host.WebSocket
 
                     // Create a new session with the user handle as the handle
                     var sessionLogger = loggerFactory.CreateLogger<WebSocketSession>();
-                    var session = new WebSocketSession(webSocket, clusterClient, sessionLogger, userHandle, hostOptions.Value);
+                    var session = new WebSocketSession(
+                        webSocket,
+                        clusterClient,
+                        sessionLogger,
+                        auditProvider,
+                        userHandle,
+                        hostOptions.Value,
+                        webSocketOptions.Value);
 
                     // Capture the upgrade-request's trace context (populated by ASP.NET Core
                     // from an incoming traceparent header, or from our own InvokeAsync activity)
@@ -121,7 +132,8 @@ namespace FabrCore.Host.WebSocket
                     ErrorCounter.Add(1,
                         new KeyValuePair<string, object?>("error.type", "connection_error"));
 
-                    context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+                    if (!context.Response.HasStarted)
+                        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
                 }
             }
             else if (context.Request.Path == configuredPath && !context.WebSockets.IsWebSocketRequest)

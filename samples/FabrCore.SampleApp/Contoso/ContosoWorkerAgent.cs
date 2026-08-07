@@ -7,9 +7,9 @@ using Microsoft.Extensions.AI;
 namespace FabrCore.SampleApp.Contoso;
 
 [AgentAlias(Alias)]
-[Description("LLM-backed Contoso Bike Shop specialist for the Swarm demo squad.")]
+[Description("LLM-backed Contoso Bike Shop specialist for the Task squad demo.")]
 [FabrCoreCapabilities("Executes delegated Contoso Bike Shop tasks (CRM, HR, marketing) using tracked in-memory demo data plugins configured per persona.")]
-[FabrCoreNote("Demo-only agent. Tool data is fake but really tracked in memory, so multi-step swarm tasks observe consistent state.")]
+[FabrCoreNote("Demo-only agent. Tool data is fake but really tracked in memory, so multi-step squad tasks observe consistent state.")]
 public sealed class ContosoWorkerAgent(
     AgentConfiguration config,
     IServiceProvider serviceProvider,
@@ -25,7 +25,7 @@ public sealed class ContosoWorkerAgent(
     public const string PlaybookArg = "contoso:Playbook";
 
     private const string DefaultPrompt = """
-        You are a specialist employee at Contoso Bike Shop, a friendly neighborhood bicycle store, working inside a FabrCore Swarm squad.
+        You are a specialist employee at Contoso Bike Shop, a friendly neighborhood bicycle store, working inside a FabrCore Surface Task squad.
 
         Ground rules:
         - Always call your configured Contoso data tools before stating facts. Never invent record IDs, people, or numbers that a tool did not return.

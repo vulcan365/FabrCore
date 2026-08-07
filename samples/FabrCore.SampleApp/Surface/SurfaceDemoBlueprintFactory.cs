@@ -1,7 +1,7 @@
 using FabrCore.Core;
 using FabrCore.SampleApp.Contoso;
 using FabrCore.Surface.Ai.Orchestration;
-using FabrCore.Surface.Ai.Swarm;
+using FabrCore.Surface.Ai.Squads;
 using FabrCore.Surface.CommandCenter;
 
 namespace FabrCore.SampleApp.Surface;
@@ -52,18 +52,15 @@ public static class SurfaceDemoBlueprintFactory
                     Description = "SurfaceApp CRM records leaf agent"
                 }
             ],
-            Swarm = new SwarmBlueprintExtension
-            {
-                Squads =
-                [
-                    AssistantSquad(),
-                    SalesSquad(),
-                    CrmSquad(),
-                    InventorySquad(),
-                    AccountsReceivablesSquad(),
-                    ContosoBikeShopSquad()
-                ]
-            }
+            Squads =
+            [
+                AssistantSquad(),
+                SalesSquad(),
+                CrmSquad(),
+                InventorySquad(),
+                AccountsReceivablesSquad(),
+                ContosoBikeShopSquad()
+            ]
         };
 
     private static SurfaceSquadDefinition AssistantSquad()
@@ -205,7 +202,7 @@ public static class SurfaceDemoBlueprintFactory
             ]);
 
     /// <summary>
-    /// Swarm demo squad: ten Contoso Bike Shop specialists across CRM, HR, and
+    /// Task squad demo: ten Contoso Bike Shop specialists across CRM, HR, and
     /// Marketing, all backed by the shared tracked in-memory
     /// <see cref="ContosoBikeShopStore"/>. Built to exercise long-running
     /// multi-step plans (5-10 tasks) and cross-domain routing.
@@ -213,36 +210,32 @@ public static class SurfaceDemoBlueprintFactory
     private static SurfaceSquadDefinition ContosoBikeShopSquad()
         => new()
         {
-            SquadType = SurfaceSquadType.Swarm,
+            SquadType = SurfaceSquadType.Task,
             Name = ContosoSquadName,
-            Description = "Contoso Bike Shop Swarm demo squad with CRM, HR, and Marketing specialists over tracked in-memory company data.",
+            Description = "Contoso Bike Shop Task squad demo with CRM, HR, and Marketing specialists over tracked in-memory company data.",
             OrchestratorModel = "default",
-            PlannerModel = "default",
             ForceReconfigure = true,
             TaskOptions = new SurfaceTaskSquadOptions
             {
                 DelegationTimeoutSeconds = 180,
-                MaxTaskAttempts = 2,
-                MaxValidationAttempts = 2
+                MaxLoopIterations = 12,
+                PersonaPrompt = """
+                    Routing guide: Customer Records / Customer Insights / Retention Specialist own CRM customers (CUS-9xxx);
+                    Employee Records / Scheduling and Time Off / Recruiting Coordinator own HR employees (EMP-1xx);
+                    Campaign Manager / Audience Planner / Content Writer own marketing campaigns (CAM-3xx).
+                    Customer Insights can read both CRM and HR data, so cross-reference work such as
+                    "which customers are employees" belongs to Customer Insights once the fetch work has returned.
+                    For multi-domain goals, start the independent fetches concurrently, then run analysis that
+                    depends on them, then mutations, then summarize. Consult the Bike Shop SME when the request
+                    is ambiguous or the right specialist is unclear.
+                    """
             },
             OrchestratorSystemPrompt = """
-                You orchestrate the Contoso Bike Shop squad, a demo company with real tracked in-memory data:
+                You run the Contoso Bike Shop squad, a demo company with real tracked in-memory data:
                 CRM customers (CUS-9xxx), HR employees (EMP-1xx), and marketing campaigns (CAM-3xx).
                 Some customers are also employees through the employee purchase program (matched by email).
                 Preserve the user's intent, keep responses concise, and synthesize squad results into one readable answer.
                 When work was mutated, list the record IDs that were created or changed.
-                """,
-            PlannerSystemPrompt = """
-                You plan work for the Contoso Bike Shop squad. Decompose the goal into a task ledger with
-                dependencies, explicit acceptance criteria, and one executor per task.
-                Routing guide: Customer Records / Customer Insights / Retention Specialist own CRM customers (CUS-9xxx);
-                Employee Records / Scheduling and Time Off / Recruiting Coordinator own HR employees (EMP-1xx);
-                Campaign Manager / Audience Planner / Content Writer own marketing campaigns (CAM-3xx).
-                Customer Insights can read both CRM and HR data, so cross-reference tasks such as
-                "which customers are employees" belong to Customer Insights after the fetch tasks complete.
-                For multi-domain goals, plan fetch tasks first, then analysis tasks that depend on them,
-                then mutation tasks, then a final summary task. Consult the Bike Shop SME when the request
-                is ambiguous or the right specialist is unclear.
                 """,
             Agents =
             [

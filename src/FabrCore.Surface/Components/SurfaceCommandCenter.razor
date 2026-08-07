@@ -737,39 +737,23 @@
                     <label>
                         <span>Type</span>
                         <select @bind="_squadDraft.SquadType">
-                            <option value="@SurfaceSquadType.Swarm">Swarm</option>
                             <option value="@SurfaceSquadType.Orchestrator">Orchestrator</option>
                             <option value="@SurfaceSquadType.Task">Task</option>
                         </select>
                     </label>
                     <label>
                         <span>Name</span>
-                        <input @bind="_squadDraft.Name" placeholder="Operations swarm" />
+                        <input @bind="_squadDraft.Name" placeholder="Operations squad" />
                     </label>
                     <label>
                         <span>@(_squadDraft.SquadType == SurfaceSquadType.Task ? "Worker model" : "Orchestrator model")</span>
                         <input @bind="_squadDraft.OrchestratorModel" placeholder="default" />
                     </label>
-                    @if (_squadDraft.SquadType is SurfaceSquadType.Swarm or SurfaceSquadType.Task)
+                    @if (_squadDraft.SquadType is SurfaceSquadType.Task)
                     {
                         <label>
-                            <span>Planner model</span>
-                            <input @bind="_squadDraft.PlannerModel" placeholder="default" />
-                        </label>
-                    }
-                    @if (_squadDraft.SquadType is SurfaceSquadType.Task or SurfaceSquadType.Swarm)
-                    {
-                        <label>
-                            <span>@(_squadDraft.SquadType == SurfaceSquadType.Swarm ? "Fast model (classifier)" : "Fast model")</span>
-                            <input @bind="_squadDraft.FastModel" placeholder="default" />
-                        </label>
-                        <label>
-                            <span>Task attempts</span>
-                            <input type="number" min="1" @bind="_squadDraft.MaxTaskAttempts" />
-                        </label>
-                        <label>
-                            <span>Validation attempts</span>
-                            <input type="number" min="1" @bind="_squadDraft.MaxValidationAttempts" />
+                            <span>Max iterations</span>
+                            <input type="number" min="1" @bind="_squadDraft.MaxLoopIterations" />
                         </label>
                         <label>
                             <span>Timeout seconds</span>
@@ -791,15 +775,8 @@
                 <h3>Instructions</h3>
                 <label>
                     <span>Orchestrator prompt</span>
-                    <textarea @bind="_squadDraft.OrchestratorSystemPrompt" rows="4" placeholder="@(_squadDraft.SquadType == SurfaceSquadType.Task ? "How should the task runner work this goal?" : "How should the orchestrator coordinate this swarm?")"></textarea>
+                    <textarea @bind="_squadDraft.OrchestratorSystemPrompt" rows="4" placeholder="@(_squadDraft.SquadType == SurfaceSquadType.Task ? "How should the task runner work this goal?" : "How should the orchestrator coordinate this squad?")"></textarea>
                 </label>
-                @if (_squadDraft.SquadType == SurfaceSquadType.Swarm)
-                {
-                    <label>
-                        <span>Planner prompt</span>
-                        <textarea @bind="_squadDraft.PlannerSystemPrompt" rows="4" placeholder="How should the planner break down work?"></textarea>
-                    </label>
-                }
                 @if (_squadDraft.SquadType == SurfaceSquadType.Task)
                 {
                     <label>
@@ -846,12 +823,12 @@
                     </label>
                     <label>
                         <span>Squad name</span>
-                        <input @bind="_existingAgentName" placeholder="Optional display name in this swarm" />
+                        <input @bind="_existingAgentName" placeholder="Optional display name in this squad" />
                     </label>
-                    @if (Workspace.SelectedSquad?.SquadType is SurfaceSquadType.Task or SurfaceSquadType.Swarm)
+                    @if (Workspace.SelectedSquad?.SquadType is SurfaceSquadType.Task)
                     {
                         <label>
-                            <span>@(Workspace.SelectedSquad?.SquadType == SurfaceSquadType.Swarm ? "Squad role" : "Task role")</span>
+                            <span>Task role</span>
                             <select @bind="_existingAgentRole">
                                 <option value="@SurfaceSquadMemberRole.Executor">Executor</option>
                                 <option value="@SurfaceSquadMemberRole.SubjectMatterExpert">SME</option>
@@ -865,13 +842,13 @@
             {
                 <section class="surface-create-section">
                     <h3>New agent</h3>
-                    @if (!SwarmMemberAgentTypes().Any())
+                    @if (!SquadMemberAgentTypes().Any())
                     {
                         <div class="surface-create-alert is-warning">
                             No agent types were returned by host discovery. Confirm the FabrCore host references the assemblies containing agent aliases and exposes /fabrcoreapi/Discovery.
                         </div>
                     }
-                    @SwarmAgentEditor(_squadAgentDraft)
+                    @SquadAgentEditor(_squadAgentDraft)
                 </section>
             }
         </div>
@@ -914,24 +891,6 @@
                                 <dt>Orchestrator</dt>
                                 <dd>@squad.OrchestratorHandle</dd>
                             </div>
-                            @if (squad.SquadType == SurfaceSquadType.Swarm)
-                            {
-                                <div>
-                                    <dt>Planner</dt>
-                                    <dd>@squad.PlannerHandle</dd>
-                                </div>
-                            }
-                            @if (squad.SquadType == SurfaceSquadType.Swarm)
-                            {
-                                <div>
-                                    <dt>Supervisor</dt>
-                                    <dd>@SurfaceSwarmInterop.SupervisorHandle(squad)</dd>
-                                </div>
-                                <div>
-                                    <dt>Verifier</dt>
-                                    <dd>@SurfaceSwarmInterop.VerifierHandle(squad)</dd>
-                                </div>
-                            }
                             <div class="is-wide">
                                 <dt>Description</dt>
                                 <dd>@(string.IsNullOrWhiteSpace(squad.Description) ? "No description configured." : squad.Description)</dd>
@@ -976,7 +935,7 @@
                                                     <dt>Type</dt>
                                                     <dd>@agent.AgentType</dd>
                                                 </div>
-                                                @if (squad.SquadType is SurfaceSquadType.Task or SurfaceSquadType.Swarm)
+                                                @if (squad.SquadType is SurfaceSquadType.Task)
                                                 {
                                                     <div>
                                                         <dt>Role</dt>
@@ -1006,18 +965,18 @@
         }
     </text>;
 
-    private RenderFragment SwarmAgentEditor(SurfaceSquadAgentDraft swarmAgent) => @<text>
+    private RenderFragment SquadAgentEditor(SurfaceSquadAgentDraft squadAgent) => @<text>
         <div class="surface-mcp-editor">
             <div class="surface-create-grid">
                 <label>
                     <span>Name</span>
-                    <input @bind="swarmAgent.Name" placeholder="researcher" />
+                    <input @bind="squadAgent.Name" placeholder="researcher" />
                 </label>
                 <label>
                     <span>Agent type</span>
-                    <select @bind="swarmAgent.AgentType">
+                    <select @bind="squadAgent.AgentType">
                         <option value="">Select an agent type</option>
-                        @foreach (var agentType in SwarmMemberAgentTypes())
+                        @foreach (var agentType in SquadMemberAgentTypes())
                         {
                             var alias = PrimaryAlias(agentType);
                             <option value="@alias">@alias</option>
@@ -1026,18 +985,18 @@
                 </label>
                 <label>
                     <span>Model</span>
-                    <input @bind="swarmAgent.Models" placeholder="default" />
+                    <input @bind="squadAgent.Models" placeholder="default" />
                 </label>
                 <label class="is-wide">
                     <span>Description</span>
-                    <input @bind="swarmAgent.Description" placeholder="What this agent contributes" />
+                    <input @bind="squadAgent.Description" placeholder="What this agent contributes" />
                 </label>
-                @if (_squadDraft.SquadType is SurfaceSquadType.Task or SurfaceSquadType.Swarm
-                    || Workspace.SelectedSquad?.SquadType is SurfaceSquadType.Task or SurfaceSquadType.Swarm)
+                @if (_squadDraft.SquadType is SurfaceSquadType.Task
+                    || Workspace.SelectedSquad?.SquadType is SurfaceSquadType.Task)
                 {
                     <label>
                         <span>Squad role</span>
-                        <select @bind="swarmAgent.Role">
+                        <select @bind="squadAgent.Role">
                             <option value="@SurfaceSquadMemberRole.Executor">Executor</option>
                             <option value="@SurfaceSquadMemberRole.SubjectMatterExpert">SME</option>
                             <option value="@SurfaceSquadMemberRole.Helper">Helper</option>
@@ -1046,13 +1005,13 @@
                 }
                 <label class="is-wide">
                     <span>System prompt</span>
-                    <textarea @bind="swarmAgent.SystemPrompt" rows="3"></textarea>
+                    <textarea @bind="squadAgent.SystemPrompt" rows="3"></textarea>
                 </label>
                 <label>
                     <span>Plugins</span>
-                    <select @onchange="args => SelectSwarmPlugin(swarmAgent, args.Value?.ToString() ?? string.Empty)">
+                    <select @onchange="args => SelectSquadPlugin(squadAgent, args.Value?.ToString() ?? string.Empty)">
                         <option value="">Add plugin</option>
-                        @foreach (var plugin in AvailablePlugins(swarmAgent))
+                        @foreach (var plugin in AvailablePlugins(squadAgent))
                         {
                             var alias = PrimaryAlias(plugin);
                             <option value="@alias">@alias</option>
@@ -1061,9 +1020,9 @@
                 </label>
                 <label>
                     <span>Tools</span>
-                    <select @onchange="args => SelectSwarmTool(swarmAgent, args.Value?.ToString() ?? string.Empty)">
+                    <select @onchange="args => SelectSquadTool(squadAgent, args.Value?.ToString() ?? string.Empty)">
                         <option value="">Add tool</option>
-                        @foreach (var tool in AvailableTools(swarmAgent))
+                        @foreach (var tool in AvailableTools(squadAgent))
                         {
                             var alias = PrimaryAlias(tool);
                             <option value="@alias">@alias</option>
@@ -1072,14 +1031,14 @@
                 </label>
             </div>
 
-            @if (swarmAgent.PluginList.Count > 0)
+            @if (squadAgent.PluginList.Count > 0)
             {
                 <div class="surface-discovery-list" aria-label="Selected plugins">
-                    @foreach (var alias in swarmAgent.PluginList)
+                    @foreach (var alias in squadAgent.PluginList)
                     {
                         <button type="button"
                                 class="surface-discovery-choice is-selected"
-                                @onclick="() => swarmAgent.RemovePlugin(alias)">
+                                @onclick="() => squadAgent.RemovePlugin(alias)">
                             <span>@alias</span>
                             <small>Selected plugin</small>
                         </button>
@@ -1087,14 +1046,14 @@
                 </div>
             }
 
-            @if (swarmAgent.ToolList.Count > 0)
+            @if (squadAgent.ToolList.Count > 0)
             {
                 <div class="surface-discovery-list" aria-label="Selected tools">
-                    @foreach (var alias in swarmAgent.ToolList)
+                    @foreach (var alias in squadAgent.ToolList)
                     {
                         <button type="button"
                                 class="surface-discovery-choice is-selected"
-                                @onclick="() => swarmAgent.RemoveTool(alias)">
+                                @onclick="() => squadAgent.RemoveTool(alias)">
                             <span>@alias</span>
                             <small>Selected tool</small>
                         </button>
@@ -1370,7 +1329,7 @@
         _squadSettingsError = null;
         _squadAgentDraft = new SurfaceSquadAgentDraft();
         _squadAgentDraft.Role = SurfaceSquadMemberRole.Executor;
-        if (SwarmMemberAgentTypes().FirstOrDefault() is { } firstAgent)
+        if (SquadMemberAgentTypes().FirstOrDefault() is { } firstAgent)
         {
             _squadAgentDraft.AgentType = PrimaryAlias(firstAgent);
         }
@@ -1581,26 +1540,26 @@
     private void ToggleTool(string alias)
         => _createDraft.ToggleToolAlias(alias);
 
-    private void SelectSwarmPlugin(SurfaceSquadAgentDraft swarmAgent, string alias)
+    private void SelectSquadPlugin(SurfaceSquadAgentDraft squadAgent, string alias)
     {
         if (string.IsNullOrWhiteSpace(alias))
         {
             return;
         }
 
-        swarmAgent.AddPlugin(alias);
-        swarmAgent.PendingPluginAlias = string.Empty;
+        squadAgent.AddPlugin(alias);
+        squadAgent.PendingPluginAlias = string.Empty;
     }
 
-    private void SelectSwarmTool(SurfaceSquadAgentDraft swarmAgent, string alias)
+    private void SelectSquadTool(SurfaceSquadAgentDraft squadAgent, string alias)
     {
         if (string.IsNullOrWhiteSpace(alias))
         {
             return;
         }
 
-        swarmAgent.AddTool(alias);
-        swarmAgent.PendingToolAlias = string.Empty;
+        squadAgent.AddTool(alias);
+        squadAgent.PendingToolAlias = string.Empty;
     }
 
     private void AddArgRow()
@@ -1857,13 +1816,7 @@
             }));
         }
 
-        if (squad.SquadType == SurfaceSquadType.Swarm)
-        {
-            candidates.Add(new("planner", "Planner", "Swarm planner", squad.PlannerHandle, 1));
-        }
-
-        candidates.Add(new("swarm", squad.Name, "Squad orchestrator", squad.OrchestratorHandle, 2));
-        candidates.Add(new("orchestrator", "Orchestrator", "Squad orchestrator", squad.OrchestratorHandle, 3));
+        candidates.Add(new("orchestrator", "Orchestrator", "Squad orchestrator", squad.OrchestratorHandle, 1));
 
         return candidates
             .Where(candidate => string.IsNullOrWhiteSpace(query)
@@ -1997,22 +1950,19 @@
         return entry.TypeName;
     }
 
-    private IEnumerable<SurfaceDiscoveryRegistryEntry> SwarmMemberAgentTypes()
+    private IEnumerable<SurfaceDiscoveryRegistryEntry> SquadMemberAgentTypes()
         => Workspace.Discovery?.Agents
-               .Where(entry =>
-               {
-                   var alias = PrimaryAlias(entry);
-                   return !string.Equals(alias, SurfaceSwarmAgentTypes.Orchestrator, StringComparison.OrdinalIgnoreCase)
-                          && !string.Equals(alias, SurfaceSwarmAgentTypes.Planner, StringComparison.OrdinalIgnoreCase)
-                          && !string.Equals(alias, SurfaceOrchestrationAgentTypes.SquadOrchestrator, StringComparison.OrdinalIgnoreCase);
-               })
+               .Where(entry => !string.Equals(
+                   PrimaryAlias(entry),
+                   SurfaceOrchestrationAgentTypes.SquadOrchestrator,
+                   StringComparison.OrdinalIgnoreCase))
            ?? [];
 
-    private IEnumerable<SurfaceDiscoveryRegistryEntry> AvailablePlugins(SurfaceSquadAgentDraft swarmAgent)
-        => AvailableDiscoveryEntries(Workspace.Discovery?.Plugins ?? [], swarmAgent.PluginList);
+    private IEnumerable<SurfaceDiscoveryRegistryEntry> AvailablePlugins(SurfaceSquadAgentDraft squadAgent)
+        => AvailableDiscoveryEntries(Workspace.Discovery?.Plugins ?? [], squadAgent.PluginList);
 
-    private IEnumerable<SurfaceDiscoveryRegistryEntry> AvailableTools(SurfaceSquadAgentDraft swarmAgent)
-        => AvailableDiscoveryEntries(Workspace.Discovery?.Tools ?? [], swarmAgent.ToolList);
+    private IEnumerable<SurfaceDiscoveryRegistryEntry> AvailableTools(SurfaceSquadAgentDraft squadAgent)
+        => AvailableDiscoveryEntries(Workspace.Discovery?.Tools ?? [], squadAgent.ToolList);
 
     private static IEnumerable<SurfaceDiscoveryRegistryEntry> AvailableDiscoveryEntries(
         IEnumerable<SurfaceDiscoveryRegistryEntry> entries,
@@ -2031,13 +1981,10 @@
 
         var existingHandles = selected.Agents.Select(agent => agent.Handle).ToHashSet(StringComparer.OrdinalIgnoreCase);
         existingHandles.Add(selected.OrchestratorHandle);
-        existingHandles.Add(selected.PlannerHandle);
 
         return Workspace.AllAgents
             .Where(agent => !agent.IsHidden
                             && !existingHandles.Contains(agent.Handle)
-                            && !string.Equals(agent.AgentType, SurfaceSwarmAgentTypes.Orchestrator, StringComparison.OrdinalIgnoreCase)
-                            && !string.Equals(agent.AgentType, SurfaceSwarmAgentTypes.Planner, StringComparison.OrdinalIgnoreCase)
                             && !string.Equals(agent.AgentType, SurfaceOrchestrationAgentTypes.SquadOrchestrator, StringComparison.OrdinalIgnoreCase))
             .OrderBy(agent => agent.DisplayName, StringComparer.OrdinalIgnoreCase);
     }
@@ -2072,9 +2019,9 @@
             _ => "is-agent"
         };
 
-        if (IsSwarmMirror(item))
+        if (IsSquadMirror(item))
         {
-            classes += " is-swarm-mirror";
+            classes += " is-squad-mirror";
         }
 
         if (IsAgentToAgent(item))
@@ -2178,7 +2125,7 @@
     private static MarkupString RenderMarkdown(string? text)
         => new(SurfaceMarkdownRenderer.Render(text));
 
-    private static bool IsSwarmMirror(SurfaceTimelineItem item)
+    private static bool IsSquadMirror(SurfaceTimelineItem item)
         => item.SourceMessage?.Args is not null
            && item.SourceMessage.Args.TryGetValue(SurfaceSquadArgs.Mirror, out var mirror)
            && string.Equals(mirror, "true", StringComparison.OrdinalIgnoreCase);

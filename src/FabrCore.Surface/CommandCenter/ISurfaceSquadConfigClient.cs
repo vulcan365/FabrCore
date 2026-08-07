@@ -1,4 +1,4 @@
-using FabrCore.Surface.Ai.Swarm;
+using FabrCore.Surface.Ai.Squads;
 
 namespace FabrCore.Surface.CommandCenter;
 

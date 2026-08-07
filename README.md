@@ -26,7 +26,7 @@ FabrCore provides the building blocks for creating, hosting, and connecting to A
 - **Real-Time Monitoring** -- Agent message traffic, events, LLM request/response capture, and token tracking
 - **Audio Transcription** -- Azure OpenAI gpt-4o transcription model support
 - **Testing Harness** -- In-memory agent testing with mock and live LLM modes
-- **Blueprint-Driven Development** -- One source-controlled document for agents and supervised Swarm squads
+- **Blueprint-Driven Development** -- One source-controlled document for agents and Surface squads
 - **Standalone Surface UI** -- Blazor command center and chat with no Forge account required
 - **Optional Memory and GraphRAG** -- SQL Server 2025-backed durable memory and knowledge services
 
@@ -56,6 +56,7 @@ FabrCore provides the building blocks for creating, hosting, and connecting to A
 |---------|-------------|
 | **[FabrCore.Core](https://www.nuget.org/packages/FabrCore.Core)** | Core interfaces, data models, and grain abstractions |
 | **[FabrCore.Sdk](https://www.nuget.org/packages/FabrCore.Sdk)** | Agent SDK -- `FabrCoreAgentProxy`, plugins, tools, MCP, monitoring |
+| **FabrCore.Client.WebSocket** | Typed WebSocket v2 client with tickets, reconnect, durable delivery checkpoints, and explicit acknowledgements |
 | **[FabrCore.Host](https://www.nuget.org/packages/FabrCore.Host)** | Server host -- Orleans silo, REST API, chat completions, WebSocket (in-memory Localhost mode built in) |
 | **[FabrCore.Host.SqlServer](https://www.nuget.org/packages/FabrCore.Host.SqlServer)** | SQL Server clustering, persistence, and reminders for the host, with automatic Orleans table deployment |
 | **[FabrCore.Host.AzureStorage](https://www.nuget.org/packages/FabrCore.Host.AzureStorage)** | Azure Storage clustering (tables), persistence (blob/tables), reminders, and streams (queues) for the host, with automatic resource provisioning |
@@ -63,7 +64,7 @@ FabrCore provides the building blocks for creating, hosting, and connecting to A
 | **FabrCore.Services.Contracts** | Open Memory and GraphRAG administration protocol used by self-hosted tools and Forge |
 | **FabrCore.Services.Memory** | Optional scoped durable memory, taxonomy, consolidation, and audit services |
 | **FabrCore.Services.GraphRag** | Optional document ingestion, graph retrieval, search, and administration services |
-| **FabrCore.Surface** | Standalone Blazor command center, chat, Adaptive Cards, and supervised Swarm |
+| **FabrCore.Surface** | Standalone Blazor command center, chat, Adaptive Cards, and squads |
 
 Forge is the commercial operations and governance product: hosted or on-prem fleet
 administration, identity/team management, incidents, and configuration distribution.
@@ -83,7 +84,7 @@ then start the sample and open `/surface`.
 dotnet add package FabrCore.Host
 ```
 
-`FabrCore.Host` pulls in `FabrCore.Sdk` and `FabrCore.Core` transitively. Client applications should connect through the Host HTTP/WebSocket API.
+`FabrCore.Host` pulls in `FabrCore.Sdk` and `FabrCore.Core` transitively. Client applications should connect through the Host HTTP/WebSocket API. `FabrCore.Client.WebSocket` provides the typed production v2 live client; agent creation and Blueprint provisioning remain HTTP-only.
 
 ### 2. Create an agent
 
@@ -156,6 +157,7 @@ Full documentation is available in the [`docs/skills`](docs/skills/) directory:
 | [FabrCore Overview](docs/skills/fabrcore/SKILL.md) | Architecture, prerequisites, and project templates |
 | [Agent Development](docs/skills/fabrcore-agent/SKILL.md) | Building agents with lifecycle methods, state, timers, and reminders |
 | [Microsoft Agent Framework](docs/skills/fabrcore-agentframework/SKILL.md) | `ChatClientAgent`, sessions, thread patterns, and `Microsoft.Extensions.AI` |
+| [Agent Harness](docs/skills/fabrcore-harness/SKILL.md) | Model-managed todo lists, iteration loops, background delegation, and durable sessions |
 | [Server Setup](docs/skills/fabrcore-server/SKILL.md) | Orleans silo, REST API, WebSocket, LLM providers, and system agents |
 | [Plugins and Tools](docs/skills/fabrcore-plugins-tools/SKILL.md) | Stateful plugins, stateless tools, and DI integration |
 | [MCP Integration](docs/skills/fabrcore-mcp/SKILL.md) | Model Context Protocol servers via Stdio and HTTP transports |
@@ -164,7 +166,7 @@ Full documentation is available in the [`docs/skills`](docs/skills/) directory:
 | [Orleans Configuration](docs/skills/fabrcore-orleans/SKILL.md) | Clustering, persistence, streaming, reminders, and multi-silo |
 | [Testing](docs/skills/fabrcore-testing/SKILL.md) | In-memory test harness with mock and live LLM modes |
 | [Audio Transcription](docs/skills/fabrcore-transcription/SKILL.md) | Azure OpenAI gpt-4o audio transcription |
-| [Blueprints](docs/blueprints.md) | Canonical agent and Swarm configuration, storage, apply endpoints, and admin authentication |
+| [Blueprints](docs/blueprints.md) | Canonical agent and squad configuration, storage, apply endpoints, and admin authentication |
 
 **Check out the [FabrCore Blog](https://fabrcore.ai/blogs)** for tutorials, architecture deep-dives, integration guides, and best practices.
 

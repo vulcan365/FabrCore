@@ -1,6 +1,6 @@
 using System.Text.Json;
 using FabrCore.Core;
-using FabrCore.Surface.Ai.Swarm;
+using FabrCore.Surface.Ai.Squads;
 using FabrCore.Surface.Contracts;
 
 namespace FabrCore.Surface.CommandCenter;

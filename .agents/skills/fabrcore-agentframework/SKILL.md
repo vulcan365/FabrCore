@@ -14,6 +14,7 @@ description: >
   "AgentSessionStateBag", "CreateSessionAsync".
   Do NOT use for: FabrCore-specific agent lifecycle (OnInitialize, OnMessage) — use fabrcore-agent.
   Do NOT use for: plugin or tool development — use fabrcore-plugins-tools.
+  Do NOT use for: the harness providers (TodoProvider, LoopAgent, BackgroundAgentsProvider) or AsHarnessAgent — use fabrcore-harness.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
 ---
 
@@ -180,6 +181,8 @@ public sealed partial class ChatClientAgent : AIAgent
 ```
 
 FabrCore's `CreateChatClientAgent()` creates this internally. You typically don't construct it directly.
+
+`CreateFabrCoreHarnessAgent()` also builds a `ChatClientAgent`, then wraps it with the harness providers and an iteration loop. See **fabrcore-harness** when the agent needs a todo list, needs to keep working until the plan is done, or needs to delegate to other agents.
 
 ### ChatClientAgentOptions
 

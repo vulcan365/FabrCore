@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Net;
 using System.Text;
+using FabrCore.Core.Skills;
 
 namespace FabrCore.Sdk.Tests;
 
@@ -47,6 +48,34 @@ public sealed class FabrCoreHostApiClientTests
         Assert.AreEqual("user1", response.Principals.Single().Handle);
     }
 
+    [TestMethod]
+    public async Task PublishHarnessSkillAsync_StreamsZipToPrincipalAdminEndpoint()
+    {
+        var handler = new SkillRecordingHandler();
+        var apiClient = new FabrCoreHostApiClient(
+            new HttpClient(handler),
+            new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["FabrCore:HostUrl"] = "https://fabrcore.test"
+            }).Build(),
+            NullLogger<FabrCoreHostApiClient>.Instance);
+        await using var zip = new MemoryStream([1, 2, 3, 4]);
+
+        var result = await apiClient.PublishHarnessSkillAsync(
+            "owner@example.com",
+            "policy-review",
+            "1.2.0",
+            zip);
+
+        Assert.AreEqual(HttpMethod.Put, handler.Method);
+        Assert.AreEqual(
+            "https://fabrcore.test/fabrcoreapi/admin/v1/principals/owner%40example.com/skills/policy-review/versions/1.2.0",
+            handler.RequestUri?.ToString());
+        Assert.AreEqual("application/zip", handler.ContentType);
+        CollectionAssert.AreEqual(new byte[] { 1, 2, 3, 4 }, handler.Body);
+        Assert.AreEqual("policy-review", result.Manifest.Name);
+    }
+
     private sealed class RecordingHandler : HttpMessageHandler
     {
         private readonly string _responseJson;
@@ -67,6 +96,34 @@ public sealed class FabrCoreHostApiClientTests
             };
 
             return Task.FromResult(response);
+        }
+    }
+
+    private sealed class SkillRecordingHandler : HttpMessageHandler
+    {
+        public Uri? RequestUri { get; private set; }
+        public HttpMethod? Method { get; private set; }
+        public string? ContentType { get; private set; }
+        public byte[]? Body { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            RequestUri = request.RequestUri;
+            Method = request.Method;
+            ContentType = request.Content?.Headers.ContentType?.MediaType;
+            Body = request.Content is null
+                ? null
+                : await request.Content.ReadAsByteArrayAsync(cancellationToken);
+
+            return new HttpResponseMessage(HttpStatusCode.Created)
+            {
+                Content = new StringContent(
+                    """{"manifest":{"name":"policy-review","version":"1.2.0"},"alreadyExisted":false}""",
+                    Encoding.UTF8,
+                    "application/json")
+            };
         }
     }
 }

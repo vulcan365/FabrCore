@@ -16,24 +16,21 @@
       "args": {}
     }
   ],
-  "swarm": {
-    "squads": [
-      {
-        "squadType": "swarm",
-        "name": "Research Desk",
-        "description": "Plans, supervises, and verifies multi-agent research.",
-        "orchestratorModel": "default",
-        "plannerModel": "default",
-        "agents": [
-          {
-            // Reuse the blueprint-defined assistant instead of creating another agent.
-            "handle": "assistant",
-            "name": "Researcher",
-            "agentType": "surface",
-            "role": "executor"
-          }
-        ]
-      }
-    ]
-  }
+  "squads": [
+    {
+      "squadType": "task",
+      "name": "Research Desk",
+      "description": "Plans and delegates multi-step research to squad executors.",
+      "orchestratorModel": "default",
+      "agents": [
+        {
+          // Reuse the blueprint-defined assistant instead of creating another agent.
+          "handle": "assistant",
+          "name": "Researcher",
+          "agentType": "surface",
+          "role": "executor"
+        }
+      ]
+    }
+  ]
 }

@@ -1,55 +1,76 @@
+using FabrCore.Core.Acl;
+using FabrCore.Core.Auditing;
+using FabrCore.Core.WebSockets;
 using FabrCore.Host.Configuration;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Hosting;
 
-namespace FabrCore.Host.WebSocket
+namespace FabrCore.Host.WebSocket;
+
+/// <summary>Authenticates v2 upgrades with a short-lived, single-use ticket.</summary>
+public sealed class DefaultWebSocketAuthenticator(
+    IOptions<FabrCoreHostOptions> hostOptions,
+    IOptions<FabrCoreWebSocketOptions> webSocketOptions,
+    IOptions<FabrCoreAclOptions> aclOptions,
+    IWebHostEnvironment environment,
+    IWebSocketTicketService ticketService,
+    IAuditProvider auditProvider) : IWebSocketAuthenticator
 {
-    /// <summary>
-    /// Default authenticator. Reads the user handle from the
-    /// <c>x-fabrcore-userhandle</c> header or <c>userhandle</c> query parameter, and (optionally)
-    /// enforces a configured <c>Origin</c> allowlist. Does NOT validate an identity —
-    /// replace in production with an implementation that verifies a bearer token
-    /// or session cookie.
-    /// </summary>
-    public sealed class DefaultWebSocketAuthenticator : IWebSocketAuthenticator
+    public async Task<WebSocketAuthResult> AuthenticateAsync(HttpContext context)
     {
-        private readonly FabrCoreHostOptions _options;
+        var protocols = context.WebSockets.WebSocketRequestedProtocols;
+        if (!protocols.Contains(FabrCoreWebSocketProtocol.Subprotocol, StringComparer.Ordinal))
+            return WebSocketAuthResult.Deny($"The '{FabrCoreWebSocketProtocol.Subprotocol}' subprotocol is required.");
 
-        public DefaultWebSocketAuthenticator(IOptions<FabrCoreHostOptions> options)
+        var origin = context.Request.Headers.Origin.FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(origin) &&
+            !hostOptions.Value.AllowedWebSocketOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase))
+            return WebSocketAuthResult.Deny("The browser Origin is not allowed.");
+
+        var ticketProtocols = protocols.Where(x =>
+            x.StartsWith(FabrCoreWebSocketProtocol.TicketSubprotocolPrefix, StringComparison.Ordinal)).ToArray();
+        if (ticketProtocols.Length > 1)
+            return WebSocketAuthResult.Deny("Exactly one WebSocket ticket subprotocol is allowed.");
+        var ticketProtocol = ticketProtocols.SingleOrDefault();
+        string? principal = null;
+        if (ticketProtocol is not null)
         {
-            _options = options.Value;
+            var token = ticketProtocol[FabrCoreWebSocketProtocol.TicketSubprotocolPrefix.Length..];
+            if (!string.IsNullOrWhiteSpace(token))
+                principal = await ticketService.RedeemAsync(token);
+        }
+        else if (environment.IsDevelopment() && webSocketOptions.Value.AllowDevelopmentPrincipalSelection)
+        {
+            var selected = context.Request.Headers["x-fabrcore-userhandle"].FirstOrDefault()
+                ?? context.Request.Query["userhandle"].FirstOrDefault();
+            principal = DefaultWebSocketPrincipalResolver.Normalize(selected);
         }
 
-        public Task<WebSocketAuthResult> AuthenticateAsync(HttpContext context)
+        if (principal is null)
         {
-            // Origin allowlist — only enforced when configured. Empty list = allow all.
-            if (_options.AllowedWebSocketOrigins is { Count: > 0 } allowed)
-            {
-                var origin = context.Request.Headers["Origin"].FirstOrDefault();
-                if (!string.IsNullOrEmpty(origin) && !allowed.Contains(origin, StringComparer.OrdinalIgnoreCase))
-                {
-                    return Task.FromResult(WebSocketAuthResult.Deny(
-                        $"Origin '{origin}' is not in the allow-list."));
-                }
-            }
-
-            string? userHandle = null;
-            if (context.Request.Headers.TryGetValue("x-fabrcore-userhandle", out var userHandleValues))
-            {
-                userHandle = userHandleValues.FirstOrDefault();
-            }
-            else if (context.Request.Query.TryGetValue("userhandle", out var queryValues))
-            {
-                userHandle = queryValues.FirstOrDefault();
-            }
-
-            if (string.IsNullOrWhiteSpace(userHandle))
-            {
-                return Task.FromResult(WebSocketAuthResult.Deny(
-                    "Missing required user handle. Provide via x-fabrcore-userhandle header or userhandle query parameter."));
-            }
-
-            return Task.FromResult(WebSocketAuthResult.Allow(userHandle));
+            await AuditAsync(null, AuditOutcome.Denied, "Ticket is missing, expired, invalid, or already used.");
+            return WebSocketAuthResult.Deny("A valid single-use WebSocket ticket is required.");
         }
+
+        if (string.Equals(principal, aclOptions.Value.SystemPrincipal, StringComparison.OrdinalIgnoreCase))
+        {
+            await AuditAsync(principal, AuditOutcome.Denied, "The System principal cannot open an external WebSocket.");
+            return WebSocketAuthResult.Deny("The System principal is forbidden.");
+        }
+
+        await AuditAsync(principal, AuditOutcome.Success, "WebSocket ticket redeemed.");
+        return WebSocketAuthResult.Allow(principal);
     }
+
+    private Task AuditAsync(string? principal, AuditOutcome outcome, string reason) => auditProvider.RecordAsync(new AuditEvent
+    {
+        Category = AuditCategory.WebSocketSecurity,
+        Outcome = outcome,
+        SubjectPrincipal = principal,
+        Permission = "websocket.ticket.redeem",
+        Reason = reason,
+        WasEnforced = outcome == AuditOutcome.Denied,
+    });
 }

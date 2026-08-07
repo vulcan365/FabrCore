@@ -7,7 +7,17 @@ namespace FabrCore.Core.Interfaces
     {
         Task Subscribe(IPrincipalGrainObserver observer);
         Task Unsubscribe(IPrincipalGrainObserver observer);
+        Task<FabrCore.Core.WebSockets.FabrCoreWebSocketRegistration> SubscribeWebSocket(
+            IPrincipalWebSocketObserver observer,
+            string clientId,
+            string connectionId,
+            long? checkpoint);
+        Task UnsubscribeWebSocket(string clientId, string connectionId);
+        [AlwaysInterleave]
+        Task AcknowledgeWebSocket(string clientId, long sequence);
+        [AlwaysInterleave]
         Task<AgentMessage> SendAndReceiveMessage(AgentMessage request);
+        [AlwaysInterleave]
         Task SendMessage(AgentMessage request);
 
         Task SetContextValue(string key, string? value);
@@ -47,6 +57,9 @@ namespace FabrCore.Core.Interfaces
         /// <returns>Health status after reset.</returns>
         [AlwaysInterleave]
         Task<AgentHealthStatus> ResetAgent(string handle);
+
+        [AlwaysInterleave]
+        Task<AgentHealthStatus> GetAgentHealth(string handle, HealthDetailLevel detailLevel = HealthDetailLevel.Basic);
 
         /// <summary>
         /// Removes an agent from this principal's tracked-agent list.

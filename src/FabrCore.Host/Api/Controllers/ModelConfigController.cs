@@ -41,13 +41,15 @@ namespace FabrCore.Host.Api.Controllers
                     modelConfig.MaxOutputTokens,
                     modelConfig.ReasoningEffort,
                     modelConfig.ContextWindowTokens,
+                    modelConfig.ContextCompactionEnabled,
+                    modelConfig.ContextEvictThreshold,
+                    modelConfig.ContextTruncateThreshold,
                     modelConfig.CompactionEnabled,
                     modelConfig.CompactionKeepLastN,
                     modelConfig.CompactionThreshold,
                     modelConfig.CompactionStaleAfterMinutes,
                     modelConfig.PerTurnMaxInputTokens,
                     modelConfig.MaxPromptInputTokens,
-                    modelConfig.MidTurnCompactionEnabled,
                     modelConfig.RunawayBudgetBehavior
                 });
             }

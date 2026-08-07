@@ -1,21 +1,16 @@
 using FabrCore.Core;
 using FabrCore.Core.Blueprints;
-using FabrCore.Surface.Ai.Swarm;
+using FabrCore.Surface.Ai.Squads;
 using System.Text.Json;
 
 namespace FabrCore.Surface.CommandCenter;
 
 /// <summary>
 /// Backward-compatible Surface view of the canonical <see cref="FabrCoreBlueprint"/>.
-/// The typed Swarm property is serialized as the canonical top-level "swarm" extension;
+/// The typed Squads property is serialized as the canonical top-level "squads" extension;
 /// hosts deserialize that property into <see cref="FabrCoreBlueprint.Extensions"/>.
 /// </summary>
 public sealed class SurfaceBlueprintDocument : FabrCoreBlueprint
-{
-    public SwarmBlueprintExtension Swarm { get; set; } = new();
-}
-
-public sealed class SwarmBlueprintExtension
 {
     public List<SurfaceSquadDefinition> Squads { get; set; } = [];
 }
