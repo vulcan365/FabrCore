@@ -18,10 +18,11 @@ namespace FabrCore.Host
 
         private static readonly Counter<long> AssembliesLoadedCounter = Meter.CreateCounter<long>(
             "fabrcore.host.silobuilder.assemblies.loaded",
-            description: "Number of additional assemblies loaded via AddFabrCore");
+            description: "Number of application and discovery assemblies loaded via AddFabrCore");
 
         /// <summary>
-        /// Registers FabrCore grain assemblies with the Orleans silo.
+        /// Loads the application assembly and any optional additional assemblies before Orleans
+        /// finalizes application-part discovery.
         /// <para>
         /// Call this inside your own <c>builder.UseOrleans(siloBuilder => { ... })</c> when you want
         /// full control over Orleans providers. You are responsible for registering:
@@ -34,19 +35,25 @@ namespace FabrCore.Host
         /// </para>
         /// </summary>
         /// <param name="siloBuilder">The Orleans silo builder.</param>
-        /// <param name="additionalAssemblies">Assemblies containing agents, plugins, and tools to discover.</param>
+        /// <param name="additionalAssemblies">
+        /// Optional assemblies which are absent from the application's dependency graph. The
+        /// entry assembly and its referenced FabrCore dependencies are included automatically.
+        /// </param>
         /// <returns>The silo builder for chaining.</returns>
         public static ISiloBuilder AddFabrCore(this ISiloBuilder siloBuilder, List<Assembly> additionalAssemblies)
         {
             using var activity = ActivitySource.StartActivity("AddFabrCore", ActivityKind.Internal);
 
+            var applicationAssemblies = FabrCoreHostExtensions.LoadApplicationAssemblies(
+                Assembly.GetEntryAssembly()?.GetName().Name,
+                additionalAssemblies);
+
             var loadedCount = 0;
-            foreach (var assembly in additionalAssemblies)
+            foreach (var assembly in applicationAssemblies)
             {
                 using var assemblyActivity = ActivitySource.StartActivity("LoadAssembly", ActivityKind.Internal);
                 assemblyActivity?.SetTag("assembly.name", assembly.GetName().Name);
 
-                Assembly.Load(assembly.GetName().Name!);
                 loadedCount++;
 
                 AssembliesLoadedCounter.Add(1,

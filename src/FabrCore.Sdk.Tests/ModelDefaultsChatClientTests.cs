@@ -155,7 +155,8 @@ public sealed class ModelDefaultsChatClientTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["FabrCore:HostUrl"] = "https://fabrcore.test"
+                ["FabrCore:HostUrl"] = "https://fabrcore.test",
+                ["FabrCore:AdminAuthentication:ApiKey"] = "admin-key"
             })
             .Build();
         var service = new FabrCoreChatClientService(
@@ -170,6 +171,8 @@ public sealed class ModelDefaultsChatClientTests
         Assert.AreEqual(
             "https://fabrcore.test/fabrcoreapi/ModelConfig/model/graphrag",
             handler.RequestUri?.ToString());
+        Assert.AreEqual("Bearer", handler.Authorization?.Scheme);
+        Assert.AreEqual("admin-key", handler.Authorization?.Parameter);
     }
 
     [TestMethod]
@@ -308,6 +311,7 @@ public sealed class ModelDefaultsChatClientTests
     {
         public Uri? RequestUri { get; private set; }
         public int RequestCount { get; private set; }
+        public System.Net.Http.Headers.AuthenticationHeaderValue? Authorization { get; private set; }
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
@@ -315,6 +319,7 @@ public sealed class ModelDefaultsChatClientTests
         {
             RequestUri = request.RequestUri;
             RequestCount++;
+            Authorization = request.Headers.Authorization;
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(

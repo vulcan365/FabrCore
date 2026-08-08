@@ -7,14 +7,36 @@ namespace FabrCore.Sdk
     public sealed class FabrCoreRegistry : IFabrCoreRegistry
     {
         private readonly ILogger<FabrCoreRegistry> _logger;
+        private readonly IReadOnlyList<Assembly>? _assemblies;
         private readonly Lazy<Dictionary<string, Type>> _agentTypes;
         private readonly Lazy<Dictionary<string, Type>> _pluginTypes;
         private readonly Lazy<Dictionary<string, MethodInfo>> _toolMethods;
         private readonly List<RegistryCollision> _collisions = new();
 
         public FabrCoreRegistry(ILogger<FabrCoreRegistry> logger)
+            : this(logger, (IReadOnlyList<Assembly>?)null)
+        {
+        }
+
+        /// <summary>
+        /// Creates a registry which scans only the supplied assemblies. Pass an empty collection
+        /// to create an empty registry. The single-argument constructor retains the legacy
+        /// process-wide scan for backwards compatibility.
+        /// </summary>
+        public FabrCoreRegistry(ILogger<FabrCoreRegistry> logger, IEnumerable<Assembly> assemblies)
+            : this(
+                logger,
+                (IReadOnlyList<Assembly>)(assemblies?.Distinct().ToArray()
+                    ?? throw new ArgumentNullException(nameof(assemblies))))
+        {
+        }
+
+        private FabrCoreRegistry(
+            ILogger<FabrCoreRegistry> logger,
+            IReadOnlyList<Assembly>? assemblies)
         {
             _logger = logger;
+            _assemblies = assemblies;
             _agentTypes = new Lazy<Dictionary<string, Type>>(ScanAgents);
             _pluginTypes = new Lazy<Dictionary<string, Type>>(ScanPlugins);
             _toolMethods = new Lazy<Dictionary<string, MethodInfo>>(ScanTools);
@@ -129,7 +151,7 @@ namespace FabrCore.Sdk
         {
             var result = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            foreach (var assembly in GetAssemblies())
             {
                 Type[] types;
                 try
@@ -171,7 +193,7 @@ namespace FabrCore.Sdk
         {
             var result = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            foreach (var assembly in GetAssemblies())
             {
                 Type[] types;
                 try
@@ -213,7 +235,7 @@ namespace FabrCore.Sdk
         {
             var result = new Dictionary<string, MethodInfo>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            foreach (var assembly in GetAssemblies())
             {
                 Type[] types;
                 try
@@ -278,5 +300,8 @@ namespace FabrCore.Sdk
                 });
             }
         }
+
+        private IEnumerable<Assembly> GetAssemblies() =>
+            _assemblies ?? AppDomain.CurrentDomain.GetAssemblies();
     }
 }

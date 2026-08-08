@@ -56,6 +56,11 @@ Snapshot date: 2026-08-05
 
 ### Changed
 
+- `AddFabrCoreServer` and `AddFabrCoreServices` now load the application assembly and referenced
+  FabrCore project/package dependencies before registry discovery. Normal hosts no longer need
+  `AdditionalAssemblies`; it remains available for dynamically selected assemblies outside the
+  application dependency graph. Default registry DI construction now preserves process-wide
+  discovery even though exact-scope registry constructors are also available.
 - Changed Surface blueprints from the nested `swarm.squads` extension to a top-level `squads`
   extension. Supported squad types are now `orchestrator` and `task`.
 - Reworked task squads around `SurfaceTaskHarnessAgent`. A task run tracks model-owned todos,

@@ -9,11 +9,8 @@ using FabrCore.Services.Microsoft365Copilot;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.AddFabrCoreServer(new FabrCoreServerOptions
-{
-    // Assemblies containing your [AgentAlias]/[PluginAlias]/[ToolAlias] types.
-    AdditionalAssemblies = [typeof({{AGENT_TYPE}}).Assembly]
-});
+// The application assembly is discovered automatically.
+builder.AddFabrCoreServer();
 
 // Microsoft 365 Copilot / Teams channel. Optional lambda overrides config values in code:
 // builder.AddMicrosoft365Copilot(o => o.Streaming.InformativeUpdate = "Thinking...");

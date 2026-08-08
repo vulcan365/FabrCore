@@ -89,7 +89,7 @@ internal sealed class CopilotAgentProvisioner : ICopilotAgentProvisioner
                 $"Failed to provision Copilot agent '{handle}' (type '{config.AgentType}') for principal '{principalHandle}': " +
                 $"{status?.State.ToString() ?? "no result"} — {status?.Message ?? "no details"}. " +
                 "Verify Microsoft365Copilot:Agent:AgentType matches a registered [AgentAlias] and the agent's assembly " +
-                "is listed in FabrCoreServerOptions.AdditionalAssemblies.");
+                "is present in the application dependency graph. AdditionalAssemblies is needed only for assemblies outside that graph.");
         }
 
         _logger.LogInformation(

@@ -27,10 +27,7 @@ using FabrCore.Host;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.AddFabrCoreServer(new FabrCoreServerOptions
-{
-    AdditionalAssemblies = [typeof(MyAgent).Assembly]
-});
+builder.AddFabrCoreServer();
 
 var app = builder.Build();
 app.UseFabrCoreServer();
@@ -57,26 +54,31 @@ app.Run();
 
 ## FabrCoreServerOptions
 
+The application assembly and referenced project/package dependencies that use FabrCore are loaded
+and scanned automatically, so normal agents, plugins, and tools require no assembly configuration.
+`AdditionalAssemblies` is an optional escape hatch for dynamically selected packages or other
+assemblies absent from the application's dependency graph:
+
 ```csharp
 builder.AddFabrCoreServer(new FabrCoreServerOptions
 {
-    // Required: assemblies containing agents, plugins, tools
-    AdditionalAssemblies = [
-        typeof(MyAgent).Assembly,
-        typeof(MyPlugin).Assembly
-    ]
+    AdditionalAssemblies = [typeof(DynamicAgentPackage.Marker).Assembly]
 });
 ```
 
-`AdditionalAssemblies` tells FabrCore which assemblies to scan for `[AgentAlias]`, `[PluginAlias]`, and `[ToolAlias]` types. Registry metadata attributes (`[Description]`, `[FabrCoreCapabilities]`, `[FabrCoreNote]`) are also read from these assemblies and surfaced in the discovery endpoint. Types decorated with `[FabrCoreHidden]` are excluded from discovery but remain usable.
+`RegistryAssemblies` is an optional exact allowlist for `[AgentAlias]`, `[PluginAlias]`, and
+`[ToolAlias]` discovery and runtime tool resolution. When it is null, FabrCore scans all loaded
+assemblies, including the application assembly, its referenced FabrCore dependencies, and
+`AdditionalAssemblies`. Use an explicit scope
+only when the host needs a strict discovery boundary; an empty list intentionally creates an empty
+registry. Registry metadata attributes (`[Description]`, `[FabrCoreCapabilities]`,
+`[FabrCoreNote]`) are read from the selected assemblies and surfaced in the discovery endpoint.
+Types decorated with `[FabrCoreHidden]` are excluded from discovery but remain usable.
 
 ### Custom Providers
 
 ```csharp
-builder.AddFabrCoreServer(new FabrCoreServerOptions
-{
-    AdditionalAssemblies = [typeof(MyAgent).Assembly]
-}
+builder.AddFabrCoreServer(new FabrCoreServerOptions()
 .UseAgentManagementProvider<SqlAgentManagementProvider>()
 .UseAclEvaluator<MyAclEvaluator>()      // custom access-control decisions (see fabrcore-acl)
 .UseAuditProvider<MySiemAuditProvider>());  // durable security audit sink (see fabrcore-acl)
@@ -87,10 +89,7 @@ builder.AddFabrCoreServer(new FabrCoreServerOptions
 Verifiable execution is off by default. Enable it when a host needs signed/tamper-evident evidence for messages, events, LLM calls, and plugin/tool side effects. SPIFFE is optional; the core feature is provider-neutral signing and evidence storage.
 
 ```csharp
-builder.AddFabrCoreServer(new FabrCoreServerOptions
-{
-    AdditionalAssemblies = [typeof(MyAgent).Assembly]
-}
+builder.AddFabrCoreServer(new FabrCoreServerOptions()
 .UseVerifiableExecution()
 .UseLocalCertificateVerifiableExecutionSigner());
 ```
@@ -98,10 +97,7 @@ builder.AddFabrCoreServer(new FabrCoreServerOptions
 Production hosts should usually add a durable store and customer-managed signer:
 
 ```csharp
-builder.AddFabrCoreServer(new FabrCoreServerOptions
-{
-    AdditionalAssemblies = [typeof(MyAgent).Assembly]
-}
+builder.AddFabrCoreServer(new FabrCoreServerOptions()
 .UseVerifiableExecution(v =>
 {
     v.RequireSignerForTrustedExecution = true;
@@ -121,20 +117,14 @@ Use `FabrCoreServerOptions.UseTimeProvider(...)` when a host needs Orleans sched
 ```csharp
 var demoClock = new DemoTimeProvider();
 
-builder.AddFabrCoreServer(new FabrCoreServerOptions
-{
-    AdditionalAssemblies = [typeof(MyAgent).Assembly]
-}
+builder.AddFabrCoreServer(new FabrCoreServerOptions()
 .UseTimeProvider(demoClock));
 ```
 
 You can also let DI create the provider:
 
 ```csharp
-builder.AddFabrCoreServer(new FabrCoreServerOptions
-{
-    AdditionalAssemblies = [typeof(MyAgent).Assembly]
-}
+builder.AddFabrCoreServer(new FabrCoreServerOptions()
 .UseTimeProvider<DemoTimeProvider>());
 ```
 
@@ -152,7 +142,7 @@ For instance-based registration, FabrCore registers both `TimeProvider` and the 
 3. **Typed Entity Storage** — `IFabrCoreStorageProvider` backed by the configured Orleans storage provider
 4. **Verifiable Execution Services** — `IVerifiableExecutionStore`, `IVerifiableExecutionSigner`, `IVerifiableExecutionVerifier`, `IVerifiableExecutionContext`, and SDK helper support for external effects (disabled/no-op unless enabled)
 5. **Background Services** — `AgentRegistryCleanupService`, `FileCleanupService`
-6. **Assembly Discovery** — Scans `AdditionalAssemblies` for agent, plugin, and tool types
+6. **Assembly Discovery** — Scans the exact `RegistryAssemblies` allowlist when supplied; otherwise uses legacy process-wide discovery
 7. **ACL & Security Audit** — Binds `FabrCore:Acl` and `FabrCore:Audit` from `IConfiguration` (normally `appsettings.json`), registers the ACL evaluator/enforcer, the `AclRegistryGrain`-backed entity store, and the audit provider (see fabrcore-acl)
 
 ## What UseFabrCoreServer Configures
@@ -306,8 +296,9 @@ Configuration ownership:
   `FabrCore:CloudServer:Enabled` to be true. The dispatcher uses `FabrCore:CloudServer:ApiKey`
   for its local Host admin requests, and the `FabrCoreAdmin` policy accepts that key. There is
   no separate remote-admin key or remote-admin-without-Cloud-Server state.
-- `FabrCore:AdminAuthentication:ApiKey` remains available for direct non-cloud callers of the
-  privileged Host administration APIs.
+- `FabrCore:AdminAuthentication:ApiKey` authenticates direct non-cloud callers of privileged
+  Host APIs, including remote model-configuration and API-key lookup. Separate SDK processes
+  must configure the same value so `FabrCoreHostApiClient` can send it as a Bearer credential.
 - `FabrCore:EmitAttributionHeaders` opts OpenAI-compatible LLM requests into per-agent attribution
   headers. Leave it false unless the endpoint is trusted to receive agent and trace metadata.
 - `FabrCore:Storage:UserHandle` is an optional default principal handle for the SDK storage-provider
@@ -768,7 +759,7 @@ Typed methods are `ListHarnessSkillsAsync`, `GetHarnessSkillAsync`, `PublishHarn
 
 ### Discovery API (`/fabrcoreapi/discovery`)
 
-Introspect available agent types, plugins, and tools registered via `AdditionalAssemblies`. Returns full registry metadata including capabilities, notes, and method descriptions.
+Introspect available agent types, plugins, and tools selected by `RegistryAssemblies` (or legacy process-wide discovery when it is null). Returns full registry metadata including capabilities, notes, and method descriptions.
 
 Discovery is type-level, not instance-level. Evicting an agent removes that created agent from diagnostics/principal tracking, but it does not remove the agent class/alias from `/discovery` unless the assembly/type is removed from the host.
 
@@ -920,7 +911,14 @@ Send a chat completion request to the configured LLM. Uses `IFabrCoreChatClientS
 
 ### Model Config API (`/fabrcoreapi/modelconfig`)
 
-Read model configuration and API keys from `fabrcore.json`. Useful for clients that need to know available models.
+Read model configuration and API keys from the Host's active configuration store. Both endpoints
+require the `FabrCoreAdmin` Bearer policy because the API-key response contains secret material.
+Set `FabrCore:AdminAuthentication:ApiKey` to the same value in the Host and any separate SDK
+process that uses these routes.
+
+Agents running in the Host process do not use these HTTP routes: `AddFabrCoreServices` registers
+an `IFabrCoreModelConfigurationResolver` backed directly by the active local-file, Cloud Server,
+or custom `IFabrCoreConfigurationStore` implementation. The HTTP path is only the remote fallback.
 
 #### GET `/modelconfig/model/{name}` — Get model configuration
 
@@ -1211,5 +1209,5 @@ public FabrCoreServerOptions UseTimeProvider<TTimeProvider>()
 
 **Plugin tools not appearing:**
 1. Verify `[PluginAlias]` matches the name in `AgentConfiguration.Plugins`
-2. Ensure plugin assembly is included in `AdditionalAssemblies`
+2. Ensure the plugin assembly is referenced and loaded; use `AdditionalAssemblies` only for a dynamically selected or otherwise unloaded package
 3. Check that tool methods have `[Description]` attributes

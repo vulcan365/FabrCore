@@ -168,6 +168,6 @@ Remind the user of these protected members they can use:
 1. Detect the namespace from the project file or existing files in the directory.
 2. Run `dotnet build` to verify the file compiles.
 3. Remind the user:
-   - Add this agent's assembly to the server's `FabrCoreServerOptions.AdditionalAssemblies` if it's in a separate project.
+   - Add a normal project/package reference from the server; FabrCore discovers referenced agent assemblies automatically.
    - Update `fabrcore.json` to include the model configuration referenced by the agent (defaults to `"default"`).
    - The `[AgentAlias]` value is what you use as `AgentType` when creating the agent via `ClientContext.CreateAgent()` or the REST API.

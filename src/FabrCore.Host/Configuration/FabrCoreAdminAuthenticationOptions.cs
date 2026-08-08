@@ -7,7 +7,7 @@ public sealed class FabrCoreAdminAuthenticationOptions : AuthenticationSchemeOpt
     public const string SectionName = "FabrCore:AdminAuthentication";
 
     /// <summary>
-    /// Cluster-scoped API key required by versioned administration endpoints.
+    /// Cluster-scoped API key required by privileged administration and model-configuration endpoints.
     /// Store this value in user secrets, environment variables, or a secret manager.
     /// </summary>
     public string? ApiKey { get; set; }

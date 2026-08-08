@@ -18,7 +18,7 @@ namespace FabrCore.Services.Microsoft365Copilot;
 /// Call <see cref="AddMicrosoft365Copilot"/> after <c>AddFabrCoreServer</c> and
 /// <see cref="UseMicrosoft365Copilot"/> after <c>UseFabrCoreServer</c>:
 /// <code>
-/// builder.AddFabrCoreServer(new FabrCoreServerOptions { AdditionalAssemblies = [typeof(MyAgent).Assembly] });
+/// builder.AddFabrCoreServer();
 /// builder.AddMicrosoft365Copilot();
 ///
 /// var app = builder.Build();

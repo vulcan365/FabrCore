@@ -32,19 +32,13 @@ Localhost mode is built into `FabrCore.Host`. The other modes live in provider p
 | `AzureStorage` | `FabrCore.Host.AzureStorage` |
 
 ```csharp
-builder.AddFabrCoreServer(new FabrCoreServerOptions
-{
-    AdditionalAssemblies = [typeof(MyAgent).Assembly]
-});
+builder.AddFabrCoreServer();
 ```
 
 Explicit registration is also available (optional): `options.UseSqlServer()` or `options.UseAzureStorage()`:
 
 ```csharp
-builder.AddFabrCoreServer(new FabrCoreServerOptions
-{
-    AdditionalAssemblies = [typeof(MyAgent).Assembly]
-});
+builder.AddFabrCoreServer();
 ```
 
 Orleans settings are read from the `FabrCore:Orleans` section in `appsettings.json`.
@@ -56,10 +50,7 @@ Orleans settings are read from the `FabrCore:Orleans` section in `appsettings.js
 ```csharp
 var demoClock = new DemoTimeProvider();
 
-builder.AddFabrCoreServer(new FabrCoreServerOptions
-{
-    AdditionalAssemblies = [typeof(MyAgent).Assembly]
-}
+builder.AddFabrCoreServer(new FabrCoreServerOptions()
 .UseTimeProvider(demoClock));
 ```
 
@@ -232,10 +223,7 @@ using FabrCore.Host.Configuration;
 var builder = WebApplication.CreateBuilder(args);
 
 // 1. Register FabrCore's non-Orleans services (DI, controllers, background services)
-builder.AddFabrCoreServices(new FabrCoreServerOptions
-{
-    AdditionalAssemblies = [typeof(MyAgent).Assembly]
-});
+builder.AddFabrCoreServices();
 
 // Optional: register a custom clock before UseOrleans.
 builder.Services.AddSingleton<TimeProvider>(new DemoTimeProvider());
@@ -268,7 +256,8 @@ builder.UseOrleans(siloBuilder =>
         o.ConfigureTableServiceClient(connStr));
 
     // Register FabrCore grains
-    siloBuilder.AddFabrCore([typeof(MyAgent).Assembly]);
+    // The entry assembly is automatic; pass extra assemblies only when they are not otherwise loaded.
+    siloBuilder.AddFabrCore([]);
 });
 
 var app = builder.Build();

@@ -1,7 +1,7 @@
 // TaskAgent registration template for Program.cs / Startup.
 //
 // Five things to wire:
-//   1. Register TaskAgent assembly + your client agent assemblies with FabrCore
+//   1. Reference TaskAgent + your client agent assemblies (discovered automatically)
 //   2. Call AddTaskAgentServices(...) to configure options
 //   3. Call AddAgentMemoryServices(...) so Teaching/learning persist
 //   4. After app.Build(), bring each client agent + SME online via
@@ -21,18 +21,10 @@ using FabrCore.Host.Services;
 using FabrCore.Sdk;
 
 // =============================================================================
-// 1. Register assemblies (TaskAgent + your client agent assemblies)
+// 1. Start FabrCore (referenced FabrCore assemblies are discovered automatically)
 // =============================================================================
 
-builder.AddFabrCoreServer(new FabrCoreServerOptions
-{
-    AdditionalAssemblies =
-    [
-        typeof(TaskAgent).Assembly,           // the TaskAgent itself
-        typeof(MyClientAgent).Assembly,       // each client agent assembly
-        typeof(MySmeAgent).Assembly,          // each SME agent assembly
-    ]
-});
+builder.AddFabrCoreServer();
 
 // =============================================================================
 // 2. Configure TaskAgent services

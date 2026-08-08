@@ -93,10 +93,7 @@ using FabrCore.Host;
 using FabrCore.Services.Microsoft365Copilot;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.AddFabrCoreServer(new FabrCoreServerOptions
-{
-    AdditionalAssemblies = [typeof(MyChatAgent).Assembly]
-});
+builder.AddFabrCoreServer();
 builder.AddMicrosoft365Copilot();
 
 var app = builder.Build();
@@ -192,10 +189,7 @@ using FabrCore.Services.Microsoft365Copilot;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.AddFabrCoreServer(new FabrCoreServerOptions
-{
-    AdditionalAssemblies = [typeof(MyAgent).Assembly]
-});
+builder.AddFabrCoreServer();
 builder.AddMicrosoft365Copilot();          // ← the addon
 
 var app = builder.Build();
@@ -226,8 +220,9 @@ app.Run();
 }
 ```
 
-`Agent:AgentType` is any `[AgentAlias]` registered through
-`FabrCoreServerOptions.AdditionalAssemblies`. Each Microsoft 365 user automatically gets their own
+`Agent:AgentType` is any discovered `[AgentAlias]`. The application assembly and referenced
+FabrCore project/package dependencies are discovered automatically; `AdditionalAssemblies` is
+only needed for an assembly outside the application dependency graph. Each Microsoft 365 user automatically gets their own
 agent instance (principal handle = their Entra object id), with isolated chat history and state.
 
 **3. Create the Azure resources** (once — see [Azure setup](#azure-setup) below).

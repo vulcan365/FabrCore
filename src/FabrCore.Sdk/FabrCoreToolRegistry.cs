@@ -12,12 +12,34 @@ namespace FabrCore.Sdk
     public sealed class FabrCoreToolRegistry
     {
         private readonly ILogger<FabrCoreToolRegistry> _logger;
+        private readonly IReadOnlyList<Assembly>? _assemblies;
         private readonly Lazy<Dictionary<string, Type>> _pluginTypes;
         private readonly Lazy<Dictionary<string, MethodInfo>> _toolMethods;
 
         public FabrCoreToolRegistry(ILogger<FabrCoreToolRegistry> logger)
+            : this(logger, (IReadOnlyList<Assembly>?)null)
+        {
+        }
+
+        /// <summary>
+        /// Creates a tool registry which scans only the supplied assemblies. Pass an empty
+        /// collection to create an empty registry. The single-argument constructor retains the
+        /// legacy process-wide scan for backwards compatibility.
+        /// </summary>
+        public FabrCoreToolRegistry(ILogger<FabrCoreToolRegistry> logger, IEnumerable<Assembly> assemblies)
+            : this(
+                logger,
+                (IReadOnlyList<Assembly>)(assemblies?.Distinct().ToArray()
+                    ?? throw new ArgumentNullException(nameof(assemblies))))
+        {
+        }
+
+        private FabrCoreToolRegistry(
+            ILogger<FabrCoreToolRegistry> logger,
+            IReadOnlyList<Assembly>? assemblies)
         {
             _logger = logger;
+            _assemblies = assemblies;
             _pluginTypes = new Lazy<Dictionary<string, Type>>(ScanPlugins);
             _toolMethods = new Lazy<Dictionary<string, MethodInfo>>(ScanTools);
         }
@@ -167,7 +189,7 @@ namespace FabrCore.Sdk
         {
             var result = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            foreach (var assembly in GetAssemblies())
             {
                 Type[] types;
                 try
@@ -205,7 +227,7 @@ namespace FabrCore.Sdk
         {
             var result = new Dictionary<string, MethodInfo>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            foreach (var assembly in GetAssemblies())
             {
                 Type[] types;
                 try
@@ -242,6 +264,9 @@ namespace FabrCore.Sdk
             _logger.LogInformation("Tool scan complete: {Count} tool aliases registered", result.Count);
             return result;
         }
+
+        private IEnumerable<Assembly> GetAssemblies() =>
+            _assemblies ?? AppDomain.CurrentDomain.GetAssemblies();
 
         private sealed class PluginServiceProvider : IServiceProvider
         {

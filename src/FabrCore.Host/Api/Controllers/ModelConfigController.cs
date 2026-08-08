@@ -1,10 +1,13 @@
 using FabrCore.Host.Services;
+using FabrCore.Host.Security;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 
 namespace FabrCore.Host.Api.Controllers
 {
     [ApiController]
+    [Authorize(Policy = FabrCoreAdminAuthenticationDefaults.Policy)]
     [Route("fabrcoreapi/[controller]")]
     public class ModelConfigController : Controller
     {

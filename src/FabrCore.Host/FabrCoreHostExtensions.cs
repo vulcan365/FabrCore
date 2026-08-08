@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.DependencyModel;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Orleans.Hosting;
@@ -25,7 +26,22 @@ namespace FabrCore.Host
 
     public class FabrCoreServerOptions
     {
+        /// <summary>
+        /// Gets or sets optional assemblies which FabrCore should load in addition to the
+        /// application assembly. The application assembly and referenced FabrCore project/package
+        /// dependencies are loaded automatically. Use this only for assemblies which are absent
+        /// from the application's dependency graph, such as dynamically selected packages.
+        /// </summary>
         public List<Assembly> AdditionalAssemblies { get; set; } = new();
+
+        /// <summary>
+        /// Gets or sets the exact assemblies scanned for agent, plugin, and standalone-tool
+        /// aliases. This is independent from <see cref="AdditionalAssemblies"/>. When null,
+        /// FabrCore scans all assemblies loaded in the current process, including the application
+        /// assembly, its referenced FabrCore dependencies, and any <see cref="AdditionalAssemblies"/>
+        /// loaded during server registration.
+        /// </summary>
+        public List<Assembly>? RegistryAssemblies { get; set; }
 
         internal TimeProviderRegistration TimeProviderRegistrationOptions { get; private set; } = TimeProviderRegistration.None;
 
@@ -410,6 +426,14 @@ namespace FabrCore.Host
 
             try
             {
+                var applicationAssemblies = LoadApplicationAssemblies(
+                    builder.Environment.ApplicationName,
+                    options.AdditionalAssemblies);
+                activity?.SetTag("application_assemblies.count", applicationAssemblies.Count);
+                logger.LogDebug(
+                    "Application assembly and {AdditionalAssemblyCount} additional assemblies loaded before discovery",
+                    Math.Max(0, applicationAssemblies.Count - 1));
+
                 builder.Services.AddHttpContextAccessor();
                 logger.LogDebug("HttpContextAccessor added");
 
@@ -475,10 +499,36 @@ namespace FabrCore.Host
                     logger.LogDebug("FabrCore configuration store: local fabrcore.json");
                 }
 
-                builder.Services.AddSingleton<FabrCore.Sdk.FabrCoreToolRegistry>();
-                logger.LogDebug("FabrCoreToolRegistry added");
+                builder.Services.TryAddSingleton<
+                    FabrCore.Sdk.IFabrCoreModelConfigurationResolver,
+                    Services.ConfigurationStoreModelConfigurationResolver>();
+                logger.LogDebug("In-process model configuration resolver added");
 
-                builder.Services.AddSingleton<FabrCore.Sdk.IFabrCoreRegistry, FabrCore.Sdk.FabrCoreRegistry>();
+                var registryAssemblies = options.RegistryAssemblies?.Distinct().ToArray();
+                if (registryAssemblies is null)
+                {
+                    // Explicit factories are required here. Both registry implementations also
+                    // expose an IEnumerable<Assembly> constructor for exact scopes, and the default
+                    // DI activator would otherwise select it with an empty enumerable.
+                    builder.Services.AddSingleton(serviceProvider =>
+                        new FabrCore.Sdk.FabrCoreToolRegistry(
+                            serviceProvider.GetRequiredService<ILogger<FabrCore.Sdk.FabrCoreToolRegistry>>()));
+                    builder.Services.AddSingleton<FabrCore.Sdk.IFabrCoreRegistry>(serviceProvider =>
+                        new FabrCore.Sdk.FabrCoreRegistry(
+                            serviceProvider.GetRequiredService<ILogger<FabrCore.Sdk.FabrCoreRegistry>>()));
+                }
+                else
+                {
+                    builder.Services.AddSingleton(serviceProvider =>
+                        new FabrCore.Sdk.FabrCoreToolRegistry(
+                            serviceProvider.GetRequiredService<ILogger<FabrCore.Sdk.FabrCoreToolRegistry>>(),
+                            registryAssemblies));
+                    builder.Services.AddSingleton<FabrCore.Sdk.IFabrCoreRegistry>(serviceProvider =>
+                        new FabrCore.Sdk.FabrCoreRegistry(
+                            serviceProvider.GetRequiredService<ILogger<FabrCore.Sdk.FabrCoreRegistry>>(),
+                            registryAssemblies));
+                }
+                logger.LogDebug("FabrCoreToolRegistry added");
                 logger.LogDebug("FabrCoreRegistry added");
 
                 // Configure Embeddings
@@ -690,6 +740,83 @@ namespace FabrCore.Host
                 ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "services_add_failed"));
                 throw;
             }
+        }
+
+        /// <summary>
+        /// Loads the configured application assembly and any explicitly supplied extra assemblies
+        /// before registry or Orleans application-part discovery occurs.
+        /// </summary>
+        internal static IReadOnlyList<Assembly> LoadApplicationAssemblies(
+            string? applicationName,
+            IEnumerable<Assembly>? additionalAssemblies)
+        {
+            var assemblies = new Dictionary<string, Assembly>(StringComparer.OrdinalIgnoreCase);
+
+            static string GetAssemblyKey(Assembly assembly) =>
+                assembly.FullName ?? assembly.GetName().Name ?? assembly.ToString();
+
+            void AddAssembly(Assembly assembly)
+            {
+                var loadedAssembly = assembly.IsDynamic
+                    ? assembly
+                    : Assembly.Load(assembly.GetName());
+                assemblies.TryAdd(GetAssemblyKey(loadedAssembly), loadedAssembly);
+            }
+
+            Assembly? applicationAssembly = null;
+            if (!string.IsNullOrWhiteSpace(applicationName))
+            {
+                applicationAssembly = Assembly.Load(new AssemblyName(applicationName));
+                AddAssembly(applicationAssembly);
+            }
+            else if (Assembly.GetEntryAssembly() is { } entryAssembly)
+            {
+                applicationAssembly = entryAssembly;
+                AddAssembly(entryAssembly);
+            }
+
+            // References are present in the application's dependency context even when the app
+            // refers to their FabrCore agents only by alias string. Load project outputs plus
+            // packages that directly use FabrCore.Sdk/Core so normal referenced agent, plugin,
+            // and tool assemblies need no type-marker registration.
+            if (applicationAssembly is not null && DependencyContext.Load(applicationAssembly) is { } dependencyContext)
+            {
+                foreach (var library in dependencyContext.RuntimeLibraries.Where(library =>
+                    string.Equals(library.Type, "project", StringComparison.OrdinalIgnoreCase) ||
+                    library.Dependencies.Any(dependency =>
+                        string.Equals(dependency.Name, "FabrCore.Sdk", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(dependency.Name, "FabrCore.Core", StringComparison.OrdinalIgnoreCase))))
+                {
+                    foreach (var assemblyName in library.GetDefaultAssemblyNames(dependencyContext))
+                    {
+                        try
+                        {
+                            AddAssembly(Assembly.Load(assemblyName));
+                        }
+                        catch (FileNotFoundException)
+                        {
+                            // Optional or platform-specific runtime assets can be absent. They are
+                            // not FabrCore discovery candidates in this deployment.
+                        }
+                        catch (FileLoadException)
+                        {
+                            // Preserve startup compatibility with project outputs that cannot be
+                            // loaded in the current runtime context.
+                        }
+                        catch (BadImageFormatException)
+                        {
+                            // Ignore native or otherwise non-managed project runtime assets.
+                        }
+                    }
+                }
+            }
+
+            foreach (var assembly in additionalAssemblies ?? [])
+            {
+                AddAssembly(assembly);
+            }
+
+            return assemblies.Values.ToArray();
         }
 
         internal static void ConfigureTimeProvider(IServiceCollection services, FabrCoreServerOptions.TimeProviderRegistration registration)

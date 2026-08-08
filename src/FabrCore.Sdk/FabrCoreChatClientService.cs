@@ -8,7 +8,6 @@ using OpenTelemetry.Trace;
 using System.ClientModel;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
-using System.Text.Json;
 
 namespace FabrCore.Sdk
 {
@@ -51,8 +50,11 @@ namespace FabrCore.Sdk
         private readonly IConfiguration _configuration;
         private readonly ILoggerFactory _loggerFactory;
         private readonly ILogger<FabrCoreChatClientService> _logger;
-        private static readonly HttpClient SharedHttpClient = new();
-        private readonly HttpClient _httpClient;
+        private static readonly HttpClient SharedHttpClient = new(new HttpClientHandler
+        {
+            AllowAutoRedirect = false
+        });
+        private readonly IFabrCoreModelConfigurationResolver _modelConfigurationResolver;
         private readonly bool _emitAttributionHeaders;
 
         public FabrCoreChatClientService(IConfiguration configuration, ILoggerFactory loggerFactory)
@@ -60,19 +62,41 @@ namespace FabrCore.Sdk
         {
         }
 
-        internal FabrCoreChatClientService(
+        /// <summary>
+        /// Creates a chat client service using the supplied model configuration resolver.
+        /// FabrCore Host registers a configuration-store-backed resolver so in-process agents
+        /// do not call the Host API through the web authentication pipeline.
+        /// </summary>
+        public FabrCoreChatClientService(
             IConfiguration configuration,
             ILoggerFactory loggerFactory,
-            HttpClient httpClient)
+            IFabrCoreModelConfigurationResolver modelConfigurationResolver)
         {
             _configuration = configuration;
             _loggerFactory = loggerFactory;
             _logger = loggerFactory.CreateLogger<FabrCoreChatClientService>();
-            _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+            _modelConfigurationResolver = modelConfigurationResolver
+                ?? throw new ArgumentNullException(nameof(modelConfigurationResolver));
             _emitAttributionHeaders = string.Equals(
                 _configuration[FabrCoreConfigurationKeys.EmitAttributionHeaders], "true", StringComparison.OrdinalIgnoreCase);
 
-            _logger.LogDebug("FabrCoreChatClientService created");
+            _logger.LogDebug(
+                "FabrCoreChatClientService created with resolver {ResolverType}",
+                modelConfigurationResolver.GetType().Name);
+        }
+
+        internal FabrCoreChatClientService(
+            IConfiguration configuration,
+            ILoggerFactory loggerFactory,
+            HttpClient httpClient)
+            : this(
+                configuration,
+                loggerFactory,
+                new FabrCoreHostApiClient(
+                    httpClient ?? throw new ArgumentNullException(nameof(httpClient)),
+                    configuration,
+                    loggerFactory.CreateLogger<FabrCoreHostApiClient>()))
+        {
         }
 
         public async Task<IChatClient> GetChatClient(string name, int networkTimeoutSeconds = 100)
@@ -452,42 +476,14 @@ namespace FabrCore.Sdk
         private async Task<ModelConfiguration> GetModelConfiguration(string name)
         {
             using var activity = ActivitySource.StartActivity("GetModelConfiguration", ActivityKind.Client);
-            var baseUrl = _configuration[FabrCore.Core.FabrCoreConfigurationKeys.HostUrl] ?? "http://localhost:5000";
-            var url = $"{baseUrl}/fabrcoreapi/ModelConfig/model/{name}";
-
             activity?.SetTag("model.config.name", name);
-            activity?.SetTag("http.url", url);
+            activity?.SetTag("model.config.resolver", _modelConfigurationResolver.GetType().Name);
 
-            _logger.LogDebug("Fetching model configuration: {Name} from {Url}", name, url);
+            _logger.LogDebug("Resolving model configuration: {Name}", name);
 
             try
             {
-                var response = await _httpClient.GetAsync(url);
-
-                activity?.SetTag("http.status_code", (int)response.StatusCode);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    _logger.LogError("Failed to fetch model configuration - Name: {Name}, StatusCode: {StatusCode}",
-                        name, response.StatusCode);
-                    activity?.SetStatus(ActivityStatusCode.Error, $"HTTP {response.StatusCode}");
-                    ErrorCounter.Add(1,
-                        new KeyValuePair<string, object?>("error.type", "model_config_fetch_failed"),
-                        new KeyValuePair<string, object?>("http.status_code", (int)response.StatusCode));
-                    throw new Exception($"Failed to get model configuration for '{name}': {response.StatusCode}");
-                }
-
-                var json = await response.Content.ReadAsStringAsync();
-                var result = JsonSerializer.Deserialize<ModelConfigResponse>(json, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
-
-                if (result == null)
-                {
-                    _logger.LogError("Failed to deserialize model configuration for: {Name}", name);
-                    throw new Exception($"Failed to deserialize model configuration for '{name}'");
-                }
+                var result = await _modelConfigurationResolver.GetModelConfigurationAsync(name);
 
                 ModelConfigFetchCounter.Add(1,
                     new KeyValuePair<string, object?>("model.config.name", name),
@@ -497,29 +493,7 @@ namespace FabrCore.Sdk
                     result.Name, result.Provider, result.Model);
 
                 activity?.SetStatus(ActivityStatusCode.Ok);
-
-                return new ModelConfiguration
-                {
-                    Name = result.Name,
-                    Provider = result.Provider,
-                    Uri = result.Uri,
-                    Model = result.Model,
-                    ApiKeyAlias = result.ApiKeyAlias,
-                    TimeoutSeconds = result.TimeoutSeconds,
-                    MaxOutputTokens = result.MaxOutputTokens,
-                    ReasoningEffort = result.ReasoningEffort,
-                    ContextWindowTokens = result.ContextWindowTokens,
-                    ContextCompactionEnabled = result.ContextCompactionEnabled,
-                    ContextEvictThreshold = result.ContextEvictThreshold,
-                    ContextTruncateThreshold = result.ContextTruncateThreshold,
-                    CompactionEnabled = result.CompactionEnabled,
-                    CompactionKeepLastN = result.CompactionKeepLastN,
-                    CompactionThreshold = result.CompactionThreshold,
-                    CompactionStaleAfterMinutes = result.CompactionStaleAfterMinutes,
-                    PerTurnMaxInputTokens = result.PerTurnMaxInputTokens,
-                    MaxPromptInputTokens = result.MaxPromptInputTokens,
-                    RunawayBudgetBehavior = result.RunawayBudgetBehavior
-                };
+                return result;
             }
             catch (Exception ex)
             {
@@ -536,42 +510,14 @@ namespace FabrCore.Sdk
         private async Task<string> GetApiKey(string alias)
         {
             using var activity = ActivitySource.StartActivity("GetApiKey", ActivityKind.Client);
-            var baseUrl = _configuration[FabrCore.Core.FabrCoreConfigurationKeys.HostUrl] ?? "http://localhost:5000";
-            var url = $"{baseUrl}/fabrcoreapi/ModelConfig/apikey/{alias}";
-
             activity?.SetTag("api_key.alias", alias);
-            activity?.SetTag("http.url", url);
+            activity?.SetTag("model.config.resolver", _modelConfigurationResolver.GetType().Name);
 
-            _logger.LogDebug("Fetching API key for alias: {Alias}", alias);
+            _logger.LogDebug("Resolving API key for alias: {Alias}", alias);
 
             try
             {
-                var response = await _httpClient.GetAsync(url);
-
-                activity?.SetTag("http.status_code", (int)response.StatusCode);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    _logger.LogError("Failed to fetch API key - Alias: {Alias}, StatusCode: {StatusCode}",
-                        alias, response.StatusCode);
-                    activity?.SetStatus(ActivityStatusCode.Error, $"HTTP {response.StatusCode}");
-                    ErrorCounter.Add(1,
-                        new KeyValuePair<string, object?>("error.type", "api_key_fetch_failed"),
-                        new KeyValuePair<string, object?>("http.status_code", (int)response.StatusCode));
-                    throw new Exception($"Failed to get API key for alias '{alias}': {response.StatusCode}");
-                }
-
-                var json = await response.Content.ReadAsStringAsync();
-                var result = JsonSerializer.Deserialize<ApiKeyResponse>(json, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
-
-                if (result == null)
-                {
-                    _logger.LogError("Failed to deserialize API key for alias: {Alias}", alias);
-                    throw new Exception($"Failed to deserialize API key for alias '{alias}'");
-                }
+                var apiKey = await _modelConfigurationResolver.GetApiKeyAsync(alias);
 
                 ApiKeyFetchCounter.Add(1,
                     new KeyValuePair<string, object?>("api_key.alias", alias));
@@ -579,7 +525,7 @@ namespace FabrCore.Sdk
                 _logger.LogInformation("API key fetched successfully for alias: {Alias}", alias);
                 activity?.SetStatus(ActivityStatusCode.Ok);
 
-                return result.Value;
+                return apiKey;
             }
             catch (Exception ex)
             {
@@ -591,38 +537,6 @@ namespace FabrCore.Sdk
                     new KeyValuePair<string, object?>("api_key.alias", alias));
                 throw;
             }
-        }
-
-        private class ModelConfigResponse
-        {
-            public required string Name { get; set; }
-            public required string Provider { get; set; }
-            public required string Uri { get; set; }
-            public required string Model { get; set; }
-            public required string ApiKeyAlias { get; set; }
-            public int TimeoutSeconds { get; set; }
-            public int? MaxOutputTokens { get; set; }
-            public string? ReasoningEffort { get; set; }
-            public int? ContextWindowTokens { get; set; }
-            public bool? ContextCompactionEnabled { get; set; }
-            public double? ContextEvictThreshold { get; set; }
-            public double? ContextTruncateThreshold { get; set; }
-            public bool? CompactionEnabled { get; set; }
-            public int? CompactionKeepLastN { get; set; }
-            public double? CompactionThreshold { get; set; }
-            public int? CompactionStaleAfterMinutes { get; set; }
-            public int? PerTurnMaxInputTokens { get; set; }
-            public int? MaxPromptInputTokens { get; set; }
-
-            /// <summary>Accepted for wire compatibility with older hosts. Ignored — mid-turn history compaction was retired.</summary>
-            public bool? MidTurnCompactionEnabled { get; set; }
-
-            public string? RunawayBudgetBehavior { get; set; }
-        }
-
-        private class ApiKeyResponse
-        {
-            public required string Value { get; set; }
         }
     }
 }
