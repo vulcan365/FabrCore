@@ -12,6 +12,7 @@ description: >
   "TodoProvider", "todos_add", "todos_complete", "todo list", "LoopAgent", "LoopEvaluator",
   "TodoCompletionLoopEvaluator", "BackgroundTaskCompletionLoopEvaluator",
   "CompletionMarkerLoopEvaluator", "AIJudgeLoopEvaluator", "BackgroundAgentsProvider",
+  "CreateInternalAgentAsync", "InternalAgentResult", "private specialist", "in-proxy multi-agent",
   "background_agents_start_task", "background agents", "delegate to another agent",
   "agent fan-out", "iteration loop", "keep working until done", "_Harness", "_HarnessLoop",
   "_HarnessBackgroundAgents", "AsHarnessAgent", "Microsoft.Agents.AI.Harness", "HarnessAgent".
@@ -169,12 +170,17 @@ Modes are on by default. FabrCore supplies `plan` and `execute` instructions tha
 
 Use `harness.RunAsync(message)`, passing the complete `AgentMessage`. The wrapper reads `message.Args["_plan-mode"]` before every run:
 
-| Value | Starting mode |
+| Value (with the default behavior) | Starting mode |
 |-------|---------------|
 | missing, invalid, or `true` | `plan` |
 | `false` | `execute` |
 
 The flag chooses the starting mode; the model may still call `mode_set` during the run. String and `ChatMessage` overloads cannot see `AgentMessage.Args` and preserve the session's current/default mode. Hosts can read or change it with `GetModeAsync`, `SetModeAsync`, and `SetPlanModeAsync`; external setters snapshot immediately.
+
+Set `FabrCoreHarnessOptions.MissingPlanModeBehavior` when an omitted or invalid flag should behave
+differently. `SelectPlanning` is the compatibility default; `PreserveCurrentMode` honors the current
+session/default mode, and `SelectExecution` selects execution. Explicit valid `true`/`false` values
+always win.
 
 ## The Loop
 
@@ -193,7 +199,10 @@ The iteration cap defaults to 10 (`_HarnessLoopMaxIterations`). **It is a budget
 
 ## Background Agents
 
-Delegates come from FabrCore handles, resolved through `AgentRosterBuilder`:
+Background delegates may be external FabrCore agents or private in-process specialists. These are
+different topologies and should not be mixed up.
+
+External delegates come from FabrCore handles, resolved through `AgentRosterBuilder`:
 
 ```json
 "args": {
@@ -209,6 +218,18 @@ The builder probes each handle with `GetAgentHealth` and produces the non-empty 
 Each delegation becomes a real `AgentMessage` sent with `SendAndReceiveMessage`, bounded by `.WaitAsync(timeout)`. A breach surfaces to the model as `BackgroundTaskStatus.Failed` with the reason readable via `background_agents_get_task_results`.
 
 To supply delegates in code instead — squad members, agents with their own transport — set `options.BackgroundAgents` in the `configure` callback with any `AIAgent` whose `Name` is non-empty and unique.
+
+For private specialists owned by the same proxy, create them in `OnInitialize` with
+`CreateInternalAgentAsync` and add `result.AsBackgroundAgent()`. FabrCore gives these agents separate
+tracked clients, fail-closed risk-classified tool scopes, timeout/concurrency bounds, and child
+attribution. They have no FabrCore handles and do not use `SendMessage`; this is not squads, A2A, or
+FabrCore agent-to-agent delegation. Only `Read` and `Compute` tools are permitted under background
+execution policies. See **fabrcore-agent → `references/internal-agent-composition.md`**.
+
+The upstream background provider stores live child tasks and sessions only in memory. After proxy
+deactivation, an in-flight private task becomes `Lost`; it is not automatically restarted. The
+FabrCore wrapper can enforce its timeout even though the upstream provider does not pass the parent
+tool-call cancellation token into a started child.
 
 **`A2AAgentProxy` cannot back this.** It leaves `Name` and `Description` null, which `BackgroundAgentsProvider` rejects outright, and it has no delegation timeout. Use `FabrCoreBackgroundAgent`.
 

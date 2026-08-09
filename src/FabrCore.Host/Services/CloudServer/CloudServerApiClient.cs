@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -40,16 +41,23 @@ internal sealed record CloudConfigurationFetchResult(
 internal sealed class CloudServerApiClient
 {
     public const string HttpClientName = "FabrCore.CloudServer";
+    internal const int ConnectMaxAttempts = 3;
+    internal static readonly TimeSpan ConnectTimeoutBuffer = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan ConnectRetryBaseDelay = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan ConnectMaxRetryDelay = TimeSpan.FromSeconds(5);
 
     private static readonly JsonSerializerOptions JsonOptions = JsonSerializerOptions.Web;
 
     private readonly IHttpClientFactory httpClientFactory;
+    private readonly CloudServerConnectClient connectClient;
     private readonly CloudServerOptions options;
     private readonly RemoteAdministrationOptions remoteAdministration;
     private readonly ILogger<CloudServerApiClient> logger;
+    private readonly SemaphoreSlim connectPollGate = new(1, 1);
 
     public CloudServerApiClient(
         IHttpClientFactory httpClientFactory,
+        CloudServerConnectClient connectClient,
         IOptions<CloudServerOptions> options,
         IOptions<RemoteAdministrationOptions> remoteAdministration,
         IConfiguration configuration,
@@ -57,6 +65,7 @@ internal sealed class CloudServerApiClient
         ILogger<CloudServerApiClient> logger)
     {
         this.httpClientFactory = httpClientFactory;
+        this.connectClient = connectClient;
         this.options = options.Value;
         this.remoteAdministration = remoteAdministration.Value;
         this.logger = logger;
@@ -175,26 +184,137 @@ internal sealed class CloudServerApiClient
         string hostInstanceId,
         CancellationToken cancellationToken = default)
     {
-        var waitSeconds = Math.Max(1, (int)remoteAdministration.PollWait.TotalSeconds);
-        using var request = new HttpRequestMessage(
-            HttpMethod.Get,
-            BuildUri(
-                $"{CloudServerProtocol.ConnectPath}?waitSeconds={waitSeconds}" +
-                $"&hostInstanceId={Uri.EscapeDataString(hostInstanceId)}"));
-        ApplyHeaders(request);
-
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(remoteAdministration.PollWait + TimeSpan.FromSeconds(10));
-        using var response = await SendAsync(request, timeout.Token);
-        if (response.StatusCode == HttpStatusCode.NoContent)
+        await connectPollGate.WaitAsync(cancellationToken);
+        try
         {
-            return null;
+            return await PollAdminCommandCoreAsync(hostInstanceId, cancellationToken);
+        }
+        finally
+        {
+            connectPollGate.Release();
+        }
+    }
+
+    internal TimeSpan EffectiveConnectPollWait => TimeSpan.FromSeconds(
+        Math.Clamp((int)remoteAdministration.PollWait.TotalSeconds, 1, 25));
+
+    internal TimeSpan EffectiveConnectAttemptTimeout => EffectiveConnectPollWait + ConnectTimeoutBuffer;
+
+    private async Task<CloudAdminCommand?> PollAdminCommandCoreAsync(
+        string hostInstanceId,
+        CancellationToken cancellationToken)
+    {
+        var pollWait = EffectiveConnectPollWait;
+        var attemptTimeout = EffectiveConnectAttemptTimeout;
+        var endpoint = BuildUri(
+            $"{CloudServerProtocol.ConnectPath}?waitSeconds={(int)pollWait.TotalSeconds}" +
+            $"&hostInstanceId={Uri.EscapeDataString(hostInstanceId)}");
+
+        for (var attempt = 1; attempt <= ConnectMaxAttempts; attempt++)
+        {
+            var stopwatch = Stopwatch.StartNew();
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
+                ApplyHeaders(request);
+
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                timeout.CancelAfter(attemptTimeout);
+                using var response = await SendConnectAsync(request, timeout.Token);
+
+                if (IsTransientConnectStatus(response.StatusCode) && attempt < ConnectMaxAttempts)
+                {
+                    logger.LogWarning(
+                        "Cloud Server connect poll retrying: endpoint {Endpoint}, configured poll duration {ConfiguredPollDuration}, " +
+                        "effective poll duration {EffectivePollDuration}, effective attempt timeout {AttemptTimeout}, " +
+                        "retry attempt {RetryAttempt}/{MaxAttempts}, attempt outcome {Outcome}, HTTP status {StatusCode}, " +
+                        "elapsed {ElapsedMilliseconds} ms",
+                        CloudServerProtocol.ConnectPath,
+                        remoteAdministration.PollWait,
+                        pollWait,
+                        attemptTimeout,
+                        attempt + 1,
+                        ConnectMaxAttempts,
+                        "transient-http-status",
+                        (int)response.StatusCode,
+                        stopwatch.ElapsedMilliseconds);
+                    await DelayBeforeConnectRetryAsync(attempt, response, cancellationToken);
+                    continue;
+                }
+
+                if (response.StatusCode == HttpStatusCode.NoContent)
+                {
+                    logger.LogDebug(
+                        "Cloud Server connect poll completed: endpoint {Endpoint}, configured poll duration {ConfiguredPollDuration}, " +
+                        "effective poll duration {EffectivePollDuration}, effective attempt timeout {AttemptTimeout}, " +
+                        "attempt {Attempt}/{MaxAttempts}, terminal outcome {Outcome}, elapsed {ElapsedMilliseconds} ms",
+                        CloudServerProtocol.ConnectPath,
+                        remoteAdministration.PollWait,
+                        pollWait,
+                        attemptTimeout,
+                        attempt,
+                        ConnectMaxAttempts,
+                        "empty",
+                        stopwatch.ElapsedMilliseconds);
+                    return null;
+                }
+
+                response.EnsureSuccessStatusCode();
+                var command = await response.Content.ReadFromJsonAsync<CloudAdminCommand>(JsonOptions, timeout.Token)
+                    ?? throw new InvalidOperationException(
+                        "Cloud server returned an empty connect-channel command.");
+                logger.LogDebug(
+                    "Cloud Server connect poll completed: endpoint {Endpoint}, configured poll duration {ConfiguredPollDuration}, " +
+                    "effective poll duration {EffectivePollDuration}, effective attempt timeout {AttemptTimeout}, " +
+                    "attempt {Attempt}/{MaxAttempts}, terminal outcome {Outcome}, command {CommandId}, " +
+                    "elapsed {ElapsedMilliseconds} ms",
+                    CloudServerProtocol.ConnectPath,
+                    remoteAdministration.PollWait,
+                    pollWait,
+                    attemptTimeout,
+                    attempt,
+                    ConnectMaxAttempts,
+                    "delivered",
+                    command.CommandId,
+                    stopwatch.ElapsedMilliseconds);
+                return command;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                logger.LogDebug(
+                    "Cloud Server connect poll completed: endpoint {Endpoint}, configured poll duration {ConfiguredPollDuration}, " +
+                    "effective poll duration {EffectivePollDuration}, effective attempt timeout {AttemptTimeout}, " +
+                    "attempt {Attempt}/{MaxAttempts}, terminal outcome {Outcome}, elapsed {ElapsedMilliseconds} ms",
+                    CloudServerProtocol.ConnectPath,
+                    remoteAdministration.PollWait,
+                    pollWait,
+                    attemptTimeout,
+                    attempt,
+                    ConnectMaxAttempts,
+                    "cancelled",
+                    stopwatch.ElapsedMilliseconds);
+                throw;
+            }
+            catch (OperationCanceledException) when (attempt < ConnectMaxAttempts)
+            {
+                LogConnectRetry("attempt-timeout", attempt, pollWait, attemptTimeout, stopwatch.ElapsedMilliseconds);
+                await DelayBeforeConnectRetryAsync(attempt, response: null, cancellationToken);
+            }
+            catch (OperationCanceledException ex)
+            {
+                throw new TimeoutException(
+                    $"Cloud Server connect poll at {CloudServerProtocol.ConnectPath} exceeded its " +
+                    $"{attemptTimeout} attempt timeout after {ConnectMaxAttempts} attempts.",
+                    ex);
+            }
+            catch (Exception ex) when (IsTransientConnectException(ex) && attempt < ConnectMaxAttempts)
+            {
+                LogConnectRetry(ex.GetType().Name, attempt, pollWait, attemptTimeout, stopwatch.ElapsedMilliseconds);
+                await DelayBeforeConnectRetryAsync(attempt, response: null, cancellationToken);
+            }
         }
 
-        response.EnsureSuccessStatusCode();
-        var command = await response.Content.ReadFromJsonAsync<CloudAdminCommand>(JsonOptions, timeout.Token);
-        return command ?? throw new InvalidOperationException(
-            "Cloud server returned an empty connect-channel command.");
+        throw new InvalidOperationException("Cloud Server connect retry loop exited without a terminal outcome.");
     }
 
     public async Task SendAdminCommandResponseAsync(
@@ -241,5 +361,60 @@ internal sealed class CloudServerApiClient
     {
         var client = httpClientFactory.CreateClient(HttpClientName);
         return client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token);
+    }
+
+    private Task<HttpResponseMessage> SendConnectAsync(HttpRequestMessage request, CancellationToken token)
+        => connectClient.SendAsync(request, token);
+
+    private static bool IsTransientConnectStatus(HttpStatusCode statusCode) =>
+        statusCode is HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests ||
+        (int)statusCode >= 500;
+
+    private static bool IsTransientConnectException(Exception exception) =>
+        exception is HttpRequestException or IOException;
+
+    private void LogConnectRetry(
+        string outcome,
+        int attempt,
+        TimeSpan pollWait,
+        TimeSpan attemptTimeout,
+        long elapsedMilliseconds)
+    {
+        logger.LogWarning(
+            "Cloud Server connect poll retrying: endpoint {Endpoint}, configured poll duration {ConfiguredPollDuration}, " +
+            "effective poll duration {EffectivePollDuration}, effective attempt timeout {AttemptTimeout}, " +
+            "retry attempt {RetryAttempt}/{MaxAttempts}, attempt outcome {Outcome}, elapsed {ElapsedMilliseconds} ms",
+            CloudServerProtocol.ConnectPath,
+            remoteAdministration.PollWait,
+            pollWait,
+            attemptTimeout,
+            attempt + 1,
+            ConnectMaxAttempts,
+            outcome,
+            elapsedMilliseconds);
+    }
+
+    private static async Task DelayBeforeConnectRetryAsync(
+        int attempt,
+        HttpResponseMessage? response,
+        CancellationToken cancellationToken)
+    {
+        var retryAfter = response?.Headers.RetryAfter;
+        var delay = retryAfter?.Delta;
+        if (delay is null && retryAfter?.Date is { } retryDate)
+        {
+            delay = retryDate - DateTimeOffset.UtcNow;
+        }
+
+        if (delay is null || delay <= TimeSpan.Zero)
+        {
+            delay = ConnectRetryBaseDelay * Math.Pow(2, attempt - 1);
+        }
+        else if (delay > ConnectMaxRetryDelay)
+        {
+            delay = ConnectMaxRetryDelay;
+        }
+
+        await Task.Delay(delay.Value, cancellationToken);
     }
 }

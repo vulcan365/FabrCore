@@ -87,6 +87,12 @@ public sealed class FabrCoreHarnessOptions
     /// </summary>
     public string ExecutionModeName { get; set; } = "execute";
 
+    /// <summary>
+    /// Behavior when <see cref="FabrCoreHarnessResult.RunAsync(FabrCore.Core.AgentMessage, AgentRunOptions?, CancellationToken)"/>
+    /// receives no <see cref="HarnessMessageArgs.PlanMode"/> argument. Defaults to the original planning behavior.
+    /// </summary>
+    public MissingPlanModeBehavior MissingPlanModeBehavior { get; set; } = MissingPlanModeBehavior.SelectPlanning;
+
     /// <summary>Set to <see langword="true"/> to omit the <c>todos_*</c> tools.</summary>
     public bool DisableTodoProvider { get; set; }
 

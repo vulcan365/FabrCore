@@ -9,6 +9,7 @@ namespace FabrCore.Sdk
     public sealed class LlmCallContext : IDisposable
     {
         private static readonly AsyncLocal<LlmCallContext?> _current = new();
+        private LlmCallContext? _previous;
 
         /// <summary>Gets the current active context, or null if none.</summary>
         public static LlmCallContext? Current => _current.Value;
@@ -24,12 +25,20 @@ namespace FabrCore.Sdk
             {
                 AgentHandle = agentHandle,
                 OriginContext = originContext,
-                TraceId = traceId
+                TraceId = traceId,
+                _previous = _current.Value
             };
             _current.Value = ctx;
             return ctx;
         }
 
-        public void Dispose() => _current.Value = null;
+        public void Dispose()
+        {
+            if (ReferenceEquals(_current.Value, this))
+            {
+                _current.Value = _previous;
+            }
+            _previous = null;
+        }
     }
 }

@@ -376,6 +376,16 @@ tools.Add(AIFunctionFactory.Create(MyLocalTool));
 var tools = await ResolveConfiguredToolsAsync(); // includes MCP tools
 ```
 
+### Tools for private internal specialists
+
+Do not pass `ResolveConfiguredToolsAsync()` to every internal `AIAgent`; that leaks the proxy's full
+capability inventory into every role. Use `ResolveInternalAgentToolsAsync` with explicit plugin/tool/
+MCP aliases and an `InternalAgentToolRisk` entry for every effective function name. Resolution is
+fail-closed, rejects duplicate names and unsafe background risks, creates fresh plugin instances per
+scope, and cleans disposable scoped resources up with the proxy. `ConcurrentReadOnly` and
+`SerializedReadOnly` scopes accept only `Read` and `Compute`; approval-required effects stay on the
+main orchestration path. See **fabrcore-agent → `references/internal-agent-composition.md`**.
+
 ## Writing Effective Tool Descriptions
 
 The LLM relies on `[Description]` attributes to decide when to call tools:

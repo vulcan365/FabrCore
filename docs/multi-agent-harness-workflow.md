@@ -1,8 +1,11 @@
 # In-Proxy Multi-Agent Harness Workflows
 
 > Research note, verified against FabrCore and Microsoft Agent Framework source on 2026-08-08.
-> This document describes an application composition pattern. It does not propose a new FabrCore
-> runtime API, agent-to-agent protocol, or package dependency.
+> FabrCore now includes the phase-one production API described by this research:
+> `CreateInternalAgentAsync`, `ResolveInternalAgentToolsAsync`, bounded internal-agent execution,
+> risk-classified tool scopes, child attribution, and `MissingPlanModeBehavior`. This remains an
+> in-proxy composition, not a new agent-to-agent protocol or Workflows package dependency. See the
+> production guidance in `docs/skills/fabrcore-agent/references/internal-agent-composition.md`.
 
 ## Research objective
 

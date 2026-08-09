@@ -331,8 +331,15 @@ internal sealed class CloudServerSyncService : BackgroundService
     private async Task RunConnectLoopAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation(
-            "Cloud Server outbound remote administration enabled for host target {HostUrl}",
-            remoteAdministration.HostUrl);
+            "Cloud Server outbound remote administration enabled for host target {HostUrl}: endpoint {Endpoint}, " +
+            "configured poll duration {ConfiguredPollDuration}, effective poll duration {EffectivePollDuration}, " +
+            "effective attempt timeout {AttemptTimeout}, maximum attempts {MaxAttempts}",
+            remoteAdministration.HostUrl,
+            CloudServerProtocol.ConnectPath,
+            remoteAdministration.PollWait,
+            apiClient.EffectiveConnectPollWait,
+            apiClient.EffectiveConnectAttemptTimeout,
+            CloudServerApiClient.ConnectMaxAttempts);
 
         if (!Uri.TryCreate(remoteAdministration.HostUrl, UriKind.Absolute, out var adminUri) ||
             !adminUri.IsLoopback)
@@ -362,7 +369,17 @@ internal sealed class CloudServerSyncService : BackgroundService
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Cloud Server connect-channel iteration failed");
+                logger.LogWarning(
+                    ex,
+                    "Cloud Server connect poll completed: endpoint {Endpoint}, configured poll duration " +
+                    "{ConfiguredPollDuration}, effective poll duration {EffectivePollDuration}, effective attempt timeout " +
+                    "{AttemptTimeout}, maximum attempts {MaxAttempts}, terminal outcome {Outcome}",
+                    CloudServerProtocol.ConnectPath,
+                    remoteAdministration.PollWait,
+                    apiClient.EffectiveConnectPollWait,
+                    apiClient.EffectiveConnectAttemptTimeout,
+                    CloudServerApiClient.ConnectMaxAttempts,
+                    "failed");
                 try
                 {
                     await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);

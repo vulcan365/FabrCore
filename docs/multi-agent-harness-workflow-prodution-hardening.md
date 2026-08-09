@@ -1,10 +1,12 @@
 # In-Proxy Multi-Agent Harness Workflows: Production Hardening
 
-> Status: **Proposed**
+> Status: **Phase 1 and Harness mode hardening implemented; durable approval and task-ledger phases remain application/platform work**
 >
 > Date: 2026-08-08
 >
 > Companion research: [In-Proxy Multi-Agent Harness Workflows](multi-agent-harness-workflow.md)
+>
+> Future platform backlog: [In-Proxy Multi-Agent Harness Workflows: Follow-up Backlog](multi-agent-harness-workflow-follow-up.md)
 
 This document defines the FabrCore hardening needed to treat private, in-process `AIAgent`
 specialists inside one `FabrCoreAgentProxy` as a supported production pattern. It does not propose
@@ -26,6 +28,26 @@ production feature for autonomous work because local background tasks lack FabrC
 cancellation, actor-safety, approval, specialist attribution, and restart policy.
 
 FabrCore should harden the existing topology rather than introduce another multi-agent protocol.
+
+## Implementation status
+
+| Capability | Status in the current SDK |
+|---|---|
+| First-class internal specialist creation | Implemented: `CreateInternalAgentAsync` |
+| Fail-closed scoped plugin/tool/MCP resolution | Implemented: `ResolveInternalAgentToolsAsync` |
+| Explicit tool risk and background mutation rejection | Implemented: `InternalAgentToolRisk` and execution-policy validation |
+| Per-specialist and per-proxy timeout/concurrency | Implemented by the FabrCore bounded-agent decorator |
+| Child LLM attribution and lifecycle monitor events | Implemented with `InternalAgent:{name}` and `internal-agent.task.*` events |
+| Activation cleanup of specialist scopes | Implemented; disposable plugins and proxy-tracked MCP clients are cleaned up |
+| Missing `_plan-mode` semantics | Implemented: `MissingPlanModeBehavior` |
+| Parent tool-call cancellation after upstream background start | Not available upstream; the FabrCore timeout remains enforced |
+| Durable human approval channel | Not native; use the documented application-level persisted two-turn contract |
+| Durable internal task ledger and automatic idempotent-read restart | Not implemented; restored in-flight tasks are reported `Lost` |
+| Microsoft Workflows checkpoint adapter | Not implemented; remains an optional application dependency |
+
+The workstream sections below retain the design rationale and remaining platform roadmap. For APIs
+that are implemented, use `docs/skills/fabrcore-agent/references/internal-agent-composition.md` as
+the operational contract.
 
 ## Fixed architecture boundaries
 
@@ -73,7 +95,7 @@ The pattern is production-ready only when all applicable gates pass:
 | Honest completion | Lost, timed-out, failed, running, and incomplete work is surfaced in the response | All workflows |
 | Verification | An external mutation is followed by domain verification before success | Any mutation workflow |
 
-## Current gaps and source evidence
+## Baseline gaps and source evidence
 
 ### Local background work is not bounded
 
@@ -84,6 +106,10 @@ cancellation token and the provider options do not expose a timeout or concurren
 External FabrCore background agents are different: `FabrCoreBackgroundAgent` applies a default
 120-second timeout around `SendAndReceiveMessage`. That protection does not apply to ordinary
 `AIAgent` instances supplied directly in `FabrCoreHarnessOptions.BackgroundAgents`.
+
+Current FabrCore status: agents produced by `CreateInternalAgentAsync` are wrapped with a finite
+timeout plus per-specialist and per-proxy concurrency gates. Arbitrary caller-supplied `AIAgent`
+instances remain the caller's responsibility.
 
 ### Local runtime state cannot survive deactivation
 
@@ -108,12 +134,18 @@ policy for restarting an idempotent local task or preserving its input outside t
 `TryCreateContextCompactionProviderAsync` is private, so application code cannot reuse the exact
 standard provider when constructing a specialist.
 
+Current FabrCore status: `CreateInternalAgentAsync` now owns this composition and reuses the private
+provider internally; application code does not need direct access to it.
+
 ### Tool resolution is proxy-wide
 
 `ResolveConfiguredToolsAsync` resolves the complete plugin/tool/MCP inventory from
 `AgentConfiguration`. It does not express “these aliases belong only to the GitHub reader” or
 “this specialist may read but may not write.” Developers can resolve subsets through the public
 registry and connect MCP servers manually, but doing so bypasses a clear, supported role-scoping API.
+
+Current FabrCore status: `ResolveInternalAgentToolsAsync` is the supported fail-closed role-scoping
+API. It validates aliases, duplicates, explicit risk, and background-policy compatibility.
 
 ### Durable tool approval is not shipped
 
@@ -128,6 +160,10 @@ it through FabrCore channels/outbox, bind a later response, and resume.
 children share the owning proxy's handle and normally inherit the same `OriginContext`, so aggregate
 cost is visible but the monitor cannot reliably answer which internal specialist incurred it.
 
+Current FabrCore status: the bounded internal agent sets `InternalAgent:{name}` around child calls
+and emits lifecycle monitor events. The upstream provider does not expose its numeric background
+task ID to the wrapper, so those events identify the specialist rather than the provider task ID.
+
 ### Missing `_plan-mode` forces planning
 
 `FabrCoreHarnessResult.RunAsync(AgentMessage)` initializes `planning = true` and changes mode on every
@@ -135,10 +171,12 @@ message. A missing `_plan-mode` therefore selects planning even when
 `AgentModeProviderOptions.DefaultMode` is `execute`. Internal action workflows either have to disable
 modes, mutate the message args, or use a different overload.
 
+Current FabrCore status: `MissingPlanModeBehavior.PreserveCurrentMode` and `.SelectExecution` remove
+that workaround while `.SelectPlanning` preserves compatibility.
+
 ## Workstream 1: first-class internal specialist creation
 
-Add one protected factory on `FabrCoreAgentProxy`. Names below are proposed API shapes, not existing
-contracts:
+FabrCore now provides this protected factory on `FabrCoreAgentProxy`:
 
 ```csharp
 protected Task<InternalAgentResult> CreateInternalAgentAsync(
@@ -153,9 +191,11 @@ public sealed record InternalAgentOptions
     public required string Model { get; init; }
     public InternalAgentToolScope? ToolScope { get; init; }
     public IList<AITool>? Tools { get; init; }
+    public IReadOnlyDictionary<string, InternalAgentToolRisk>? ToolRisks { get; init; }
     public InternalAgentExecutionPolicy ExecutionPolicy { get; init; }
         = InternalAgentExecutionPolicy.ConcurrentReadOnly;
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(120);
+    public int MaxConcurrency { get; init; } = 2;
     public bool EnableContextCompaction { get; init; } = true;
     public bool EnableOpenTelemetry { get; init; } = true;
 }
@@ -193,11 +233,11 @@ The factory must not:
 
 ## Workstream 2: bounded local delegation
 
-FabrCore needs a wrapper or provider for code-supplied local agents. Reusing
+FabrCore now uses a wrapper for agents produced by `CreateInternalAgentAsync`. Reusing
 `FabrCoreBackgroundAgent` is inappropriate because that type intentionally sends `AgentMessage`
 requests to external FabrCore handles.
 
-### Phase-one implementation
+### Implemented phase-one behavior
 
 Wrap each internal `AIAgent` in a delegating agent that:
 
@@ -244,7 +284,7 @@ path or in a separately durable application actor/service.
 
 ## Workstream 3: scoped tools and resource ownership
 
-Add a protected resolver that creates a distinct capability set for one internal specialist:
+FabrCore now provides a protected resolver that creates a distinct capability set for one internal specialist:
 
 ```csharp
 protected Task<InternalAgentToolScope> ResolveInternalAgentToolsAsync(
@@ -257,6 +297,8 @@ public sealed record InternalAgentToolScopeOptions
     public IReadOnlyList<string> Plugins { get; init; } = [];
     public IReadOnlyList<string> Tools { get; init; } = [];
     public IReadOnlyList<McpServerConfig> McpServers { get; init; } = [];
+    public IReadOnlyDictionary<string, InternalAgentToolRisk> ToolRisks { get; init; } =
+        new Dictionary<string, InternalAgentToolRisk>(StringComparer.OrdinalIgnoreCase);
     public InternalAgentExecutionPolicy ExecutionPolicy { get; init; }
         = InternalAgentExecutionPolicy.ConcurrentReadOnly;
 }
@@ -416,7 +458,7 @@ The external service must accept and enforce an idempotency key, and FabrCore mu
 
 ## Workstream 7: Harness mode semantics
 
-Add an explicit option controlling what `RunAsync(AgentMessage)` does when `_plan-mode` is absent:
+FabrCore now exposes an explicit option controlling what `RunAsync(AgentMessage)` does when `_plan-mode` is absent:
 
 ```csharp
 public enum MissingPlanModeBehavior

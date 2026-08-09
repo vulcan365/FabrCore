@@ -27,7 +27,8 @@ The host enables the feature purely through `appsettings.json` — no `fabrcore.
       "Environment": null
     },
     "RemoteAdministration": {
-      "Enabled": true
+      "Enabled": true,
+      "PollWait": "00:00:20"
     }
   }
 }
@@ -229,6 +230,47 @@ Returns `204` when no command arrives during the poll, or `200` with:
   "expiresAt": "2026-07-29T18:00:45Z"
 }
 ```
+
+`204 No Content` after the requested wait is a normal empty-queue result. It is not a failed
+connection and must not be logged or retried as an exception.
+
+### Connect timeout and retry requirements
+
+The connect request is an intentional long poll. A host's effective per-attempt timeout must
+therefore be **strictly greater** than the server hold duration. The FabrCore host uses the
+effective `PollWait` (default 20 seconds, constrained by the protocol to 1–25 seconds) plus a
+10-second response/transport buffer. With defaults, the server holds for up to 20 seconds and
+the host attempt timeout is 30 seconds.
+
+The connect transport is isolated from application-wide `HttpClient` policies. In particular,
+Aspire's standard HTTP resilience handler has a default 10-second attempt timeout and must not
+wrap this long poll. The host performs at most three sequential attempts for DNS, TLS,
+transport, HTTP 408/429, and 5xx failures. It never starts the next attempt until the preceding
+request has completed or cancellation has unwound. One `CloudServerApiClient` permits only one
+active connect poll; a multi-silo cluster can intentionally have one poll per host instance,
+with Forge's durable lease preventing duplicate command execution.
+
+Caller or host-shutdown cancellation is terminal and is not retried. An empty poll is logged at
+Debug with outcome `empty`; delivery uses outcome `delivered`; cancellation uses `cancelled`;
+and retries identify the endpoint, configured and effective poll duration, effective attempt
+timeout, next attempt, HTTP status or exception category, and elapsed time. Genuine terminal
+failures remain Warning-level and retain their exception details.
+
+#### Workaround for affected hosts
+
+Connect-channel hosts built from the initial v2 implementation (FabrCore 1.5.0 through the
+1.7.1 local builds) can inherit a 10-second app-wide attempt timeout. Until upgrading to a
+package containing the dedicated connect transport, use one of these mitigations:
+
+1. Set `FabrCore:RemoteAdministration:PollWait` to `00:00:05`. This lets Forge return an empty
+   `204` comfortably before a 10-second attempt timeout. It increases empty-poll traffic but
+   does not affect heartbeat or agent execution.
+2. If the application owns its global resilience configuration, set its attempt timeout above
+   `PollWait` plus transport margin (30 seconds or more for the default 20-second poll). This
+   changes the policy for every client using that default, so the shorter `PollWait` is the
+   narrower operational workaround.
+3. Disable `FabrCore:RemoteAdministration:Enabled` when the outbound administration channel is
+   not required. Cloud configuration refresh and heartbeat remain separate features.
 
 Normative host safety rules:
 

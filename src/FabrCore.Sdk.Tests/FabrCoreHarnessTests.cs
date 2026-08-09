@@ -81,6 +81,38 @@ public sealed class FabrCoreHarnessTests
     }
 
     [TestMethod]
+    public async Task MissingPlanModeCanPreserveTheCurrentMode()
+    {
+        var (agent, _, _) = CreateAgent(
+            FakeChatClient.WithTextResponse("Done."),
+            configure: options => options.MissingPlanModeBehavior = MissingPlanModeBehavior.PreserveCurrentMode);
+        await agent.OnInitialize();
+
+        await agent.OnMessage(Ask("Execute", planMode: false));
+        Assert.AreEqual("execute", await agent.Harness!.GetModeAsync());
+
+        await agent.OnMessage(Ask("Keep executing"));
+        Assert.AreEqual("execute", await agent.Harness.GetModeAsync());
+    }
+
+    [TestMethod]
+    public async Task MissingOrInvalidPlanModeCanSelectExecution()
+    {
+        var (agent, _, _) = CreateAgent(
+            FakeChatClient.WithTextResponse("Done."),
+            configure: options => options.MissingPlanModeBehavior = MissingPlanModeBehavior.SelectExecution);
+        await agent.OnInitialize();
+
+        await agent.OnMessage(Ask("Missing means execute"));
+        Assert.AreEqual("execute", await agent.Harness!.GetModeAsync());
+
+        var invalid = Ask("Invalid also follows the configured fallback");
+        invalid.Args![HarnessMessageArgs.PlanMode] = "not-a-bool";
+        await agent.OnMessage(invalid);
+        Assert.AreEqual("execute", await agent.Harness.GetModeAsync());
+    }
+
+    [TestMethod]
     public async Task ModesCanBeDisabledWithoutDisablingTheTodoLoop()
     {
         var chatClient = FakeChatClient.Scripted(

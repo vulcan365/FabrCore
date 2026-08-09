@@ -211,13 +211,97 @@ public sealed class CloudServerApiClientTests
     [TestMethod]
     public async Task ConnectPoll_NoContent_ReturnsNull()
     {
-        var handler = new FakeCloudServerHandler(_ =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.NoContent)));
+        var handler = new FakeCloudServerHandler(async (_, cancellationToken) =>
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(100), cancellationToken);
+            return new HttpResponseMessage(HttpStatusCode.NoContent);
+        });
         var client = CloudServerTestFactory.ApiClient(handler, CloudServerTestFactory.Options());
 
         var command = await client.PollAdminCommandAsync("silo-1");
 
         Assert.IsNull(command);
+        Assert.AreEqual(1, handler.Requests.Count, "An empty long poll is a successful terminal outcome, not a retry.");
+    }
+
+    [TestMethod]
+    public async Task ConnectPoll_TransientFailure_RetriesSequentially()
+    {
+        var attempts = 0;
+        var active = 0;
+        var maximumActive = 0;
+        var handler = new FakeCloudServerHandler(async (_, cancellationToken) =>
+        {
+            var currentActive = Interlocked.Increment(ref active);
+            InterlockedExtensions.Max(ref maximumActive, currentActive);
+            try
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(25), cancellationToken);
+                return Interlocked.Increment(ref attempts) == 1
+                    ? new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+                    : new HttpResponseMessage(HttpStatusCode.NoContent);
+            }
+            finally
+            {
+                Interlocked.Decrement(ref active);
+            }
+        });
+        var client = CloudServerTestFactory.ApiClient(handler, CloudServerTestFactory.Options());
+
+        var command = await client.PollAdminCommandAsync("silo-1");
+
+        Assert.IsNull(command);
+        Assert.AreEqual(2, attempts);
+        Assert.AreEqual(1, maximumActive, "A retry must not overlap the cancelled or completed attempt.");
+    }
+
+    [TestMethod]
+    public async Task ConnectPoll_CallerCancellation_StopsWithoutRetry()
+    {
+        var handler = new FakeCloudServerHandler(async (_, cancellationToken) =>
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            return new HttpResponseMessage(HttpStatusCode.NoContent);
+        });
+        var client = CloudServerTestFactory.ApiClient(handler, CloudServerTestFactory.Options());
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+
+        await Assert.ThrowsExactlyAsync<TaskCanceledException>(
+            () => client.PollAdminCommandAsync("silo-1", cancellation.Token));
+
+        Assert.AreEqual(1, handler.Requests.Count, "Caller cancellation must not be retried.");
+    }
+
+    [TestMethod]
+    public async Task ConnectPoll_ConcurrentCallers_AreSerialized()
+    {
+        var active = 0;
+        var maximumActive = 0;
+        var firstStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handler = new FakeCloudServerHandler(async (_, cancellationToken) =>
+        {
+            var currentActive = Interlocked.Increment(ref active);
+            InterlockedExtensions.Max(ref maximumActive, currentActive);
+            firstStarted.TrySetResult();
+            try
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(100), cancellationToken);
+                return new HttpResponseMessage(HttpStatusCode.NoContent);
+            }
+            finally
+            {
+                Interlocked.Decrement(ref active);
+            }
+        });
+        var client = CloudServerTestFactory.ApiClient(handler, CloudServerTestFactory.Options());
+
+        var first = client.PollAdminCommandAsync("silo-1");
+        await firstStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        var second = client.PollAdminCommandAsync("silo-1");
+        await Task.WhenAll(first, second);
+
+        Assert.AreEqual(2, handler.Requests.Count);
+        Assert.AreEqual(1, maximumActive, "Only one connect poll may be active per Cloud Server client.");
     }
 
     [TestMethod]
@@ -243,5 +327,22 @@ public sealed class CloudServerApiClientTests
         Assert.AreEqual(HttpMethod.Post, request.Method);
         Assert.IsTrue(handler.RequestBodies[0]!.Contains("\"commandId\":\"command/with spaces\""));
         Assert.IsTrue(handler.RequestBodies[0]!.Contains("\"statusCode\":200"));
+    }
+}
+
+internal static class InterlockedExtensions
+{
+    public static void Max(ref int location, int value)
+    {
+        var current = Volatile.Read(ref location);
+        while (current < value)
+        {
+            var observed = Interlocked.CompareExchange(ref location, value, current);
+            if (observed == current)
+            {
+                return;
+            }
+            current = observed;
+        }
     }
 }

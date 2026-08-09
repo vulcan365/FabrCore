@@ -482,6 +482,7 @@ namespace FabrCore.Host
                 {
                     builder.Services.AddHttpClient(Services.CloudServer.CloudServerApiClient.HttpClientName);
                     builder.Services.AddHttpClient(Services.CloudServer.CloudServerSyncService.LocalAdminHttpClientName);
+                    builder.Services.AddSingleton<Services.CloudServer.CloudServerConnectClient>();
                     builder.Services.AddSingleton<Services.CloudServer.CloudServerApiClient>();
                     builder.Services.AddSingleton<Services.CloudServer.CloudConfigurationDiskCache>();
                     builder.Services.AddSingleton<Services.CloudServer.CloudServerConfigurationStore>();

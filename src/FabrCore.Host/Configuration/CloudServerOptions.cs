@@ -101,7 +101,10 @@ public sealed class RemoteAdministrationOptions
     /// <summary>Gets or sets whether outbound-only remote administration is enabled.</summary>
     public bool Enabled { get; set; }
 
-    /// <summary>Gets or sets how long each server long poll waits for work.</summary>
+    /// <summary>
+    /// Gets or sets the requested server long-poll duration. Protocol v2 constrains the effective
+    /// server wait to 1–25 seconds; the host applies a separate transport buffer after that wait.
+    /// </summary>
     public TimeSpan PollWait { get; set; } = TimeSpan.FromSeconds(20);
 
     /// <summary>Gets or sets the maximum proxied request or response body size.</summary>

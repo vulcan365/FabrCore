@@ -31,6 +31,13 @@ Snapshot date: 2026-08-05
   `AsFabrCoreHarnessAgent` for direct `IChatClient` composition.
 - Added `FabrCoreHarnessOptions`, `FabrCoreHarnessResult`, `HarnessLoopMode`, `HarnessArgs`,
   `HarnessSessionSnapshot`, `FabrCoreBackgroundAgent`, and `AgentRosterBuilder`.
+- Added production-hardened private internal specialists for one proxy:
+  `CreateInternalAgentAsync`, `ResolveInternalAgentToolsAsync`, explicit read/compute/effect risk
+  classification, per-specialist and per-proxy execution bounds, child LLM attribution, lifecycle
+  monitor events, and activation-scoped resource cleanup.
+- Added `MissingPlanModeBehavior` so Harness callers can preserve the current/default mode or select
+  execution when an inbound message omits `_plan-mode`, while retaining planning as the compatibility
+  default.
 - Added durable harness `plan` / `execute` modes, `_plan-mode` selection on inbound
   `AgentMessage` values, mode-aware todo looping, and SDK helpers for inspecting or changing mode.
 - Added configurable todo, background-delegation, completion-marker, and AI-judge loop modes,
@@ -56,6 +63,10 @@ Snapshot date: 2026-08-05
 
 ### Changed
 
+- Isolated the Cloud Server `/fabrcore-cloud/v2/connect` long poll from application-wide HTTP
+  resilience handlers. The host now uses a poll-aware timeout, sequential transient retries,
+  one active poll per host client, clean shutdown cancellation, and structured terminal outcomes;
+  normal empty polls no longer surface as Polly 10-second timeout exception chains.
 - `AddFabrCoreServer` and `AddFabrCoreServices` now load the application assembly and referenced
   FabrCore project/package dependencies before registry discovery. Normal hosts no longer need
   `AdditionalAssemblies`; it remains available for dynamically selected assemblies outside the
