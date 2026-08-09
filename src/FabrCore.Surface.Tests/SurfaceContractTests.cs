@@ -1668,7 +1668,9 @@ public sealed class SurfaceContractTests
         options.HiddenAgentHandles.Clear();
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton<IFabrCoreRegistry, FabrCoreRegistry>();
+        services.AddSingleton<IFabrCoreRegistry>(serviceProvider =>
+            new FabrCoreRegistry(
+                serviceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<FabrCoreRegistry>>()));
         await using var provider = services.BuildServiceProvider();
         var workspace = CreateWorkspace(context, options, provider);
 
