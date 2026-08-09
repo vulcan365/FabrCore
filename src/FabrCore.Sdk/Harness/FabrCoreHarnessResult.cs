@@ -228,14 +228,39 @@ public sealed class FabrCoreHarnessResult
             return;
         }
 
-        var planning = true;
-        if (message.Args?.TryGetValue(HarnessMessageArgs.PlanMode, out var configured) is true
-            && bool.TryParse(configured, out var parsed))
+        if (message.Args?.TryGetValue(HarnessMessageArgs.PlanMode, out var configured) is true)
         {
-            planning = parsed;
+            if (!bool.TryParse(configured, out var parsed))
+            {
+                logger?.LogWarning(
+                    "Invalid {Argument} value '{Value}' for {Handle}; applying missing-value behavior {Behavior}",
+                    HarnessMessageArgs.PlanMode,
+                    configured,
+                    agentHandle,
+                    Agent.MissingPlanModeBehavior);
+                await ApplyMissingPlanModeBehaviorAsync(cancellationToken);
+                return;
+            }
+
+            await SetPlanModeWithoutSnapshotAsync(parsed, cancellationToken);
+            return;
         }
 
-        await Modes.SetModeAsync(
+        await ApplyMissingPlanModeBehaviorAsync(cancellationToken);
+    }
+
+    private Task ApplyMissingPlanModeBehaviorAsync(CancellationToken cancellationToken) => Agent.MissingPlanModeBehavior switch
+    {
+        MissingPlanModeBehavior.SelectPlanning => SetPlanModeWithoutSnapshotAsync(true, cancellationToken),
+        MissingPlanModeBehavior.SelectExecution => SetPlanModeWithoutSnapshotAsync(false, cancellationToken),
+        MissingPlanModeBehavior.PreserveCurrentMode => Task.CompletedTask,
+        _ => throw new InvalidOperationException($"Unsupported missing plan-mode behavior '{Agent.MissingPlanModeBehavior}'.")
+    };
+
+    private async Task SetPlanModeWithoutSnapshotAsync(bool planning, CancellationToken cancellationToken)
+    {
+        var provider = Modes ?? throw new InvalidOperationException("Operating modes are disabled for this harness agent.");
+        await provider.SetModeAsync(
             Session,
             planning ? Agent.PlanningModeName : Agent.ExecutionModeName,
             cancellationToken);

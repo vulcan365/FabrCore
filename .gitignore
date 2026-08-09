@@ -21,6 +21,9 @@ mono_crash.*
 [Dd]ebugPublic/
 [Rr]elease/
 [Rr]eleases/
+# Keep authored GitHub release notes while continuing to ignore build release directories.
+!docs/releases/
+!docs/releases/*.md
 x64/
 x86/
 [Ww][Ii][Nn]32/

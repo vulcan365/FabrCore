@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 
@@ -18,6 +19,20 @@ namespace FabrCore.Sdk
         public string Uri { get; set; } = string.Empty;
         public string Model { get; set; } = string.Empty;
         public string ApiKeyAlias { get; set; } = string.Empty;
+        public int TimeoutSeconds { get; set; }
+        public int? MaxOutputTokens { get; set; }
+        public string? ReasoningEffort { get; set; }
+        public int? ContextWindowTokens { get; set; }
+        public bool? ContextCompactionEnabled { get; set; }
+        public double? ContextEvictThreshold { get; set; }
+        public double? ContextTruncateThreshold { get; set; }
+        public bool? CompactionEnabled { get; set; }
+        public int? CompactionKeepLastN { get; set; }
+        public double? CompactionThreshold { get; set; }
+        public int? CompactionStaleAfterMinutes { get; set; }
+        public int? PerTurnMaxInputTokens { get; set; }
+        public int? MaxPromptInputTokens { get; set; }
+        public string? RunawayBudgetBehavior { get; set; }
     }
 
     /// <summary>
@@ -476,7 +491,7 @@ namespace FabrCore.Sdk
     /// <summary>
     /// HTTP client implementation for the FabrCore Host API.
     /// </summary>
-    public partial class FabrCoreHostApiClient : IFabrCoreHostApiClient, IFabrCoreStorageProvider
+    public partial class FabrCoreHostApiClient : IFabrCoreHostApiClient, IFabrCoreStorageProvider, IFabrCoreModelConfigurationResolver
     {
         private static readonly ActivitySource ActivitySource = new("FabrCore.Sdk.FabrCoreHostApiClient");
         private static readonly Meter Meter = new("FabrCore.Sdk.FabrCoreHostApiClient");
@@ -498,6 +513,7 @@ namespace FabrCore.Sdk
         private readonly ILogger<FabrCoreHostApiClient> _logger;
         private readonly string _baseUrl;
         private readonly string? _storageUserHandle;
+        private readonly string? _adminApiKey;
 
         private static readonly JsonSerializerOptions JsonOptions = new()
         {
@@ -510,6 +526,7 @@ namespace FabrCore.Sdk
             _logger = logger;
             _baseUrl = configuration[FabrCore.Core.FabrCoreConfigurationKeys.HostUrl] ?? "http://localhost:5000";
             _storageUserHandle = configuration["FabrCoreStorageUserHandle"] ?? configuration["FabrCore:Storage:UserHandle"];
+            _adminApiKey = configuration[FabrCore.Core.FabrCoreConfigurationKeys.AdminApiKey];
 
             _logger.LogDebug("FabrCoreApiClient initialized with base URL: {BaseUrl}", _baseUrl);
         }
@@ -758,16 +775,16 @@ namespace FabrCore.Sdk
             using var activity = ActivitySource.StartActivity("GetModelConfig", ActivityKind.Client);
             activity?.SetTag("model.config.name", name);
 
-            var url = $"{_baseUrl}/fabrcoreapi/ModelConfig/model/{name}";
+            var url = $"{_baseUrl}/fabrcoreapi/ModelConfig/model/{Uri.EscapeDataString(name)}";
             var startTime = Stopwatch.GetTimestamp();
 
             try
             {
-                var response = await _httpClient.GetAsync(url, cancellationToken);
-                response.EnsureSuccessStatusCode();
-
-                var result = await response.Content.ReadFromJsonAsync<ModelConfigResponse>(JsonOptions, cancellationToken)
-                    ?? throw new InvalidOperationException($"Failed to deserialize model config for '{name}'");
+                using var request = CreateModelConfigurationRequest(url);
+                var result = await SendModelConfigurationRequestAsync<ModelConfigResponse>(
+                    request,
+                    $"Model configuration '{name}'",
+                    cancellationToken);
 
                 RecordSuccess(activity, startTime, "GetModelConfig");
                 _logger.LogDebug("Retrieved model config: {Name}", name);
@@ -787,16 +804,16 @@ namespace FabrCore.Sdk
             using var activity = ActivitySource.StartActivity("GetApiKey", ActivityKind.Client);
             activity?.SetTag("api_key.alias", alias);
 
-            var url = $"{_baseUrl}/fabrcoreapi/ModelConfig/apikey/{alias}";
+            var url = $"{_baseUrl}/fabrcoreapi/ModelConfig/apikey/{Uri.EscapeDataString(alias)}";
             var startTime = Stopwatch.GetTimestamp();
 
             try
             {
-                var response = await _httpClient.GetAsync(url, cancellationToken);
-                response.EnsureSuccessStatusCode();
-
-                var result = await response.Content.ReadFromJsonAsync<ApiKeyResponse>(JsonOptions, cancellationToken)
-                    ?? throw new InvalidOperationException($"Failed to deserialize API key for alias '{alias}'");
+                using var request = CreateModelConfigurationRequest(url);
+                var result = await SendModelConfigurationRequestAsync<ApiKeyResponse>(
+                    request,
+                    $"API key alias '{alias}'",
+                    cancellationToken);
 
                 RecordSuccess(activity, startTime, "GetApiKey");
                 _logger.LogDebug("Retrieved API key for alias: {Alias}", alias);
@@ -810,6 +827,115 @@ namespace FabrCore.Sdk
                 throw;
             }
         }
+
+        async Task<ModelConfiguration> IFabrCoreModelConfigurationResolver.GetModelConfigurationAsync(
+            string name,
+            CancellationToken cancellationToken)
+        {
+            var result = await GetModelConfigAsync(name, cancellationToken);
+            return new ModelConfiguration
+            {
+                Name = result.Name,
+                Provider = result.Provider,
+                Uri = result.Uri,
+                Model = result.Model,
+                ApiKeyAlias = result.ApiKeyAlias,
+                TimeoutSeconds = result.TimeoutSeconds,
+                MaxOutputTokens = result.MaxOutputTokens,
+                ReasoningEffort = result.ReasoningEffort,
+                ContextWindowTokens = result.ContextWindowTokens,
+                ContextCompactionEnabled = result.ContextCompactionEnabled,
+                ContextEvictThreshold = result.ContextEvictThreshold,
+                ContextTruncateThreshold = result.ContextTruncateThreshold,
+                CompactionEnabled = result.CompactionEnabled,
+                CompactionKeepLastN = result.CompactionKeepLastN,
+                CompactionThreshold = result.CompactionThreshold,
+                CompactionStaleAfterMinutes = result.CompactionStaleAfterMinutes,
+                PerTurnMaxInputTokens = result.PerTurnMaxInputTokens,
+                MaxPromptInputTokens = result.MaxPromptInputTokens,
+                RunawayBudgetBehavior = result.RunawayBudgetBehavior
+            };
+        }
+
+        async Task<string> IFabrCoreModelConfigurationResolver.GetApiKeyAsync(
+            string alias,
+            CancellationToken cancellationToken) =>
+            (await GetApiKeyAsync(alias, cancellationToken)).Value;
+
+        private HttpRequestMessage CreateModelConfigurationRequest(string url)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            if (!string.IsNullOrWhiteSpace(_adminApiKey))
+            {
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _adminApiKey);
+            }
+
+            return request;
+        }
+
+        private async Task<T> SendModelConfigurationRequestAsync<T>(
+            HttpRequestMessage request,
+            string resourceDescription,
+            CancellationToken cancellationToken)
+        {
+            using var response = await _httpClient.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken);
+
+            var requestedUri = request.RequestUri;
+            var finalUri = response.RequestMessage?.RequestUri ?? requestedUri;
+            var contentType = response.Content.Headers.ContentType?.ToString() ?? "(none)";
+            var redirectLocation = response.Headers.Location?.ToString();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var redirectDetail = string.IsNullOrWhiteSpace(redirectLocation)
+                    ? string.Empty
+                    : $", redirect location '{redirectLocation}'";
+                var authenticationHint = response.StatusCode is System.Net.HttpStatusCode.Unauthorized
+                    or System.Net.HttpStatusCode.Forbidden || (int)response.StatusCode is >= 300 and < 400
+                    ? $" Verify {FabrCoreConfigurationKeys.AdminApiKey} and the FabrCore service authentication configuration."
+                    : string.Empty;
+
+                throw new HttpRequestException(
+                    $"{resourceDescription} request failed with HTTP {(int)response.StatusCode} " +
+                    $"({response.StatusCode}) at '{finalUri}', content type '{contentType}'{redirectDetail}." +
+                    authenticationHint,
+                    inner: null,
+                    response.StatusCode);
+            }
+
+            if (!IsJsonContentType(response.Content.Headers.ContentType?.MediaType))
+            {
+                var authenticationHint = contentType.Contains("html", StringComparison.OrdinalIgnoreCase)
+                    ? " The response appears to be an authentication or login page. Verify the FabrCore service authentication configuration."
+                    : string.Empty;
+                throw new InvalidOperationException(
+                    $"{resourceDescription} request returned unexpected content type '{contentType}' " +
+                    $"with HTTP {(int)response.StatusCode} at '{finalUri}' (requested '{requestedUri}')." +
+                    authenticationHint);
+            }
+
+            try
+            {
+                return await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken)
+                    ?? throw new InvalidOperationException(
+                        $"{resourceDescription} request returned an empty JSON document at '{finalUri}'.");
+            }
+            catch (JsonException ex)
+            {
+                throw new InvalidOperationException(
+                    $"{resourceDescription} request returned malformed JSON with content type '{contentType}' " +
+                    $"at '{finalUri}'.",
+                    ex);
+            }
+        }
+
+        private static bool IsJsonContentType(string? mediaType) =>
+            string.Equals(mediaType, "application/json", StringComparison.OrdinalIgnoreCase) ||
+            (mediaType?.EndsWith("+json", StringComparison.OrdinalIgnoreCase) ?? false);
 
         public async Task<AgentsListResponse> GetAgentsAsync(string? status = null, CancellationToken cancellationToken = default)
         {

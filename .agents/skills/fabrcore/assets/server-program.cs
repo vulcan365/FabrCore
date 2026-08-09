@@ -3,13 +3,8 @@ using FabrCore.Host;
 var builder = WebApplication.CreateBuilder(args);
 
 // ── Simple path: FabrCore configures Orleans automatically from appsettings.json ──
-builder.AddFabrCoreServer(new FabrCoreServerOptions
-{
-    // Add assemblies containing your agents, plugins, and tools
-    AdditionalAssemblies = [
-        // typeof(MyAgent).Assembly
-    ]
-}
+// The application assembly is discovered automatically.
+builder.AddFabrCoreServer(new FabrCoreServerOptions()
 // Optional: custom providers (defaults work for most cases)
 // .UseAgentManagementProvider<SqlAgentManagementProvider>()
 // .UseAclEvaluator<MyAclEvaluator>()          // custom access-control decisions (see fabrcore-acl)
@@ -23,10 +18,7 @@ builder.AddFabrCoreServer(new FabrCoreServerOptions
 //
 // using FabrCore.Host.Configuration;
 //
-// builder.AddFabrCoreServices(new FabrCoreServerOptions
-// {
-//     AdditionalAssemblies = [typeof(MyAgent).Assembly]
-// });
+// builder.AddFabrCoreServices();
 //
 // builder.Services.AddSingleton<TimeProvider>(new DemoTimeProvider());
 //
@@ -37,7 +29,7 @@ builder.AddFabrCoreServer(new FabrCoreServerOptions
 //     siloBuilder.AddMemoryGrainStorage(FabrCoreOrleansConstants.PubSubStoreName);
 //     siloBuilder.AddMemoryStreams(FabrCoreOrleansConstants.StreamProviderName);
 //     siloBuilder.UseInMemoryReminderService();
-//     siloBuilder.AddFabrCore([typeof(MyAgent).Assembly]);
+//     siloBuilder.AddFabrCore([]); // Entry assembly is automatic.
 // });
 
 var app = builder.Build();

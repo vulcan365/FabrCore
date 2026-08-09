@@ -43,12 +43,8 @@ using FabrCore.Host;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add FabrCore server with Orleans silo, REST API, and WebSocket support.
-// AdditionalAssemblies tells Orleans where to find your agent types.
-builder.AddFabrCoreServer(new FabrCoreServerOptions
-{
-    // Add assemblies containing your [AgentAlias] agent types here:
-    // AdditionalAssemblies = [typeof(MyAgent).Assembly]
-});
+// The application and its referenced FabrCore agent projects/packages are discovered automatically.
+builder.AddFabrCoreServer();
 
 var app = builder.Build();
 
@@ -58,7 +54,7 @@ app.UseFabrCoreServer();
 app.Run();
 ```
 
-**IMPORTANT:** If the user has an agents project/assembly, uncomment and update the `AdditionalAssemblies` line with the correct type reference (e.g., `typeof(SampleAgent).Assembly`). Add the corresponding `using` statement.
+If the user has an agents project, add a normal `ProjectReference`; FabrCore discovers it automatically. Use `AdditionalAssemblies` only for dynamically selected assemblies absent from the application dependency graph.
 
 ### 3. `appsettings.json`
 
@@ -161,6 +157,6 @@ This prevents committing API keys to source control.
 1. Run `dotnet build` to verify the project compiles.
 2. Remind the user:
    - Replace API key placeholders in `fabrcore.json` with real keys.
-   - Add agent assemblies to `AdditionalAssemblies` in `Program.cs` when they create agents.
+   - Add a project/package reference for agent assemblies; no `AdditionalAssemblies` entry is needed for normal references.
    - The server exposes REST API at `/fabrcoreapi/` and WebSocket at `/ws`.
    - Orleans clustering is set to `Localhost` for development. Use `SqlServer` or `AzureStorage` for production.

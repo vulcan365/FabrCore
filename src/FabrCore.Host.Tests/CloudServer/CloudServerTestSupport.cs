@@ -12,9 +12,15 @@ namespace FabrCore.Host.Tests.CloudServer;
 
 internal sealed class FakeCloudServerHandler : HttpMessageHandler
 {
-    private readonly Func<HttpRequestMessage, Task<HttpResponseMessage>> responder;
+    private readonly Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> responder;
 
     public FakeCloudServerHandler(Func<HttpRequestMessage, Task<HttpResponseMessage>> responder)
+        : this((request, _) => responder(request))
+    {
+    }
+
+    public FakeCloudServerHandler(
+        Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> responder)
     {
         this.responder = responder;
     }
@@ -27,7 +33,7 @@ internal sealed class FakeCloudServerHandler : HttpMessageHandler
     {
         Requests.Add(request);
         RequestBodies.Add(request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken));
-        return await responder(request);
+        return await responder(request, cancellationToken);
     }
 
     public static HttpResponseMessage Json(HttpStatusCode statusCode, object body) => new(statusCode)
@@ -86,6 +92,7 @@ internal static class CloudServerTestFactory
             .Build();
         return new CloudServerApiClient(
             new FakeHttpClientFactory(handler),
+            new CloudServerConnectClient(handler),
             Microsoft.Extensions.Options.Options.Create(options),
             Microsoft.Extensions.Options.Options.Create(remoteAdministration ?? RemoteOptions()),
             configuration,

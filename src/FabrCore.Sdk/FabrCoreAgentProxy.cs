@@ -1377,6 +1377,8 @@ namespace FabrCore.Sdk
 
         async Task IFabrCoreAgentProxy.InternalDisposeAsync()
         {
+            await DisposeInternalAgentResourcesAsync();
+
             if (_mcpClients.Count == 0)
                 return;
 

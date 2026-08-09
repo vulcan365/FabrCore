@@ -514,6 +514,14 @@ var mainAgent = new ChatClientAgent(chatClient,
 var result = await mainAgent.RunAsync("What's the weather in Seattle?");
 ```
 
+Agent-as-tool is synchronous composition owned by the parent model. For several private specialists
+inside one `FabrCoreAgentProxy`, prefer the production-hardened FabrCore factory and Harness
+background roster: `CreateInternalAgentAsync` supplies separate tracked clients, scoped/risk-checked
+tools, timeout/concurrency bounds, attribution, and lifecycle cleanup. Those specialists remain
+in-process `AIAgent` objects with no FabrCore handles. See **fabrcore-agent →
+`references/internal-agent-composition.md`** and **fabrcore-harness**. Use agent-as-tool when the
+parent needs one immediate expert result rather than concurrent, iterative delegation.
+
 ## Agent Middleware (AIAgentBuilder)
 
 Middleware intercepts agent runs to add logging, security, modification, etc:

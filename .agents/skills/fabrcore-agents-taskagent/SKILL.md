@@ -178,21 +178,15 @@ where the TaskAgent looks up the resolved name.
 
 Five things to wire to use the TaskAgent.
 
-### 1. Reference + register the assembly
+### 1. Reference the assemblies
 
 ```csharp
 using FabrCore.Agents.TaskAgent;
 using FabrCore.Agents.TaskAgent.Configuration;
 using FabrCore.Experimental.Memory.Configuration;
 
-builder.AddFabrCoreServer(new FabrCoreServerOptions
-{
-    AdditionalAssemblies =
-    [
-        typeof(TaskAgent).Assembly,         // the TaskAgent itself
-        typeof(MyDomainAgent).Assembly      // your client agent(s)
-    ]
-});
+// Normal project/package references are discovered automatically.
+builder.AddFabrCoreServer();
 ```
 
 ### 2. Register TaskAgent + memory services

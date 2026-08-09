@@ -117,12 +117,9 @@ using <SolutionName>.Agents;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add FabrCore server with Orleans silo, REST API, and WebSocket support
-builder.AddFabrCoreServer(new FabrCoreServerOptions
-{
-    // Load agent types from the Agents library
-    AdditionalAssemblies = [typeof(SampleAgent).Assembly]
-});
+// Add FabrCore server with Orleans silo, REST API, and WebSocket support.
+// The referenced Agents project is discovered automatically.
+builder.AddFabrCoreServer();
 
 var app = builder.Build();
 
@@ -358,7 +355,7 @@ A FabrCore AI agent system built on Orleans.
 1. Create a new class in the `<SolutionName>.Agents` project extending `FabrCoreAgentProxy`.
 2. Add the `[AgentAlias("your-agent")]` attribute.
 3. Implement `OnInitialize()` and `OnMessage()`.
-4. The server auto-discovers agents via the `AdditionalAssemblies` configuration.
+4. The server auto-discovers agents from the application and its referenced FabrCore projects/packages.
 
 ## Documentation
 

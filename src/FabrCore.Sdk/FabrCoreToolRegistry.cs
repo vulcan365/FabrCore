@@ -12,12 +12,34 @@ namespace FabrCore.Sdk
     public sealed class FabrCoreToolRegistry
     {
         private readonly ILogger<FabrCoreToolRegistry> _logger;
+        private readonly IReadOnlyList<Assembly>? _assemblies;
         private readonly Lazy<Dictionary<string, Type>> _pluginTypes;
         private readonly Lazy<Dictionary<string, MethodInfo>> _toolMethods;
 
         public FabrCoreToolRegistry(ILogger<FabrCoreToolRegistry> logger)
+            : this(logger, (IReadOnlyList<Assembly>?)null)
+        {
+        }
+
+        /// <summary>
+        /// Creates a tool registry which scans only the supplied assemblies. Pass an empty
+        /// collection to create an empty registry. The single-argument constructor retains the
+        /// legacy process-wide scan for backwards compatibility.
+        /// </summary>
+        public FabrCoreToolRegistry(ILogger<FabrCoreToolRegistry> logger, IEnumerable<Assembly> assemblies)
+            : this(
+                logger,
+                (IReadOnlyList<Assembly>)(assemblies?.Distinct().ToArray()
+                    ?? throw new ArgumentNullException(nameof(assemblies))))
+        {
+        }
+
+        private FabrCoreToolRegistry(
+            ILogger<FabrCoreToolRegistry> logger,
+            IReadOnlyList<Assembly>? assemblies)
         {
             _logger = logger;
+            _assemblies = assemblies;
             _pluginTypes = new Lazy<Dictionary<string, Type>>(ScanPlugins);
             _toolMethods = new Lazy<Dictionary<string, MethodInfo>>(ScanTools);
         }
@@ -36,7 +58,7 @@ namespace FabrCore.Sdk
             {
                 foreach (var alias in pluginAliases)
                 {
-                    var (resolved, names) = await ResolvePluginAsync(serviceProvider, alias, config, agentHost);
+                    var (resolved, names, _) = await ResolvePluginAsync(serviceProvider, alias, config, agentHost);
                     tools.AddRange(resolved);
                     resolvedNames.AddRange(names);
                 }
@@ -65,7 +87,54 @@ namespace FabrCore.Sdk
             return tools;
         }
 
-        private async Task<(List<AITool> Tools, List<string> Names)> ResolvePluginAsync(
+        /// <summary>
+        /// Resolves a required, isolated tool set and retains ownership of disposable plugin instances.
+        /// Unlike <see cref="ResolveToolsAsync"/>, every requested alias must resolve to at least one tool.
+        /// </summary>
+        public async Task<FabrCoreResolvedToolScope> ResolveToolScopeAsync(
+            IServiceProvider serviceProvider,
+            IEnumerable<string>? pluginAliases,
+            IEnumerable<string>? toolAliases,
+            AgentConfiguration config,
+            IFabrCoreAgentHost? agentHost = null,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(serviceProvider);
+            ArgumentNullException.ThrowIfNull(config);
+
+            var tools = new List<AITool>();
+            var resources = new List<object>();
+            try
+            {
+                foreach (var alias in pluginAliases ?? [])
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var (resolved, _, instance) = await ResolvePluginAsync(serviceProvider, alias, config, agentHost);
+                    if (instance is IDisposable or IAsyncDisposable) resources.Add(instance);
+                    if (resolved.Count == 0)
+                        throw new InvalidOperationException($"Required plugin alias '{alias}' did not resolve to any tools.");
+
+                    tools.AddRange(resolved);
+                }
+
+                foreach (var alias in toolAliases ?? [])
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var resolved = ResolveStandaloneTool(alias, serviceProvider)
+                        ?? throw new InvalidOperationException($"Required tool alias '{alias}' could not be resolved.");
+                    tools.Add(resolved);
+                }
+
+                return new FabrCoreResolvedToolScope(tools, resources);
+            }
+            catch
+            {
+                await FabrCoreResolvedToolScope.DisposeResourcesAsync(resources);
+                throw;
+            }
+        }
+
+        private async Task<(List<AITool> Tools, List<string> Names, object? Instance)> ResolvePluginAsync(
             IServiceProvider serviceProvider,
             string alias,
             AgentConfiguration config,
@@ -74,7 +143,7 @@ namespace FabrCore.Sdk
             if (!_pluginTypes.Value.TryGetValue(alias, out var pluginType))
             {
                 _logger.LogWarning("Plugin alias '{Alias}' not found", alias);
-                return (new List<AITool>(), new List<string>());
+                return (new List<AITool>(), new List<string>(), null);
             }
 
             // Create plugin-scoped provider that includes IFabrCoreAgentHost
@@ -90,13 +159,21 @@ namespace FabrCore.Sdk
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to create plugin instance for alias '{Alias}' (type: {Type})", alias, pluginType.FullName);
-                return (new List<AITool>(), new List<string>());
+                return (new List<AITool>(), new List<string>(), null);
             }
 
             if (instance is IFabrCorePlugin fabrcorePlugin)
             {
-                await fabrcorePlugin.InitializeAsync(config, pluginServiceProvider);
-                _logger.LogInformation("Initialized plugin '{Alias}'", alias);
+                try
+                {
+                    await fabrcorePlugin.InitializeAsync(config, pluginServiceProvider);
+                    _logger.LogInformation("Initialized plugin '{Alias}'", alias);
+                }
+                catch
+                {
+                    await FabrCoreResolvedToolScope.DisposeResourcesAsync([instance]);
+                    throw;
+                }
             }
 
             var tools = new List<AITool>();
@@ -131,7 +208,7 @@ namespace FabrCore.Sdk
             }
 
             _logger.LogInformation("Plugin '{Alias}' provided {ToolCount} tools: [{ToolNames}]", alias, tools.Count, string.Join(", ", toolNames));
-            return (tools, toolNames);
+            return (tools, toolNames, instance);
         }
 
         private AITool? ResolveStandaloneTool(string alias, IServiceProvider serviceProvider)
@@ -167,7 +244,7 @@ namespace FabrCore.Sdk
         {
             var result = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            foreach (var assembly in GetAssemblies())
             {
                 Type[] types;
                 try
@@ -205,7 +282,7 @@ namespace FabrCore.Sdk
         {
             var result = new Dictionary<string, MethodInfo>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            foreach (var assembly in GetAssemblies())
             {
                 Type[] types;
                 try
@@ -243,6 +320,9 @@ namespace FabrCore.Sdk
             return result;
         }
 
+        private IEnumerable<Assembly> GetAssemblies() =>
+            _assemblies ?? AppDomain.CurrentDomain.GetAssemblies();
+
         private sealed class PluginServiceProvider : IServiceProvider
         {
             private readonly IServiceProvider _inner;
@@ -259,6 +339,43 @@ namespace FabrCore.Sdk
                 if (serviceType == typeof(IFabrCoreAgentHost))
                     return _agentHost;
                 return _inner.GetService(serviceType);
+            }
+        }
+    }
+
+    /// <summary>Owns a required tool set and any disposable plugin instances created for it.</summary>
+    public sealed class FabrCoreResolvedToolScope : IAsyncDisposable
+    {
+        private readonly IReadOnlyList<object> resources;
+        private int disposed;
+
+        internal FabrCoreResolvedToolScope(IReadOnlyList<AITool> tools, IReadOnlyList<object> resources)
+        {
+            Tools = tools;
+            this.resources = resources;
+        }
+
+        public IReadOnlyList<AITool> Tools { get; }
+
+        public async ValueTask DisposeAsync()
+        {
+            if (Interlocked.Exchange(ref disposed, 1) != 0) return;
+            await DisposeResourcesAsync(resources);
+        }
+
+        internal static async Task DisposeResourcesAsync(IEnumerable<object> resources)
+        {
+            foreach (var resource in resources.Reverse())
+            {
+                switch (resource)
+                {
+                    case IAsyncDisposable asyncDisposable:
+                        await asyncDisposable.DisposeAsync();
+                        break;
+                    case IDisposable disposable:
+                        disposable.Dispose();
+                        break;
+                }
             }
         }
     }

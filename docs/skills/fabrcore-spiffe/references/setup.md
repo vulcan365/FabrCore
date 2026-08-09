@@ -5,10 +5,7 @@
 Verifiable execution is off by default. Existing monitoring keeps working.
 
 ```csharp
-builder.AddFabrCoreServer(new FabrCoreServerOptions
-{
-    AdditionalAssemblies = [typeof(MyAgent).Assembly]
-});
+builder.AddFabrCoreServer();
 ```
 
 ## The Four Setup Levels
@@ -29,10 +26,7 @@ SPIFFE belongs at level 3. Do not require it for levels 1 or 2.
 Use this for demos, local development, and first customer pilots.
 
 ```csharp
-builder.AddFabrCoreServer(new FabrCoreServerOptions
-{
-    AdditionalAssemblies = [typeof(MyAgent).Assembly]
-}
+builder.AddFabrCoreServer(new FabrCoreServerOptions()
 .UseVerifiableExecution()
 .UseLocalCertificateVerifiableExecutionSigner());
 ```
@@ -51,10 +45,7 @@ It is tamper-evident for the life of the process/store, but not a production tru
 Use this only for observability/prototyping.
 
 ```csharp
-builder.AddFabrCoreServer(new FabrCoreServerOptions
-{
-    AdditionalAssemblies = [typeof(MyAgent).Assembly]
-}
+builder.AddFabrCoreServer(new FabrCoreServerOptions()
 .UseVerifiableExecution());
 ```
 
@@ -65,10 +56,7 @@ Because the default signer is `NullVerifiableExecutionSigner`, bundles verify as
 Use a SQL/event-log/object-store implementation when evidence must survive restarts and support audit/export.
 
 ```csharp
-builder.AddFabrCoreServer(new FabrCoreServerOptions
-{
-    AdditionalAssemblies = [typeof(MyAgent).Assembly]
-}
+builder.AddFabrCoreServer(new FabrCoreServerOptions()
 .UseVerifiableExecution()
 .UseVerifiableExecutionStore<SqlVerifiableExecutionStore>()
 .UseLocalCertificateVerifiableExecutionSigner());
@@ -95,10 +83,7 @@ Provider rules:
 Use a customer certificate, KMS, HSM, or enterprise PKI.
 
 ```csharp
-builder.AddFabrCoreServer(new FabrCoreServerOptions
-{
-    AdditionalAssemblies = [typeof(MyAgent).Assembly]
-}
+builder.AddFabrCoreServer(new FabrCoreServerOptions()
 .UseVerifiableExecution()
 .UseVerifiableExecutionSigner<MyKmsSigner>());
 ```

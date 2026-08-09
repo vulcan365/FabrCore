@@ -216,6 +216,10 @@ public class FabrCoreCopilotAgent : AgentApplication
         }
         finally
         {
+            // Stop the independent typing worker before the final streaming activity is sent.
+            // Otherwise it can race EndStreamAsync and leave a late typing indicator visible
+            // after the completed response until the channel expires it.
+            await StopTypingTimer(turnContext);
             await stream.EndStreamAsync(cancellationToken);
         }
     }

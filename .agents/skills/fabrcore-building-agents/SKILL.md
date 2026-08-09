@@ -960,7 +960,7 @@ var config = new AgentConfiguration
 1. Detect the namespace from the project file or existing files in the directory.
 2. Run `dotnet build` to verify the file compiles.
 3. Remind the user:
-   - **For agents:** Add this agent's assembly to the server's `FabrCoreServerOptions.AdditionalAssemblies` if it's in a separate project. The `[AgentAlias]` value is what you use as `AgentType` when creating the agent via the REST API or `ClientContext`.
+   - **For agents:** Add a normal project/package reference from the server; FabrCore discovers referenced agent assemblies automatically. The `[AgentAlias]` value is what you use as `AgentType` when creating the agent via the REST API or `ClientContext`.
    - **For plugins:** Add the `[PluginAlias]` value to the agent's `Plugins` list in `AgentConfiguration`. Plugin settings go in `Args` using the `PluginAlias:Key` convention.
    - **For tools:** Add the `[ToolAlias]` value to the agent's `Tools` list in `AgentConfiguration`.
    - Update `fabrcore.json` to include the model configuration referenced by the agent (defaults to `"default"`).

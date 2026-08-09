@@ -91,6 +91,7 @@ public sealed class FabrCoreHarnessAgent : DelegatingAIAgent
         skills = composition.Skills;
         PlanningModeName = composition.PlanningModeName;
         ExecutionModeName = composition.ExecutionModeName;
+        MissingPlanModeBehavior = composition.MissingPlanModeBehavior;
         loopEvaluatorCount = composition.LoopEvaluatorCount;
     }
 
@@ -105,6 +106,9 @@ public sealed class FabrCoreHarnessAgent : DelegatingAIAgent
 
     /// <summary>The mode selected by <see cref="HarnessMessageArgs.PlanMode"/> when its value is false.</summary>
     public string ExecutionModeName { get; }
+
+    /// <summary>Mode behavior for inbound messages that omit <see cref="HarnessMessageArgs.PlanMode"/>.</summary>
+    public MissingPlanModeBehavior MissingPlanModeBehavior { get; }
 
     /// <summary>The background-agent provider, or <see langword="null"/> when no background agents were supplied.</summary>
     public BackgroundAgentsProvider? BackgroundAgents => backgroundAgents;
@@ -250,6 +254,7 @@ public sealed class FabrCoreHarnessAgent : DelegatingAIAgent
             skillsProvider,
             planningModeName,
             executionModeName,
+            options?.MissingPlanModeBehavior ?? MissingPlanModeBehavior.SelectPlanning,
             evaluators.Count);
     }
 
@@ -417,5 +422,6 @@ public sealed class FabrCoreHarnessAgent : DelegatingAIAgent
         AgentSkillsProvider? Skills,
         string PlanningModeName,
         string ExecutionModeName,
+        MissingPlanModeBehavior MissingPlanModeBehavior,
         int LoopEvaluatorCount);
 }

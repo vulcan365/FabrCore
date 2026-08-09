@@ -30,14 +30,8 @@ namespace FabrCore.SampleApp
             builder.Services.AddSingleton<ContosoBikeShopStore>();
             builder.Services.AddSingleton<ISurfaceActionRegistry, CrmSurfaceActionRegistry>();
 
-            var fabrCoreOptions = new FabrCoreServerOptions
-            {
-                AdditionalAssemblies =
-                [
-                    typeof(CrmDemoAgent).Assembly,
-                    typeof(SurfaceMessageTypes).Assembly
-                ]
-            };
+            // The application and its referenced FabrCore assemblies are discovered automatically.
+            var fabrCoreOptions = new FabrCoreServerOptions();
 
             fabrCoreOptions.UseInMemoryAgentMessageMonitor(capture =>
             {

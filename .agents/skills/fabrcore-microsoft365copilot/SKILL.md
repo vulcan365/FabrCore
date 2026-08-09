@@ -42,10 +42,7 @@ dotnet add <server-project> package FabrCore.Services.Microsoft365Copilot
 Two lines in the host's `Program.cs` (full template: `assets/server-program.cs`):
 
 ```csharp
-builder.AddFabrCoreServer(new FabrCoreServerOptions
-{
-    AdditionalAssemblies = [typeof(MyAgent).Assembly]
-});
+builder.AddFabrCoreServer();
 builder.AddMicrosoft365Copilot();     // after AddFabrCoreServer
 
 var app = builder.Build();
@@ -74,7 +71,9 @@ Minimal production section:
 ```
 
 `Agent:AgentType` must be an `[AgentAlias]` registered via
-`FabrCoreServerOptions.AdditionalAssemblies`.
+the automatically discovered application assembly or referenced FabrCore project/package dependencies.
+Use `FabrCoreServerOptions.AdditionalAssemblies` only for assemblies outside the application
+dependency graph.
 
 ### Full reference
 
@@ -268,7 +267,7 @@ Bot messaging endpoint to `https://<tunnel>/api/messages`.
 | Agent not in Copilot *Agents* list | Wait a few minutes; user needs the Copilot license; app must show under *Manage your apps* |
 | 401 in host logs on /api/messages | `ClientId`/`TenantId` don't match the tokens Azure Bot Service sends |
 | No reply in Teams/Copilot | Bot messaging endpoint must exactly match your public host + `MessagesEndpoint`; check host logs |
-| "Failed to provision Copilot agent" | `Agent:AgentType` doesn't match a registered `[AgentAlias]`, or the agent assembly is missing from `AdditionalAssemblies` |
+| "Failed to provision Copilot agent" | `Agent:AgentType` doesn't match a discovered `[AgentAlias]`, or a dynamically selected agent assembly was not added to `AdditionalAssemblies` |
 | NU1605 package downgrade at restore | Don't mix a `FabrCore.Host` PackageReference with a ProjectReference to this addon's source — reference both as packages or both as projects |
 | Startup throws "ClientId is required" | Token validation is on without a ClientId; set it, or disable validation for local dev |
 | Proactive message never sends | `Proactive:Enabled` is false, or the principal has not completed an eligible personal turn that captured a conversation endpoint |

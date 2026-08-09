@@ -9,6 +9,11 @@ namespace FabrCore.Core
         /// <summary>Absolute base URL clients use to reach the FabrCore host.</summary>
         public const string HostUrl = "FabrCore:HostUrl";
 
+        /// <summary>
+        /// API key used by remote SDK processes to authenticate privileged Host API requests.
+        /// </summary>
+        public const string AdminApiKey = "FabrCore:AdminAuthentication:ApiKey";
+
         /// <summary>Orleans cluster configuration section.</summary>
         public const string OrleansSection = "FabrCore:Orleans";
 

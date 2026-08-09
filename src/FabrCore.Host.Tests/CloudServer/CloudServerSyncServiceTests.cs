@@ -46,7 +46,8 @@ public sealed class CloudServerSyncServiceTests
         public static Harness Create(
             FakeCloudServerHandler handler,
             Action<CloudServerOptions>? configure = null,
-            Action<ServiceCollection>? services = null)
+            Action<ServiceCollection>? services = null,
+            Action<RemoteAdministrationOptions>? configureRemote = null)
         {
             var harness = new Harness();
             Directory.CreateDirectory(harness.ContentRoot);
@@ -58,8 +59,8 @@ public sealed class CloudServerSyncServiceTests
                 configure?.Invoke(o);
             });
             var optionsWrapper = Microsoft.Extensions.Options.Options.Create(options);
-            var remoteOptionsWrapper = Microsoft.Extensions.Options.Options.Create(
-                CloudServerTestFactory.RemoteOptions());
+            var remoteOptions = CloudServerTestFactory.RemoteOptions(configureRemote);
+            var remoteOptionsWrapper = Microsoft.Extensions.Options.Options.Create(remoteOptions);
             var environment = new TestHostEnvironment(harness.ContentRoot);
 
             var serviceCollection = new ServiceCollection();
@@ -68,7 +69,7 @@ public sealed class CloudServerSyncServiceTests
             harness.DiskCache = new CloudConfigurationDiskCache(
                 optionsWrapper, environment, NullLogger<CloudConfigurationDiskCache>.Instance);
             harness.Service = new CloudServerSyncService(
-                CloudServerTestFactory.ApiClient(handler, options),
+                CloudServerTestFactory.ApiClient(handler, options, remoteOptions),
                 harness.Store,
                 harness.DiskCache,
                 optionsWrapper,
@@ -338,5 +339,38 @@ public sealed class CloudServerSyncServiceTests
 
         Assert.AreEqual("v2", harness.Store.CurrentConfigurationVersion,
             "A heartbeat response with refreshRequested should trigger an immediate configuration fetch.");
+    }
+
+    [TestMethod]
+    public async Task StopAsync_CancelsActiveConnectPoll_WithoutStartingAnother()
+    {
+        var connectStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var connectRequests = 0;
+        var handler = new FakeCloudServerHandler(async (request, cancellationToken) =>
+        {
+            if (request.RequestUri!.AbsolutePath == CloudServerProtocol.ConnectPath)
+            {
+                Interlocked.Increment(ref connectRequests);
+                connectStarted.TrySetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                return new HttpResponseMessage(HttpStatusCode.NoContent);
+            }
+
+            return FakeCloudServerHandler.Json(HttpStatusCode.OK, Envelope("v1"));
+        });
+        await using var harness = Harness.Create(
+            handler,
+            configureRemote: options =>
+            {
+                options.Enabled = true;
+                options.HostUrl = "http://127.0.0.1:5000";
+            });
+
+        await harness.Service.StartAsync(CancellationToken.None);
+        await connectStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        using var stopTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        await harness.Service.StopAsync(stopTimeout.Token);
+
+        Assert.AreEqual(1, connectRequests, "Shutdown cancellation must not retry or overlap the active poll.");
     }
 }
