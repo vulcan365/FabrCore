@@ -12,6 +12,8 @@ public sealed class PrincipalMessageRelayTests
     [TestMethod]
     public async Task ResolveWithoutTarget_SelectsMostRecentlyActiveEndpointAcrossProviders()
     {
+        Assert.IsFalse(PrincipalDeliveryStateMachine.ShouldDeliverToObservers(0, null));
+
         var sms = Available("sms", "phone-1", DateTimeOffset.UtcNow.AddMinutes(-5));
         var webhook = Available("webhook", "hook-1", DateTimeOffset.UtcNow);
         var dispatcher = CreateDispatcher(sms, webhook);
@@ -25,23 +27,27 @@ public sealed class PrincipalMessageRelayTests
     }
 
     [TestMethod]
-    public async Task ExplicitTarget_OnlyInvokesRequestedRelayAndPreservesEndpoint()
+    public async Task ExplicitTarget_WithObserver_UsesRequestedExternalRelayAndPreservesEndpoint()
     {
         var sms = Available("sms", "phone-1", DateTimeOffset.UtcNow);
-        var webhook = Available("webhook", "hook-2", DateTimeOffset.UtcNow);
+        var m365 = Available("m365copilot", "conversation-2", DateTimeOffset.UtcNow);
         var message = new AgentMessage
         {
             Message = "ready",
-            DeliveryTarget = new PrincipalDeliveryTarget("webhook", "hook-requested")
+            DeliveryTarget = new PrincipalDeliveryTarget("m365copilot", "conversation-requested")
         };
 
-        var result = await CreateDispatcher(sms, webhook).ResolveAsync(
+        Assert.IsFalse(PrincipalDeliveryStateMachine.ShouldDeliverToObservers(
+            1,
+            message.DeliveryTarget));
+
+        var result = await CreateDispatcher(sms, m365).ResolveAsync(
             "user", message, new Dictionary<string, string>());
 
-        Assert.AreEqual("webhook", result.Channel);
+        Assert.AreEqual("m365copilot", result.Channel);
         Assert.AreEqual(0, sms.ResolveCalls);
-        Assert.AreEqual(1, webhook.ResolveCalls);
-        Assert.AreEqual("hook-requested", webhook.LastTarget?.EndpointId);
+        Assert.AreEqual(1, m365.ResolveCalls);
+        Assert.AreEqual("conversation-requested", m365.LastTarget?.EndpointId);
     }
 
     [TestMethod]
@@ -160,11 +166,29 @@ public sealed class PrincipalMessageRelayTests
     }
 
     [TestMethod]
-    public void ObserverPrecedence_UsesObserverPathOnlyWhenAnObserverIsLive()
+    public void ObserverPrecedence_AppliesOnlyToUntargetedMessages()
     {
-        Assert.IsFalse(PrincipalDeliveryStateMachine.ShouldDeliverToObservers(0));
-        Assert.IsTrue(PrincipalDeliveryStateMachine.ShouldDeliverToObservers(1));
-        Assert.IsTrue(PrincipalDeliveryStateMachine.ShouldDeliverToObservers(3));
+        Assert.IsFalse(PrincipalDeliveryStateMachine.ShouldDeliverToObservers(0, null));
+        Assert.IsTrue(PrincipalDeliveryStateMachine.ShouldDeliverToObservers(1, null));
+        Assert.IsTrue(PrincipalDeliveryStateMachine.ShouldDeliverToObservers(3, null));
+
+        var explicitTarget = new PrincipalDeliveryTarget("m365copilot");
+        Assert.IsFalse(PrincipalDeliveryStateMachine.ShouldDeliverToObservers(0, explicitTarget));
+        Assert.IsFalse(PrincipalDeliveryStateMachine.ShouldDeliverToObservers(1, explicitTarget));
+        Assert.IsFalse(PrincipalDeliveryStateMachine.ShouldDeliverToObservers(3, explicitTarget));
+
+        var emptyTarget = new PrincipalDeliveryTarget(" ");
+        Assert.IsTrue(PrincipalDeliveryStateMachine.ShouldDeliverToObservers(1, emptyTarget));
+    }
+
+    [TestMethod]
+    public void ExplicitExternalTarget_IsExcludedFromWebSocketDeliveryRecords()
+    {
+        Assert.IsTrue(PrincipalDeliveryStateMachine.ShouldRecordForWebSocket(null));
+        Assert.IsTrue(PrincipalDeliveryStateMachine.ShouldRecordForWebSocket(
+            new PrincipalDeliveryTarget(" ")));
+        Assert.IsFalse(PrincipalDeliveryStateMachine.ShouldRecordForWebSocket(
+            new PrincipalDeliveryTarget("m365copilot")));
     }
 
     [TestMethod]

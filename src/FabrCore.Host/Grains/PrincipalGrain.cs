@@ -140,25 +140,47 @@ namespace FabrCore.Host.Grains
                 ObserverSubscriptionsCounter.Add(1,
                     new KeyValuePair<string, object?>("action", "subscribe"));
 
-                // Flush any pending messages to the newly subscribed observer
+                // Flush untargeted pending messages to the newly subscribed observer.
+                // Explicit external targets retain their durable relay intent.
                 if (pendingMessages.Count > 0)
                 {
-                    var messageCount = pendingMessages.Count;
-                    logger.LogInformation("Flushing {MessageCount} pending messages to observers - PrincipalHandle: {PrincipalHandle}",
-                        messageCount, principalHandle);
+                    var retained = new Queue<AgentMessage>();
+                    var flushed = 0;
 
                     while (pendingMessages.TryDequeue(out var message))
                     {
-                        observerManager.Notify(o => o.OnMessageReceived(message));
+                        if (!PrincipalDeliveryStateMachine.ShouldDeliverToObservers(
+                                observerManager.Count + webSocketObservers.Count,
+                                message.DeliveryTarget))
+                        {
+                            retained.Enqueue(message);
+                            continue;
+                        }
 
+                        observerManager.Notify(o => o.OnMessageReceived(message));
+                        flushed++;
                         ObserverNotificationsCounter.Add(1);
                     }
 
-                    PendingMessagesFlushedCounter.Add(messageCount);
+                    while (retained.TryDequeue(out var message))
+                    {
+                        pendingMessages.Enqueue(message);
+                    }
 
-                    await PersistPendingAndDeliveryStateAsync();
+                    if (flushed > 0)
+                    {
+                        PendingMessagesFlushedCounter.Add(flushed);
+                        await PersistPendingAndDeliveryStateAsync();
 
-                    logger.LogInformation("Finished flushing pending messages - PrincipalHandle: {PrincipalHandle}", principalHandle);
+                        logger.LogInformation(
+                            "Flushed {MessageCount} untargeted pending messages to observers - PrincipalHandle: {PrincipalHandle}, RetainedTargetedMessages: {RetainedTargetedMessages}",
+                            flushed,
+                            principalHandle,
+                            pendingMessages.Count);
+                    }
+
+                    await PromotePendingMessagesAsync();
+                    await DispatchNextDeliveryAsync();
                 }
 
                 activity?.SetStatus(ActivityStatusCode.Ok);
@@ -214,8 +236,9 @@ namespace FabrCore.Host.Grains
             var registration = await deliveryGrain.RegisterClient(clientId, checkpoint);
             webSocketObservers[clientId] = (connectionId, observer);
 
-            // Messages queued before the first v2 registration remain live pending work,
-            // not historical replay. Persist them into the v2 log before notifying.
+            // Untargeted messages queued before the first v2 registration remain live
+            // pending work, not historical replay. Explicit external targets must not
+            // enter the WebSocket log and retain their durable relay intent.
             if (pendingMessages.Count > 0)
             {
                 var replayIds = registration.Replay.Select(x => x.Message.Id).ToHashSet(StringComparer.Ordinal);
@@ -223,6 +246,14 @@ namespace FabrCore.Host.Grains
                 pendingMessages.Clear();
                 foreach (var message in pending)
                 {
+                    if (!PrincipalDeliveryStateMachine.ShouldDeliverToObservers(
+                            observerManager.Count + webSocketObservers.Count,
+                            message.DeliveryTarget))
+                    {
+                        pendingMessages.Enqueue(message);
+                        continue;
+                    }
+
                     if (replayIds.Contains(message.Id))
                         continue;
                     var delivery = await deliveryGrain.Append(message);
@@ -233,6 +264,8 @@ namespace FabrCore.Host.Grains
                     }
                 }
                 await PersistPendingAndDeliveryStateAsync();
+                await PromotePendingMessagesAsync();
+                await DispatchNextDeliveryAsync();
             }
 
             if (registration.Replay.Count > 0)
@@ -287,10 +320,7 @@ namespace FabrCore.Host.Grains
                 context.Count,
                 refreshedDeliveries);
 
-            if (observerManager.Count == 0)
-            {
-                await PromotePendingMessagesAsync();
-            }
+            await PromotePendingMessagesAsync();
 
             // Work already committed to the outbox stays on its durable relay
             // path even if an observer has since connected.
@@ -868,24 +898,37 @@ namespace FabrCore.Host.Grains
 
             try
             {
-                var deliveryGrain = clusterClient.GetGrain<IWebSocketDeliveryGrain>(principalHandle);
-                var durableDelivery = await deliveryGrain.Append(request);
-                if (durableDelivery is not null && webSocketObservers.Count > 0)
+                var observerCount = observerManager.Count + webSocketObservers.Count;
+                var deliverToObservers = PrincipalDeliveryStateMachine.ShouldDeliverToObservers(
+                    observerCount,
+                    request.DeliveryTarget);
+
+                // WebSocket delivery records are local-observer work. Explicitly targeted
+                // external messages must never enter that log or its reconnect replay path.
+                if (PrincipalDeliveryStateMachine.ShouldRecordForWebSocket(request.DeliveryTarget))
                 {
-                    foreach (var (clientId, registration) in webSocketObservers.ToArray())
+                    var deliveryGrain = clusterClient.GetGrain<IWebSocketDeliveryGrain>(principalHandle);
+                    var durableDelivery = await deliveryGrain.Append(request);
+                    if (durableDelivery is not null && webSocketObservers.Count > 0)
                     {
-                        await deliveryGrain.MarkDelivered(clientId, durableDelivery.Sequence);
-                        registration.Observer.OnDelivery(durableDelivery);
+                        foreach (var (clientId, registration) in webSocketObservers.ToArray())
+                        {
+                            await deliveryGrain.MarkDelivered(clientId, durableDelivery.Sequence);
+                            registration.Observer.OnDelivery(durableDelivery);
+                        }
+                        ObserverNotificationsCounter.Add(webSocketObservers.Count);
                     }
-                    ObserverNotificationsCounter.Add(webSocketObservers.Count);
                 }
 
-                // If no live observers are subscribed, preserve pending/external relay behavior.
-                if (!PrincipalDeliveryStateMachine.ShouldDeliverToObservers(observerManager.Count + webSocketObservers.Count))
+                if (!deliverToObservers)
                 {
                     pendingMessages.Enqueue(request);
-                    logger.LogInformation("No observers subscribed, message queued - PrincipalHandle: {PrincipalHandle}, QueueLength: {QueueLength}",
-                        principalHandle, pendingMessages.Count);
+                    logger.LogInformation(
+                        "Message queued for external principal delivery - PrincipalHandle: {PrincipalHandle}, QueueLength: {QueueLength}, LiveObservers: {LiveObservers}, TargetChannel: {TargetChannel}",
+                        principalHandle,
+                        pendingMessages.Count,
+                        observerCount,
+                        request.DeliveryTarget?.Channel);
 
                     PendingMessagesQueuedCounter.Add(1);
 
@@ -902,9 +945,10 @@ namespace FabrCore.Host.Grains
                     // Notify legacy in-process observers. v2 observers were notified from
                     // the durable record above and never receive raw AgentMessage frames.
                     if (observerManager.Count > 0)
+                    {
                         observerManager.Notify(observer => observer.OnMessageReceived(request));
-
-                    ObserverNotificationsCounter.Add(1);
+                        ObserverNotificationsCounter.Add(observerManager.Count);
+                    }
 
                     logger.LogInformation("Principal observers notified - PrincipalHandle: {PrincipalHandle}", principalHandle);
                     activity?.SetStatus(ActivityStatusCode.Ok);
@@ -923,7 +967,16 @@ namespace FabrCore.Host.Grains
 
         private async Task PromotePendingMessagesAsync()
         {
-            if (pendingMessages.Count == 0 || observerManager.Count > 0)
+            if (pendingMessages.Count == 0)
+            {
+                return;
+            }
+
+            var observerCount = observerManager.Count + webSocketObservers.Count;
+            if (!pendingMessages.Any(message =>
+                    !PrincipalDeliveryStateMachine.ShouldDeliverToObservers(
+                        observerCount,
+                        message.DeliveryTarget)))
             {
                 return;
             }
@@ -940,10 +993,18 @@ namespace FabrCore.Host.Grains
                 principalHandle,
                 pendingMessages.Count,
                 context.Count,
-                observerManager.Count);
+                observerCount);
 
             while (pendingMessages.TryDequeue(out var message))
             {
+                if (PrincipalDeliveryStateMachine.ShouldDeliverToObservers(
+                        observerCount,
+                        message.DeliveryTarget))
+                {
+                    retained.Enqueue(message);
+                    continue;
+                }
+
                 logger.LogInformation(
                     "Resolving principal pending message for external delivery - PrincipalHandle: {PrincipalHandle}, MessageId: {MessageId}, MessageType: {MessageType}, TargetChannel: {TargetChannel}, TargetEndpoint: {TargetEndpoint}",
                     principalHandle,

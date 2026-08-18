@@ -218,14 +218,20 @@ await SendToUserAsync("Your report is ready");
 
 await SendToUserAsync(
     "Your report is ready",
+    target: new PrincipalDeliveryTarget("m365copilot"));
+
+await SendToUserAsync(
+    "Send this to a specific conversation",
     target: new PrincipalDeliveryTarget("m365copilot", endpointId));
 ```
 
 An untargeted message uses the most recently active eligible endpoint across every installed
-relay. An explicit target selects this provider and endpoint. The M365 relay accepts nonblank
-text and valid Adaptive Cards; it rejects system/control messages, foreign targets, unsupported
-`ui.*` payloads, and invalid mappings. It sends on bounded worker shards rather than blocking
-the principal grain.
+relay. A channel-only target selects this provider's most recently active eligible endpoint; an
+endpoint target selects that eligible conversation. Either explicit form bypasses local observer
+precedence, so Surface or another connected WebSocket/legacy observer does not consume the
+proactive notification. The M365 relay accepts nonblank text and valid Adaptive Cards; it rejects
+system/control messages, foreign targets, unsupported `ui.*` payloads, and invalid mappings. It
+sends on bounded worker shards rather than blocking the principal grain.
 
 The provider retries throttling, 5xx, network, and timeout failures (honoring `Retry-After` when
 available). Permanent 4xx and mapping failures are dead-lettered; stale conversation references
