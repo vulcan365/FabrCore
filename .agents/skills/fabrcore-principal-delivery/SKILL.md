@@ -1,8 +1,8 @@
 ---
 name: fabrcore-principal-delivery
 description: >
-  Build, configure, test, or troubleshoot FabrCore durable agent-to-principal delivery when no
-  user turn or live observer is active. Covers SendToUserAsync, PrincipalDeliveryTarget,
+  Build, configure, test, or troubleshoot FabrCore durable agent-to-principal external delivery,
+  including explicit-channel routing while local observers are active. Covers SendToUserAsync, PrincipalDeliveryTarget,
   IPrincipalMessageRelay, IPrincipalContextStore, IPrincipalMessageDeliveryCompletion, provider
   endpoint registration, bounded relay workers, durable outbox leases/retries/dead letters,
   at-least-once semantics, and Microsoft 365 Copilot proactive delivery. Use for "proactive
@@ -13,8 +13,8 @@ description: >
 
 # FabrCore Principal Delivery
 
-Use FabrCore's provider-neutral principal-delivery pipeline for messages produced when a principal
-has no live client observer:
+Use FabrCore's provider-neutral principal-delivery pipeline for out-of-turn messages and messages
+explicitly addressed to an external channel:
 
 ```text
 agent -> PrincipalGrain -> durable outbox -> channel relay -> provider
@@ -53,6 +53,12 @@ await SendToUserAsync(
     messageType: "verification.code",
     target: new PrincipalDeliveryTarget("sms", "verified-phone-1"));
 
+// Select the provider but let it choose the most recently active eligible endpoint.
+// This target keeps external-delivery precedence even while local observers are connected.
+await SendToUserAsync(
+    "Your report is ready",
+    target: new PrincipalDeliveryTarget("m365copilot"));
+
 // Preserve a structured AgentMessage for provider-specific mapping.
 await SendToUserAsync(new AgentMessage
 {
@@ -84,6 +90,9 @@ The agent must have a principal-qualified handle. The helper sets the owning pri
 ## Durability invariants
 
 - Persist pending work before resolution and atomically move resolved work to the outbox.
+- Treat a nonblank `DeliveryTarget.Channel` as explicit external-routing intent. Do not notify,
+  record, or replay that message through legacy or WebSocket observers, even when connected.
+- Keep observer-first behavior unchanged for messages without an explicit channel target.
 - Lease only the oldest outbox entry for a principal; never lease multiple entries concurrently.
 - Treat `NotApplicable` messages as skippable. Treat a supported-but-`Unavailable` message as an
   ordering barrier.
@@ -109,7 +118,9 @@ Proactive delivery is disabled by default. Enable only after the normal M365 tur
 
 The provider stores up to eight versioned conversation endpoints, defaults to personal scope,
 supports text and valid Adaptive Cards, and marks stale endpoints unavailable until an eligible
-inbound turn refreshes them. Never put conversation references or Microsoft SDK types in Core.
+inbound turn refreshes them. A channel-only `m365copilot` target selects the newest eligible
+endpoint and bypasses local observer precedence. Never put conversation references or Microsoft
+SDK types in Core.
 
 ## Verification
 
@@ -122,8 +133,9 @@ dotnet test src\FabrCore.Sdk.Tests\FabrCore.Sdk.Tests.csproj
 dotnet test src\FabrCore.Services.Microsoft365Copilot.Tests\FabrCore.Services.Microsoft365Copilot.Tests.csproj
 ```
 
-Cover explicit routing, newest-endpoint fallback, zero-relay compatibility, context limits,
-observer precedence, queue saturation, leases, retries, persisted-state recovery, endpoint
+Cover explicit routing with legacy and WebSocket observers connected, newest-endpoint fallback,
+zero-relay compatibility, context limits, untargeted observer precedence, queue saturation, leases,
+retries, persisted-state recovery, endpoint
 refresh, dead letters, payload rejection, and retry classification.
 
 ## Key implementation files

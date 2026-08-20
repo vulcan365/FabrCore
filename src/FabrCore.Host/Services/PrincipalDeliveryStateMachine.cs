@@ -5,7 +5,16 @@ namespace FabrCore.Host.Services;
 
 internal static class PrincipalDeliveryStateMachine
 {
-    public static bool ShouldDeliverToObservers(int observerCount) => observerCount > 0;
+    public static bool HasExplicitDeliveryTarget(PrincipalDeliveryTarget? target) =>
+        !string.IsNullOrWhiteSpace(target?.Channel);
+
+    public static bool ShouldRecordForWebSocket(PrincipalDeliveryTarget? target) =>
+        !HasExplicitDeliveryTarget(target);
+
+    public static bool ShouldDeliverToObservers(
+        int observerCount,
+        PrincipalDeliveryTarget? target) =>
+        observerCount > 0 && !HasExplicitDeliveryTarget(target);
 
     public static bool TryRecoverExpiredLease(
         PrincipalDeliveryOutboxEntry entry,

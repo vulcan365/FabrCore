@@ -3939,6 +3939,18 @@ body:has(.surface-command-center-standalone) {
     overflow-wrap: anywhere;
 }
 
+.surface-chat-link-message-text h1,
+.surface-chat-link-message-text h2,
+.surface-chat-link-message-text h3,
+.surface-chat-link-message-text h4,
+.surface-chat-link-message-text h5,
+.surface-chat-link-message-text h6 {
+    margin: 0.55rem 0 0.35rem;
+    color: inherit;
+    font-size: 1rem;
+    line-height: 1.35;
+}
+
 .surface-chat-link-message-text p:first-child {
     margin-top: 0;
 }

@@ -69,8 +69,10 @@ Relay resolution statuses mean:
 Only one relay may own a channel. Duplicate channel registrations fail when the dispatcher is
 constructed because a channel alone must identify the relay that later receives the frozen work.
 
-A live observer handles newly arriving messages directly. Once a message has moved to the outbox,
-it remains on the relay path even if an observer subsequently connects.
+A live observer handles newly arriving untargeted messages directly. A nonblank target channel
+overrides observer precedence: Core persists and resolves it for the requested relay without
+notifying or recording it for legacy or WebSocket observers. Once a message has moved to the
+outbox, it remains on the relay path even if an observer subsequently connects.
 
 ## Context storage
 
@@ -87,8 +89,9 @@ Use a versioned key such as `mobilepush:installations:v1`. Store endpoint IDs, p
 metadata, eligibility, and last-active timestamps. Never store API keys, OAuth access/refresh
 tokens, signing secrets, or other provider credentials.
 
-Updating context persists immediately, re-evaluates pending messages when no observer is active,
-and wakes outbox entries waiting for endpoint refresh.
+Updating context persists immediately, re-evaluates untargeted pending messages when no observer is
+active, re-evaluates explicitly targeted pending messages regardless of observer state, and wakes
+outbox entries waiting for endpoint refresh.
 
 ## Outbox lifecycle
 
@@ -178,7 +181,7 @@ Cover:
 - `NotApplicable` skipping and `Unavailable` ordering barriers
 - zero-relay pending compatibility
 - context entry/key/value/total limits
-- live-observer precedence and persisted pending flushes
+- untargeted live-observer precedence, targeted legacy/WebSocket exclusion, and persisted pending flushes
 - bounded queue saturation returning false without drops
 - lease acquisition, expiry, and persisted restart recovery
 - retryable, endpoint-unavailable, delivered, and permanent transitions

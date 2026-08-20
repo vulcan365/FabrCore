@@ -17,11 +17,11 @@ namespace FabrCore.Services.Microsoft365Copilot.Tests;
 public sealed class FabrCoreCopilotAgentStreamingTests
 {
     private const string ErrorResponse = "Expected error response";
-    private static readonly TimeSpan AgentDelay = TimeSpan.FromMilliseconds(50);
+    private static readonly TimeSpan AgentDelay = TimeSpan.FromMilliseconds(150);
     private static readonly TimeSpan SaveStateDelay = TimeSpan.FromMilliseconds(75);
 
     [TestMethod]
-    public async Task StreamingSuccess_StopsTypingTimerBeforeFinalMessage()
+    public async Task StreamingSuccess_UsesOnlyStreamingTypingActivities()
     {
         var (adapter, agent) = CreateAgent(async () =>
         {
@@ -31,11 +31,11 @@ public sealed class FabrCoreCopilotAgentStreamingTests
 
         await adapter.SendTextToBotAsync("hello", agent.OnTurnAsync, CancellationToken.None);
 
-        AssertFinalMessageHasNoTrailingTyping(adapter, "Finished response");
+        AssertStreamingLifecycle(adapter, "Finished response");
     }
 
     [TestMethod]
-    public async Task StreamingError_StopsTypingTimerBeforeFinalMessage()
+    public async Task StreamingError_UsesOnlyStreamingTypingActivities()
     {
         var (adapter, agent) = CreateAgent(async () =>
         {
@@ -45,14 +45,14 @@ public sealed class FabrCoreCopilotAgentStreamingTests
 
         await adapter.SendTextToBotAsync("hello", agent.OnTurnAsync, CancellationToken.None);
 
-        AssertFinalMessageHasNoTrailingTyping(adapter, ErrorResponse);
+        AssertStreamingLifecycle(adapter, ErrorResponse);
     }
 
     private static (TestAdapter Adapter, FabrCoreCopilotAgent Agent) CreateAgent(
         Func<Task<AgentMessage>> replyFactory)
     {
         var adapter = new TestAdapter(
-            Channels.Msteams,
+            "msteams:copilot",
             sendTraceActivity: false,
             NullLogger<TestAdapter>.Instance,
             tokenClient: null);
@@ -62,8 +62,8 @@ public sealed class FabrCoreCopilotAgentStreamingTests
             StartTypingTimer = true,
             TypingOptions = new TypingOptions
             {
-                InitialDelayMs = 5,
-                IntervalMs = 10,
+                InitialDelayMs = 100,
+                IntervalMs = 25,
             },
             TurnStateFactory = () => DelayedTurnStateProxy.Create(SaveStateDelay),
         };
@@ -91,7 +91,7 @@ public sealed class FabrCoreCopilotAgentStreamingTests
         return (adapter, agent);
     }
 
-    private static void AssertFinalMessageHasNoTrailingTyping(TestAdapter adapter, string expectedText)
+    private static void AssertStreamingLifecycle(TestAdapter adapter, string expectedText)
     {
         var activities = adapter.GetActivitySnapshot();
         var finalIndex = Array.FindLastIndex(
@@ -101,11 +101,12 @@ public sealed class FabrCoreCopilotAgentStreamingTests
         Assert.IsGreaterThanOrEqualTo(0, finalIndex, "The final streamed message was not sent.");
         Assert.IsTrue(
             activities.Take(finalIndex).Any(activity =>
-                activity.Type == ActivityTypes.Typing && activity.GetStreamingEntity() is null),
-            "The test did not exercise the active typing timer before stream completion.");
+                activity.Type == ActivityTypes.Typing && activity.GetStreamingEntity() is not null),
+            "The streaming progress indicator was not sent before stream completion.");
         Assert.IsFalse(
-            activities.Skip(finalIndex + 1).Any(activity => activity.Type == ActivityTypes.Typing),
-            "A typing activity was emitted after the final streamed message.");
+            activities.Any(activity =>
+                activity.Type == ActivityTypes.Typing && activity.GetStreamingEntity() is null),
+            "An ordinary typing activity was emitted during a streaming turn.");
         Assert.AreEqual(
             activities.Length - 1,
             finalIndex,

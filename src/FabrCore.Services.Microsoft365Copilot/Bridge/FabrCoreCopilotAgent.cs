@@ -92,6 +92,18 @@ public class FabrCoreCopilotAgent : AgentApplication
                 turnContext.Activity.Id);
         }
 
+        var useStreaming = _copilotOptions.Streaming.Enabled
+            && turnContext.StreamingResponse.IsStreamingChannel;
+
+        if (useStreaming)
+        {
+            // The SDK's automatic typing worker sends ordinary typing activities that are
+            // independent from the streaming protocol. Teams/Copilot can keep the last one
+            // visible until it expires even after the stream's final message arrives, so let
+            // the informative streaming update be the only progress indicator for this turn.
+            await StopTypingTimer(turnContext);
+        }
+
         var userToken = await TryGetUserTokenAsync(turnContext, cancellationToken);
 
         var principalHandle = await _principalResolver.ResolvePrincipalHandleAsync(turnContext, userToken, cancellationToken);
@@ -155,9 +167,6 @@ public class FabrCoreCopilotAgent : AgentApplication
         }
 
         await using var _ = capture;
-
-        var useStreaming = _copilotOptions.Streaming.Enabled
-            && turnContext.StreamingResponse.IsStreamingChannel;
 
         if (useStreaming)
         {

@@ -1,7 +1,8 @@
 # Principal message relays
 
-Principal message relays let an agent send a message when its user has no live FabrCore observer.
-The feature is provider-neutral:
+Principal message relays let an agent send a message when its user has no live FabrCore observer,
+or explicitly address an external channel even while a local observer is connected. The feature
+is provider-neutral:
 
 ```text
 agent -> principal grain -> durable outbox -> provider relay -> external channel
@@ -38,8 +39,10 @@ await SendToUserAsync(new AgentMessage
 
 Without a target, FabrCore asks every installed relay and selects the eligible endpoint with the
 most recent `LastActiveUtc`. With a target, only the named channel is considered and the provider
-owns interpretation of `EndpointId`. A live principal observer takes precedence for newly arriving
-messages; relay resolution occurs only when no observer is present.
+owns interpretation of `EndpointId`. A live principal observer takes precedence only for untargeted
+messages. A nonblank target channel enters the durable external-delivery path and is not delivered
+to legacy or WebSocket observers. `EndpointId` may be omitted when the provider supports selecting
+an endpoint, such as the most recently active eligible Microsoft 365 conversation.
 
 ## Provider lifecycle
 
@@ -276,6 +279,8 @@ metadata, message mapping, provider I/O, and failure classification change; agen
   public replay API.
 - Ordering is preserved per principal. Unsupported control messages remain pending but do not
   block later messages that another relay can deliver.
+- Explicit channel targets retain external-delivery precedence when legacy, Surface, or other
+  WebSocket observers are connected; untargeted messages retain observer-first behavior.
 - A relay queue returning `false`, throwing while resolving, or disappearing during deployment
   does not discard durable work.
 - The metrics meter `FabrCore.Host.PrincipalGrain` emits

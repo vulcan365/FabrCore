@@ -15,7 +15,7 @@ namespace FabrCore.Services.Microsoft365Copilot.Tests;
 public sealed class CopilotProactiveDeliveryTests
 {
     [TestMethod]
-    public async Task Relay_SelectsLatestEligibleEndpoint_AndHonorsExplicitEndpoint()
+    public async Task Relay_ChannelOnlyTargetSelectsLatestEligibleEndpoint_AndHonorsExplicitEndpoint()
     {
         var older = Endpoint("older", DateTimeOffset.UtcNow.AddMinutes(-5));
         var latest = Endpoint("latest", DateTimeOffset.UtcNow);
@@ -26,10 +26,10 @@ public sealed class CopilotProactiveDeliveryTests
             null!,
             NullLogger<CopilotPrincipalMessageRelay>.Instance);
 
-        var automatic = await relay.ResolveAsync(
+        var channelOnly = await relay.ResolveAsync(
             "user",
             new AgentMessage { Message = "Report ready" },
-            null,
+            new PrincipalDeliveryTarget(Microsoft365CopilotDefaults.ChannelName),
             context);
         var explicitResult = await relay.ResolveAsync(
             "user",
@@ -37,8 +37,27 @@ public sealed class CopilotProactiveDeliveryTests
             new PrincipalDeliveryTarget(Microsoft365CopilotDefaults.ChannelName, "older"),
             context);
 
-        Assert.AreEqual("latest", automatic.EndpointId);
+        Assert.AreEqual("latest", channelOnly.EndpointId);
         Assert.AreEqual("older", explicitResult.EndpointId);
+    }
+
+    [TestMethod]
+    public async Task Relay_ExplicitTargetWithoutEligibleEndpoint_IsUnavailable()
+    {
+        var disabled = Endpoint("disabled", DateTimeOffset.UtcNow);
+        disabled.Eligible = false;
+        var relay = new CopilotPrincipalMessageRelay(
+            null!,
+            NullLogger<CopilotPrincipalMessageRelay>.Instance);
+
+        var result = await relay.ResolveAsync(
+            "user",
+            new AgentMessage { Message = "Report ready" },
+            new PrincipalDeliveryTarget(Microsoft365CopilotDefaults.ChannelName),
+            RegistryContext(disabled));
+
+        Assert.AreEqual(PrincipalMessageRelayResolutionStatus.Unavailable, result.Status);
+        Assert.AreEqual(Microsoft365CopilotDefaults.ChannelName, result.Channel);
     }
 
     [TestMethod]
