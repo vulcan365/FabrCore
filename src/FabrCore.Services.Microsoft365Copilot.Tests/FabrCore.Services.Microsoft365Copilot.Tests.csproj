@@ -14,8 +14,8 @@
 
   <ItemGroup>
     <PackageReference Include="MSTest" Version="4.3.3" />
-    <PackageReference Include="Microsoft.Agents.Builder.Testing" Version="1.7.129" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <PackageReference Include="Microsoft.Agents.Builder.Testing" Version="1.8.77" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
   </ItemGroup>
 
   <ItemGroup>

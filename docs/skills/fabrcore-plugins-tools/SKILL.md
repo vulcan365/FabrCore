@@ -81,7 +81,9 @@ public class MyPlugin : IFabrCorePlugin
 ### Plugin Lifecycle
 
 1. **Discovery** — `FabrCoreRegistry` scans assemblies for `[PluginAlias]` at startup; `[FabrCoreCapabilities]` and `[FabrCoreNote]` metadata is included in the registry
-2. **Resolution** — `FabrCoreToolRegistry.ResolvePluginToolsAsync()` instantiates the plugin
+2. **Resolution** — `FabrCoreToolRegistry.ResolveToolsAsync()` instantiates the plugin
+   (internal agents use `ResolveToolScopeAsync()`, which requires every alias to resolve and
+   owns disposal of the plugin instances it created)
 3. **Initialization** — `InitializeAsync(config, serviceProvider)` called with agent's config
 4. **Tool Extraction** — Public methods with `[Description]` become `AITool` instances; method names and descriptions are included in the registry
 5. **Disposal** — If plugin implements `IDisposable` or `IAsyncDisposable`, disposed on agent deactivation

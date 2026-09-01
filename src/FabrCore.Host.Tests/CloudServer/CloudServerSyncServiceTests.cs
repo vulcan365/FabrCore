@@ -2,6 +2,7 @@ using FabrCore.Core;
 using FabrCore.Core.Blueprints;
 using FabrCore.Core.CloudServer;
 using FabrCore.Host.Configuration;
+using FabrCore.Host.Configuration.Cloud;
 using FabrCore.Host.Services;
 using FabrCore.Host.Services.CloudServer;
 using Microsoft.Extensions.DependencyInjection;
@@ -43,11 +44,14 @@ public sealed class CloudServerSyncServiceTests
         public CloudConfigurationDiskCache DiskCache { get; private set; } = null!;
         public CloudServerSyncService Service { get; private set; } = null!;
 
+        public CloudSettingsState? CloudSettings { get; private set; }
+
         public static Harness Create(
             FakeCloudServerHandler handler,
             Action<CloudServerOptions>? configure = null,
             Action<ServiceCollection>? services = null,
-            Action<RemoteAdministrationOptions>? configureRemote = null)
+            Action<RemoteAdministrationOptions>? configureRemote = null,
+            CloudSettingsState? cloudSettings = null)
         {
             var harness = new Harness();
             Directory.CreateDirectory(harness.ContentRoot);
@@ -76,7 +80,10 @@ public sealed class CloudServerSyncServiceTests
                 remoteOptionsWrapper,
                 serviceCollection.BuildServiceProvider(),
                 new FakeHttpClientFactory(handler),
-                NullLogger<CloudServerSyncService>.Instance);
+                NullLogger<CloudServerSyncService>.Instance,
+                cloudSettings,
+                new FabrCoreSettingsCatalog());
+            harness.CloudSettings = cloudSettings;
             return harness;
         }
 
@@ -94,6 +101,106 @@ public sealed class CloudServerSyncServiceTests
             Service.Dispose();
             Directory.Delete(ContentRoot, recursive: true);
         }
+    }
+
+    private static CloudSettingsState BootstrapState(
+        string version, Dictionary<string, string?> settings)
+    {
+        var provider = new CloudSettingsConfigurationProvider();
+        provider.Apply(settings);
+        return new CloudSettingsState(
+            provider,
+            new CloudConfigurationEnvelope
+            {
+                ConfigurationVersion = version,
+                Configuration = new FabrCoreConfiguration(),
+                Settings = settings
+            });
+    }
+
+    [TestMethod]
+    public async Task StartAsync_AdoptsBootstrapEnvelope_WithoutAsecondFetch()
+    {
+        // The envelope was already fetched during host construction so Orleans could see it.
+        // Fetching again at startup would be wasted work against the cloud server.
+        var handler = new FakeCloudServerHandler(_ =>
+            Task.FromResult(FakeCloudServerHandler.Json(HttpStatusCode.OK, Envelope("from-network"))));
+        var state = BootstrapState("from-bootstrap", new Dictionary<string, string?>
+        {
+            ["FabrCore:Orleans:ClusterId"] = "prod"
+        });
+        await using var harness = Harness.Create(handler, cloudSettings: state);
+
+        await harness.Service.StartAsync(CancellationToken.None);
+
+        Assert.AreEqual("from-bootstrap", harness.Store.CurrentConfigurationVersion);
+        Assert.AreEqual(
+            0,
+            handler.Requests.Count(request => request.RequestUri!.AbsolutePath.EndsWith("/configuration")),
+            "Startup should adopt the bootstrap snapshot instead of re-fetching configuration.");
+    }
+
+    [TestMethod]
+    public async Task StartAsync_FallsBackToFetching_WhenNoBootstrapEnvelopeExists()
+    {
+        var handler = new FakeCloudServerHandler(_ =>
+            Task.FromResult(FakeCloudServerHandler.Json(HttpStatusCode.OK, Envelope("v1"))));
+        await using var harness = Harness.Create(handler);
+
+        await harness.Service.StartAsync(CancellationToken.None);
+
+        Assert.AreEqual("v1", harness.Store.CurrentConfigurationVersion);
+        Assert.AreEqual(
+            1,
+            handler.Requests.Count(request => request.RequestUri!.AbsolutePath.EndsWith("/configuration")));
+    }
+
+    [TestMethod]
+    public async Task RefreshLoop_AppliesSettings_AndReportsPendingRestart()
+    {
+        var fetchCount = 0;
+        var handler = new FakeCloudServerHandler(_ =>
+        {
+            var first = Interlocked.Increment(ref fetchCount) == 1;
+            return Task.FromResult(FakeCloudServerHandler.Json(HttpStatusCode.OK, new
+            {
+                schemaVersion = 1,
+                configurationVersion = first ? "v1" : "v2",
+                issuedAt = DateTimeOffset.UtcNow,
+                configuration = new { modelConfigurations = Array.Empty<object>(), apiKeys = Array.Empty<object>() },
+                settings = new Dictionary<string, string?>
+                {
+                    ["FabrCore:Orleans:ClusterId"] = first ? "prod" : "prod-renamed",
+                    ["FabrCore:Host:GatewayDiscovery:RefreshPeriod"] = first ? "00:01:00" : "00:02:00"
+                }
+            }));
+        });
+        var state = BootstrapState("v1", new Dictionary<string, string?>
+        {
+            ["FabrCore:Orleans:ClusterId"] = "prod",
+            ["FabrCore:Host:GatewayDiscovery:RefreshPeriod"] = "00:01:00"
+        });
+        await using var harness = Harness.Create(
+            handler, o => o.RefreshInterval = TimeSpan.FromMilliseconds(50), cloudSettings: state);
+
+        await harness.Service.StartAsync(CancellationToken.None);
+        Assert.AreEqual(0, state.PendingRestartSettings.Count);
+
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (harness.Store.CurrentConfigurationVersion != "v2" && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(25);
+        }
+
+        Assert.AreEqual("v2", harness.Store.CurrentConfigurationVersion);
+        Assert.AreEqual("v2", state.AppliedSettingsVersion);
+
+        // The live key applied straight into configuration; the Orleans key cannot, so it is
+        // reported as pending rather than silently treated as effective.
+        Assert.AreEqual(
+            "00:02:00", state.Provider.Snapshot()["FabrCore:Host:GatewayDiscovery:RefreshPeriod"]);
+        CollectionAssert.AreEqual(
+            new[] { "FabrCore:Orleans:ClusterId" }, state.PendingRestartSettings.ToArray());
     }
 
     [TestMethod]

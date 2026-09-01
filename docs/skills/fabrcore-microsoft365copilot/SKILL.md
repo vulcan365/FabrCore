@@ -8,7 +8,9 @@ description: >
   delivery. Use for M365 Copilot, custom engine agent, Teams bot, bot messaging endpoint,
   copilotAgents, ICopilotPrincipalResolver, SharedAgentHandle, PassUserTokenToAgent,
   Proactive:Enabled, DeliveryEndpointId, stored conversation endpoints, or out-of-turn Teams
-  messages. Use fabrcore-server for general hosting, fabrcore-agent for agent code, fabrcore-acl
+  messages. Use fabrcore-a2a when Copilot Studio should call the agent as an A2A
+  connected agent (Add agent > A2A agent, Code/CoWork orchestration) rather than a person chatting
+  with it. Use fabrcore-server for general hosting, fabrcore-agent for agent code, fabrcore-acl
   for grants, and fabrcore-principal-delivery for generic relay/provider and durable-outbox
   internals.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*) Bash(az:*) Bash(curl:*) Bash(devtunnel:*)"
@@ -32,6 +34,26 @@ POST /api/messages  ──►  FabrCoreCopilotAgent (Agents SDK bridge, in the a
         │                    ▼
         ◄── streamed reply ── your [AgentAlias] agent on the Orleans silo
 ```
+
+## This addon or fabrcore-a2a?
+
+Both connect FabrCore to Microsoft, and picking the wrong one costs a day. They are not
+alternatives — many hosts run both.
+
+| | This addon | A2A, built into `FabrCore.Host` (**fabrcore-a2a**) |
+|---|---|---|
+| Who calls | A **person**, chatting in Microsoft 365 Copilot or Teams | **Another agent** — Copilot Studio's orchestrator, or any A2A client |
+| Protocol | Azure Bot Service Activity Protocol | Open Agent2Agent (A2A) |
+| Endpoint | `/api/messages` | `/a2a/{agent}` plus agent cards on `/.well-known/*` |
+| Identity | Each Microsoft 365 user, via Entra and Azure Bot Service tokens | The calling agent or tenant, via API key or OAuth 2.0 |
+| Setup | Package reference, Azure Bot registration, Entra app, app package upload | Built into `FabrCore.Host`: an HTTPS route, a credential, and `A2A:Enabled` |
+| Discovery | The app package manifest | The agent card's description and skills |
+
+Rule of thumb: **"my users want to chat with this agent in Copilot"** → this addon.
+**"Copilot Studio should be able to delegate work to this agent"** (Add agent → A2A agent, and the
+Code / CoWork multi-agent experiences) → **fabrcore-a2a**.
+
+Both mount on the same host and share the same agents, principals, and ACLs.
 
 ## Install and wire up
 

@@ -8,6 +8,8 @@ using FabrCore.Core.Monitoring;
 using FabrCore.Core.Skills;
 using FabrCore.Core.VerifiableExecution;
 using FabrCore.Host.Configuration;
+using FabrCore.Host.Configuration.Cloud;
+using Microsoft.Extensions.Configuration;
 using FabrCore.Host.Security;
 using FabrCore.Host.Services;
 using FabrCore.Services.Contracts.Capabilities;
@@ -125,6 +127,83 @@ public sealed class RemoteAdminController(
         }
 
         return Ok(document);
+    }
+
+    /// <summary>
+    /// Describes every configuration key this host understands, whether a cloud-delivered change
+    /// applies live or needs a restart, and where each currently-effective value came from.
+    /// <para>
+    /// A management console uses this to render a real settings form instead of a JSON textarea,
+    /// and to show which published values are stored but not yet in effect. Secret values are
+    /// reported as set/not-set and never returned.
+    /// </para>
+    /// </summary>
+    [HttpGet("settings/catalog")]
+    public IActionResult GetSettingsCatalog()
+    {
+        if (RejectSpoofedTargetHeaders() is { } rejected) return rejected;
+
+        var catalog = services.GetRequiredService<FabrCoreSettingsCatalog>();
+        var configuration = services.GetRequiredService<IConfiguration>();
+        var cloudState = services.GetService<CloudSettingsState>();
+        var cloudValues = cloudState?.Provider.Snapshot() ?? [];
+        var pending = new HashSet<string>(
+            cloudState?.PendingRestartSettings ?? [], StringComparer.OrdinalIgnoreCase);
+
+        var effective = new List<EffectiveSetting>();
+        foreach (var (key, value) in configuration.AsEnumerable())
+        {
+            // Intermediate section nodes carry no value, and keys the catalog does not describe
+            // are not ours to advertise.
+            if (value is null || catalog.Find(key) is null)
+            {
+                continue;
+            }
+
+            var isCloudKey = cloudValues.TryGetValue(key, out var cloudValue);
+            var source = isCloudKey
+                ? string.Equals(cloudValue, value, StringComparison.Ordinal)
+                    ? "cloud"
+                    : "local-override"
+                : "local";
+            var secret = FabrCoreSettingsCatalog.IsSecret(key);
+
+            effective.Add(new EffectiveSetting(
+                key,
+                source,
+                catalog.GetApplyMode(key).ToString(),
+                pending.Contains(key),
+                secret,
+                secret ? null : value));
+        }
+
+        effective.Sort((left, right) =>
+            string.Compare(left.Key, right.Key, StringComparison.OrdinalIgnoreCase));
+
+        return Ok(new
+        {
+            ApiVersion = "1",
+            CloudSettingsEnabled = cloudState is not null,
+            AppliedSettingsVersion = cloudState?.AppliedSettingsVersion,
+            PendingRestartSettings = cloudState?.PendingRestartSettings ?? [],
+            BlockedFromCloud = new
+            {
+                Sections = CloudSettingsPolicy.BlockedSectionNames,
+                Keys = CloudSettingsPolicy.BlockedKeyNames,
+                Reason = "These own host enrollment and the remote recovery path. A cloud server " +
+                    "cannot set them, so an operator can always recover a host from a bad publish."
+            },
+            Descriptors = catalog.Descriptors.Select(descriptor => new
+            {
+                descriptor.Key,
+                descriptor.Type,
+                descriptor.DefaultValue,
+                descriptor.Description,
+                ApplyMode = descriptor.ApplyMode.ToString(),
+                descriptor.IsSection
+            }),
+            Effective = effective
+        });
     }
 
     [HttpGet("runtime/principals")]
@@ -576,6 +655,21 @@ public sealed class RemoteAdminController(
             throw;
         }
     }
+
+    /// <summary>One configuration key as the running host currently sees it.</summary>
+    /// <param name="Source">
+    /// <c>cloud</c> when the cloud value is what took effect, <c>local-override</c> when an
+    /// environment variable or command-line argument outranked the cloud value, otherwise
+    /// <c>local</c>.
+    /// </param>
+    /// <param name="Value">Null for secrets, which are reported as set without their value.</param>
+    private sealed record EffectiveSetting(
+        string Key,
+        string Source,
+        string ApplyMode,
+        bool PendingRestart,
+        bool IsSecret,
+        string? Value);
 
     private IActionResult? RejectSpoofedTargetHeaders()
     {

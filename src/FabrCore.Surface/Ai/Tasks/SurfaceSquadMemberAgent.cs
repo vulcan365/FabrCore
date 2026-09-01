@@ -17,9 +17,9 @@ namespace FabrCore.Surface.Ai.Tasks;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Deliberately not <c>A2AAgentProxy</c>: that proxy leaves <see cref="Name"/> and <see cref="Description"/>
-/// null (the provider rejects empty names), bypasses <see cref="SurfaceSquadConversationBus"/> so nothing is
-/// mirrored into the principal's timeline, and has no delegation timeout.
+/// <see cref="Name"/> and <see cref="Description"/> are always populated (the provider rejects empty names),
+/// delegation goes through <see cref="SurfaceSquadConversationBus"/> so every turn is mirrored into the
+/// principal's timeline, and each call is bounded by a delegation timeout.
 /// </para>
 /// <para>
 /// The delegate's reply is returned verbatim. There is no envelope, status token, or summary extraction —

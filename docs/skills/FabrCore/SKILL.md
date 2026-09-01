@@ -11,7 +11,8 @@ description: >
   fabrcore-messaging; durable proactive/out-of-turn delivery and relay providers to
   fabrcore-principal-delivery; authorization/audit to fabrcore-acl; MCP to fabrcore-mcp;
   verifiable execution/SPIFFE to fabrcore-spiffe; Microsoft 365 Copilot/Teams integration to
-  fabrcore-microsoft365copilot; Memory to fabrcore-services-memory; GraphRAG to
+  fabrcore-microsoft365copilot; Agent2Agent (A2A) endpoints and Copilot Studio connected agents to
+  fabrcore-a2a; Memory to fabrcore-services-memory; GraphRAG to
   fabrcore-graphrag; Surface UI and squads to fabrcore-surface;
   tests to fabrcore-testing; and August 2026 OSS/Forge ownership or cross-repo changes to
   fabrcore-oss-aug2026.
@@ -51,6 +52,7 @@ Build distributed AI agent systems with FabrCore — an open-source .NET 10 fram
 | Security Audit | ACL decisions, boundary crossings | `IAuditProvider`, `AuditEvent` | fabrcore-acl |
 | MCP | External tool protocol | `McpServerConfig` | fabrcore-mcp |
 | Microsoft 365 Copilot | Copilot/Teams channel addon | `AddMicrosoft365Copilot()`, `Microsoft365CopilotOptions` | fabrcore-microsoft365copilot |
+| A2A | Agent2Agent protocol endpoints (in `FabrCore.Host`) | `A2A:Enabled`, `A2AOptions`, agent cards | fabrcore-a2a |
 | Memory | Durable scoped agent memory | `AddAgentMemoryServices()`, `IAgentMemoryService` | fabrcore-services-memory |
 | GraphRAG | Scoped knowledge ingestion/search | `AddGraphRagServices()`, `IKnowledgeSearchService` | fabrcore-graphrag |
 | Surface | OSS command-center UI | `AddFabrCoreSurface()`, `SurfaceChatLink` | fabrcore-surface |

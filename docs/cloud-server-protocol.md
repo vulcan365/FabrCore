@@ -24,7 +24,8 @@ The host enables the feature purely through `appsettings.json` — no `fabrcore.
       "Url": "https://forge.vulcan365.ai",
       "ApiKey": "<per-cluster API key>",
       "ClusterId": null,
-      "Environment": null
+      "Environment": null,
+      "Settings": { "Enabled": true }
     },
     "RemoteAdministration": {
       "Enabled": true,
@@ -133,9 +134,11 @@ Response envelope:
 
 - `configuration` is exactly the `FabrCore.Core.FabrCoreConfiguration` shape (all
   `ModelConfiguration` tuning fields are supported; the example above is abbreviated).
-- `settings` is a **reserved** optional map of flat IConfiguration keys (for example
-  `"FabrCore:Host:WebSocketPath": "/ws"`). Current hosts ignore it; servers may omit it or
-  populate it without breaking compatibility.
+- `settings` is an optional map of flat IConfiguration keys (for example
+  `"FabrCore:Host:WebSocketPath": "/ws"`) that the host layers into its own configuration. It is
+  optional in both directions: a server may omit it, and a host may decline to consume it
+  (`FabrCore:CloudServer:Settings:Enabled: false`). See
+  [Cloud-delivered settings](#cloud-delivered-settings) below.
 - `blueprints` is an optional list of principal-scoped canonical `FabrCoreBlueprint`
   deployments. On a new configuration version the host stores each blueprint and, when
   `applyOnRefresh` is true, applies it through the same host-side expander pipeline used by
@@ -144,6 +147,58 @@ Response envelope:
 - `configurationVersion` must change whenever the effective configuration changes — including
   when only an environment overlay changed. A content hash of the merged document is a good
   implementation.
+
+## Cloud-delivered settings
+
+A host that consumes `settings` layers the map into its own `IConfiguration`, which lets a server
+manage far more than model configuration — Orleans clustering, connection strings, access control,
+timeouts, add-on channel configuration. This is what makes provisioning a new host a matter of
+supplying one API key.
+
+Three rules govern it. All are host-side obligations; a server needs only to publish the map.
+
+### Precedence
+
+The cloud layer sits **above `appsettings*.json` and below environment variables and command-line
+arguments**:
+
+```
+appsettings.json  <  appsettings.{Environment}.json  <  cloud settings  <  environment variables  <  command line
+```
+
+Central configuration therefore beats a stale file on the machine, while an operator keeps a local
+override that does not depend on reaching the server — which matters precisely when the thing being
+corrected is a bad publish.
+
+### Keys a server may never set
+
+A host **must** refuse these, whatever a server sends, and should log each refusal:
+
+| Key or section | Reason |
+|---|---|
+| `FabrCore:CloudServer` | Owns enrollment. A server that could rewrite its own URL, key, or `Enabled` flag could orphan or redirect an entire fleet with no local way back. |
+| `FabrCore:RemoteAdministration` | Owns the outbound recovery channel. |
+| `FabrCore:HostUrl` | The connect channel dispatches admin requests to this address, so a remotely settable value is an SSRF pivot. |
+
+A host should also bound the payload (key count and total size) and reject malformed keys, rather
+than trusting a server to be well-behaved.
+
+### Timing, and settings that need a restart
+
+Settings are fetched **during host construction**, before clustering and connection strings are
+read, so a provisioning-critical value arrives in time to be used. That fetch is best-effort: if
+the server is unreachable the host falls back to its last-known-good cache, and failing that
+continues with local configuration — the ordinary startup path then applies
+`StartupFailureBehavior` as usual.
+
+Most host options are captured once at startup and cannot observe a later change. When a refresh
+delivers a value that differs from the one the process started with, and its consumers cannot pick
+the change up, the host does **not** pretend the change took effect: it keeps serving the startup
+value and reports the key in `pendingRestartSettings` on the next heartbeat. Hosts never restart
+themselves; when to restart is the operator's decision.
+
+A host that consumes settings advertises `"config.settings": "1"` in its heartbeat capabilities, so
+a server can tell whether publishing them will have any effect.
 
 ## POST /fabrcore-cloud/v1/heartbeat
 
@@ -162,9 +217,12 @@ Request body:
   "hostInstanceId": "HOSTNAME:3f2a…",
   "hostVersion": "1.3.0",
   "appliedConfigurationVersion": "5b3e…9c",
+  "appliedSettingsVersion": "5b3e…9c",
+  "pendingRestartSettings": ["FabrCore:Orleans:ClusterId"],
   "activeGatewayCount": 2,
   "capabilities": {
     "host": "1.5.0",
+    "config.settings": "1",
     "memory.admin": "1",
     "graphrag.admin": "1",
     "blueprint.squads": "1"
@@ -172,6 +230,11 @@ Request body:
   "timestamp": "2026-07-23T18:00:00Z"
 }
 ```
+
+`appliedSettingsVersion` and `pendingRestartSettings` are additive and present only when the host
+consumes cloud settings. `pendingRestartSettings` lists keys whose published value is stored but not
+yet in effect, so a server can show an operator that a change is waiting on a restart rather than
+silently failing. Both are omitted when empty.
 
 `capabilities` is an additive service/API-version map. Forge uses it to avoid rendering
 features a cluster does not have. Authenticated operators can obtain the richer feature
@@ -307,7 +370,9 @@ lease when more than one server replica can answer long polls.
 
 1. **Startup**: fetch configuration before serving traffic (a few quick attempts). On failure,
    fall back to the last-known-good disk cache; with no cache, fail startup (default) or start
-   degraded per `StartupFailureBehavior`.
+   degraded per `StartupFailureBehavior`. A host consuming `settings` performs one earlier,
+   best-effort fetch during construction so provisioning-critical keys are in place before they
+   are read; that fetch never decides startup failure on its own.
 2. **Refresh**: poll with `If-None-Match` at `RefreshInterval` (default 5 minutes),
    exponential backoff on failure, never dropping the last-known-good snapshot.
 3. **Cache**: after every successful fetch, persist the envelope to
@@ -316,7 +381,9 @@ lease when more than one server replica can answer long polls.
 4. **Blueprint rollout**: on a changed configuration version, store each delivered canonical
    blueprint under its declared principal and apply entries marked `applyOnRefresh`. A failed
    blueprint must be logged without discarding an otherwise valid model configuration.
-5. **Key rotation**: servers rotate cluster API keys by allowing multiple active keys per
+5. **Settings**: apply the `settings` map subject to the precedence, blocklist and bounds above;
+   report applied version and pending-restart keys on the heartbeat; never self-restart.
+6. **Key rotation**: servers rotate cluster API keys by allowing multiple active keys per
    cluster; servers rotate *provider* keys by publishing a new configuration version — hosts
    pick it up on the next refresh (or immediately via `refreshRequested`).
 

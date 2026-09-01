@@ -1,0 +1,30 @@
+{
+  "A2A": {
+    "Enabled": true,
+    "PublicBaseUrl": "https://agents.contoso.com",
+    "Discovery": {
+      "AgentTypes": "Described"
+    },
+
+    "Authentication": {
+      "Mode": "JwtBearer",
+      "JwtBearer": {
+        "Authority": "https://login.microsoftonline.com/<tenant-id>/v2.0",
+        "Audience": "api://<a2a-api-app-id>",
+        "PrincipalClaimType": "oid",
+
+        "AuthorizationUrl": "https://login.microsoftonline.com/<tenant-id>/oauth2/v2.0/authorize",
+        "TokenUrl": "https://login.microsoftonline.com/<tenant-id>/oauth2/v2.0/token",
+        "RefreshUrl": "https://login.microsoftonline.com/<tenant-id>/oauth2/v2.0/token",
+        "Scopes": {
+          "api://<a2a-api-app-id>/.default": "Call the Contoso FabrCore agents"
+        }
+      }
+    },
+
+    "Principal": {
+      "Strategy": "Claim",
+      "Prefix": "a2a-"
+    }
+  }
+}

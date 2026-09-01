@@ -224,8 +224,8 @@ To supply delegates in code instead — squad members, agents with their own tra
 For private specialists owned by the same proxy, create them in `OnInitialize` with
 `CreateInternalAgentAsync` and add `result.AsBackgroundAgent()`. FabrCore gives these agents separate
 tracked clients, fail-closed risk-classified tool scopes, timeout/concurrency bounds, and child
-attribution. They have no FabrCore handles and do not use `SendMessage`; this is not squads, A2A, or
-FabrCore agent-to-agent delegation. Only `Read` and `Compute` tools are permitted under background
+attribution. They have no FabrCore handles and do not use `SendMessage`; this is not squads, the A2A
+protocol (**fabrcore-a2a**), or FabrCore agent-to-agent delegation. Only `Read` and `Compute` tools are permitted under background
 execution policies. See **fabrcore-agent → `references/internal-agent-composition.md`**.
 
 The upstream background provider stores live child tasks and sessions only in memory. After proxy
@@ -233,7 +233,7 @@ deactivation, an in-flight private task becomes `Lost`; it is not automatically 
 FabrCore wrapper can enforce its timeout even though the upstream provider does not pass the parent
 tool-call cancellation token into a started child.
 
-**`A2AAgentProxy` cannot back this.** It leaves `Name` and `Description` null, which `BackgroundAgentsProvider` rejects outright, and it has no delegation timeout. Use `FabrCoreBackgroundAgent`.
+**Do not confuse this with the A2A protocol.** Background delegation is in-process and FabrCore-internal, and `FabrCoreBackgroundAgent` is its delegate type; `FabrCore.Host`'s A2A endpoints publish agents to *external* clients over Agent2Agent. They compose — an A2A caller can reach an agent that then delegates in the background — but neither replaces the other. See **fabrcore-a2a**.
 
 ## Session Durability
 
@@ -288,7 +288,7 @@ storage. See **fabrcore-agent → Context Management: the compaction ladder**.
 Read only what the task needs:
 
 - `references/configuration.md` — use for the `_Harness*` args table, parsing rules, blueprint examples, code-vs-config precedence, and why re-applying a blueprint may appear to do nothing.
-- `references/skills.md` — use for publishing immutable skill ZIPs, Storage layout and durability, exact-version assignment, limits, security rules, and administration APIs.
+- `references/skills.md` — use for publishing immutable skill ZIPs, Storage layout and durability, exact-version assignment, limits, security rules, and administration APIs. For how a loaded skill appears on an agent's A2A card, see **fabrcore-a2a**.
 - `references/durability.md` — use for session snapshot format and lifecycle, size limits, corruption handling, lost delegations, and how reset, thread-clear, and eviction interact with harness state.
 
 ## Assets
@@ -308,4 +308,5 @@ Read only what the task needs:
 - **Background agent names must be non-empty and case-insensitively unique** — `AgentRosterBuilder` guarantees this. If you build delegates by hand, so must you.
 - **Arg keys are case-sensitive** — `_HarnessLoop` works, `_harnessloop` is silently ignored.
 - **Skills are exact-version and activation-cached** — changing `_HarnessSkills` or deleting a package affects a new activation; force reconfigure or evict an active agent to reload it.
+- **Skills are principal-scoped, and that principal is not always the one you published from** — an agent reached over A2A runs as the A2A principal (`a2a` by default), so publish there for its `_HarnessSkills` to resolve. That agent's card also advertises the skills it loads, so a published description is read by remote orchestrators as well as by the model. See **fabrcore-a2a**.
 - **Harness types are `[Experimental]` upstream** — files in `src/FabrCore.Sdk/Harness/` open with `#pragma warning disable MAAI001`. Do the same in agent code that names `TodoProvider`, `AgentModeProvider`, `LoopAgent`, or `BackgroundAgentsProvider` directly.

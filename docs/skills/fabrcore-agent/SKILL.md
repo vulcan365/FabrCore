@@ -84,6 +84,22 @@ public class JobAgent : FabrCoreAgentProxy { /* ... */ }
 
 These attributes are optional but strongly recommended for any agent that will be discoverable by other agents or surfaced in a registry UI.
 
+**This metadata can leave your cluster.** The Agent2Agent addon (**fabrcore-a2a**) can publish
+agents straight from this registry — `A2A:Discovery:AgentTypes = "Described"` exposes every agent
+type that carries a `[Description]`, with no per-agent configuration. When it does:
+
+| Attribute | Becomes |
+|-----------|---------|
+| `[Description]` | The agent card's `description` — what an external orchestrator matches on |
+| `[FabrCoreCapabilities]` | The card skill's `tags` (comma-separated) |
+| `[FabrCoreNote]` | The card skill's `examples` |
+| `[FabrCoreHidden]` | Exclusion from A2A as well as from `/fabrcoreapi/discovery` |
+
+So write these for that audience: say what the agent is for and when to pick it, not how it is
+implemented. `[FabrCoreNote]` earns its place here — a note saying when *not* to use the agent is
+what keeps a remote orchestrator from mis-routing to it. An A2A `Agents` entry can override any of
+it per endpoint, but these values are the default.
+
 ## Protected Fields
 
 Available from the base class:

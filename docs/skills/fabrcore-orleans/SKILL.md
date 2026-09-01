@@ -480,3 +480,55 @@ AgentA.OnMessage()
               └─> Response
         └─> Return to AgentA
 ```
+
+
+## Grain interfaces need `Microsoft.Orleans.Sdk`
+
+Every project that declares grain interfaces or grain classes must reference
+**`Microsoft.Orleans.Sdk`**, not just `Microsoft.Orleans.Core.Abstractions`. The SDK package carries
+the Orleans source generator; the abstractions package is types only. Without the generator the
+project compiles cleanly and produces **no** `OrleansCodeGen` output at all - no interface proxies,
+and nothing added to `config.Interfaces` in its generated type manifest.
+
+Nothing fails at build time. The silo fails at startup instead, on the first grain interface it
+tries to name:
+
+```
+System.InvalidOperationException: Type "MyApp.Interfaces.IThingGrain" is not allowed.
+To allow it, call TypeManifestOptions.AddAllowedType, ...
+  at Orleans.Metadata.GrainInterfaceTypeResolver.GetGrainInterfaceTypeByConvention(Type type)
+  at Orleans.Metadata.SiloManifestProvider.CreateGrainManifest(...)
+```
+
+The named type is misleading: it is simply the first interface the manifest walked, not the only
+broken one. Every grain interface in that assembly is equally unregistered.
+
+**Do not** work around this with `TypeManifestOptions.AddAllowedType`, `AddAllowedAssembly`, or
+`AllowAllTypes = true`. Those suppress the symptom while leaving the assembly without proxies, and
+`AllowAllTypes` is insecure whenever serialized input can be influenced by an untrusted party. Add
+the SDK reference instead:
+
+```xml
+<PackageReference Include="Microsoft.Orleans.Sdk" Version="10.3.1" />
+```
+
+`Microsoft.Orleans.Sdk` already includes `Microsoft.Orleans.Core.Abstractions`, so it replaces that
+reference rather than joining it.
+
+To confirm the generator ran, build with codegen emitted and look for proxy files:
+
+```bash
+dotnet build MyApp.Interfaces.csproj -t:Rebuild -p:EmitCompilerGeneratedFiles=true -p:CompilerGeneratedFilesOutputPath=obj/gen
+ls obj/gen/Orleans.CodeGenerator/*/
+```
+
+You want one `*.orleans.proxy.*.g.cs` per grain interface. An empty directory, or a
+`*.orleans.metadata.g.cs` whose `ConfigureInner` adds `InterfaceImplementations` but never
+`Interfaces`, means the generator is not running for that project.
+
+## Troubleshooting
+
+| Symptom | Cause and fix |
+| --- | --- |
+| `Type "X" is not allowed` at startup, naming a grain interface | The assembly declaring it lacks `Microsoft.Orleans.Sdk`, so no proxies were generated. Add the SDK reference; do not add allowed types |
+| Grain state vanishes on restart in development | Localhost clustering uses in-memory grain storage. Expected; switch to SqlServer or AzureStorage for restart-safe persistence |

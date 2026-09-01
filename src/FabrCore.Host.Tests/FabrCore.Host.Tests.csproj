@@ -14,12 +14,13 @@
 
   <ItemGroup>
     <PackageReference Include="MSTest" Version="4.3.3" />
-    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.10" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.11" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\FabrCore.Host\FabrCore.Host.csproj" />
+    <ProjectReference Include="..\FabrCore.Host.Testing\FabrCore.Host.Testing.csproj" />
     <ProjectReference Include="..\FabrCore.Host.SqlServer\FabrCore.Host.SqlServer.csproj" />
     <ProjectReference Include="..\FabrCore.Host.AzureStorage\FabrCore.Host.AzureStorage.csproj" />
   </ItemGroup>

@@ -292,6 +292,7 @@ For end-to-end `SpanId`/`ParentSpanId` propagation checks you need the grain ing
 | `SendMessage(agent, text, fromHandle?)` | Calls `OnMessage()` with a properly formed `AgentMessage` |
 | `InitializeAndMessage(agent, text)` | Convenience: init + send in one call |
 | `SendBusyMessage(agent, text, fromHandle?)` | Calls `OnMessageBusy()` to test busy-state handling |
+| `GetChatClient(name?, timeoutSeconds?)` | Resolves an `IChatClient` from the harness DI container (call after creating an agent) |
 | `AgentHost` | Access the `TestFabrCoreAgentHost` for assertions |
 
 ## TestFabrCoreAgentHost Handle Methods
@@ -301,20 +302,26 @@ For end-to-end `SpanId`/`ParentSpanId` propagation checks you need the grain ing
 Compatibility naming: `GetUserHandle()`, `HasUserHandle()`, and `UserHandle` tuple fields are legacy contract names. In tests, assert them as principal handles.
 
 ```csharp
-// Default handle is "test-agent" (no principal handle)
-var harness = new FabrCoreTestHarness();
-var host = harness.AgentHost;
+// Construct the host directly to exercise handle parsing
+var host = new TestFabrCoreAgentHost();   // default handle "test-agent"
 host.GetHandle();        // "test-agent"
-host.GetUserHandle();   // ""
+host.GetUserHandle();    // ""
 host.GetAgentHandle();   // "test-agent"
-host.HasUserHandle();         // false
+host.HasUserHandle();    // false
 
-// With principal-handle-scoped handle
-var harness2 = new FabrCoreTestHarness(new() { Handle = "principal1:my-agent" });
-var host2 = harness2.AgentHost;
-host2.GetUserHandle();  // "principal1"
+// With a principal-handle-scoped handle
+var host2 = new TestFabrCoreAgentHost("principal1:my-agent");
+host2.GetUserHandle();   // "principal1"
 host2.GetAgentHandle();  // "my-agent"
-host2.HasUserHandle();        // true
+host2.HasUserHandle();   // true
+
+// Through the harness: AgentHost is built by CreateMockAgent/CreateLiveAgent from
+// config.Handle (default "test:<alias>"), so create the agent before reading it.
+using var harness = new FabrCoreTestHarness();
+harness.CreateMockAgent<MyAgent>(
+    FakeChatClient.WithTextResponse("ok"),
+    new AgentConfiguration { Handle = "principal1:my-agent", Models = "default" });
+harness.AgentHost.GetUserHandle();  // "principal1"
 ```
 
 ## TestFabrCoreAgentHost Assertions

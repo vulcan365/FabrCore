@@ -367,6 +367,10 @@ FodyWeavers.xsd
 # FabrCore configuration (may contain API keys)
 **/fabrcore.json
 
+# Cloud Server last-known-good cache (same exposure profile as fabrcore.json:
+# it stores the delivered configuration, including provider API keys, in plaintext)
+**/fabrcore.cloud-cache.json
+
 # Local NuGet publishing script (contains a user-supplied API key)
 /scripts/Push-NuGet.ps1
 

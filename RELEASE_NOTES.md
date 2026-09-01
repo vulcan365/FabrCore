@@ -19,6 +19,10 @@ Snapshot date: 2026-08-05
 - Added a two-layer compaction ladder: reversible, per-call context compaction bounds what the
   model sees, while history compaction continues to summarize persisted `MessageThreads`
   between turns.
+- Added Agent2Agent (A2A) endpoints to `FabrCore.Host`, publishing a server's agents over the open
+  A2A protocol. Microsoft 365 Copilot Studio tenants can add FabrCore agents as A2A connected
+  agents, which is how they join Copilot's Code and CoWork orchestration. Every deployment has it;
+  `A2A:Enabled` (default false) turns it on with no code or package change.
 - Replaced the Surface Swarm runtime with simpler blueprint-defined `orchestrator` and `task`
   squads. Task squads use harness todo, background-agent, and loop primitives to coordinate
   executor and subject-matter-expert members.
@@ -60,6 +64,67 @@ Snapshot date: 2026-08-05
   model, persona prompt, delegation overlay, delegation timeout, and maximum loop iterations.
 - Added focused SDK tests for harness composition, durable sessions, delegation behavior,
   configuration parsing, and compaction-ladder ordering.
+- Added the `A2A` configuration section and `FabrCoreServerOptions.ConfigureA2A` for code-level
+  settings. `AddFabrCoreServer` registers the A2A services and `UseFabrCoreServer` maps the routes,
+  both gated on `A2A:Enabled`. `A2A:AgentTypes`, `A2A:AgentHandles`, and `A2A:Agents` select which
+  agent types or existing handles are published.
+- Added A2A 0.3.0 protocol support: agent cards on `/.well-known/agent-card.json` and the pre-0.3
+  `/.well-known/agent.json`, the JSON-RPC binding at each agent's base path, the HTTP+JSON binding
+  under `/v1` (`message:send`, `message:stream`, `tasks/{id}`, `:cancel`, `:subscribe`), SSE
+  streaming with keep-alives, the full task lifecycle with cancellation and resubscribe, and an
+  agent catalog at `GET /a2a`.
+- Added native handling for Microsoft Copilot Studio's wire shape, which posts JSON-RPC bodies to
+  the HTTP+JSON `message:stream` URL and reads a single JSON response. `A2A:Interop` controls
+  whether that is accepted, whether the stream is collapsed, and the result shape, so no
+  middleware shim is needed.
+- Added A2A caller authentication (`None`, `ApiKey` with constant-time comparison and per-key agent
+  scoping, `JwtBearer` for OAuth 2.0/OIDC), principal mapping strategies (`Fixed`, `ContextId`,
+  `ApiKey`, `Claim`), and the `IA2APrincipalResolver`, `IA2ATaskStore`, `IA2AAgentCardFactory`, and
+  `IA2AAgentProvisioner` extension points.
+- Added registry-driven A2A exposure so the config section does not restate the agent catalog.
+  `A2A:Discovery:AgentTypes` (`Described` / `All`) publishes agent types straight from the FabrCore
+  registry with include/exclude globs, carrying each agent's `[Description]`,
+  `[FabrCoreCapabilities]`, and `[FabrCoreNote]` onto its agent card. `[FabrCoreHidden]` types are
+  excluded automatically, because discovery reads the same registry call that backs
+  `/fabrcoreapi/discovery`.
+- Added `A2A:Discovery:IncludeAgentHandles` globs that publish live agents by key (for example
+  `system:*`), refreshed on `Discovery:RefreshInterval`. A2A routes are parameterized rather than
+  mapped per agent, so agents created after startup become reachable without a restart.
+- Added `A2A:Defaults` for fleet-wide model, prompt, plugin, tool, arg, and card settings, with
+  per-agent entries overriding only what they state.
+- Added stored-harness-skill advertising: an agent that loads FabrCore harness skills (the
+  `_HarnessSkills` arg) resolves each `name@version` against its principal's skill catalog and
+  advertises them as A2A card skills tagged `harness-skill`. Resolution is limited to agents whose
+  principal does not depend on the caller (published by handle, or provisioned under
+  `Principal:Strategy = Fixed`), reads are cached, and a skill-store failure degrades the card
+  rather than failing it. `A2A:Discovery:IncludeHarnessSkills` turns it off.
+- `IA2APrincipalResolver.ResolvePrincipalHandle` is now
+  `ValueTask<string?> ResolvePrincipalHandleAsync(HttpContext, A2AExposedAgent, string, CancellationToken)`,
+  matching `ICopilotPrincipalResolver`. Mapping a caller to a real user means a store lookup, and the
+  synchronous signature forced implementations into cached snapshots behind a lock.
+  `DescribeCaller` stays synchronous.
+- Added `FabrCore.Host.Testing`: `FabrCoreA2ATestHost` stands the A2A endpoints up over an
+  in-memory server with `FakeFabrCoreAgentService` and `FakeFabrCoreRegistry`, so an application can
+  test its own exposure — agent cards, authentication, the Copilot Studio interop path, and which
+  agent grain a call reaches — without an Orleans silo. `AddA2A` / `UseA2A` are public for hosts
+  that compose the pipeline themselves; both are idempotent. `FabrCore.Host.Tests` runs its own A2A
+  suite through this package's public surface.
+- `scripts/Pack-Local.ps1` fails instead of falling back to a hardcoded `1.5.0` when no git tag is
+  found, and refuses to pack a version lower than one already in the output feed (override with
+  `-AllowVersionDowngrade`). The fallback silently produced builds that sorted below packages
+  consumers already referenced.
+- Added `docs/a2a.md` and the `fabrcore-a2a` skill. `samples/FabrCore.SampleApp` carries an `A2A`
+  section in `fabrcore.sample.json`, off until `A2A:Enabled` is set.
+- `FabrCore.Host` now references `Microsoft.AspNetCore.Authentication.JwtBearer`, which the A2A
+  OAuth 2.0 authentication mode uses.
+
+### Removed
+
+- Removed `FabrCore.Sdk.A2AAgentProxy` and `A2AAgentSession`. Despite the name they implemented
+  none of the Agent2Agent protocol — no agent card, transport, or task lifecycle — and were an
+  in-process `AIAgent` adapter for an earlier Microsoft agent-framework workflow with no callers.
+  Use `FabrCoreBackgroundAgent` for in-process delegation and the host's A2A endpoints for the
+  protocol.
 
 ### Changed
 

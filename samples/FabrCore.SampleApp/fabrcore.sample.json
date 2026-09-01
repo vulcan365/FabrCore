@@ -19,6 +19,28 @@
       "Value": "replace-with-api-key"
     }
   ],
+  "A2A": {
+    "Enabled": false,
+    "PublicBaseUrl": "https://replace-with-public-host",
+    "Discovery": {
+      "AgentTypes": "Described"
+    },
+    "Authentication": {
+      "Mode": "ApiKey",
+      "ApiKey": {
+        "Keys": [
+          {
+            "Name": "copilot-studio",
+            "Value": "<set-with-user-secrets-or-key-vault>"
+          }
+        ]
+      }
+    },
+    "Provider": {
+      "Organization": "Vulcan365",
+      "Url": "https://vulcan365.com"
+    }
+  },
   "Microsoft365Copilot": {
     "TenantId": "replace-with-entra-tenant-id",
     "ClientId": "replace-with-bot-app-registration-client-id",

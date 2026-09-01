@@ -1,8 +1,9 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using FabrCore.Core;
+using FabrCore.Host.A2A;
 using FabrCore.SampleApp.Surface;
 using FabrCore.Sdk;
 using FabrCore.Surface.Contracts;
@@ -46,6 +47,8 @@ public sealed class CrmDemoAgent(
         - Add-contact forms must include customerId, fullName, title, email, phone, and primary fields, with customerId prefilled when known.
 
         Keep chat responses brief and explain what UI you rendered. Never invent real external CRM access; this is seeded demo data.
+        A system turn may tell you the caller cannot display Surface UI. When it does, that instruction wins
+        over every rendering rule above: render nothing, describe no UI, put the full answer in your reply text.
         """;
 
     private static readonly Regex CustomerIdRegex = new(@"\bCUS-\d{4,}\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -122,8 +125,14 @@ public sealed class CrmDemoAgent(
         if (message.MessageType == SurfaceMessageTypes.UiAction)
             return await PublishOneWayResponseAsync(message, await HandleSurfaceAction(message));
 
-        if (await TryHandleDirectFormRequest(message) is { } formResponse)
+        // The form shortcut renders an Adaptive Card. On a text-only channel that card is invisible,
+        // so the shortcut can only produce a dead end ("Which customer should I add the contact
+        // to?" with the answer sitting in a form nobody can see). Let the model ask in chat instead.
+        if (!IsTextOnlyChannel(message.Channel)
+            && await TryHandleDirectFormRequest(message) is { } formResponse)
+        {
             return await PublishOneWayResponseAsync(message, formResponse);
+        }
 
         var response = message.Response();
         if (_agent is null || _session is null)
@@ -133,7 +142,25 @@ public sealed class CrmDemoAgent(
         }
 
         SetStatusMessage("Working in the demo CRM...");
-        await foreach (var update in _agent.RunStreamingAsync(new ChatMessage(ChatRole.User, message.Message), _session))
+
+        // A2A callers (Copilot Studio among them) receive text and nothing else - there is no
+        // Surface canvas at the far end. Carry this as a system turn rather than appending it to
+        // the user's text: bracketed imperatives inside message content are exactly the shape a
+        // downstream prompt-injection shield flags, and Copilot Studio's blocks the whole step.
+        var turn = new List<ChatMessage>();
+        if (IsTextOnlyChannel(message.Channel))
+        {
+            turn.Add(new ChatMessage(
+                ChatRole.System,
+                "This caller renders no Surface UI and sees only your reply text. Do not call "
+                + "RenderCrmSurfaceView for this turn, and do not describe UI you rendered. State "
+                + "the full answer as text. When details are missing for a create or update, ask "
+                + "for them in chat rather than offering a form."));
+        }
+
+        turn.Add(new ChatMessage(ChatRole.User, message.Message));
+
+        await foreach (var update in _agent.RunStreamingAsync(turn, _session))
         {
             response.Message += update.Text;
         }
@@ -141,6 +168,13 @@ public sealed class CrmDemoAgent(
         SetStatusMessage(null);
         return await PublishOneWayResponseAsync(message, response);
     }
+
+    /// <summary>
+    /// True when the turn arrived over a channel that renders no Surface UI, so the reply text is
+    /// the only thing the caller sees.
+    /// </summary>
+    private static bool IsTextOnlyChannel(string? channel)
+        => string.Equals(channel, A2ADefaults.ChannelName, StringComparison.OrdinalIgnoreCase);
 
     private void ScheduleProactiveTestMessage(AgentMessage sourceMessage)
     {

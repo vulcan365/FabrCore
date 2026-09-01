@@ -33,6 +33,12 @@ API calls, and retry classification in the provider package.
   start from [assets/webhook-relay.cs](assets/webhook-relay.cs).
 - **Enable Microsoft 365 Copilot/Teams:** use the `fabrcore-microsoft365copilot` skill for bot and
   manifest setup; use this skill for the generic durability model and agent API.
+- **Reach an A2A caller out of turn:** you cannot. The Agent2Agent addon (**fabrcore-a2a**) is
+  request/response ingress only — it registers no `IPrincipalMessageRelay`, and an A2A client holds
+  no endpoint FabrCore can push to. An A2A caller learns about long-running work by polling
+  `tasks/get` or holding the SSE stream open, not through this delivery pipeline. If an A2A-mapped
+  principal also has a real relay endpoint (email, webhook, Teams), `SendToUserAsync` reaches them
+  there instead.
 - **Diagnose stuck or duplicated work:** inspect pending/outbox state, lease timestamps, endpoint
   eligibility, relay queue acceptance, completion callbacks, and the recovery reminder in that
   order.
