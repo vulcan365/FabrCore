@@ -3,6 +3,7 @@ using FabrCore.Core.Blueprints;
 using FabrCore.Services.GraphRag.Administration;
 using FabrCore.Services.Memory.Administration;
 using FabrCore.Host.Configuration;
+using FabrCore.Host.Configuration.Cloud;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -37,6 +38,8 @@ internal sealed class CloudServerSyncService : BackgroundService
     private readonly IServiceProvider serviceProvider;
     private readonly IHttpClientFactory httpClientFactory;
     private readonly ILogger<CloudServerSyncService> logger;
+    private readonly CloudSettingsState? cloudSettings;
+    private readonly FabrCoreSettingsCatalog settingsCatalog;
     private readonly string hostInstanceId;
     private readonly string hostVersion;
 
@@ -48,7 +51,9 @@ internal sealed class CloudServerSyncService : BackgroundService
         IOptions<RemoteAdministrationOptions> remoteAdministration,
         IServiceProvider serviceProvider,
         IHttpClientFactory httpClientFactory,
-        ILogger<CloudServerSyncService> logger)
+        ILogger<CloudServerSyncService> logger,
+        CloudSettingsState? cloudSettings = null,
+        FabrCoreSettingsCatalog? settingsCatalog = null)
     {
         this.apiClient = apiClient;
         this.store = store;
@@ -58,6 +63,8 @@ internal sealed class CloudServerSyncService : BackgroundService
         this.serviceProvider = serviceProvider;
         this.httpClientFactory = httpClientFactory;
         this.logger = logger;
+        this.cloudSettings = cloudSettings;
+        this.settingsCatalog = settingsCatalog ?? new FabrCoreSettingsCatalog();
         this.hostInstanceId = $"{Environment.MachineName}:{Guid.NewGuid():N}";
         this.hostVersion = typeof(CloudServerSyncService).Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
@@ -66,11 +73,27 @@ internal sealed class CloudServerSyncService : BackgroundService
     public override async Task StartAsync(CancellationToken cancellationToken)
     {
         logger.LogInformation(
-            "Cloud Server configuration enabled — cluster '{ClusterId}', environment '{Environment}', server {Url}",
-            apiClient.EffectiveClusterId, apiClient.EffectiveEnvironment, options.Url);
+            "Cloud Server configuration enabled — cluster '{ClusterId}', environment '{Environment}', server {Url}, " +
+            "settings {SettingsState}",
+            apiClient.EffectiveClusterId,
+            apiClient.EffectiveEnvironment,
+            options.Url,
+            cloudSettings is null ? "not consumed" : "consumed");
 
+        // When cloud settings are enabled the envelope was already fetched during host
+        // construction so that Orleans and connection strings could see it. Adopt that snapshot
+        // instead of paying for a second full fetch; its settings are already applied.
         var fetched = false;
-        for (var attempt = 1; attempt <= StartupFetchAttempts && !cancellationToken.IsCancellationRequested; attempt++)
+        if (cloudSettings?.TakeBootstrapEnvelope() is { } bootstrapEnvelope)
+        {
+            await ApplySnapshotAsync(bootstrapEnvelope, cancellationToken, applySettings: false);
+            fetched = true;
+            logger.LogDebug(
+                "Adopted cloud configuration version {Version} fetched during host construction",
+                bootstrapEnvelope.ConfigurationVersion);
+        }
+
+        for (var attempt = 1; attempt <= StartupFetchAttempts && !fetched && !cancellationToken.IsCancellationRequested; attempt++)
         {
             var result = await apiClient.FetchConfigurationAsync(currentVersion: null, cancellationToken);
             if (result.Status == CloudConfigurationFetchStatus.Success)
@@ -223,6 +246,10 @@ internal sealed class CloudServerSyncService : BackgroundService
         HostInstanceId = hostInstanceId,
         HostVersion = hostVersion,
         AppliedConfigurationVersion = store.CurrentConfigurationVersion,
+        AppliedSettingsVersion = cloudSettings?.AppliedSettingsVersion,
+        PendingRestartSettings = cloudSettings is { PendingRestartSettings.Count: > 0 } settings
+            ? [.. settings.PendingRestartSettings]
+            : null,
         ActiveGatewayCount = TryGetActiveGatewayCount(),
         Capabilities = BuildCapabilities(),
         Timestamp = DateTimeOffset.UtcNow
@@ -234,6 +261,11 @@ internal sealed class CloudServerSyncService : BackgroundService
         {
             ["host"] = hostVersion
         };
+
+        if (cloudSettings is not null)
+        {
+            capabilities["config.settings"] = "1";
+        }
 
         if (remoteAdministration.Enabled)
         {
@@ -271,9 +303,17 @@ internal sealed class CloudServerSyncService : BackgroundService
 
     private async Task ApplySnapshotAsync(
         CloudConfigurationEnvelope envelope,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool applySettings = true)
     {
         store.ApplySnapshot(envelope);
+
+        // Settings are applied before blueprints so a blueprint that depends on a freshly
+        // delivered setting sees it, and so a failing blueprint cannot strand the settings layer.
+        if (applySettings)
+        {
+            cloudSettings?.Apply(envelope, settingsCatalog, logger);
+        }
 
         // Blueprints is optional in the v1 protocol; third-party servers may send null even
         // though the envelope setter normalizes it. Never let an absent list block config.

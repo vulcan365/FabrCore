@@ -80,6 +80,21 @@ public class FabrCoreTestHarness : IDisposable
     }
 
     /// <summary>
+    /// Resolves a chat client by model name from the harness's DI container.
+    /// Useful for evaluation tests that need an LLM judge separate from the agent under test.
+    /// Call after CreateMockAgent or CreateLiveAgent — the container is built by those methods.
+    /// </summary>
+    public async Task<IChatClient> GetChatClient(string name = "default", int networkTimeoutSeconds = 100)
+    {
+        if (_serviceProvider is null)
+            throw new InvalidOperationException(
+                "Call CreateMockAgent or CreateLiveAgent before GetChatClient — the service provider is built there.");
+
+        var chatClientService = _serviceProvider.GetRequiredService<IFabrCoreChatClientService>();
+        return await chatClientService.GetChatClient(name, networkTimeoutSeconds);
+    }
+
+    /// <summary>
     /// Initializes the agent by calling OnInitialize directly.
     /// </summary>
     public async Task InitializeAgent(FabrCoreAgentProxy agent)

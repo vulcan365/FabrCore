@@ -57,9 +57,10 @@ FabrCore provides the building blocks for creating, hosting, and connecting to A
 | **[FabrCore.Core](https://www.nuget.org/packages/FabrCore.Core)** | Core interfaces, data models, and grain abstractions |
 | **[FabrCore.Sdk](https://www.nuget.org/packages/FabrCore.Sdk)** | Agent SDK -- `FabrCoreAgentProxy`, plugins, tools, MCP, monitoring |
 | **FabrCore.Client.WebSocket** | Typed WebSocket v2 client with tickets, reconnect, durable delivery checkpoints, and explicit acknowledgements |
-| **[FabrCore.Host](https://www.nuget.org/packages/FabrCore.Host)** | Server host -- Orleans silo, REST API, chat completions, WebSocket (in-memory Localhost mode built in) |
+| **[FabrCore.Host](https://www.nuget.org/packages/FabrCore.Host)** | Server host -- Orleans silo, REST API, chat completions, WebSocket, and Agent2Agent (A2A) endpoints for Copilot Studio and other A2A clients (in-memory Localhost mode built in) |
 | **[FabrCore.Host.SqlServer](https://www.nuget.org/packages/FabrCore.Host.SqlServer)** | SQL Server clustering, persistence, and reminders for the host, with automatic Orleans table deployment |
 | **[FabrCore.Host.AzureStorage](https://www.nuget.org/packages/FabrCore.Host.AzureStorage)** | Azure Storage clustering (tables), persistence (blob/tables), reminders, and streams (queues) for the host, with automatic resource provisioning |
+| **[FabrCore.Host.Testing](https://www.nuget.org/packages/FabrCore.Host.Testing)** | Test helpers -- stand the host's A2A endpoints up over an in-memory server with fake agent and registry services, to test your own exposure without an Orleans silo |
 | **[FabrCore.Services.Microsoft365Copilot](https://www.nuget.org/packages/FabrCore.Services.Microsoft365Copilot)** | Server addon -- surface FabrCore agents in Microsoft 365 Copilot and Teams (`/api/messages`, Entra auth, app package generation) |
 | **FabrCore.Services.Contracts** | Open Memory and GraphRAG administration protocol used by self-hosted tools and Forge |
 | **FabrCore.Services.Memory** | Optional scoped durable memory, taxonomy, consolidation, and audit services |

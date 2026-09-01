@@ -38,6 +38,20 @@ public sealed class CloudHeartbeatRequest
     public Dictionary<string, string> Capabilities { get; set; } =
         new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Gets or sets the configuration version whose <c>settings</c> map this host has applied,
+    /// when cloud-delivered settings are enabled. Additive: schema-v1 servers ignore it.
+    /// </summary>
+    public string? AppliedSettingsVersion { get; set; }
+
+    /// <summary>
+    /// Gets or sets the settings keys whose cloud value differs from the value this process
+    /// started with and whose consumers cannot observe a change without a restart. Servers use
+    /// this to show operators that a published change is stored but not yet in effect. Additive:
+    /// schema-v1 servers ignore it.
+    /// </summary>
+    public List<string>? PendingRestartSettings { get; set; }
+
     /// <summary>Gets or sets when the host produced this heartbeat.</summary>
     public DateTimeOffset Timestamp { get; set; }
 }

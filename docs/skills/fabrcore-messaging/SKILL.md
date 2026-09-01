@@ -346,6 +346,35 @@ var message = new AgentMessage
 };
 ```
 
+### Channel and args stamped by ingress addons
+
+A message that entered through an addon carries a `Channel` value and a set of namespaced `Args`,
+so an agent can tell where a turn came from without the caller having to say so. Read them; never
+trust them for authorization (that is the ACL layer's job).
+
+| Channel | Source | Args namespace | Skill |
+|---------|--------|----------------|-------|
+| `m365copilot` | Microsoft 365 Copilot / Teams | `Microsoft365Copilot:*` (`AadObjectId`, `TenantId`, `ConversationId`, `Locale`, ...) | fabrcore-microsoft365copilot |
+| `a2a` | An external agent over the Agent2Agent protocol | `A2A:*` (`ContextId`, `TaskId`, `MessageId`, `AgentName`, `Caller`, `Metadata`, `NonTextParts`) | fabrcore-a2a |
+
+```csharp
+public override async Task<AgentMessage> OnMessage(AgentMessage message)
+{
+    var response = message.Response();
+
+    if (message.Channel == "a2a")
+    {
+        // A2A groups related turns by contextId, and carries any caller-supplied metadata
+        // (Copilot Studio puts its conversation history there) as raw JSON.
+        var contextId = message.Args?.GetValueOrDefault("A2A:ContextId");
+        var callerMetadata = message.Args?.GetValueOrDefault("A2A:Metadata");
+    }
+
+    response.Message = "...";
+    return response;
+}
+```
+
 ## Correlation and Tracing (OpenTelemetry / W3C TraceContext)
 
 `AgentMessage` and `EventMessage` carry W3C TraceContext fields so every hop (client → grain → downstream agent/event handler → response) stays in one trace:
@@ -434,7 +463,9 @@ of what matters for messaging:
   require `agent.message.allow` on the target; `CreateAgent`/`ResetAgent`/`UntrackAgent` require
   `agent.create`/`agent.reconfigure`/`agent.destroy`.
 - **Agent-to-agent hops within a principal are trusted; cross-principal a2a hops are
-  ACL-checked sender-side** (the acting principal derives from the sending grain's key, never
+  ACL-checked sender-side** ("a2a" here means agent-to-agent messaging inside the cluster, not the
+  Agent2Agent (A2A) protocol — that is an ingress addon, **fabrcore-a2a**, whose callers arrive as
+  an ordinary principal and are then subject to these same rules) (the acting principal derives from the sending grain's key, never
   from the spoofable `FromHandle`). Unauthorized sends throw `AclDeniedException` in Enforce mode.
 - **Transitive fan-out is audited, not blocked**: the first cross-principal hop stamps
   `AgentMessage.CrossPrincipalOrigin`/`CrossPrincipalHops`; chains that cross further principal

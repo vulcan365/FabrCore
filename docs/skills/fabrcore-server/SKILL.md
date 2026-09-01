@@ -11,7 +11,9 @@ description: >
   "AdditionalAssemblies", "WebSocket", "server setup", "LLM provider", "Storage API",
   "typed entity storage", "IFabrCoreStorageProvider", "UseVerifiableExecution",
   "IVerifiableExecutionStore", "signed execution", or "evidence bundle".
-  Do NOT use for: Orleans clustering/configuration — use fabrcore-orleans.
+  Do NOT use for: Orleans clustering/configuration — use fabrcore-orleans; Microsoft 365
+  Copilot/Teams channel setup — use fabrcore-microsoft365copilot; Agent2Agent (A2A) endpoints,
+  agent cards, and Copilot Studio connected agents — use fabrcore-a2a.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
 ---
 
@@ -151,6 +153,31 @@ For instance-based registration, FabrCore registers both `TimeProvider` and the 
 2. **WebSocket** — Enables WebSocket middleware at `/ws`
 3. **CORS** — Configures cross-origin policies
 
+### Hosting FabrCore inside an interactive web app
+
+When the same app serves a UI (Blazor, MVC, Razor Pages), its UI-facing middleware will reshape
+FabrCore's machine-facing responses unless you scope it. Two traps, both of which turn a correct
+response into a misleading one and cost real debugging time:
+
+| Middleware | What it does to `/fabrcoreapi`, `/a2a`, `/ws` |
+| --- | --- |
+| A global authorization `FallbackPolicy` + `MapRazorComponents` | Blazor's catch-all matches every unmatched path and carries no authorization metadata, so the fallback policy applies. Unmatched paths answer **302 to a sign-in page** instead of 404. A client probing for a resource follows the redirect, parses an HTML login form, and reports that the resource does not exist |
+| `UseStatusCodePagesWithReExecute("/not-found")` | A 401 gets re-executed as a POST into a Razor component, where antiforgery rejects the body. The caller receives **400 HTML** instead of 401 JSON |
+
+Keep both off the machine-facing routes:
+
+```csharp
+app.UseWhen(
+    context => !context.Request.Path.StartsWithSegments("/fabrcoreapi")
+        && !context.Request.Path.StartsWithSegments("/a2a")
+        && !context.Request.Path.StartsWithSegments("/.well-known"),
+    branch => branch.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true));
+```
+
+Diagnosing these from the client is close to impossible, because the correctly spelled path keeps
+answering 200 the whole time. Check what your app returns for an **unmatched** path under each
+FabrCore prefix - a bare 404 is what you want.
+
 ## appsettings.json — FabrCore Runtime Configuration
 
 All FabrCore-owned runtime configuration belongs under the single `FabrCore` root. A root-level
@@ -268,6 +295,9 @@ sufficient:
       "Heartbeat": {
         "Enabled": true,
         "Interval": "00:01:00"
+      },
+      "Settings": {
+        "Enabled": true
       }
     },
     "RemoteAdministration": {
@@ -292,10 +322,37 @@ Configuration ownership:
 - `FabrCore:HostUrl` is the HTTP base URL used by FabrCore clients and as the only Cloud Server
   remote-administration target. When remote administration is enabled, it must be an absolute
   HTTP(S) URL reachable from the host process. It is not the ASP.NET Core listen address.
+- `FabrCore:CloudServer:Settings:Enabled` (default true, and a no-op unless
+  `FabrCore:CloudServer:Enabled` is also true) lets the cloud server manage application settings,
+  not just model configuration. The envelope's flat `settings` map is layered into the host's
+  `IConfiguration` with the precedence
+  `appsettings < cloud < environment variables < command line`, so central configuration beats a
+  stale file on the box while an operator keeps a local override that does not require reaching the
+  server. Settings are fetched once during host construction so Orleans clustering and connection
+  strings are in place before they are read; that fetch is best-effort and never decides startup
+  failure on its own. Set it to false to keep all application settings local while still pulling
+  model configuration from the cloud.
+
+  Three areas can never be set remotely, whatever a server sends: `FabrCore:CloudServer` and
+  `FabrCore:RemoteAdministration` (which own enrollment and the remote recovery path) and
+  `FabrCore:HostUrl` (the connect channel's local dispatch target). Refusals are logged by key.
+
+  Most options are captured once at startup, so a later cloud change to them cannot take effect in
+  the running process. The host keeps serving the startup value and reports the key in the
+  heartbeat's `pendingRestartSettings`; it never restarts itself. `GET
+  /fabrcoreapi/admin/v1/settings/catalog` returns which keys apply live versus needing a restart,
+  where each effective value came from, and what is currently pending — with secret values redacted.
 - `FabrCore:RemoteAdministration:Enabled` is the remote-administration gate and requires
   `FabrCore:CloudServer:Enabled` to be true. The dispatcher uses `FabrCore:CloudServer:ApiKey`
   for its local Host admin requests, and the `FabrCoreAdmin` policy accepts that key. There is
   no separate remote-admin key or remote-admin-without-Cloud-Server state.
+- `FabrCore:RemoteAdministration:PollWait` is the *requested* connect long-poll duration. Protocol
+  v2 constrains the effective server wait to 1-25 seconds (20 seconds by default), and the host adds
+  a 10-second transport buffer on top for its per-attempt timeout. The connect channel uses a
+  dedicated transport so app-wide `HttpClient` resilience defaults (notably Aspire's 10-second
+  attempt timeout) cannot cut the poll short; a `204` after the wait is a normal empty queue, not a
+  failure. See `docs/cloud-server-protocol.md` for the retry rules and the shorter-`PollWait`
+  workaround for hosts built on the initial v2 implementation.
 - `FabrCore:AdminAuthentication:ApiKey` authenticates direct non-cloud callers of privileged
   Host APIs, including remote model-configuration and API-key lookup. Separate SDK processes
   must configure the same value so `FabrCoreHostApiClient` can send it as a Bearer credential.
@@ -318,6 +375,11 @@ Configuration ownership:
 Place `fabrcore.json` in the server project root. **Add to .gitignore** (contains API keys).
 It is read by FabrCore's local model configuration store, not added to the application's general
 `IConfiguration`. Keep host runtime settings in `appsettings.json`.
+
+External channels are the exception: the A2A endpoints and `AddMicrosoft365Copilot` own their own
+top-level sections in this file (`A2A`, `Microsoft365Copilot`) and add `fabrcore.json` to
+`IConfiguration` themselves when their section is not already present. See **External Channels**
+below.
 
 ### Complete Schema
 
@@ -494,6 +556,44 @@ public class MyStartupService : IHostedService
 ```
 
 The agent grain key becomes `"system:{config.Handle}"`, and the system principal grain tracks it under the `"system"` principal handle. Any allowed caller can message it (ACL permitting) using the full handle `"system:automation_agent-123"`.
+
+## External Channels
+
+Beyond `/fabrcoreapi/` and `/ws`, a host can expose agents over protocols external systems speak.
+Each is configured from its own top-level section of `fabrcore.json` and each is inert until
+configured.
+
+| Channel | How it is enabled | Config section | Mounts | Skill |
+|---------|-------------------|----------------|--------|-------|
+| Agent2Agent (A2A) | Built in — set `A2A:Enabled` | `A2A` | `/a2a/*`, `/.well-known/agent-card.json`, `/.well-known/agent.json` | fabrcore-a2a |
+| `FabrCore.Services.Microsoft365Copilot` | Package + `AddMicrosoft365Copilot()` / `UseMicrosoft365Copilot()` | `Microsoft365Copilot` | `/api/messages`, `/m365copilot/*`, `/manifests/*` | fabrcore-microsoft365copilot |
+
+A2A ships in `FabrCore.Host`: `AddFabrCoreServer` registers it and `UseFabrCoreServer` maps it,
+both gated on `A2A:Enabled`, so turning it on is a configuration change and nothing else. Use
+`FabrCoreServerOptions.ConfigureA2A` for code-level settings. It publishes agents from the same
+registry that backs `/fabrcoreapi/discovery`, so `"Discovery": { "AgentTypes": "Described" }`
+exposes the whole fleet without naming any agent — and `[FabrCoreHidden]` keeps a type out of both
+at once.
+
+The Copilot channel is a separate package because it pulls in the Microsoft 365 Agents SDK:
+
+```csharp
+builder.AddFabrCoreServer();          // A2A included
+builder.AddMicrosoft365Copilot();     // package addon
+
+var app = builder.Build();
+app.UseFabrCoreServer();              // A2A routes mapped here
+app.UseMicrosoft365Copilot();
+```
+
+Both run side by side: the Copilot channel is how a *person* chats with your agent in Microsoft
+365 Copilot or Teams; A2A is how *another agent* — Copilot Studio's orchestrator included — calls
+it as a connected agent.
+
+**These routes live outside `/fabrcoreapi/` and do not use the `x-user-handle` header.** Each
+authenticates its own callers and maps them to a FabrCore principal itself, so a reverse proxy that
+only forwards `/fabrcoreapi/` and `/ws` will not reach them. A2A in particular is meant to be
+publicly reachable, and its `A2A:Enabled` flag defaults to `false` for that reason.
 
 ## REST API Endpoints
 
@@ -754,6 +854,8 @@ Pitfalls:
 FabrCoreAdmin-protected endpoints list, inspect, publish, and delete immutable principal-scoped harness skills. PUT streams one ZIP; the archive is validation transport only and is never retained through the File API. Normalized manifests and textual resources use typed Storage container `fabrcore.harness-skills` with no TTL. Catalog mutations are serialized by a principal-keyed Orleans grain on `fabrcoreStorage`.
 
 Typed methods are `ListHarnessSkillsAsync`, `GetHarnessSkillAsync`, `PublishHarnessSkillAsync`, and `DeleteHarnessSkillAsync`. See **fabrcore-harness → references/skills.md** for routes, package rules, limits, exact-version assignment, and runtime caching.
+
+An agent published over A2A advertises the harness skills it loads on its agent card, resolved against the catalog of the principal it runs as — see **fabrcore-a2a**. Publish to that principal (`a2a` by default), not to the one you administer from.
 
 ---
 

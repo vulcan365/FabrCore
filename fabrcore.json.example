@@ -30,6 +30,33 @@
       "Value": "your-openai-api-key-here"
     }
   ],
+  "A2A": {
+    "Enabled": true,
+    "PublicBaseUrl": "https://your-public-host.example.com",
+    "Discovery": {
+      "AgentTypes": "Described",
+      "ExcludeAgentTypes": [ "internal-*" ]
+    },
+    "Defaults": {
+      "Models": "default"
+    },
+    "Authentication": {
+      "Mode": "ApiKey",
+      "ApiKey": {
+        "HeaderName": "x-api-key",
+        "Keys": [
+          {
+            "Name": "copilot-studio",
+            "Value": "generate-a-long-random-secret"
+          }
+        ]
+      }
+    },
+    "Provider": {
+      "Organization": "Contoso",
+      "Url": "https://contoso.com"
+    }
+  },
   "Microsoft365Copilot": {
     "TenantId": "your-entra-tenant-id",
     "ClientId": "your-bot-app-registration-client-id",

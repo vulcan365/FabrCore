@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<Title>FabrCore Host Testing</Title>
+		<Description>Test helpers for FabrCore server integrations. Stands a FabrCore host's HTTP surface up over Microsoft.AspNetCore.TestHost with fake agent and registry services, so an application can test its own Agent2Agent (A2A) exposure — agent cards, authentication, the Copilot Studio interop path, and which agent grain a call actually reaches — without an Orleans silo.</Description>
+		<PackageTags>fabrcore;testing;a2a;agent2agent;testhost</PackageTags>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.11" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\FabrCore.Host\FabrCore.Host.csproj" />
+	</ItemGroup>
+
+</Project>

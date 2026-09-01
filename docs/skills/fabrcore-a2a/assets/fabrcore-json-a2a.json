@@ -1,0 +1,79 @@
+{
+  "A2A": {
+    "Enabled": true,
+    "PublicBaseUrl": "https://agents.contoso.com",
+    "RoutePrefix": "/a2a",
+
+    "Discovery": {
+      "AgentTypes": "Described",
+      "ExcludeAgentTypes": [ "internal-*", "*-worker" ],
+      "IncludeAgentHandles": [ "system:*" ],
+      "RefreshInterval": "00:00:30",
+      "IncludeNotes": true
+    },
+
+    "Defaults": {
+      "Models": "default",
+      "SystemPrompt": "You are a Contoso specialist. Answer from your tools; say so when you do not know.",
+      "Plugins": [ "orders-plugin" ],
+      "AgentPerContext": true,
+      "Args": {
+        "_HarnessSkills": "order-lookup@1.2.0,returns-policy@2.0.0"
+      }
+    },
+
+    "Agents": [
+      {
+        "Name": "support",
+        "AgentType": "chat-agent",
+        "DisplayName": "Contoso Support",
+        "Description": "Answers questions about Contoso orders, returns, and shipping policy.",
+        "Skills": [
+          {
+            "Name": "Order status",
+            "Description": "Looks up the status and delivery estimate of a Contoso order from its number.",
+            "Tags": [ "orders", "shipping" ],
+            "Examples": [ "Where is order 41288?", "Has my order shipped yet?" ]
+          },
+          {
+            "Name": "Returns",
+            "Description": "Explains Contoso return eligibility and starts a return for an order.",
+            "Tags": [ "returns", "refunds" ],
+            "Examples": [ "Can I return the headphones I bought last week?" ]
+          }
+        ]
+      }
+    ],
+
+    "Authentication": {
+      "Mode": "ApiKey",
+      "AllowAnonymousAgentCard": true,
+      "ApiKey": {
+        "HeaderName": "x-api-key",
+        "Keys": [
+          {
+            "Name": "copilot-studio",
+            "Value": "<set-with-user-secrets-or-key-vault>",
+            "PrincipalHandle": "contoso-tenant"
+          }
+        ]
+      }
+    },
+
+    "Principal": {
+      "Strategy": "ApiKey",
+      "Prefix": "a2a-"
+    },
+
+    "Tasks": {
+      "ExecutionTimeout": "00:05:00",
+      "Retention": "01:00:00",
+      "StreamHeartbeatInterval": "00:00:15"
+    },
+
+    "Provider": {
+      "Organization": "Contoso",
+      "Url": "https://contoso.com"
+    }
+  }
+}

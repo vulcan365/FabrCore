@@ -10,7 +10,8 @@ description: >
   Triggers on: "ACL", "access control", "permission grant", "PermissionGrant", "AclPrincipal",
   "AclRole", "AclGroup", "acl-admin", "acl.manage", "enforcement mode", "AuditOnly",
   "cross-principal", "cross talk", "boundary crossing", "System principal", "dynamic group",
-  "IAuditProvider", "audit events", "security audit", "IAclEvaluator", "agent.message.allow".
+  "IAuditProvider", "audit events", "security audit", "IAclEvaluator", "agent.message.allow",
+  "A2A caller grants", "A2A principal".
   Do NOT use for: agent lifecycle (fabrcore-agent), message routing mechanics (fabrcore-messaging),
   signed evidence/SPIFFE (fabrcore-spiffe), message monitoring (fabrcore-agentmonitor).
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
@@ -33,7 +34,10 @@ observable through a pluggable security audit provider.
   its own agents; anything cross-principal requires an explicit grant.
 - **Permissions use 3-dot notation:** `entity.behavior.effect` — e.g. `agent.message.allow`,
   `agent.create.deny`. Effects are only `allow` and `deny`; **deny overrides allow**.
-- **Agent-to-agent (a2a) traffic is enforced.** The first cross-principal hop is authorized
+- **Agent-to-agent (a2a) traffic is enforced.** Throughout this skill "a2a" is FabrCore's
+  shorthand for *agent-to-agent messaging inside the cluster* — not the Agent2Agent (A2A)
+  protocol, which is a separate ingress addon (**fabrcore-a2a**) whose callers land on a principal
+  and are then subject to exactly these rules. The first cross-principal hop is authorized
   sender-side; once a message lands at another principal's agent, further hops run as that
   principal (checked again if they cross another boundary) and are audited via a breadcrumb —
   warned, never blocked.
@@ -121,6 +125,40 @@ disable an action entirely for a subject. Zero-config behavior is unchanged (no 
 exist by default). Subject identities resolved per evaluation: the principal, the acting agent
 handle (a2a only), stored group memberships, dynamic groups, and effective roles (direct +
 via groups).
+
+## Grants for A2A protocol callers
+
+The A2A endpoints in `FabrCore.Host` (**fabrcore-a2a**) authenticate external A2A clients and map each
+to a FabrCore principal (`A2A:Principal:Strategy`). From that point on it is an ordinary principal,
+so the rules above apply unchanged — and the ACL implications follow from which strategy and which
+exposure style you chose:
+
+| A2A configuration | ACL consequence |
+|---|---|
+| `AgentTypes` + `Principal:Strategy = Fixed` (the default) | The addon provisions agents **under the caller's own principal**, so no grant is needed. Every A2A caller shares that one principal and therefore each other's agents and history |
+| `AgentTypes` + `Strategy = ContextId` / `ApiKey` / `Claim` | Each caller gets its own principal with its own agents. Still no grant needed, and callers are isolated from one another. Prefer this for multi-tenant exposure |
+| `AgentHandles` (for example `system:assistant`) | The A2A principal messages **another principal's** agent, so it needs `agent.message.allow` on that resource — unless the target is the unrestricted System principal, which bypasses checks |
+
+Grant the A2A principal access to a shared agent owned by another principal (the default A2A
+principal handle is `a2a`; `A2A:Principal:Prefix` and the non-`Fixed` strategies change it):
+
+```csharp
+await client.UpsertAclGrantAsync("system", new PermissionGrant
+{
+    Subject = new AclSubject(SubjectKind.Principal, "a2a"),
+    Permission = FabrPermissions.AgentMessageAllow,
+    Resource = "contoso:assistant"
+});
+```
+
+With a per-caller strategy the subject is one principal per caller, so grant a **group** or **role**
+instead of maintaining one grant per tenant.
+
+Because an A2A principal is reachable from outside your cluster, treat its grants as an external
+trust boundary: grant the specific resources it needs rather than `*:*`, prefer a per-caller
+principal strategy over one shared principal, and keep `AuditOnly` on while you tune the grants.
+Exposing a handle under the System principal skips ACL entirely, which is the most permissive
+option available — do it deliberately.
 
 ## Enforcement Modes
 

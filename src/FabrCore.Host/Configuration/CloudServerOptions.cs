@@ -67,6 +67,8 @@ public sealed class CloudServerOptions
     /// <summary>Gets or sets heartbeat reporting options.</summary>
     public CloudServerHeartbeatOptions Heartbeat { get; set; } = new();
 
+    /// <summary>Gets or sets cloud-delivered application settings options.</summary>
+    public CloudServerSettingsOptions Settings { get; set; } = new();
 }
 
 /// <summary>Startup behavior when cloud configuration cannot be obtained from network or cache.</summary>
@@ -77,6 +79,24 @@ public enum CloudServerStartupFailureBehavior
 
     /// <summary>Start with no configuration; model/key lookups return 404 until a sync succeeds.</summary>
     StartDegraded
+}
+
+/// <summary>
+/// Options for cloud-delivered application settings, nested under
+/// <c>FabrCore:CloudServer:Settings</c>. When enabled the host layers the envelope's flat
+/// <c>settings</c> map into its <see cref="Microsoft.Extensions.Configuration.IConfiguration"/>,
+/// fetching once at construction so values read before the container exists (Orleans clustering,
+/// connection strings) are covered.
+/// </summary>
+public sealed class CloudServerSettingsOptions
+{
+    /// <summary>
+    /// Gets or sets whether cloud-delivered settings are applied. On by default when the Cloud
+    /// Server feature is enabled: an absent or empty settings map is a no-op, so hosts talking to
+    /// a server that publishes none are unaffected. Set false to keep all application settings
+    /// local while still pulling model configuration from the cloud.
+    /// </summary>
+    public bool Enabled { get; set; } = true;
 }
 
 /// <summary>Heartbeat reporting options nested under <c>FabrCore:CloudServer:Heartbeat</c>.</summary>

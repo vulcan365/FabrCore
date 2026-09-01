@@ -1,4 +1,4 @@
-using FabrCore.Core;
+﻿using FabrCore.Core;
 using FabrCore.SampleApp.Components;
 using FabrCore.SampleApp.Contoso;
 using FabrCore.SampleApp.Crm;
@@ -104,7 +104,16 @@ namespace FabrCore.SampleApp
                 app.UseExceptionHandler("/Error");
             }
 
-            app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+            // Re-executing an error status into the Blazor not-found page is right for the UI and
+            // wrong for the machine-facing routes: a 401 from A2A comes back re-executed as a
+            // POST into a Razor component, where antiforgery rejects the body and the caller sees
+            // 400 HTML instead of 401 JSON. Any FabrCore server that is also an interactive web
+            // app has this problem — keep the status-code pages off /a2a and /.well-known.
+            app.UseWhen(
+                context => !context.Request.Path.StartsWithSegments("/a2a")
+                    && !context.Request.Path.StartsWithSegments("/.well-known"),
+                branch => branch.UseStatusCodePagesWithReExecute(
+                    "/not-found", createScopeForStatusCodePages: true));
             app.UseAntiforgery();
             app.UseFabrCoreServer(new FabrCoreServerOptions());
             app.UseMicrosoft365Copilot();

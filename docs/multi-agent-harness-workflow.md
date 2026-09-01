@@ -57,7 +57,8 @@ This pattern should not be confused with:
   `AgentMessage` crosses to another grain.
 - **FabrCore Surface squads.** A squad is host-visible orchestration among registered agents;
   these specialists are private implementation details of one proxy.
-- **A2A.** No agent card, remote endpoint, `A2AAgentProxy`, or A2A transport is involved.
+- **A2A.** No agent card, remote endpoint, or A2A transport is involved; that is
+  `FabrCore.Host`'s A2A endpoints, which publish whole agents to external clients.
 - **A plugin containing several tools.** A specialist is model-backed and can perform its own
   tool loop; a plugin is only a tool provider.
 - **A security sandbox.** All specialists execute in the host process. Narrow tools and service

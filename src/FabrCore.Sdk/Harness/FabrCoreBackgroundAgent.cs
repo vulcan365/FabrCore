@@ -14,9 +14,9 @@ namespace FabrCore.Sdk;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Deliberately not <see cref="A2AAgentProxy"/>: that proxy leaves <see cref="Name"/> and
-/// <see cref="Description"/> null, and <c>BackgroundAgentsProvider</c> rejects unnamed agents outright. It
-/// also has no delegation timeout, so a wedged target would hang the delegating agent's turn indefinitely.
+/// <c>BackgroundAgentsProvider</c> rejects unnamed agents outright, so <see cref="Name"/> and
+/// <see cref="Description"/> are always populated here. Delegation is also bounded by a timeout, so a
+/// wedged target cannot hang the delegating agent's turn indefinitely.
 /// </para>
 /// <para>
 /// Delegation is stateless. Each call carries its full instruction, and the target agent owns its own durable

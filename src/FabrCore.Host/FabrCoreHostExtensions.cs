@@ -3,6 +3,7 @@ using FabrCore.Core.Acl;
 using FabrCore.Core.Auditing;
 using FabrCore.Core.Monitoring;
 using FabrCore.Core.VerifiableExecution;
+using FabrCore.Host.A2A;
 using FabrCore.Host.Configuration;
 using FabrCore.Host.Services;
 using FabrCore.Host.Security;
@@ -75,6 +76,12 @@ namespace FabrCore.Host
         internal Type VerifiableExecutionStoreType { get; private set; } = typeof(InMemoryVerifiableExecutionStore);
         internal Type VerifiableExecutionSignerType { get; private set; } = typeof(NullVerifiableExecutionSigner);
         internal VerifiableExecutionOptions VerifiableExecutionOptions { get; } = new();
+
+        /// <summary>
+        /// Code-level override for the Agent2Agent (A2A) endpoints, applied after the <c>A2A</c>
+        /// configuration section is bound. Null leaves A2A entirely configuration-driven.
+        /// </summary>
+        internal Action<A2AOptions>? A2AConfigure { get; private set; }
 
         /// <summary>
         /// Explicitly registered <see cref="IFabrCoreConfigurationStore"/> implementation type.
@@ -251,6 +258,30 @@ namespace FabrCore.Host
             return this;
         }
 
+        /// <summary>
+        /// Configures the Agent2Agent (A2A) endpoints in code, on top of the <c>A2A</c>
+        /// configuration section. Every FabrCore server has A2A available; it stays inert until
+        /// <c>A2A:Enabled</c> is true or this callback sets <see cref="A2AOptions.Enabled"/>.
+        /// </summary>
+        /// <example>
+        /// <code>
+        /// builder.AddFabrCoreServer(new FabrCoreServerOptions()
+        ///     .ConfigureA2A(a2a =>
+        ///     {
+        ///         a2a.Enabled = true;
+        ///         a2a.Discovery.AgentTypes = A2ADiscoveryMode.Described;
+        ///     }));
+        /// </code>
+        /// </example>
+        public FabrCoreServerOptions ConfigureA2A(Action<A2AOptions> configure)
+        {
+            ArgumentNullException.ThrowIfNull(configure);
+            A2AConfigure = A2AConfigure is null
+                ? configure
+                : options => { A2AConfigure(options); configure(options); };
+            return this;
+        }
+
         public FabrCoreServerOptions UseVerifiableExecutionStore<T>() where T : class, IVerifiableExecutionStore
         {
             VerifiableExecutionStoreType = typeof(T);
@@ -380,6 +411,9 @@ namespace FabrCore.Host
                 app.UseMiddleware<FabrCore.Host.WebSocket.WebSocketMiddleware>();
                 logger.LogInformation("WebSocket middleware added");
 
+                // Agent2Agent (A2A) endpoints. No-ops unless A2A:Enabled is true.
+                app.UseA2A();
+
                 logger.LogInformation("FabrCore server configured successfully");
                 activity?.SetStatus(ActivityStatusCode.Ok);
                 return app;
@@ -426,6 +460,18 @@ namespace FabrCore.Host
 
             try
             {
+                // Cloud-delivered settings are layered into IConfiguration first, because the
+                // values that make remote provisioning worthwhile (Orleans clustering, connection
+                // strings) are read while the silo is built and never again. A no-op unless the
+                // Cloud Server feature and its Settings sub-feature are both enabled.
+                var cloudSettings = Configuration.Cloud.CloudSettingsBootstrapper.TryApply(builder, loggerFactory);
+                if (cloudSettings is not null)
+                {
+                    builder.Services.AddSingleton(cloudSettings);
+                }
+
+                builder.Services.TryAddSingleton<Configuration.Cloud.FabrCoreSettingsCatalog>();
+
                 var applicationAssemblies = LoadApplicationAssemblies(
                     builder.Environment.ApplicationName,
                     options.AdditionalAssemblies);
@@ -708,6 +754,11 @@ namespace FabrCore.Host
                     options.VerifiableExecutionOptions.Enabled ? "enabled" : "disabled",
                     options.VerifiableExecutionStoreType.Name,
                     options.VerifiableExecutionSignerType.Name);
+
+                // Agent2Agent (A2A) endpoints. Available to every deployment and inert until
+                // A2A:Enabled is true, so publishing agents to external orchestrators is a
+                // configuration change rather than a dependency change.
+                builder.AddA2A(options.A2AConfigure);
 
                 // Configure Agent Service
                 builder.Services.AddSingleton<IFabrCoreAgentService, FabrCoreAgentService>();
