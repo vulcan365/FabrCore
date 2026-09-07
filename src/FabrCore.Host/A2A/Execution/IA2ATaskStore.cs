@@ -22,6 +22,10 @@ public interface IA2ATaskStore
 
     /// <summary>Stores or replaces a task snapshot.</summary>
     ValueTask SaveAsync(A2ATask task, CancellationToken cancellationToken = default);
+
+    /// <summary>Lists retained snapshots. Custom stores should override to support ListTasks.</summary>
+    ValueTask<IReadOnlyList<A2ATask>> ListAsync(CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("This task store does not support listing.");
 }
 
 /// <summary>
@@ -66,6 +70,10 @@ internal sealed class InMemoryA2ATaskStore : IA2ATaskStore
     private bool IsExpired(Entry entry)
         => A2ATaskStates.IsTerminal(entry.Task.Status.State)
            && _timeProvider.GetUtcNow() - entry.SavedAt > _options.Retention;
+
+    public ValueTask<IReadOnlyList<A2ATask>> ListAsync(CancellationToken cancellationToken = default)
+        => ValueTask.FromResult<IReadOnlyList<A2ATask>>(_tasks.Values
+            .Where(entry => !IsExpired(entry)).Select(entry => entry.Task).ToList());
 
     private void Trim()
     {

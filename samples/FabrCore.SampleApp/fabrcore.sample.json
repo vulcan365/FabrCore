@@ -11,6 +11,14 @@
       "Provider": "OpenAI",
       "Model": "text-embedding-3-small",
       "ApiKeyAlias": "openai"
+    },
+    {
+      "Name": "graphrag",
+      "Provider": "OpenAI",
+      "Model": "gpt-5.4-mini",
+      "ApiKeyAlias": "openai",
+      "ReasoningEffort": "none",
+      "ContextWindowTokens": 75000
     }
   ],
   "ApiKeys": [
@@ -19,20 +27,32 @@
       "Value": "replace-with-api-key"
     }
   ],
+  "AgentBindings": {
+    "assistant": {
+      "AgentType": "crm-demo-agent",
+      "Handle": "assistant",
+      "Models": "default"
+    }
+  },
   "A2A": {
     "Enabled": false,
     "PublicBaseUrl": "https://replace-with-public-host",
-    "Discovery": {
-      "AgentTypes": "Described"
+    "Agents": [
+      {
+        "Name": "crm-assistant",
+        "Binding": "assistant"
+      }
+    ],
+    "Principal": {
+      "Strategy": "CanonicalEntra"
     },
     "Authentication": {
-      "Mode": "ApiKey",
-      "ApiKey": {
-        "Keys": [
-          {
-            "Name": "copilot-studio",
-            "Value": "<set-with-user-secrets-or-key-vault>"
-          }
+      "Mode": "JwtBearer",
+      "JwtBearer": {
+        "Authority": "https://login.microsoftonline.com/replace-with-entra-tenant-id/v2.0",
+        "Audience": "replace-with-a2a-api-app-client-id",
+        "RequiredScopes": [
+          "agent.invoke"
         ]
       }
     },
@@ -46,14 +66,17 @@
     "ClientId": "replace-with-bot-app-registration-client-id",
     "ClientSecret": "<set-with-user-secrets-or-key-vault>",
     "WelcomeMessage": "Hello! I'm the FabrCore Surface CRM demo agent. Ask me about the Contoso CRM data.",
+    "Principal": {
+      "Strategy": "CanonicalEntra"
+    },
     "Agent": {
-      "AgentType": "crm-demo-agent",
-      "Handle": "copilot",
-      "Models": "default"
+      "Binding": "assistant"
     },
     "Proactive": {
       "Enabled": true,
-      "AllowedConversationTypes": [ "personal" ]
+      "AllowedConversationTypes": [
+        "personal"
+      ]
     },
     "Manifest": {
       "Name": "FabrCore Surface Demo",
@@ -66,8 +89,14 @@
       "TermsOfUseUrl": "https://vulcan365.com",
       "PublicHostName": "replace-with-public-host",
       "ConversationStarters": [
-        { "Title": "Browse accounts", "Description": "What CRM accounts do we have?" },
-        { "Title": "Pipeline check", "Description": "Summarize the current sales opportunities." }
+        {
+          "Title": "Browse accounts",
+          "Description": "What CRM accounts do we have?"
+        },
+        {
+          "Title": "Pipeline check",
+          "Description": "Summarize the current sales opportunities."
+        }
       ]
     }
   }

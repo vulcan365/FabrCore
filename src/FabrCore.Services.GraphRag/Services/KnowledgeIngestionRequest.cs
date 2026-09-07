@@ -9,4 +9,8 @@ public sealed record KnowledgeIngestionRequest(
     string FileName,
     string ScopeKey,
     string MarkdownContent,
-    string? ExtractionInstructions = null);
+    string? ExtractionInstructions = null)
+{
+    /// <summary>Rebuild even when content and instructions match, for example after changing extraction settings.</summary>
+    public bool ForceReingestion { get; init; }
+}

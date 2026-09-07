@@ -73,7 +73,7 @@ string ScopeKey { get; }
 
 ### SaveMemoryAsync
 
-Validates taxonomy, generates embedding, inserts as Warm, adds to hot index. Similar existing entities (within `Consolidation.EntityMatchThreshold`) are merged instead of duplicated.
+Validates taxonomy, generates embedding, inserts as Warm, adds to hot index. Similar active same-type entities (within `Consolidation.EntityMatchThreshold`) can merge. Snapshot and metadata-bearing saves skip matching; without a merge model both texts are retained.
 
 ```csharp
 Task<MemoryEntry> SaveMemoryAsync(
@@ -561,7 +561,7 @@ Grouped options: top-level settings plus `HotIndex`, `Retrieval`, `Consolidation
 | Property | Type | Default | Description |
 |---|---|---|---|
 | `ConnectionStringName` | `string` | `""` | Set internally by `AddAgentMemoryServices(connectionStringName)` — not assignable in the callback |
-| `EmbeddingDimensions` | `int` | `1536` | VECTOR column dimension; must match the embeddings model. Fixed at schema creation — changing later requires dropping the `mem` schema |
+| `EmbeddingDimensions` | `int` | `1536` | VECTOR column dimension; must match the embeddings model. Fixed at schema creation — changing later requires a planned migration and re-embedding |
 | `AllowStartupWithoutEmbeddings` | `bool` | `false` | true = log error instead of failing the host when the connection string or `IEmbeddings` is missing (client-only hosts) |
 | `AllowedMemoryTypes` | `HashSet<MemoryType>` | All five | Restrict allowed types |
 | `PointInTimeMemories` | `bool` | `false` | Mark all extracted memories as point-in-time snapshots |
@@ -665,3 +665,9 @@ public static (bool IsValid, string? RejectionReason) Validate(
 - Type not in `allowedTypes`
 
 Content validation is not performed — content policy is the consuming agent's responsibility.
+
+## Tier-management tool
+
+`AgentMemoryPlugin.UpdateMemory(string memoryId, string? title = null, string? type = null, string? content = null, string? description = null, string? temperature = null)` exposes partial updates. Cold removes the index pointer; Warm/Hot restore index eligibility subject to caps. No tool accepts a caller-selected scope.
+
+`SearchArchiveAsync` and `SearchArchive` search all retained embedded content, including Cold. `RecallMemories` also returns archive and summary results when its plan selects them.

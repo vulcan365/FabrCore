@@ -338,8 +338,9 @@ internal sealed class A2AAgentCatalog : IA2AAgentCatalog
         IReadOnlyList<A2ASkillOptions>? skills)
     {
         var defaults = options.Defaults;
+        var bound = !string.IsNullOrWhiteSpace(agent?.Binding);
 
-        var args = new Dictionary<string, string>(defaults.Args);
+        var args = bound ? new Dictionary<string, string>() : new Dictionary<string, string>(defaults.Args);
         if (agent is not null)
         {
             foreach (var (key, value) in agent.Args)
@@ -359,9 +360,9 @@ internal sealed class A2AAgentCatalog : IA2AAgentCatalog
             ProvisionHandle = provisionHandle,
             FixedHandle = fixedHandle,
             Models = Pick(agent?.Models, defaults.Models),
-            SystemPrompt = agent?.SystemPrompt ?? defaults.SystemPrompt,
-            Plugins = agent?.Plugins is { Count: > 0 } p ? p : defaults.Plugins,
-            Tools = agent?.Tools is { Count: > 0 } t ? t : defaults.Tools,
+            SystemPrompt = bound ? agent!.SystemPrompt : agent?.SystemPrompt ?? defaults.SystemPrompt,
+            Plugins = bound ? agent!.Plugins : agent?.Plugins is { Count: > 0 } p ? p : defaults.Plugins,
+            Tools = bound ? agent!.Tools : agent?.Tools is { Count: > 0 } t ? t : defaults.Tools,
             Args = args,
             AgentPerContext = agent?.AgentPerContext ?? defaults.AgentPerContext,
             InputModes = agent?.InputModes is { Count: > 0 } im ? im : defaults.InputModes,

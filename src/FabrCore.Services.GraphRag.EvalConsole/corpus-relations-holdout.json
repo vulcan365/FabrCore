@@ -1,0 +1,39 @@
+[
+  {
+    "FileName": "rfc1952-gzip.txt",
+    "Url": "https://www.rfc-editor.org/rfc/rfc1952.txt",
+    "Query": "Which compression method and corruption-detection checksum does the gzip file format use?",
+    "ExpectedEntities": [
+      "gzip"
+    ],
+    "EvidenceTerms": [
+      "DEFLATE"
+    ],
+    "ExpectedEdges": [
+      {
+        "Id": "gzip-deflate",
+        "Fact": "GZIP uses the DEFLATE compression method.",
+        "SourceSection": "RFC 1952 abstract and section 2.3.1",
+        "EvidenceText": "format presently uses the DEFLATE method",
+        "FromPattern": "\\bgzip\\b",
+        "Types": [
+          "USES",
+          "DEPENDS_ON"
+        ],
+        "ToPattern": "\\bdeflate\\b"
+      },
+      {
+        "Id": "gzip-crc32",
+        "Fact": "GZIP uses CRC32 for detecting corruption.",
+        "SourceSection": "RFC 1952 section 2.3.1",
+        "EvidenceText": "CRC32",
+        "FromPattern": "\\bgzip\\b",
+        "Types": [
+          "USES"
+        ],
+        "ToPattern": "CRC.?32",
+        "EvidencePattern": "(?s)(?=.*CRC.?32)(?=.*corrupt|.*integrity|.*check)"
+      }
+    ]
+  }
+]

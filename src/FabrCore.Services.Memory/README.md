@@ -1,3 +1,5 @@
+> For the reviewed code-call and plugin workflows, use the [distributed memory skill](../../docs/skills/fabrcore-services-memory/SKILL.md). See the [readiness review](../../docs/memory-readiness-review.md) for fixes, validation results, and remaining rollout checks. Hot is a bounded pointer index; Cold is excluded from ordinary warm recall, while archive search spans all retained embedded content. `AgentMemoryPlugin.UpdateMemory` supports corrections and tier changes.
+
 # FabrCore.Services.Memory
 
 Public Memory administration interfaces, DTOs, audit records, and transport client contracts are

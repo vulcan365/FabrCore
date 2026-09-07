@@ -3,6 +3,7 @@ using FabrCore.Services.GraphRag.Audit;
 using FabrCore.Services.GraphRag.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Configuration;
 
 namespace FabrCore.Services.GraphRag.Tests.Infrastructure;
 
@@ -46,8 +47,10 @@ internal sealed class LiveGraphRagFixture : IAsyncDisposable
             database.Configuration, NullLogger<KnowledgeIngestionService>.Instance,
             TestEnvironment.ConnectionStringName, database.Audit, embeddings,
             serviceProvider: serviceProvider, extractionModelName: "default");
+        var vectorOnlyConfiguration = new ConfigurationBuilder().AddConfiguration(database.Configuration)
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["GraphRag:Ingestion:EnableExtraction"] = "false" }).Build();
         var vectorOnlyIngestion = new KnowledgeIngestionService(
-            database.Configuration, NullLogger<KnowledgeIngestionService>.Instance,
+            vectorOnlyConfiguration, NullLogger<KnowledgeIngestionService>.Instance,
             TestEnvironment.ConnectionStringName, database.Audit, embeddings);
         var search = new KnowledgeSearchService(
             database.Configuration, NullLogger<KnowledgeSearchService>.Instance,

@@ -12,7 +12,7 @@ namespace FabrCore.Host.Tests.A2A;
 public sealed class A2AAuthenticationTests
 {
     private const string SendBody =
-        """{"jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":{"kind":"message","role":"user","messageId":"m-1","parts":[{"kind":"text","text":"hi"}]}}}""";
+        """{"jsonrpc":"2.0","id":1,"method":"SendMessage","params":{"message":{"kind":"message","role":"user","messageId":"m-1","parts":[{"kind":"text","text":"hi"}]}}}""";
 
     private static Dictionary<string, string?> ApiKeyConfig() => new()
     {

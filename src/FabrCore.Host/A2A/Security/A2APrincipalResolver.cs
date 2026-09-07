@@ -58,6 +58,16 @@ internal sealed class DefaultA2APrincipalResolver : IA2APrincipalResolver
         CancellationToken cancellationToken = default)
     {
         var principal = _options.Principal;
+        if (principal.Strategy == A2APrincipalStrategy.CanonicalEntra)
+        {
+            if (context.User.Identity?.IsAuthenticated != true)
+                return ValueTask.FromResult<string?>(null);
+            var canonical = FabrCore.Core.EntraPrincipalHandle.Create(
+                context.User.FindFirstValue("tid"), context.User.FindFirstValue("oid"),
+                application: string.IsNullOrWhiteSpace(context.User.FindFirstValue("scp"))
+                    || context.User.FindFirstValue("idtyp") == "app");
+            return ValueTask.FromResult(canonical is null ? null : principal.Prefix + canonical);
+        }
         var raw = principal.Strategy switch
         {
             A2APrincipalStrategy.Fixed => principal.Handle,
@@ -86,7 +96,10 @@ internal sealed class DefaultA2APrincipalResolver : IA2APrincipalResolver
     }
 
     public string? DescribeCaller(HttpContext context)
-        => context.User.FindFirstValue(A2AClaimTypes.ApiKeyName)
+        => _options.Principal.Strategy == A2APrincipalStrategy.CanonicalEntra
+            ? FabrCore.Core.EntraPrincipalHandle.Create(context.User.FindFirstValue("tid"), context.User.FindFirstValue("oid"),
+                application: string.IsNullOrWhiteSpace(context.User.FindFirstValue("scp")) || context.User.FindFirstValue("idtyp") == "app")
+            : context.User.FindFirstValue(A2AClaimTypes.ApiKeyName)
            ?? context.User.FindFirstValue(ClaimTypes.NameIdentifier)
            ?? context.User.FindFirstValue("sub");
 }

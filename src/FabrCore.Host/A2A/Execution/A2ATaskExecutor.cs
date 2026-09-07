@@ -27,6 +27,8 @@ internal interface IA2ATaskExecutor
     /// <summary>Returns the still-live execution for a task, or null once it has been released.</summary>
     A2ATaskExecution? Find(string taskId);
 
+    ValueTask<IReadOnlyList<A2ATask>> ListAsync(CancellationToken cancellationToken);
+
     /// <summary>Reads a task back, from the live execution when there is one and the store otherwise.</summary>
     ValueTask<A2ATask?> GetTaskAsync(string taskId, int? historyLength, CancellationToken cancellationToken);
 
@@ -47,6 +49,7 @@ internal readonly record struct A2ACancelResult(A2ACancelOutcome Outcome, A2ATas
 
 internal sealed class A2ATaskExecutor : IA2ATaskExecutor
 {
+    private readonly SemaphoreSlim _executionSlots;
     private readonly IFabrCoreAgentService _agentService;
     private readonly IA2AAgentProvisioner _provisioner;
     private readonly IA2ATaskStore _taskStore;
@@ -67,14 +70,21 @@ internal sealed class A2ATaskExecutor : IA2ATaskExecutor
         _provisioner = provisioner;
         _taskStore = taskStore;
         _options = options.Value;
+        _executionSlots = new SemaphoreSlim(_options.Tasks.MaxConcurrentTasks, _options.Tasks.MaxConcurrentTasks);
         _timeProvider = timeProvider;
         _logger = logger;
     }
 
     public A2ATaskExecution Start(A2AExecutionRequest request)
     {
+        if (!_executionSlots.Wait(0)) throw new A2ATaskCapacityException();
         var execution = new A2ATaskExecution(request, _timeProvider);
-        _live[request.TaskId] = execution;
+        if (!_live.TryAdd(request.TaskId, execution))
+        {
+            execution.Dispose();
+            _executionSlots.Release();
+            throw new InvalidOperationException("The task already exists.");
+        }
         TrimFinishedExecutions();
         execution.Run(RunAsync);
         return execution;
@@ -106,6 +116,12 @@ internal sealed class A2ATaskExecutor : IA2ATaskExecutor
 
     public A2ATaskExecution? Find(string taskId)
         => _live.TryGetValue(taskId, out var execution) ? execution : null;
+
+    public async ValueTask<IReadOnlyList<A2ATask>> ListAsync(CancellationToken cancellationToken)
+    {
+        var stored = await _taskStore.ListAsync(cancellationToken);
+        return _live.Values.Select(e => e.Snapshot()).Concat(stored).DistinctBy(t => t.Id).ToList();
+    }
 
     public async ValueTask<A2ATask?> GetTaskAsync(
         string taskId, int? historyLength, CancellationToken cancellationToken)
@@ -213,12 +229,23 @@ internal sealed class A2ATaskExecutor : IA2ATaskExecutor
             _logger.LogError(
                 ex,
                 "A2A task {TaskId} for agent {Agent} failed.", request.TaskId, request.Agent.Name);
-            execution.Fail(ex.Message);
+            execution.Fail("The agent could not complete the request.");
         }
         finally
         {
-            await _taskStore.SaveAsync(execution.Snapshot(), CancellationToken.None);
-            execution.CloseSubscribers();
+            try
+            {
+                await _taskStore.SaveAsync(execution.Snapshot(), CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Could not persist A2A task {TaskId}.", request.TaskId);
+            }
+            finally
+            {
+                execution.CloseSubscribers();
+                _executionSlots.Release();
+            }
 
             // Keep the finished execution addressable for a short window so an in-flight
             // tasks/resubscribe still finds its recorded events, then fall back to the store.
@@ -260,6 +287,8 @@ internal sealed class A2ATaskExecutor : IA2ATaskExecutor
     }
 }
 
+internal sealed class A2ATaskCapacityException : Exception;
+
 /// <summary>
 /// A single running A2A task: its current snapshot, the events it has emitted, and the
 /// subscribers streaming them.
@@ -293,6 +322,8 @@ internal sealed class A2ATaskExecution : IDisposable
             Status = new A2ATaskStatus { State = A2ATaskStates.Submitted, Timestamp = Now(timeProvider) },
             History = new List<A2AMessage> { userTurn },
             Artifacts = new List<A2AArtifact>(),
+            Metadata = new() { [A2ATaskOwnership.Key] = System.Text.Json.JsonSerializer.SerializeToElement(
+                A2ATaskOwnership.Fingerprint(request.Agent.Name, request.PrincipalHandle, request.Caller)) },
         };
 
         // The first event of an A2A stream is the task itself, so a client that subscribes late
@@ -425,9 +456,10 @@ internal sealed class A2ATaskExecution : IDisposable
     /// Subscribes to this task's events. Everything already emitted is replayed first, so a
     /// subscriber never misses the terminal event because it arrived a moment too late.
     /// </summary>
-    public IAsyncEnumerable<object> SubscribeAsync(CancellationToken cancellationToken)
+    public async IAsyncEnumerable<object> SubscribeAsync(
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var channel = Channel.CreateUnbounded<object>(new UnboundedChannelOptions
+        var channel = Channel.CreateBounded<object>(new BoundedChannelOptions(32)
         {
             SingleReader = true,
             SingleWriter = false,
@@ -450,7 +482,16 @@ internal sealed class A2ATaskExecution : IDisposable
             }
         }
 
-        return channel.Reader.ReadAllAsync(cancellationToken);
+        try
+        {
+            await foreach (var evt in channel.Reader.ReadAllAsync(cancellationToken))
+                yield return evt;
+        }
+        finally
+        {
+            lock (_gate) _subscribers.Remove(channel);
+            channel.Writer.TryComplete();
+        }
     }
 
     public void CloseSubscribers()

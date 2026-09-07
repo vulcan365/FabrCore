@@ -30,7 +30,7 @@ internal sealed class CopilotAgentProvisioner : ICopilotAgentProvisioner
     private readonly IFabrCoreAgentService _agentService;
     private readonly Microsoft365CopilotOptions _options;
     private readonly ILogger<CopilotAgentProvisioner> _logger;
-    private readonly ConcurrentDictionary<string, Task> _ensured = new();
+    private readonly ConcurrentDictionary<string, Lazy<Task>> _ensured = new();
 
     public CopilotAgentProvisioner(
         IFabrCoreAgentService agentService,
@@ -62,9 +62,10 @@ internal sealed class CopilotAgentProvisioner : ICopilotAgentProvisioner
         var cacheKey = $"{principalHandle}:{handle}";
         try
         {
-            await _ensured.GetOrAdd(cacheKey, _ => EnsureCoreAsync(principalHandle, handle));
+            await _ensured.GetOrAdd(cacheKey, _ => new Lazy<Task>(() => EnsureCoreAsync(principalHandle, handle)))
+                .Value.WaitAsync(cancellationToken);
         }
-        catch
+        catch when (!cancellationToken.IsCancellationRequested)
         {
             // Do not cache failures — the next message should retry provisioning.
             _ensured.TryRemove(cacheKey, out _);
@@ -75,7 +76,10 @@ internal sealed class CopilotAgentProvisioner : ICopilotAgentProvisioner
     }
 
     public void Invalidate(string principalHandle, string agentHandle)
-        => _ensured.TryRemove($"{principalHandle}:{agentHandle}", out _);
+    {
+        _ensured.TryRemove($"{principalHandle}:{agentHandle}", out _);
+        _ensured.TryRemove("shared|" + agentHandle, out _);
+    }
 
     private async Task EnsureCoreAsync(string principalHandle, string handle)
     {
@@ -110,13 +114,23 @@ internal sealed class CopilotAgentProvisioner : ICopilotAgentProvisioner
             return;
         }
 
-        await _ensured.GetOrAdd("shared|" + shared, async _ =>
+        var key = "shared|" + shared;
+        try
         {
-            var config = BuildConfiguration(shared[systemPrefix.Length..]);
-            var status = await _agentService.ConfigureSystemAgentAsync(config);
-            _logger.LogInformation(
-                "Shared Copilot system agent {Handle} configured ({State})", shared, status.State);
-        });
+            await _ensured.GetOrAdd(key, _ => new Lazy<Task>(async () =>
+            {
+                var config = BuildConfiguration(shared[systemPrefix.Length..]);
+                var status = await _agentService.ConfigureSystemAgentAsync(config);
+                if (status.State is HealthState.Unhealthy or HealthState.NotConfigured)
+                    throw new InvalidOperationException("Shared Copilot agent provisioning failed.");
+                _logger.LogInformation("Shared Copilot system agent {Handle} configured ({State})", shared, status.State);
+            })).Value;
+        }
+        catch
+        {
+            _ensured.TryRemove(key, out _);
+            throw;
+        }
     }
 
     private AgentConfiguration BuildConfiguration(string handle) => new()

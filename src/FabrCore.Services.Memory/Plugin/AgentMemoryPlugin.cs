@@ -31,7 +31,7 @@ public class AgentMemoryPlugin : IFabrCorePlugin
     private IAgentMemoryService? _memoryService;
     private IMemorySummaryTree? _summaryTree;
     private string? _boundScopeKey;
-    private ILogger _logger = default!;
+    private ILogger _logger = Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
 
     /// <summary>
     /// The memory scope all operations bind to. Optional — when unset, the scope is
@@ -79,7 +79,7 @@ public class AgentMemoryPlugin : IFabrCorePlugin
     {
         try
         {
-            if (!Enum.TryParse<MemoryType>(type, ignoreCase: true, out var memoryType))
+            if (!Enum.TryParse<MemoryType>(type, ignoreCase: true, out var memoryType) || !Enum.IsDefined(memoryType))
                 return $"Error: Invalid memory type '{type}'. Must be one of: {MemoryTypeNames}.";
 
             var entry = await RequireService().SaveMemoryAsync(title, memoryType, content, description, isPointInTime: isPointInTime);
@@ -262,6 +262,10 @@ public class AgentMemoryPlugin : IFabrCorePlugin
                     content = m.Content,
                     updatedAt = m.UpdatedAt
                 }),
+                archiveResults = result.ArchiveResults.Select(r => new { memoryId = r.Entry.Id,
+                    title = r.Entry.Title, content = r.Entry.Content, temperature = r.Entry.Temperature.ToString(),
+                    freshnessWarning = r.FreshnessWarning }),
+                summaries = result.SummaryNodes.Select(n => new { topic = n.Topic, summary = n.Summary }),
                 freshnessWarnings = result.FreshnessWarnings,
                 warmMemoryCount = result.WarmMemories.Count
             }, JsonOptions);
@@ -283,8 +287,13 @@ public class AgentMemoryPlugin : IFabrCorePlugin
         try
         {
             MemoryType? memType = null;
-            if (typeFilter is not null && Enum.TryParse<MemoryType>(typeFilter, ignoreCase: true, out var parsed))
+            if (limit <= 0) return "Error: limit must be positive.";
+            if (typeFilter is not null)
+            {
+                if (!Enum.TryParse<MemoryType>(typeFilter, true, out var parsed) || !Enum.IsDefined(parsed))
+                    return $"Error: Invalid memory type '{typeFilter}'. Must be one of: {MemoryTypeNames}.";
                 memType = parsed;
+            }
 
             var results = await RequireService().SearchArchiveAsync(query, limit, memType);
 
@@ -308,6 +317,41 @@ public class AgentMemoryPlugin : IFabrCorePlugin
         {
             _logger.LogError(ex, "SearchArchive failed for query: {Query}", query);
             return $"Error searching archive: {ex.Message}";
+        }
+    }
+
+    [Description("Update an existing memory by ID. Supply only fields to change. Cold archives the memory and removes its hot-index pointer; Warm or Hot makes it active and eligible for the bounded hot index. Hot does not pin content in the prompt.")]
+    public async Task<string> UpdateMemory(
+        [Description("GUID of the memory to update")] string memoryId,
+        string? title = null, string? type = null, string? content = null,
+        string? description = null,
+        [Description("Optional tier: Hot, Warm, or Cold")] string? temperature = null)
+    {
+        if (!Guid.TryParse(memoryId, out var id)) return "Error: Invalid memory ID format.";
+        MemoryType? parsedType = null;
+        MemoryTemperature? parsedTemperature = null;
+        if (type is not null)
+        {
+            if (!Enum.TryParse<MemoryType>(type, true, out var value) || !Enum.IsDefined(value))
+                return $"Error: Invalid memory type. Must be one of: {MemoryTypeNames}.";
+            parsedType = value;
+        }
+        if (temperature is not null)
+        {
+            if (!Enum.TryParse<MemoryTemperature>(temperature, true, out var value) || !Enum.IsDefined(value))
+                return "Error: Invalid temperature. Use Hot, Warm, or Cold.";
+            parsedTemperature = value;
+        }
+        try
+        {
+            var entry = await RequireService().UpdateMemoryAsync(id, title, parsedType, content, description, parsedTemperature);
+            return JsonSerializer.Serialize(new { memoryId = entry.Id, title = entry.Title,
+                temperature = entry.Temperature.ToString(), message = "Memory updated successfully." }, JsonOptions);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "UpdateMemory failed for {MemoryId}", id);
+            return $"Error updating memory: {ex.Message}";
         }
     }
 

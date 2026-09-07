@@ -84,6 +84,9 @@ public class FabrCoreCopilotAgent : AgentApplication
             // the submit payload in Value; anything else without text is not routable.
             if (!CopilotActivityMapper.TryCreateUiActionMessage(turnContext.Activity.Value, out agentMessage))
             {
+                if (turnContext.Activity.Attachments?.Count > 0)
+                    await turnContext.SendActivityAsync(MessageFactory.Text(
+                        "I can't read attachments in this chat yet. Please paste the text you want me to work with."), cancellationToken);
                 return;
             }
 

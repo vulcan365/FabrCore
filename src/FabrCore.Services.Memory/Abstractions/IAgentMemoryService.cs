@@ -43,7 +43,8 @@ public interface IAgentMemoryService
     Task<MemoryIndex> GetMemoryIndexAsync(CancellationToken ct = default);
 
     /// <summary>
-    /// Search the cold layer archive via vector similarity.
+    /// Search all retained embedded memories via vector similarity, including the cold archive.
+    /// Results are not automatically promoted to an active temperature.
     /// </summary>
     Task<IReadOnlyList<MemorySearchResult>> SearchArchiveAsync(
         string query, int limit = 10, MemoryType? typeFilter = null,
@@ -59,6 +60,8 @@ public interface IAgentMemoryService
     /// Update an existing memory. Only the supplied (non-null) fields change.
     /// Re-generates the embedding when <paramref name="content"/> changes and keeps
     /// the hot index entry in sync when the title, type, or description changes.
+    /// Cold removes the index pointer; Warm/Hot make it eligible for the bounded index.
+    /// Hot does not pin full content or bypass index budgets.
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown when the memory does not exist.</exception>
     Task<MemoryEntry> UpdateMemoryAsync(

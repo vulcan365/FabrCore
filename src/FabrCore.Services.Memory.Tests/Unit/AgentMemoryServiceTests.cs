@@ -116,8 +116,8 @@ public sealed class AgentMemoryServiceTests
             "Deployment policy", MemoryType.Rule, "Deploy on Thursdays.", "Updated window");
 
         Assert.AreEqual(existing.Id, result.Id);
-        Assert.AreEqual("Deploy on Thursdays.", result.Content,
-            "Without a configured LLM, newer content should replace the old content.");
+        StringAssert.Contains(result.Content!, "Deploy on Tuesdays.");
+        StringAssert.Contains(result.Content!, "Deploy on Thursdays.");
         Assert.AreEqual("Updated window", result.Description);
         await fixture.Store.DidNotReceive().InsertEntityAsync(
             Arg.Any<string>(), Arg.Any<MemoryEntry>(), Arg.Any<CancellationToken>());
@@ -168,10 +168,9 @@ public sealed class AgentMemoryServiceTests
         Assert.AreEqual(MemoryTemperature.Cold, result.Temperature);
         Assert.AreEqual("Use the v2 endpoint.", result.Content);
         CollectionAssert.AreEqual(new float[] { 0, 1, 0 }, chunk.Embedding!);
-        await fixture.Index.Received(1).AddIndexEntryAsync(
-            fixture.Scope,
-            Arg.Is<MemoryIndexEntry>(e => e != null && e.MemoryId == id && e.Type == MemoryType.Rule),
-            Arg.Any<CancellationToken>());
+        await fixture.Index.Received(1).RemoveIndexEntryAsync(fixture.Scope, id, Arg.Any<CancellationToken>());
+        await fixture.Index.DidNotReceive().AddIndexEntryAsync(
+            fixture.Scope, Arg.Any<MemoryIndexEntry>(), Arg.Any<CancellationToken>());
     }
 
     [TestMethod]
@@ -332,6 +331,94 @@ public sealed class AgentMemoryServiceTests
             Arg.Any<double>(),
             Arg.Any<Dictionary<string, string>?>(),
             Arg.Any<CancellationToken>());
+    }
+
+    [TestMethod]
+    public async Task UpdateMemory_RestoresColdMemoryToActiveIndex()
+    {
+        var f = new ServiceFixture();
+        var entry = new MemoryEntry { Id = Guid.NewGuid(), Title = "Policy", Type = MemoryType.Rule, Temperature = MemoryTemperature.Cold };
+        f.Store.GetEntityByIdAsync(f.Scope, entry.Id, Arg.Any<CancellationToken>()).Returns(entry);
+        f.Store.UpdateEntityAsync(f.Scope, entry, Arg.Any<CancellationToken>()).Returns(entry);
+        var result = await f.Service.UpdateMemoryAsync(entry.Id, temperature: MemoryTemperature.Warm);
+        Assert.AreEqual(MemoryTemperature.Warm, result.Temperature);
+        await f.Index.Received(1).AddIndexEntryAsync(f.Scope,
+            Arg.Is<MemoryIndexEntry>(e => e.MemoryId == entry.Id), Arg.Any<CancellationToken>());
+    }
+
+    [TestMethod]
+    public void FormatRecallContext_IncludesArchiveOnlyAndSummaryOnlyResults()
+    {
+        var f = new ServiceFixture();
+        var archive = new MemoryRecallResult { ArchiveResults = [new MemorySearchResult {
+            Entry = new MemoryEntry { Title = "Old policy", Content = "Historical content" }, FreshnessWarning = "Verify source" }] };
+        var formatted = f.Service.FormatRecallContext(archive);
+        StringAssert.Contains(formatted, "Historical content");
+        StringAssert.Contains(formatted, "Verify source");
+        StringAssert.StartsWith(formatted, AgentMemoryService.MemoryContextStart);
+        StringAssert.EndsWith(formatted, AgentMemoryService.MemoryContextEnd);
+        var summary = new MemoryRecallResult { SummaryNodes = [new MemorySummaryNode { Topic = "Policy", Summary = "Topic rollup" }] };
+        StringAssert.Contains(f.Service.FormatRecallContext(summary), "Topic rollup");
+    }
+
+    [TestMethod]
+    public async Task SaveMemory_CancellationDoesNotFallBackToPersistence()
+    {
+        var f = new ServiceFixture();
+        f.Store.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns<float[]>(_ => throw new OperationCanceledException());
+        await Assert.ThrowsAsync<OperationCanceledException>(() => f.Service.SaveMemoryAsync("Fact", MemoryType.Fact, "Durable knowledge"));
+        await f.Store.DidNotReceive().InsertEntityAsync(Arg.Any<string>(), Arg.Any<MemoryEntry>(), Arg.Any<CancellationToken>());
+    }
+
+    [TestMethod]
+    public async Task UpdateMemory_RepairsMissingChunkAndClearsStaleVectorOnEmbeddingFailure()
+    {
+        var f = new ServiceFixture();
+        var entry = new MemoryEntry { Id = Guid.NewGuid(), Title = "Fact", Type = MemoryType.Fact };
+        f.Store.GetEntityByIdAsync(f.Scope, entry.Id, Arg.Any<CancellationToken>()).Returns(entry);
+        f.Store.UpdateEntityAsync(f.Scope, entry, Arg.Any<CancellationToken>()).Returns(entry);
+        f.Store.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns<float[]>(_ => throw new InvalidOperationException("offline"));
+        await f.Service.UpdateMemoryAsync(entry.Id, content: "New content");
+        await f.Store.Received(1).InsertChunkAsync(f.Scope,
+            Arg.Is<MemoryChunkEntry>(c => c.EntityId == entry.Id && c.Content == "New content" && c.Embedding == null), Arg.Any<CancellationToken>());
+        var oldChunk = new MemoryChunkEntry { EntityId = entry.Id, Content = "Old content", Embedding = [1, 0, 0] };
+        f.Store.GetPrimaryChunkAsync(f.Scope, entry.Id, Arg.Any<CancellationToken>()).Returns(oldChunk);
+        await f.Service.UpdateMemoryAsync(entry.Id, content: "Changed content");
+        await f.Store.Received(1).UpdateChunkAsync(f.Scope,
+            Arg.Is<MemoryChunkEntry>(c => c.Content == "Changed content" && c.Embedding == null), Arg.Any<CancellationToken>());
+    }
+
+    [TestMethod]
+    public async Task SaveMemory_MergeWriteFailureDoesNotCreateDuplicate()
+    {
+        var f = new ServiceFixture();
+        var entry = new MemoryEntry { Id = Guid.NewGuid(), Title = "Fact", Type = MemoryType.Fact };
+        var chunk = new MemoryChunkEntry { EntityId = entry.Id, Content = "Old fact" };
+        f.Store.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(new float[] { 1, 0, 0 });
+        f.Store.FindSimilarByContentAsync(f.Scope, Arg.Any<float[]>(), 3, Arg.Any<double>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { (entry, chunk, 0.01d) });
+        f.Store.UpdateChunkAsync(f.Scope, chunk, Arg.Any<CancellationToken>())
+            .Returns<MemoryChunkEntry>(_ => throw new InvalidOperationException("write failed"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => f.Service.SaveMemoryAsync("Fact", MemoryType.Fact, "Updated fact"));
+        await f.Store.DidNotReceive().InsertEntityAsync(Arg.Any<string>(), Arg.Any<MemoryEntry>(), Arg.Any<CancellationToken>());
+    }
+
+    [TestMethod]
+    public async Task Recall_VectorPathDoesNotSurfaceColdContentAsWarm()
+    {
+        var f = new ServiceFixture();
+        f.Planner.CreatePlanAsync(Arg.Any<string>(), Arg.Any<MemoryIndex>(), Arg.Any<CancellationToken>())
+            .Returns(new RetrievalPlan { Steps = [RetrievalStep.VectorOnly] });
+        f.Store.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(new float[] { 1, 0, 0 });
+        var archived = new MemoryEntry { Id = Guid.NewGuid(), Temperature = MemoryTemperature.Cold };
+        var active = new MemoryEntry { Id = Guid.NewGuid(), Temperature = MemoryTemperature.Warm };
+        f.Store.VectorSearchAsync(f.Scope, Arg.Any<float[]>(), Arg.Any<int>(), null, Arg.Any<CancellationToken>())
+            .Returns(new[] { new MemorySearchResult { Entry = archived }, new MemorySearchResult { Entry = active } });
+        var result = await f.Service.RecallAsync("policy");
+        Assert.HasCount(1, result.WarmMemories);
+        Assert.AreEqual(active.Id, result.WarmMemories[0].Id);
     }
 
     private sealed class ServiceFixture

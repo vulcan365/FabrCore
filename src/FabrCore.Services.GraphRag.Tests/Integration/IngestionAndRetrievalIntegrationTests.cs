@@ -47,6 +47,23 @@ public sealed class IngestionAndRetrievalIntegrationTests
     }
 
     [TestMethod]
+    public async Task IngestDocument_ForcedReingestRebuildsSameDocumentAndThenResumesReuse()
+    {
+        await using var fixture = await DatabaseFixture.CreateAsync();
+        var scope = await fixture.CreateScopeAsync("force-ingest");
+        var request = new KnowledgeIngestionRequest("forced.md", scope, "# Forced rebuild\n\nA uses B.");
+        var first = await fixture.Ingestion.IngestDocumentAsync(request);
+        var rebuilt = await fixture.Ingestion.IngestDocumentAsync(request with { ForceReingestion = true });
+        var reused = await fixture.Ingestion.IngestDocumentAsync(request);
+        Assert.AreEqual(first.DocumentId, rebuilt.DocumentId);
+        Assert.AreEqual(2, rebuilt.VersionNumber);
+        Assert.IsFalse(rebuilt.Reused);
+        Assert.AreEqual(first.ChunkCount, rebuilt.ChunkCount);
+        Assert.IsTrue(reused.Reused);
+        Assert.AreEqual(2, reused.VersionNumber);
+    }
+
+    [TestMethod]
     public async Task SearchChunks_RanksRelevantContentAndNeverLeaksAnotherScope()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();

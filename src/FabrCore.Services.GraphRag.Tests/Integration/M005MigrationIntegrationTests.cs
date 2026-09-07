@@ -12,6 +12,8 @@ public sealed class M005MigrationIntegrationTests
     [TestMethod]
     public async Task Upgrade_AddsAndBackfillsScopedColumns_AndCanRerun()
     {
+        if (!string.Equals(Environment.GetEnvironmentVariable("FABRCORE_GRAPHRAG_ALLOW_DATABASE_CREATION"), "true", StringComparison.OrdinalIgnoreCase))
+            Assert.Inconclusive("Legacy-schema migration sandbox requires explicit FABRCORE_GRAPHRAG_ALLOW_DATABASE_CREATION=true and CREATE DATABASE permission. Normal tests use the existing database.");
         var baseConnectionString = TestEnvironment.RequireDatabaseConnectionString();
         var databaseName = $"GraphRagM005_{Guid.NewGuid():N}";
         var masterBuilder = new SqlConnectionStringBuilder(baseConnectionString)

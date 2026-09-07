@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\FabrCore.Services.GraphRag\FabrCore.Services.GraphRag.csproj" />
+    <ProjectReference Include="..\FabrCore.Services.GraphRag.EvalConsole\FabrCore.Services.GraphRag.EvalConsole.csproj" />
   </ItemGroup>
 
   <ItemGroup>

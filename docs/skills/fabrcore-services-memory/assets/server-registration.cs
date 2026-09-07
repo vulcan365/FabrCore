@@ -1,3 +1,5 @@
+using FabrCore.Host;
+using FabrCore.Services.Memory.Plugin;
 // FabrCore server Program.cs — memory service registration example
 
 using FabrCore.Services.Memory.Configuration;
@@ -6,9 +8,9 @@ using FabrCore.Services.Memory.Models;
 var builder = WebApplication.CreateBuilder(args);
 
 // 1. Register FabrCore server (provides IEmbeddings, IFabrCoreChatClientService)
-builder.Services.AddFabrCoreServer(options =>
+builder.AddFabrCoreServer(new FabrCoreServerOptions
 {
-    // ... your FabrCore server configuration
+    AdditionalAssemblies = [typeof(AgentMemoryPlugin).Assembly]
 });
 
 // 2. Register agent memory services (auto-creates the mem schema and tables on startup).
@@ -17,7 +19,7 @@ builder.Services.AddFabrCoreServer(options =>
 builder.Services.AddAgentMemoryServices("MemoryDb", options =>
 {
     // Optional: embedding vector dimension — must match your embeddings model.
-    // Fixed at schema creation; changing it later requires dropping the mem schema.
+    // Fixed at schema creation; changing it later requires a planned schema migration and re-embedding.
     options.EmbeddingDimensions = 1536;    // Default: 1536
 
     // Optional: customize hot layer caps
@@ -30,7 +32,7 @@ builder.Services.AddAgentMemoryServices("MemoryDb", options =>
     options.Retrieval.FreshnessDaysThreshold = 1; // Days before staleness warning (default: 1)
 
     // Optional: customize consolidation
-    options.Consolidation.MemoryFileCap = 200;            // Max entities per scope (default: 200)
+    options.Consolidation.MemoryFileCap = 200;            // Consolidation trigger/scan bound; not a storage quota
     options.Consolidation.EnableAutoConsolidation = false; // Auto-compact on save (default: false)
     options.Consolidation.DuplicateDistanceThreshold = 0.05; // Cosine distance for dedup (default: 0.05)
 

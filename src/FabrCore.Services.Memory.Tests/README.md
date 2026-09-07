@@ -35,17 +35,17 @@ entities, chunks, relationships, summaries, registry row, and audit entries duri
 
 ## Running tests
 
-Run from the `src` directory so `global.json` selects Microsoft.Testing.Platform:
+Run from the `src` directory using the executable Microsoft.Testing.Platform runner:
 
 ```powershell
 # Fast deterministic suite
-dotnet test --project FabrCore.Services.Memory.Tests/FabrCore.Services.Memory.Tests.csproj -- --filter "TestCategory!=Integration&TestCategory!=Evaluation"
+dotnet run --project FabrCore.Services.Memory.Tests/FabrCore.Services.Memory.Tests.csproj -- --filter "TestCategory!=Integration&TestCategory!=Evaluation"
 
 # SQL Server integration suite
-dotnet test --project FabrCore.Services.Memory.Tests/FabrCore.Services.Memory.Tests.csproj -- --filter "TestCategory=Integration"
+dotnet run --project FabrCore.Services.Memory.Tests/FabrCore.Services.Memory.Tests.csproj -- --filter "TestCategory=Integration"
 
 # Live chat + embedding evaluations
-dotnet test --project FabrCore.Services.Memory.Tests/FabrCore.Services.Memory.Tests.csproj -- --filter "TestCategory=Evaluation"
+dotnet run --project FabrCore.Services.Memory.Tests/FabrCore.Services.Memory.Tests.csproj -- --filter "TestCategory=Evaluation"
 ```
 
 The retrieval eval reports and enforces:

@@ -6,7 +6,7 @@ namespace FabrCore.Host.A2A.Protocol;
 /// <summary>
 /// The discovery document an A2A client fetches to learn what an agent can do and how to reach it.
 /// Served from <c>/.well-known/agent-card.json</c>, <c>/.well-known/agent.json</c>, and
-/// <c>{base}/v1/card</c>.
+/// <c>{base}/card</c>.
 /// </summary>
 public sealed class A2AAgentCard
 {

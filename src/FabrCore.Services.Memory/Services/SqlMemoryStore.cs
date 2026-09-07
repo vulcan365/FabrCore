@@ -230,6 +230,7 @@ internal class SqlMemoryStore : IMemoryStore
             FROM {SchemaName}.MemoryEntity
             WHERE ScopeKey = @scopeKey
               AND Name != '{IndexSentinelName}'
+              AND Visibility != 'Cold'
             """;
 
         if (typeFilter.HasValue)
@@ -316,7 +317,7 @@ internal class SqlMemoryStore : IMemoryStore
         var sql = $"""
             UPDATE {SchemaName}.MemoryChunk
             SET Content = @content,
-                {(chunk.Embedding is not null ? $"Embedding = CAST(@embedding AS VECTOR({_embeddingDimensions}))," : "")}
+                {(chunk.Embedding is not null ? $"Embedding = CAST(@embedding AS VECTOR({_embeddingDimensions}))," : "Embedding = NULL,")}
                 Metadata = @metadata,
                 UpdatedAt = SYSUTCDATETIME()
             OUTPUT INSERTED.UpdatedAt

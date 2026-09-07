@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using FabrCore.Host.A2A.Protocol;
@@ -60,7 +60,7 @@ internal sealed class A2ARequestHandler
         await DispatchAsync(context, agent, parsed.Value, streaming: IsStreamingMethod(parsed.Value.Method));
     }
 
-    /// <summary>Handles <c>POST {base}/v1/message:send</c> and <c>{base}/v1/message:stream</c>.</summary>
+    /// <summary>Handles <c>POST {base}/message:send</c> and <c>{base}/message:stream</c>.</summary>
     public async Task HandleHttpMessageAsync(HttpContext context, string agentName, bool streamingRoute)
     {
         if (await ResolveAsync(context, agentName, envelope: false) is not { } agent)
@@ -79,14 +79,12 @@ internal sealed class A2ARequestHandler
 
         // A JSON-RPC envelope on a REST route means a Copilot-Studio-shaped client: it posts to
         // the streaming URL but reads a single JSON body, so streaming the answer would lose it.
-        var streaming = request.Envelope && _options.Interop.CollapseStreamForJsonRpcOnHttpRoutes
-            ? false
-            : IsStreamingMethod(request.Method);
+        var streaming = IsStreamingMethod(request.Method);
 
         await DispatchAsync(context, agent, request, streaming);
     }
 
-    /// <summary>Handles <c>GET {base}/v1/tasks/{id}</c>.</summary>
+    /// <summary>Handles <c>GET {base}/tasks/{id}</c>.</summary>
     public async Task HandleHttpGetTaskAsync(HttpContext context, string agentName, string taskId)
     {
         if (await ResolveAsync(context, agentName, envelope: false) is not { } agent)
@@ -103,18 +101,23 @@ internal sealed class A2ARequestHandler
         var historyLength = int.TryParse(context.Request.Query["historyLength"], out var parsedLength)
             ? parsedLength
             : (int?)null;
+        if (historyLength < 0 || (context.Request.Query.ContainsKey("historyLength") && historyLength is null))
+        {
+            await WriteErrorAsync(context, false, null, A2AErrors.Params("historyLength must be a nonnegative integer."));
+            return;
+        }
 
         var task = await _executor.GetTaskAsync(taskId, historyLength, context.RequestAborted);
-        if (task is null)
+        if (!await OwnsTaskAsync(context, agent, task))
         {
             await WriteErrorAsync(context, envelope: false, id: null, A2AErrors.NoSuchTask(taskId));
             return;
         }
 
-        await WriteResultAsync(context, envelope: false, id: null, task);
+        await WriteResultAsync(context, envelope: false, id: null, task!);
     }
 
-    /// <summary>Handles <c>POST {base}/v1/tasks/{id}:cancel</c>.</summary>
+    /// <summary>Handles <c>POST {base}/tasks/{id}:cancel</c>.</summary>
     public async Task HandleHttpCancelTaskAsync(HttpContext context, string agentName, string taskId)
     {
         if (await ResolveAsync(context, agentName, envelope: false) is not { } agent)
@@ -128,6 +131,11 @@ internal sealed class A2ARequestHandler
             return;
         }
 
+        if (!await OwnsTaskAsync(context, agent, await _executor.GetTaskAsync(taskId, 0, context.RequestAborted)))
+        {
+            await WriteErrorAsync(context, false, null, A2AErrors.NoSuchTask(taskId));
+            return;
+        }
         var result = await _executor.CancelAsync(taskId, context.RequestAborted);
         switch (result.Outcome)
         {
@@ -143,7 +151,7 @@ internal sealed class A2ARequestHandler
         }
     }
 
-    /// <summary>Handles <c>POST {base}/v1/tasks/{id}:subscribe</c>.</summary>
+    /// <summary>Handles <c>POST {base}/tasks/{id}:subscribe</c>.</summary>
     public async Task HandleHttpSubscribeAsync(HttpContext context, string agentName, string taskId)
     {
         if (await ResolveAsync(context, agentName, envelope: false) is not { } agent)
@@ -157,7 +165,7 @@ internal sealed class A2ARequestHandler
             return;
         }
 
-        await ResubscribeAsync(context, taskId, envelope: false, id: null);
+        await ResubscribeAsync(context, agent, taskId, envelope: false, id: null);
     }
 
     /// <summary>Serves one agent's card as JSON.</summary>
@@ -165,7 +173,7 @@ internal sealed class A2ARequestHandler
     {
         ApplyAgentCardCors(context);
 
-        if (await ResolveAsync(context, agentName, envelope: false) is not { } agent)
+        if (await ResolveAsync(context, agentName, envelope: false, discovery: true) is not { } agent)
         {
             return;
         }
@@ -232,10 +240,10 @@ internal sealed class A2ARequestHandler
                     jsonRpc = baseUrl + agent.BasePath,
                     httpJson = new
                     {
-                        send = baseUrl + agent.BasePath + "/v1/message:send",
-                        stream = baseUrl + agent.BasePath + "/v1/message:stream",
-                        getTask = baseUrl + agent.BasePath + "/v1/tasks/{taskId}",
-                        cancelTask = baseUrl + agent.BasePath + "/v1/tasks/{taskId}:cancel",
+                        send = baseUrl + agent.BasePath + "/message:send",
+                        stream = baseUrl + agent.BasePath + "/message:stream",
+                        getTask = baseUrl + agent.BasePath + "/tasks/{taskId}",
+                        cancelTask = baseUrl + agent.BasePath + "/tasks/{taskId}:cancel",
                     },
                 }),
             }),
@@ -278,15 +286,23 @@ internal sealed class A2ARequestHandler
     {
         var card = await _cardFactory.BuildAsync(agent, context.Request, context.RequestAborted);
         context.Response.ContentType = "application/json";
-        await context.Response.WriteAsync(A2AJson.Serialize(card), context.RequestAborted);
+        context.Response.Headers.Vary = "Origin, A2A-Version";
+        await context.Response.WriteAsync(A2AJson.Serialize(A2AV1.Card(card)), context.RequestAborted);
     }
 
     /// <summary>
     /// Resolves the route's agent name against the catalog, writing a not-found response and
     /// returning null when it names nothing this server publishes.
     /// </summary>
-    private async Task<A2AExposedAgent?> ResolveAsync(HttpContext context, string agentName, bool envelope)
+    private async Task<A2AExposedAgent?> ResolveAsync(HttpContext context, string agentName, bool envelope, bool discovery = false)
     {
+        var version = context.Request.Headers["A2A-Version"].ToString();
+        if (version != "1.0" && !(discovery && version.Length == 0))
+        {
+            await WriteErrorAsync(context, envelope, null, new A2AJsonRpcError
+                { Code = -32009, Message = "VersionNotSupportedError", Data = new { supportedVersions = new[] { "1.0" } } });
+            return null;
+        }
         var agent = await _catalog.FindAsync(agentName, context.RequestAborted);
         if (agent is not null)
         {
@@ -320,17 +336,20 @@ internal sealed class A2ARequestHandler
 
         switch (request.Method)
         {
+            case "ListTasks":
+                await ListTasksAsync(context, agent, request);
+                return;
             case A2AProtocol.MethodMessageSend:
             case A2AProtocol.MethodMessageStream:
                 await SendMessageAsync(context, agent, request, streaming);
                 return;
 
             case A2AProtocol.MethodTasksGet:
-                await GetTaskAsync(context, request);
+                await GetTaskAsync(context, agent, request);
                 return;
 
             case A2AProtocol.MethodTasksCancel:
-                await CancelTaskAsync(context, request);
+                await CancelTaskAsync(context, agent, request);
                 return;
 
             case A2AProtocol.MethodTasksResubscribe:
@@ -340,7 +359,7 @@ internal sealed class A2ARequestHandler
                     return;
                 }
 
-                await ResubscribeAsync(context, resubscribeParams!.Id, request.Envelope, request.Id);
+                await ResubscribeAsync(context, agent, resubscribeParams!.Id, request.Envelope, request.Id);
                 return;
 
             case A2AProtocol.MethodPushNotificationSet:
@@ -380,7 +399,7 @@ internal sealed class A2ARequestHandler
         }
 
         var message = sendParams!.Message;
-        if (message.Parts.Count == 0)
+        if (message?.Parts is null || message.Parts.Count == 0 || message.Parts.Any(p => p is null))
         {
             await WriteErrorAsync(
                 context, request.Envelope, request.Id, A2AErrors.Params("message.parts must not be empty."));
@@ -388,6 +407,22 @@ internal sealed class A2ARequestHandler
         }
 
         var contextId = FirstNonEmpty(message.ContextId, Guid.NewGuid().ToString());
+        if (sendParams.Configuration?.PushNotificationConfig is not null)
+        {
+            await WriteErrorAsync(context, request.Envelope, request.Id, A2AErrors.PushNotificationsUnsupported());
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(message.MessageId) || sendParams.Configuration?.HistoryLength < 0)
+        {
+            await WriteErrorAsync(context, request.Envelope, request.Id, A2AErrors.Params("A messageId and nonnegative historyLength are required."));
+            return;
+        }
+        if (streaming && !agent.Streaming)
+        {
+            await WriteErrorAsync(context, request.Envelope, request.Id, A2AErrors.Unsupported("This agent does not support streaming."));
+            return;
+        }
         var principalHandle = await _principalResolver.ResolvePrincipalHandleAsync(
             context, agent, contextId, context.RequestAborted);
         if (principalHandle is null)
@@ -400,17 +435,33 @@ internal sealed class A2ARequestHandler
             return;
         }
 
-        // A client continuing a task supplies its id; a new turn gets a fresh one.
-        var taskId = FirstNonEmpty(message.TaskId, Guid.NewGuid().ToString());
+        // This executor completes a single turn; it does not resume interrupted tasks.
+        // Never accept client-selected IDs or replace a running/terminal task.
+        if (!string.IsNullOrWhiteSpace(message.TaskId))
+        {
+            var existing = await _executor.GetTaskAsync(message.TaskId, 0, context.RequestAborted);
+            var taskError = await OwnsTaskAsync(context, agent, existing)
+                ? A2AErrors.Unsupported("Task continuation is not supported; send a new message with the same contextId.")
+                : A2AErrors.NoSuchTask(message.TaskId);
+            await WriteErrorAsync(context, request.Envelope, request.Id, taskError);
+            return;
+        }
+        var taskId = Guid.NewGuid().ToString();
         message.Role = A2ARoles.User;
 
-        var execution = _executor.Start(new A2AExecutionRequest(
-            agent,
-            principalHandle,
-            message,
-            taskId,
-            contextId,
-            _principalResolver.DescribeCaller(context)));
+        A2ATaskExecution execution;
+        try
+        {
+            execution = _executor.Start(new A2AExecutionRequest(
+                agent, principalHandle, message, taskId, contextId, _principalResolver.DescribeCaller(context)));
+        }
+        catch (A2ATaskCapacityException)
+        {
+            context.Response.Headers.RetryAfter = "1";
+            await WriteErrorAsync(context, request.Envelope, request.Id,
+                new A2AJsonRpcError { Code = A2AErrors.CapacityExceeded, Message = "The server is at its concurrent task limit." });
+            return;
+        }
 
         _logger.LogInformation(
             "A2A {Method} on agent {Agent} started task {TaskId} (context {ContextId}) for principal {Principal}.",
@@ -425,25 +476,25 @@ internal sealed class A2ARequestHandler
         if (sendParams.Configuration?.Blocking == false)
         {
             // Non-blocking: hand back the submitted task now and let the client poll tasks/get.
-            await WriteResultAsync(context, request.Envelope, request.Id, execution.Snapshot());
+            await WriteResultAsync(context, request.Envelope, request.Id, execution.Snapshot(), wrap: true);
             return;
         }
 
         await execution.Completion.WaitAsync(context.RequestAborted);
         var final = execution.Snapshot();
+        if (sendParams.Configuration?.HistoryLength is { } historyLength)
+            final.History = final.History?.TakeLast(historyLength).ToList();
 
-        var shape = request.Envelope && !request.NativeJsonRpcRoute
-            ? _options.Interop.CompatibilityResultShape
-            : _options.Interop.ResultShape;
+        var shape = _options.Interop.ResultShape;
 
         object result = shape == A2AResultShape.Message
             ? BuildMessageResult(final)
             : final;
 
-        await WriteResultAsync(context, request.Envelope, request.Id, result);
+        await WriteResultAsync(context, request.Envelope, request.Id, result, wrap: true);
     }
 
-    private async Task GetTaskAsync(HttpContext context, ParsedRequest request)
+    private async Task GetTaskAsync(HttpContext context, A2AExposedAgent agent, ParsedRequest request)
     {
         if (!TryReadParams<A2ATaskQueryParams>(request, out var queryParams, out var error))
         {
@@ -454,16 +505,22 @@ internal sealed class A2ARequestHandler
         var task = await _executor.GetTaskAsync(
             queryParams!.Id, queryParams.HistoryLength, context.RequestAborted);
 
-        if (task is null)
+        if (queryParams.HistoryLength < 0)
+        {
+            await WriteErrorAsync(context, request.Envelope, request.Id, A2AErrors.Params("historyLength must be nonnegative."));
+            return;
+        }
+
+        if (!await OwnsTaskAsync(context, agent, task))
         {
             await WriteErrorAsync(context, request.Envelope, request.Id, A2AErrors.NoSuchTask(queryParams.Id));
             return;
         }
 
-        await WriteResultAsync(context, request.Envelope, request.Id, task);
+        await WriteResultAsync(context, request.Envelope, request.Id, task!);
     }
 
-    private async Task CancelTaskAsync(HttpContext context, ParsedRequest request)
+    private async Task CancelTaskAsync(HttpContext context, A2AExposedAgent agent, ParsedRequest request)
     {
         if (!TryReadParams<A2ATaskIdParams>(request, out var idParams, out var error))
         {
@@ -471,7 +528,12 @@ internal sealed class A2ARequestHandler
             return;
         }
 
-        var result = await _executor.CancelAsync(idParams!.Id, context.RequestAborted);
+        if (!await OwnsTaskAsync(context, agent, await _executor.GetTaskAsync(idParams!.Id, 0, context.RequestAborted)))
+        {
+            await WriteErrorAsync(context, request.Envelope, request.Id, A2AErrors.NoSuchTask(idParams.Id));
+            return;
+        }
+        var result = await _executor.CancelAsync(idParams.Id, context.RequestAborted);
         switch (result.Outcome)
         {
             case A2ACancelOutcome.NotFound:
@@ -486,9 +548,19 @@ internal sealed class A2ARequestHandler
         }
     }
 
-    private async Task ResubscribeAsync(HttpContext context, string taskId, bool envelope, JsonNode? id)
+    private async Task ResubscribeAsync(HttpContext context, A2AExposedAgent agent, string taskId, bool envelope, JsonNode? id)
     {
+        if (!await OwnsTaskAsync(context, agent, await _executor.GetTaskAsync(taskId, 0, context.RequestAborted)))
+        {
+            await WriteErrorAsync(context, envelope, id, A2AErrors.NoSuchTask(taskId));
+            return;
+        }
         var execution = _executor.Find(taskId);
+        if (execution is not null && A2ATaskStates.IsTerminal(execution.Snapshot().Status.State))
+        {
+            await WriteErrorAsync(context, envelope, id, A2AErrors.Unsupported("Cannot subscribe to a terminal task."));
+            return;
+        }
         if (execution is null)
         {
             var stored = await _executor.GetTaskAsync(taskId, null, context.RequestAborted);
@@ -513,7 +585,8 @@ internal sealed class A2ARequestHandler
 
         await foreach (var evt in execution.SubscribeAsync(context.RequestAborted))
         {
-            var payload = envelope ? A2AJsonRpcResponse.Success(id, evt) : evt;
+            var result = A2AV1.Result(evt, wrap: true);
+            var payload = envelope ? A2AJsonRpcResponse.Success(id, result) : result;
             await writer.WriteAsync(payload);
         }
     }
@@ -573,13 +646,20 @@ internal sealed class A2ARequestHandler
 
             if (!isEnvelope)
             {
-                return new ParsedRequest(false, null, impliedMethod!, root.Clone(), false);
+                return new ParsedRequest(false, null, impliedMethod!, A2AV1.Parameters(root), false);
             }
 
             var id = root.TryGetProperty("id", out var idElement)
                 ? JsonNode.Parse(idElement.GetRawText())
                 : null;
 
+            if (root.GetProperty("jsonrpc").ValueKind != JsonValueKind.String
+                || root.GetProperty("jsonrpc").GetString() != "2.0"
+                || root.GetProperty("method").ValueKind != JsonValueKind.String)
+            {
+                await WriteErrorAsync(context, true, id, A2AErrors.Invalid("A valid JSON-RPC 2.0 method is required."));
+                return null;
+            }
             var method = root.TryGetProperty("method", out var methodElement)
                 ? methodElement.GetString() ?? string.Empty
                 : string.Empty;
@@ -588,6 +668,7 @@ internal sealed class A2ARequestHandler
                 ? paramsElement.Clone()
                 : (JsonElement?)null;
 
+            if (parameters is { } p) parameters = A2AV1.Parameters(p);
             return new ParsedRequest(true, id, method, parameters, requireEnvelope);
         }
     }
@@ -630,7 +711,8 @@ internal sealed class A2ARequestHandler
     {
         // A Message result carries the answer without the task wrapper. Prefer the terminal
         // status message; fall back to the artifact parts so nothing is dropped.
-        if (task.Status.Message is { } statusMessage && statusMessage.Parts.Count > 0)
+        if (task.Artifacts?.Any(a => a.Parts.Count > 0) != true
+            && task.Status.Message is { } statusMessage && statusMessage.Parts.Count > 0)
         {
             return statusMessage;
         }
@@ -655,6 +737,18 @@ internal sealed class A2ARequestHandler
     {
         error = null;
 
+        if (_options.Authentication.Mode == A2AAuthenticationMode.JwtBearer)
+        {
+            var jwt = _options.Authentication.JwtBearer;
+            var scopes = (context.User.FindFirstValue("scp") ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (jwt.RequiredScopes.Any(scope => !scopes.Contains(scope, StringComparer.Ordinal))
+                || (jwt.RequiredRoles.Count > 0 && !context.User.FindAll("roles").Any(c => jwt.RequiredRoles.Contains(c.Value, StringComparer.Ordinal))))
+            {
+                error = A2AErrors.Invalid("The token does not have the required scopes or roles.");
+                return false;
+            }
+        }
+
         var allowed = context.User.FindFirstValue(A2AClaimTypes.AllowedAgents);
         if (string.IsNullOrEmpty(allowed))
         {
@@ -678,12 +772,101 @@ internal sealed class A2ARequestHandler
         return false;
     }
 
+    public async Task HandleHttpListTasksAsync(HttpContext context, string agentName)
+    {
+        if (await ResolveAsync(context, agentName, false) is not { } agent) return;
+        var query = new JsonObject();
+        foreach (var key in new[] { "contextId", "status", "pageToken", "statusTimestampAfter" })
+            if (context.Request.Query.TryGetValue(key, out var value)) query[key] = value.ToString();
+        foreach (var key in new[] { "pageSize", "historyLength" })
+            if (context.Request.Query.TryGetValue(key, out var value))
+            {
+                if (!int.TryParse(value, out var number))
+                {
+                    await WriteErrorAsync(context, false, null, A2AErrors.Params($"{key} must be an integer."));
+                    return;
+                }
+                query[key] = number;
+            }
+        if (context.Request.Query.TryGetValue("includeArtifacts", out var include))
+        {
+            if (!bool.TryParse(include, out var flag))
+            {
+                await WriteErrorAsync(context, false, null, A2AErrors.Params("includeArtifacts must be boolean."));
+                return;
+            }
+            query["includeArtifacts"] = flag;
+        }
+        await DispatchAsync(context, agent, new ParsedRequest(false, null, "ListTasks",
+            JsonSerializer.SerializeToElement(query), false), false);
+    }
+
+    private async Task ListTasksAsync(HttpContext context, A2AExposedAgent agent, ParsedRequest request)
+    {
+        if (!TryReadParams<A2AListTasksParams>(request, out var query, out var error))
+        {
+            await WriteErrorAsync(context, request.Envelope, request.Id, error!);
+            return;
+        }
+        var pageSize = query!.PageSize ?? 50;
+        if (pageSize is < 1 or > 100 || query.HistoryLength < 0)
+        {
+            await WriteErrorAsync(context, request.Envelope, request.Id, A2AErrors.Params("Invalid pageSize or historyLength."));
+            return;
+        }
+        var offset = 0;
+        if (!string.IsNullOrEmpty(query.PageToken) && (!int.TryParse(query.PageToken, out offset) || offset < 0))
+        {
+            await WriteErrorAsync(context, request.Envelope, request.Id, A2AErrors.Params("Invalid pageToken."));
+            return;
+        }
+        IReadOnlyList<A2ATask> all;
+        try { all = await _executor.ListAsync(context.RequestAborted); }
+        catch (NotSupportedException)
+        {
+            await WriteErrorAsync(context, request.Envelope, request.Id, A2AErrors.Unsupported("The configured task store does not support ListTasks."));
+            return;
+        }
+        var owned = new List<A2ATask>();
+        foreach (var task in all.OrderByDescending(t => t.Status.Timestamp).ThenBy(t => t.Id, StringComparer.Ordinal))
+        {
+            if (!await OwnsTaskAsync(context, agent, task)) continue;
+            if (!string.IsNullOrEmpty(query.ContextId) && query.ContextId != task.ContextId) continue;
+            if (!string.IsNullOrEmpty(query.Status) && query.Status != "TASK_STATE_" + task.Status.State.Replace('-', '_').ToUpperInvariant()) continue;
+            if (query.StatusTimestampAfter is { } after && (!DateTimeOffset.TryParse(task.Status.Timestamp, out var timestamp) || timestamp < after)) continue;
+            owned.Add(task);
+        }
+        var page = owned.Skip(offset).Take(pageSize).Select(task => new A2ATask
+        {
+            Id = task.Id, ContextId = task.ContextId, Status = task.Status, Metadata = task.Metadata,
+            Artifacts = query.IncludeArtifacts ? task.Artifacts : null,
+            History = task.History?.TakeLast(query.HistoryLength ?? _options.Tasks.DefaultHistoryLength).ToList(),
+        }).ToList();
+        await WriteResultAsync(context, request.Envelope, request.Id, new
+        {
+            tasks = page, totalSize = owned.Count, pageSize,
+            nextPageToken = offset + page.Count < owned.Count ? (offset + page.Count).ToString(System.Globalization.CultureInfo.InvariantCulture) : "",
+        });
+    }
+
+    private async ValueTask<bool> OwnsTaskAsync(HttpContext context, A2AExposedAgent agent, A2ATask? task)
+    {
+        if (task?.Metadata is null || !task.Metadata.TryGetValue(A2ATaskOwnership.Key, out var owner)
+            || owner.ValueKind != JsonValueKind.String)
+            return false;
+        var principal = await _principalResolver.ResolvePrincipalHandleAsync(
+            context, agent, task.ContextId, context.RequestAborted);
+        return principal is not null && owner.GetString() == A2ATaskOwnership.Fingerprint(
+            agent.Name, principal, _principalResolver.DescribeCaller(context));
+    }
+
     private static string FirstNonEmpty(string? candidate, string fallback)
         => string.IsNullOrWhiteSpace(candidate) ? fallback : candidate!;
 
-    private static Task WriteResultAsync(HttpContext context, bool envelope, JsonNode? id, object result)
+    private static Task WriteResultAsync(HttpContext context, bool envelope, JsonNode? id, object result, bool wrap = false)
     {
-        context.Response.ContentType = "application/json";
+        context.Response.ContentType = !envelope ? "application/a2a+json" : "application/json";
+        result = A2AV1.Result(result, wrap);
         var payload = envelope ? A2AJsonRpcResponse.Success(id, result) : result;
         return context.Response.WriteAsync(A2AJson.Serialize(payload), context.RequestAborted);
     }
@@ -708,6 +891,21 @@ internal sealed class A2ARequestHandler
         }
 
         context.Response.StatusCode = A2AErrors.ToHttpStatus(error.Code);
-        return context.Response.WriteAsync(A2AJson.Serialize(new { error }), context.RequestAborted);
+        context.Response.ContentType = "application/problem+json";
+        var errorType = error.Code switch
+        {
+            A2AErrors.TaskNotFound => "task-not-found", A2AErrors.TaskNotCancelable => "task-not-cancelable",
+            A2AErrors.PushNotificationNotSupported => "push-notification-not-supported",
+            A2AErrors.UnsupportedOperation => "unsupported-operation", A2AErrors.ContentTypeNotSupported => "content-type-not-supported",
+            A2AErrors.AuthenticatedExtendedCardNotConfigured => "extended-agent-card-not-configured",
+            A2AErrors.VersionNotSupported => "version-not-supported", A2AErrors.CapacityExceeded => "capacity-exceeded", _ => "invalid-request",
+        };
+        return context.Response.WriteAsync(A2AJson.Serialize(new
+        {
+            type = "https://a2a-protocol.org/errors/" + errorType,
+            title = error.Message, status = context.Response.StatusCode,
+            detail = error.Data is string text ? text : error.Data is null ? null : A2AJson.Serialize(error.Data),
+            supportedVersions = error.Code == A2AErrors.VersionNotSupported ? new[] { "1.0" } : null,
+        }), context.RequestAborted);
     }
 }

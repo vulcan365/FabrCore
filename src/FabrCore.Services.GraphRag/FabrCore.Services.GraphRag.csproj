@@ -20,6 +20,7 @@
 
 	<ItemGroup>
 		<InternalsVisibleTo Include="FabrCore.Services.GraphRag.Tests" />
+        <InternalsVisibleTo Include="FabrCore.Services.GraphRag.EvalConsole" />
 	</ItemGroup>
 
 </Project>

@@ -51,6 +51,7 @@ public sealed class FabrCoreA2ATestHost : IAsyncDisposable
         _app = app;
         AgentService = agentService;
         Client = app.GetTestClient();
+        Client.DefaultRequestHeaders.Add("A2A-Version", "1.0");
     }
 
     /// <summary>An <see cref="HttpClient"/> bound to the in-memory server.</summary>
@@ -167,13 +168,13 @@ public sealed class FabrCoreA2ATestHost : IAsyncDisposable
         return events;
     }
 
-    /// <summary>A JSON-RPC <c>message/send</c> body, the shape most A2A calls take.</summary>
+    /// <summary>A JSON-RPC <c>SendMessage</c> body, the shape most A2A calls take.</summary>
     public static string MessageSendRequest(string text, string? contextId = null, object? id = null)
         => JsonSerializer.Serialize(new
         {
             jsonrpc = "2.0",
             id = id ?? 1,
-            method = "message/send",
+            method = "SendMessage",
             @params = new
             {
                 message = new

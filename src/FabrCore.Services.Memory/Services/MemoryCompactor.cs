@@ -94,17 +94,21 @@ internal class MemoryCompactor : IMemoryCompactor
             return 0;
 
         var merged = 0;
-        var alreadyDeleted = new HashSet<Guid>();
+        var alreadyArchived = new HashSet<Guid>();
 
         foreach (var (id1, id2, distance) in pairs)
         {
-            if (alreadyDeleted.Contains(id1) || alreadyDeleted.Contains(id2))
+            if (alreadyArchived.Contains(id1) || alreadyArchived.Contains(id2))
                 continue;
 
             var entry1 = await _store.GetEntityByIdAsync(scopeKey, id1, ct);
             var entry2 = await _store.GetEntityByIdAsync(scopeKey, id2, ct);
 
             if (entry1 is null || entry2 is null)
+                continue;
+            if (entry1.Temperature == MemoryTemperature.Cold || entry2.Temperature == MemoryTemperature.Cold
+                || entry1.Type != entry2.Type || entry1.IsPointInTime || entry2.IsPointInTime
+                || entry1.Metadata is { Count: > 0 } || entry2.Metadata is { Count: > 0 })
                 continue;
 
             // Load chunk content for both
@@ -129,16 +133,18 @@ internal class MemoryCompactor : IMemoryCompactor
                     keeperChunk.Embedding = await _store.GenerateEmbeddingAsync(
                         $"{keeper.Title}. {keeper.Description} {mergedContent}", ct);
                 }
-                catch { /* Continue without new embedding */ }
+                catch (Exception ex) when (ex is not OperationCanceledException) { keeperChunk.Embedding = null; }
                 await _store.UpdateChunkAsync(scopeKey, keeperChunk, ct);
             }
 
-            await _store.DeleteEntityAsync(scopeKey, toDelete.Id, ct);
+            // Preserve the original source even when a merge model is unavailable.
+            toDelete.Temperature = MemoryTemperature.Cold;
+            await _store.UpdateEntityAsync(scopeKey, toDelete, ct);
             await _indexManager.RemoveIndexEntryAsync(scopeKey, toDelete.Id, ct);
-            alreadyDeleted.Add(toDelete.Id);
+            alreadyArchived.Add(toDelete.Id);
             merged++;
 
-            _logger.LogDebug("Merged duplicate memories: kept '{Keeper}' ({KeeperId}), deleted '{Deleted}' ({DeletedId}), distance={Distance:F4}",
+            _logger.LogDebug("Merged duplicate memories: kept '{Keeper}' ({KeeperId}), archived '{Deleted}' ({DeletedId}), distance={Distance:F4}",
                 keeper.Title, keeper.Id, toDelete.Title, toDelete.Id, distance);
         }
 
@@ -157,7 +163,7 @@ internal class MemoryCompactor : IMemoryCompactor
         // Find candidates: not in hot index and older than threshold
         // Point-in-time memories (snapshots) prune at 3 days; durable memories at 30 days
         var staleCandidates = headers
-            .Where(h => !hotIds.Contains(h.MemoryId))
+            .Where(h => !hotIds.Contains(h.MemoryId) && h.Type != MemoryType.Instruction)
             .Where(h => h.IsPointInTime
                 ? (DateTime.UtcNow - h.UpdatedAt).TotalDays > 3
                 : (DateTime.UtcNow - h.UpdatedAt).TotalDays > 30)

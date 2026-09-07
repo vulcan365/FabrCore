@@ -1,0 +1,186 @@
+[
+  {
+    "FileName": "open-data-policy.md",
+    "Url": "https://raw.githubusercontent.com/project-open-data/project-open-data.github.io/f136070aa9fea595277f6ebd1cd66f57ff504dfd/policy-memo.md",
+    "Query": "What must federal agencies create and maintain in an enterprise data inventory and public data listing?",
+    "ExpectedEntities": [
+      "Data.gov",
+      "Project Open Data"
+    ],
+    "EvidenceTerms": [
+      "enterprise data inventory",
+      "public data listing"
+    ],
+    "ExpectedEdges": [
+      {
+        "Id": "government-datagov",
+        "Fact": "The Federal Government launched Data.gov.",
+        "SourceSection": "Introduction",
+        "EvidenceText": "the Federal Government launched [Data.gov]",
+        "FromPattern": "^(?:Federal Government|U\\.?S\\.? (?:Federal )?Government|United States (?:Federal )?Government)$",
+        "Types": [
+          "ESTABLISHES"
+        ],
+        "ToPattern": "^Data\\.gov$"
+      },
+      {
+        "Id": "cio-working-group",
+        "Fact": "The Federal CIO is tasked with working to establish an inter-agency working group.",
+        "SourceSection": "Information management responsibilities",
+        "EvidenceText": "the Federal CIO will work to establish an inter-agency working group",
+        "FromPattern": "^(?:Federal (?:Chief Information Officer|CIO)(?: \\(CIO\\))?)$",
+        "Types": [
+          "ESTABLISHES"
+        ],
+        "ToPattern": "^(?:inter[- ]agency working group|open data (?:inter[- ]agency )?working group)$"
+      },
+      {
+        "Id": "agencies-common-metadata",
+        "Fact": "Agencies must use common core metadata to describe information as collected and created.",
+        "SourceSection": "Collect or create information",
+        "EvidenceText": "Agencies must describe information using [common core metadata]",
+        "FromPattern": "^(?:agencies|Federal agencies|Executive departments and agencies|Federal executive departments and agencies)$",
+        "Types": [
+          "USES"
+        ],
+        "ToPattern": "^(?:common core metadata(?: schema| standard)?|common core and extensible metadata)$",
+        "DescriptionPattern": "must|required|requir|mandat"
+      },
+      {
+        "Id": "agencies-open-formats",
+        "Fact": "Agencies must use machine-readable and open formats for information as collected or created.",
+        "SourceSection": "Use machine-readable and open formats",
+        "EvidenceText": "Agencies must use machine-readable and open formats for information as it is collected or created.",
+        "FromPattern": "^(?:agencies|Federal agencies|Executive departments and agencies|Federal executive departments and agencies)$",
+        "Types": [
+          "USES"
+        ],
+        "ToPattern": "^(?:machine[- ]readable (?:and )?open formats|machine[- ]readable and open (?:data )?formats|open (?:data )?formats)$",
+        "DescriptionPattern": "\\b(?:must|shall|required|requirement|mandatory)\\b"
+      },
+      {
+        "Id": "agencies-nonproprietary-formats",
+        "Fact": "To the extent permitted by law, agencies should prioritize non-proprietary open formats.",
+        "SourceSection": "Use machine-readable and open formats",
+        "EvidenceText": "to the extent permitted by law, agencies should prioritize the use of open formats that are non-proprietary",
+        "FromPattern": "^(?:agencies|Federal agencies|Executive departments and agencies|Federal executive departments and agencies)$",
+        "Types": [
+          "USES"
+        ],
+        "ToPattern": "^(?:non[- ]proprietary (?:and )?(?:open )?(?:data )?formats|open non[- ]proprietary (?:data )?formats)$",
+        "DescriptionPattern": "\\b(?:should|recommend(?:ed|ation)?|encouraged)\\b"
+      },
+      {
+        "Id": "no-mandatory-nonproprietary-formats",
+        "Fact": "The recommendation to prioritize non-proprietary formats must not become a mandatory use claim.",
+        "SourceSection": "Use machine-readable and open formats",
+        "EvidenceText": "to the extent permitted by law, agencies should prioritize the use of open formats that are non-proprietary",
+        "FromPattern": "^(?:agencies|Federal agencies|Executive departments and agencies|Federal executive departments and agencies)$",
+        "Types": [
+          "USES"
+        ],
+        "ToPattern": "^(?:non[- ]proprietary (?:and )?(?:open )?(?:data )?formats|open non[- ]proprietary (?:data )?formats)$",
+        "DescriptionPattern": "\\b(?:must|shall|mandatory|required)\\b",
+        "Forbidden": true
+      }
+    ],
+    "ExtractionInstructions": "Extract named policies, laws, organizations, programs, roles, and their explicit responsibilities and relationships. Preserve actors, direction, and obligation strength; distinguish requirements from recommendations. Exclude navigation and copyright boilerplate."
+  },
+  {
+    "FileName": "open-data-governance.md",
+    "Url": "https://raw.githubusercontent.com/project-open-data/project-open-data.github.io/f136070aa9fea595277f6ebd1cd66f57ff504dfd/governance.md",
+    "Query": "How often does the Technical Review Committee review comments and changes to Project Open Data technical repositories?",
+    "ExpectedEntities": [
+      "Project Open Data"
+    ],
+    "EvidenceTerms": [
+      "bi-weekly",
+      "Technical Review Committee"
+    ],
+    "ExpectedEdges": [
+      {
+        "Id": "omb-eop",
+        "Fact": "OMB is a component of the Executive Office of the President.",
+        "SourceSection": "Owners",
+        "EvidenceText": "both components of the Executive Office of the President",
+        "FromPattern": "^(?:OMB|Office of Management and Budget(?: \\(OMB\\))?)$",
+        "Types": [
+          "PART_OF"
+        ],
+        "ToPattern": "^(?:EOP|Executive Office of the President(?: \\(EOP\\))?)$"
+      },
+      {
+        "Id": "ostp-eop",
+        "Fact": "OSTP is a component of the Executive Office of the President.",
+        "SourceSection": "Owners",
+        "EvidenceText": "both components of the Executive Office of the President",
+        "FromPattern": "^(?:OSTP|Office of Science and Technology Policy(?: \\(OSTP\\))?)$",
+        "Types": [
+          "PART_OF"
+        ],
+        "ToPattern": "^(?:EOP|Executive Office of the President(?: \\(EOP\\))?)$"
+      },
+      {
+        "Id": "project-github",
+        "Fact": "Project Open Data uses GitHub for publication and collaboration.",
+        "SourceSection": "Background",
+        "EvidenceText": "the Project is published on the developer social network GitHub",
+        "FromPattern": "^Project Open Data$",
+        "Types": [
+          "USES"
+        ],
+        "ToPattern": "^GitHub$"
+      }
+    ],
+    "ExtractionInstructions": "Extract named policies, laws, organizations, programs, roles, and their explicit responsibilities and relationships. Preserve actors, direction, and obligation strength; distinguish requirements from recommendations. Exclude navigation and copyright boilerplate."
+  },
+  {
+    "FileName": "cisa-open-source-policy.md",
+    "Url": "https://raw.githubusercontent.com/cisagov/development-guide/c22ca838ba50b8f5e7dc44b79ca0515c48497a6a/open-source-policy/policy.md",
+    "Query": "Which instrument does CISA use to waive copyright internationally for its code?",
+    "ExpectedEntities": [
+      "CISA",
+      "CC0"
+    ],
+    "EvidenceTerms": [
+      "CC0",
+      "internationally"
+    ],
+    "ExpectedEdges": [
+      {
+        "Id": "cisa-foss",
+        "Fact": "CISA defaults to using Free and Open Source Software in its projects.",
+        "SourceSection": "Default position",
+        "EvidenceText": "Use Free and Open Source Software (FOSS)",
+        "FromPattern": "^(?:CISA|Cybersecurity and Infrastructure Security Agency(?: \\(CISA\\))?)$",
+        "Types": [
+          "USES"
+        ],
+        "ToPattern": "^(?:FOSS|Free and Open Source Software(?: \\(FOSS\\))?)$"
+      },
+      {
+        "Id": "cisa-cc0",
+        "Fact": "CISA uses CC0 in its default license file to waive copyright internationally.",
+        "SourceSection": "Open source licenses",
+        "EvidenceText": "to waive copyright internationally",
+        "FromPattern": "^(?:CISA|Cybersecurity and Infrastructure Security Agency(?: \\(CISA\\))?|(?:CISA(?:\\x27s)? )?(?:default )?LICENSE(?: file)?)$",
+        "Types": [
+          "USES"
+        ],
+        "ToPattern": "^(?:CC0(?: 1\\.0)?|Creative Commons Zero(?: \\(CC0\\))?)$"
+      },
+      {
+        "Id": "omb-source-code-publisher",
+        "Fact": "OMB published M-16-21, the federal source code policy.",
+        "SourceSection": "Further reading",
+        "EvidenceText": "published by the White House Office of Management and Budget",
+        "FromPattern": "^(?:(?:OMB )?M-16-21|Federal Source Code Policy(?: \\(M-16-21\\))?)$",
+        "Types": [
+          "PUBLISHED_BY"
+        ],
+        "ToPattern": "^(?:OMB|(?:White House )?Office of Management and Budget(?: \\(OMB\\))?)$"
+      }
+    ],
+    "ExtractionInstructions": "Extract named policies, laws, organizations, programs, roles, and their explicit responsibilities and relationships. Preserve actors, direction, and obligation strength; distinguish requirements from recommendations. Exclude navigation and copyright boilerplate."
+  }
+]

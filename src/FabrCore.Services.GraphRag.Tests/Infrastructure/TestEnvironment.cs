@@ -16,14 +16,17 @@ internal static class TestEnvironment
             return complete;
 
         var password = Environment.GetEnvironmentVariable("FABRCORE_GRAPHRAG_TEST_PASSWORD");
+        if (string.IsNullOrWhiteSpace(password)
+            && ReadLocalEvalSetting("ConnectionStrings", "GraphRagTestDb") is { Length: > 0 } localConnection)
+            return localConnection;
         if (string.IsNullOrWhiteSpace(password))
             Assert.Inconclusive("Set FABRCORE_GRAPHRAG_TEST_CONNECTION_STRING or FABRCORE_GRAPHRAG_TEST_PASSWORD to run SQL tests.");
 
         return new SqlConnectionStringBuilder
         {
             DataSource = Environment.GetEnvironmentVariable("FABRCORE_GRAPHRAG_TEST_SERVER") ?? "localhost",
-            InitialCatalog = Environment.GetEnvironmentVariable("FABRCORE_GRAPHRAG_TEST_DATABASE") ?? "fabrcore-testing",
-            UserID = Environment.GetEnvironmentVariable("FABRCORE_GRAPHRAG_TEST_USER") ?? "fabrcore365",
+            InitialCatalog = Environment.GetEnvironmentVariable("FABRCORE_GRAPHRAG_TEST_DATABASE") ?? "graphrag",
+            UserID = Environment.GetEnvironmentVariable("FABRCORE_GRAPHRAG_TEST_USER") ?? "graphrag365",
             Password = password,
             Encrypt = true,
             TrustServerCertificate = true,
@@ -34,6 +37,7 @@ internal static class TestEnvironment
     public static FabrCoreConfiguration RequireLiveModelConfiguration()
     {
         var path = Environment.GetEnvironmentVariable("FABRCORE_GRAPHRAG_TEST_CONFIG")
+                   ?? ReadLocalEvalSetting("Eval", "ModelConfigurationPath")
                    ?? Path.Combine(AppContext.BaseDirectory, "fabrcore.json");
         if (!File.Exists(path))
             Assert.Inconclusive("Add fabrcore.json to the GraphRAG test project to run live evaluations.");
@@ -52,4 +56,17 @@ internal static class TestEnvironment
     }
 
     public static string NewScope(string prefix) => $"tests:grag:{prefix}:{Guid.NewGuid():N}";
+
+    private static string? ReadLocalEvalSetting(string section, string key)
+    {
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+        {
+            var path = Path.Combine(directory.FullName, "src", "FabrCore.Services.GraphRag.EvalConsole", "appsettings.local.json");
+            if (!File.Exists(path)) continue;
+            using var document = JsonDocument.Parse(File.ReadAllText(path));
+            return document.RootElement.TryGetProperty(section, out var settings) && settings.TryGetProperty(key, out var value)
+                ? value.GetString() : null;
+        }
+        return null;
+    }
 }

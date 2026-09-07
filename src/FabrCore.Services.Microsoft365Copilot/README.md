@@ -1,5 +1,9 @@
 # FabrCore.Services.Microsoft365Copilot
 
+For the same user to reach the same agent through Teams and A2A, use the shared
+[`CanonicalEntra` identity and named agent binding](../../docs/channel-agent-identity.md).
+The app package targets manifest 1.25. A2A targets specification release 1.0.1.
+
 A FabrCore server addon that makes your FabrCore agents available in **Microsoft 365 Copilot**
 and **Microsoft Teams** as a [custom engine agent](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/overview-custom-engine-agent).
 
@@ -26,8 +30,8 @@ nothing has to be deployed yet.
 
 **What you need**
 
-- A Microsoft 365 work account with a **Microsoft 365 Copilot license** (the $30/user/month
-  add-on) — that license is what gives you the *Agents* list in the Copilot app.
+- A Microsoft 365 work account with the tenant permissions and licensing required for the
+  selected agent experience. Confirm current requirements with your tenant administrator.
 - Permission to upload custom apps in Teams. If *Upload a custom app* is missing in step 7, ask a
   tenant admin to allow custom app uploads (Teams admin center → *Teams apps → Setup policies*) or
   to deploy the package org-wide instead.

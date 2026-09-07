@@ -13,7 +13,7 @@ namespace FabrCore.Services.Microsoft365Copilot;
 /// </summary>
 public sealed class CopilotAppPackageBuilder
 {
-    private const string ManifestSchemaVersion = "1.22";
+    private const string ManifestSchemaVersion = "1.25";
 
     private readonly Microsoft365CopilotOptions _options;
 

@@ -139,6 +139,8 @@ public sealed class CopilotTokenValidationOptions
 /// <summary>Selects and provisions the FabrCore agent that answers Copilot conversations.</summary>
 public sealed class CopilotAgentOptions
 {
+    /// <summary>Name in the shared AgentBindings section. Owns provisioning settings when set.</summary>
+    public string? Binding { get; set; }
     /// <summary>
     /// FabrCore agent type alias (the <c>[AgentAlias]</c> value) provisioned for each Microsoft 365
     /// user. Required unless <see cref="SharedAgentHandle"/> is set.
@@ -230,8 +232,10 @@ public sealed class CopilotProactiveOptions
 /// <summary>Strategy for deriving the FabrCore principal handle from the Microsoft 365 user.</summary>
 public enum CopilotPrincipalStrategy
 {
+    /// <summary>Shared tenant/object identity compatible with A2A CanonicalEntra.</summary>
+    CanonicalEntra = 4,
     /// <summary>Use the user's Entra object id (stable, tenant-scoped). Default.</summary>
-    EntraObjectId,
+    EntraObjectId = 0,
 
     /// <summary>Use <c>{tenantId}-{objectId}</c>. Recommended for MultiTenant bots.</summary>
     TenantAndObjectId,

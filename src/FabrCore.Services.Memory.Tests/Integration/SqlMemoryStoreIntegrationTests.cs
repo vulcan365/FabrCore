@@ -199,6 +199,25 @@ public sealed class SqlMemoryStoreIntegrationTests
         Assert.AreEqual(1, (int)(await command.ExecuteScalarAsync() ?? 0));
     }
 
+    [TestMethod]
+    public async Task ColdMemory_IsExcludedFromHeadersButRetainedInArchiveAndCanBeRestored()
+    {
+        var entry = await InsertMemoryAsync(_scope, "Archived policy", MemoryType.Rule, "Prior policy", UnitVector(0));
+        entry.Temperature = MemoryTemperature.Cold;
+        await _database.Store.UpdateEntityAsync(_scope, entry);
+        Assert.IsFalse((await _database.Store.GetHeadersAsync(_scope, 20)).Any(h => h.MemoryId == entry.Id));
+        Assert.IsTrue((await _database.Store.VectorSearchAsync(_scope, UnitVector(0), 10)).Any(r => r.Entry.Id == entry.Id));
+        entry.Temperature = MemoryTemperature.Warm;
+        await _database.Store.UpdateEntityAsync(_scope, entry);
+        Assert.IsTrue((await _database.Store.GetHeadersAsync(_scope, 20)).Any(h => h.MemoryId == entry.Id));
+        var chunk = (await _database.Store.GetPrimaryChunkAsync(_scope, entry.Id))!;
+        chunk.Content = "Changed content without a vector";
+        chunk.Embedding = null;
+        await _database.Store.UpdateChunkAsync(_scope, chunk);
+        Assert.HasCount(0, await _database.Store.VectorSearchAsync(_scope, UnitVector(0), 10),
+            "Changed content must not keep the old content's vector.");
+    }
+
     private async Task<MemoryEntry> InsertMemoryAsync(
         string scope,
         string title,

@@ -9,6 +9,43 @@ namespace FabrCore.Services.Microsoft365Copilot.Tests;
 [TestClass]
 public sealed class DefaultCopilotPrincipalResolverTests
 {
+    [TestMethod]
+    public async Task CanonicalIdentity_IsIdenticalAcrossTeamsAndA2A_AndSeparatesApplications()
+    {
+        const string tenant = "11111111-2222-3333-4444-555555555555";
+        const string oid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+        var teams = CreateResolver(o => o.Principal.Strategy = CopilotPrincipalStrategy.CanonicalEntra);
+        var teamsHandle = await teams.ResolvePrincipalHandleAsync(TeamsContext(oid.ToUpperInvariant(), tenant), null, default);
+
+        var builder = Microsoft.AspNetCore.Builder.WebApplication.CreateBuilder();
+        FabrCore.Host.A2A.A2AExtensions.AddA2A(builder, o =>
+        {
+            o.Enabled = true;
+            o.Authentication.Mode = FabrCore.Host.Configuration.A2AAuthenticationMode.JwtBearer;
+            o.Authentication.JwtBearer.Authority = "https://login.microsoftonline.com/" + tenant + "/v2.0";
+            o.Authentication.JwtBearer.Audience = "test-audience";
+            o.Principal.Strategy = FabrCore.Host.Configuration.A2APrincipalStrategy.CanonicalEntra;
+        });
+        using var services = Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider(builder.Services);
+        var a2a = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<FabrCore.Host.A2A.IA2APrincipalResolver>(services);
+        var context = new Microsoft.AspNetCore.Http.DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim("tid", tenant), new Claim("oid", oid), new Claim("scp", "agent.invoke") }, "validated-token")),
+        };
+        var agent = new FabrCore.Host.A2A.A2AExposedAgent
+        {
+            Name = "assistant", BasePath = "/a2a/assistant", DisplayName = "Assistant", Description = "Assistant",
+            Source = FabrCore.Host.A2A.A2AExposureSource.Configured, Models = "default", Plugins = [], Tools = [],
+            Args = new Dictionary<string, string>(), AgentPerContext = false, InputModes = ["text/plain"], OutputModes = ["text/plain"],
+            Streaming = true, Version = "1.0", Skills = [], Notes = [], HarnessSkills = [],
+        };
+        Assert.AreEqual(teamsHandle, await a2a.ResolvePrincipalHandleAsync(context, agent, "different-conversation"));
+        Assert.AreEqual($"entra-{tenant}-{oid}", teamsHandle);
+        context.User = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim("tid", tenant), new Claim("oid", oid), new Claim("idtyp", "app") }, "validated-token"));
+        Assert.AreEqual($"app-{tenant}-{oid}", await a2a.ResolvePrincipalHandleAsync(context, agent, "same-conversation"));
+        Assert.IsNull(await teams.ResolvePrincipalHandleAsync(TeamsContext(oid), null, default));
+    }
+
     private static DefaultCopilotPrincipalResolver CreateResolver(Action<Microsoft365CopilotOptions>? configure = null)
     {
         var options = new Microsoft365CopilotOptions();
