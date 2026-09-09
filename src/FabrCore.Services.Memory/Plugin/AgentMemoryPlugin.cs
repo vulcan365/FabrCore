@@ -20,6 +20,14 @@ namespace FabrCore.Services.Memory.Plugin;
 [PluginAlias("agent-memory")]
 public class AgentMemoryPlugin : IFabrCorePlugin
 {
+    public AgentMemoryPlugin() { }
+
+    /// <summary>Bind tools to a trusted code-selected service, including an internal agent's layered memory.</summary>
+    public AgentMemoryPlugin(IAgentMemoryService memoryService)
+    {
+        _memoryService = memoryService ?? throw new ArgumentNullException(nameof(memoryService));
+        _boundScopeKey = memoryService.ScopeKey;
+    }
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -50,6 +58,7 @@ public class AgentMemoryPlugin : IFabrCorePlugin
 
     public Task InitializeAsync(AgentConfiguration config, IServiceProvider serviceProvider)
     {
+        if (_memoryService is not null) return Task.CompletedTask;
         _logger = serviceProvider.GetRequiredService<ILoggerFactory>().CreateLogger<AgentMemoryPlugin>();
 
         var scopeKey = MemoryScopeResolver.Resolve(config, MemoryScope);
@@ -74,15 +83,15 @@ public class AgentMemoryPlugin : IFabrCorePlugin
         [Description("A short descriptive title for the memory")] string title,
         [Description("Memory type: 'Fact' (verified truths, domain knowledge), 'Rule' (business rules, constraints, policies), 'Instruction' (user directives, standing orders), 'Observation' (patterns noticed, inferences, situational context), or 'Procedural' (workflow patterns — prefer SaveProcedure for structured steps)")] string type,
         [Description("Full content/details of the memory")] string content,
-        [Description("Optional brief description (defaults to the title)")] string? description = null,
-        [Description("Set to true if this memory is a point-in-time snapshot (e.g., database query result) that may be stale immediately")] bool isPointInTime = false)
+        [Description("Optional brief description (defaults to a bounded content preview)")] string? description = null,
+        [Description("Set to true if this memory is a point-in-time snapshot (e.g., database query result) that may be stale immediately")] bool isPointInTime = false, CancellationToken ct = default)
     {
         try
         {
             if (!Enum.TryParse<MemoryType>(type, ignoreCase: true, out var memoryType) || !Enum.IsDefined(memoryType))
                 return $"Error: Invalid memory type '{type}'. Must be one of: {MemoryTypeNames}.";
 
-            var entry = await RequireService().SaveMemoryAsync(title, memoryType, content, description, isPointInTime: isPointInTime);
+            var entry = await RequireService().SaveMemoryAsync(title, memoryType, content, description, isPointInTime: isPointInTime, ct: ct);
             return JsonSerializer.Serialize(new
             {
                 memoryId = entry.Id,
@@ -96,7 +105,7 @@ public class AgentMemoryPlugin : IFabrCorePlugin
             _logger.LogWarning("Memory rejected by taxonomy: {Reason}", ex.Message);
             return $"Memory rejected: {ex.Message}";
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "SaveMemory failed for '{Title}'", title);
             return $"Error saving memory: {ex.Message}";
@@ -112,7 +121,7 @@ public class AgentMemoryPlugin : IFabrCorePlugin
         [Description("When to apply this procedure (e.g., 'User asks to add a customer to the system')")] string triggerCondition,
         [Description("Ordered steps as JSON array. Each item: {\"order\": 1, \"action\": \"...\", \"description\": \"...\", \"expectedOutcome\": \"...\", \"tool\": \"...\"}. Only 'order' and 'action' are required.")] string stepsJson,
         [Description("Optional: JSON array of tool names the agent should prefer (e.g., [\"customer-plugin\",\"email\"])")] string? preferredToolsJson = null,
-        [Description("Optional narrative description of the procedure")] string? description = null)
+        [Description("Optional narrative description of the procedure")] string? description = null, CancellationToken ct = default)
     {
         try
         {
@@ -182,7 +191,7 @@ public class AgentMemoryPlugin : IFabrCorePlugin
                 content: narrative,
                 description: description ?? $"Procedure: {triggerCondition}",
                 metadata: metadata,
-                isPointInTime: false);
+                isPointInTime: false, ct: ct);
 
             return JsonSerializer.Serialize(new
             {
@@ -197,7 +206,7 @@ public class AgentMemoryPlugin : IFabrCorePlugin
         {
             return $"Procedure rejected: {ex.Message}";
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "SaveProcedure failed for '{Title}'", title);
             return $"Error saving procedure: {ex.Message}";
@@ -232,11 +241,11 @@ public class AgentMemoryPlugin : IFabrCorePlugin
                  "The memory pool may be shared with other agents when a shared scope is configured. " +
                  "Call this before answering questions that may depend on prior context.")]
     public async Task<string> RecallMemories(
-        [Description("The current query or topic to find relevant memories for")] string query)
+        [Description("The current query or topic to find relevant memories for")] string query, CancellationToken ct = default)
     {
         try
         {
-            var result = await RequireService().RecallAsync(query);
+            var result = await RequireService().RecallAsync(query, ct: ct);
 
             return JsonSerializer.Serialize(new
             {
@@ -256,6 +265,7 @@ public class AgentMemoryPlugin : IFabrCorePlugin
                 warmMemories = result.WarmMemories.Select(m => new
                 {
                     memoryId = m.Id,
+                    scopeKey = m.ScopeKey,
                     title = m.Title,
                     type = m.Type.ToString(),
                     description = m.Description,
@@ -270,7 +280,7 @@ public class AgentMemoryPlugin : IFabrCorePlugin
                 warmMemoryCount = result.WarmMemories.Count
             }, JsonOptions);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "RecallMemories failed for query: {Query}", query);
             return $"Error recalling memories: {ex.Message}";
@@ -282,7 +292,7 @@ public class AgentMemoryPlugin : IFabrCorePlugin
     public async Task<string> SearchArchive(
         [Description("The search query")] string query,
         [Description("Maximum results to return (default 10)")] int limit = 10,
-        [Description("Optional filter by type: 'Fact', 'Rule', 'Instruction', 'Observation', or 'Procedural'")] string? typeFilter = null)
+        [Description("Optional filter by type: 'Fact', 'Rule', 'Instruction', 'Observation', or 'Procedural'")] string? typeFilter = null, CancellationToken ct = default)
     {
         try
         {
@@ -295,13 +305,14 @@ public class AgentMemoryPlugin : IFabrCorePlugin
                 memType = parsed;
             }
 
-            var results = await RequireService().SearchArchiveAsync(query, limit, memType);
+            var results = await RequireService().SearchArchiveAsync(query, limit, memType, ct);
 
             return JsonSerializer.Serialize(new
             {
                 results = results.Select(r => new
                 {
                     memoryId = r.Entry.Id,
+                    scopeKey = r.Entry.ScopeKey,
                     title = r.Entry.Title,
                     type = r.Entry.Type.ToString(),
                     description = r.Entry.Description,
@@ -313,7 +324,7 @@ public class AgentMemoryPlugin : IFabrCorePlugin
                 count = results.Count
             }, JsonOptions);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "SearchArchive failed for query: {Query}", query);
             return $"Error searching archive: {ex.Message}";
@@ -325,7 +336,7 @@ public class AgentMemoryPlugin : IFabrCorePlugin
         [Description("GUID of the memory to update")] string memoryId,
         string? title = null, string? type = null, string? content = null,
         string? description = null,
-        [Description("Optional tier: Hot, Warm, or Cold")] string? temperature = null)
+        [Description("Optional tier: Hot, Warm, or Cold")] string? temperature = null, CancellationToken ct = default)
     {
         if (!Guid.TryParse(memoryId, out var id)) return "Error: Invalid memory ID format.";
         MemoryType? parsedType = null;
@@ -344,11 +355,11 @@ public class AgentMemoryPlugin : IFabrCorePlugin
         }
         try
         {
-            var entry = await RequireService().UpdateMemoryAsync(id, title, parsedType, content, description, parsedTemperature);
+            var entry = await RequireService().UpdateMemoryAsync(id, title, parsedType, content, description, parsedTemperature, ct);
             return JsonSerializer.Serialize(new { memoryId = entry.Id, title = entry.Title,
                 temperature = entry.Temperature.ToString(), message = "Memory updated successfully." }, JsonOptions);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "UpdateMemory failed for {MemoryId}", id);
             return $"Error updating memory: {ex.Message}";
@@ -357,19 +368,19 @@ public class AgentMemoryPlugin : IFabrCorePlugin
 
     [Description("Delete a memory by its ID. Removes it from both the store and the hot layer index.")]
     public async Task<string> ForgetMemory(
-        [Description("The GUID of the memory to delete")] string memoryId)
+        [Description("The GUID of the memory to delete")] string memoryId, CancellationToken ct = default)
     {
         try
         {
             if (!Guid.TryParse(memoryId, out var id))
                 return $"Error: Invalid memory ID format '{memoryId}'.";
 
-            var deleted = await RequireService().ForgetMemoryAsync(id);
+            var deleted = await RequireService().ForgetMemoryAsync(id, ct);
             return deleted
                 ? JsonSerializer.Serialize(new { memoryId = id, message = "Memory forgotten successfully." }, JsonOptions)
                 : $"Memory {memoryId} not found.";
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "ForgetMemory failed for ID: {MemoryId}", memoryId);
             return $"Error forgetting memory: {ex.Message}";
@@ -378,11 +389,11 @@ public class AgentMemoryPlugin : IFabrCorePlugin
 
     [Description("Get the hot layer memory index — the always-loaded table of contents of agent memories. " +
                  "Shows all indexed memories with their titles, types, and description hooks.")]
-    public async Task<string> GetMemoryIndex()
+    public async Task<string> GetMemoryIndex(CancellationToken ct = default)
     {
         try
         {
-            var index = await RequireService().GetMemoryIndexAsync();
+            var index = await RequireService().GetMemoryIndexAsync(ct);
 
             return JsonSerializer.Serialize(new
             {
@@ -398,7 +409,7 @@ public class AgentMemoryPlugin : IFabrCorePlugin
                 })
             }, JsonOptions);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "GetMemoryIndex failed");
             return $"Error getting memory index: {ex.Message}";
@@ -411,14 +422,14 @@ public class AgentMemoryPlugin : IFabrCorePlugin
                  "summary tree has not been built (run ConsolidateMemories first) or the feature is disabled.")]
     public async Task<string> QuerySummaries(
         [Description("The broad topic or question to resolve against the summary tree")] string query,
-        [Description("Maximum number of summary nodes to return (default 5)")] int limit = 5)
+        [Description("Maximum number of summary nodes to return (default 5)")] int limit = 5, CancellationToken ct = default)
     {
         try
         {
             if (_summaryTree is null || _boundScopeKey is null)
                 return JsonSerializer.Serialize(new { summaries = Array.Empty<object>(), count = 0, message = "Summary tree unavailable." }, JsonOptions);
 
-            var nodes = await _summaryTree.QueryAsync(_boundScopeKey, query, limit);
+            var nodes = await _summaryTree.QueryAsync(_boundScopeKey, query, limit, ct);
             return JsonSerializer.Serialize(new
             {
                 summaries = nodes.Select(n => new
@@ -433,7 +444,7 @@ public class AgentMemoryPlugin : IFabrCorePlugin
                 count = nodes.Count
             }, JsonOptions);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "QuerySummaries failed for query: {Query}", query);
             return $"Error querying summaries: {ex.Message}";
@@ -442,11 +453,11 @@ public class AgentMemoryPlugin : IFabrCorePlugin
 
     [Description("Run memory consolidation: merge duplicates, archive stale observations, resolve contradictions, " +
                  "and enforce index budgets. Use when memory quality is degrading or the store is growing large.")]
-    public async Task<string> ConsolidateMemories()
+    public async Task<string> ConsolidateMemories(CancellationToken ct = default)
     {
         try
         {
-            var result = await RequireService().ConsolidateAsync();
+            var result = await RequireService().ConsolidateAsync(ct);
 
             return JsonSerializer.Serialize(new
             {
@@ -458,7 +469,7 @@ public class AgentMemoryPlugin : IFabrCorePlugin
                 message = "Consolidation complete."
             }, JsonOptions);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "ConsolidateMemories failed");
             return $"Error consolidating memories: {ex.Message}";

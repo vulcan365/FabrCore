@@ -43,6 +43,11 @@ Registered migrations currently include:
 - `M001_BaselineSchema`
 - `M002_ActionAudit`
 - `M003_SourceDocumentMetadata`
+- `M004_SourceDocumentRuntimeColumns`
+- `M005_ScopedCanonicalKnowledge`
+- `M006_SourceDocumentInstructionHash`
+- `M007_IngestionPerformanceMetrics`
+- `M008_ExtractionBatchMetrics`
 
 Migrations are intended to be idempotent and append-only. Add new migrations by
 implementing `IGraphRagMigration` and registering them in `Migrations.Registered`.
@@ -58,11 +63,19 @@ implementing `IGraphRagMigration` and registering them in `Migrations.Registered
 - Includes `Embedding VECTOR(1536)`.
 - Scope is the access boundary.
 
+`grag.CanonicalEntity`
+
+- Shared canonical identity for name/type; M005 connects it to scoped entity rows.
+- Canonical identity does not grant access across scopes.
+
 `grag.KnowledgeRelationship`
 
 - SQL graph edge table.
 - Stores typed relationships between knowledge entities.
-- Includes relationship type, description, and weight.
+- Includes relationship type, description, weight and scope.
+- Experimental policy obligation tags live in Description; no obligation column
+  was introduced. Edges do not yet retain independent conflicting qualifiers
+  for the same endpoints/type.
 
 `grag.KnowledgeChunk`
 
@@ -92,8 +105,9 @@ implementing `IGraphRagMigration` and registering them in `Migrations.Registered
 
 - Stores generated or curated community/category summaries.
 
-Domains and categories are classification/provenance. They are not security
-boundaries.
+Domains and categories are shared classification/provenance. They are not security
+boundaries. Fresh evaluation scopes do not reset taxonomy; existing labels and
+descriptions can influence later classifications.
 
 ## Source And Provenance Tables
 
@@ -104,6 +118,7 @@ boundaries.
   `SourceKey`, `SourceTitle`, `SourceOccurredAtUtc`, `MetadataJson`,
   `ContentHash`, `VersionNumber`, status fields, and count fields.
 - M003 adds/backfills first-class source metadata.
+- M004 adds runtime columns; M006 tracks extraction-instruction identity.
 
 `grag.DocumentContribution`
 
@@ -120,13 +135,20 @@ boundaries.
 
 `grag.IngestionMetric`
 
-- Records ingestion token/call/duration metrics.
+- Records ingestion token/call/duration metrics. M007 adds phase timings and batch
+  counters; M008 adds extraction-batch telemetry. Overlapping stage totals do not
+  represent additive wall time.
 - Indexed by document, creation time, and scope.
 
 ## Important Indexes
 
 Examples:
 
+- `UX_CanonicalEntity_Name_Type`
+- `IX_KnowledgeEntity_Canonical_Scope`
+- `IX_KnowledgeRelationship_ScopeKey`
+- `IX_BelongsTo_ScopeKey`
+- `UX_CommunitySummary_Category_Scope`
 - `IX_KnowledgeEntity_Name_Type_Scope`
 - `IX_KnowledgeEntity_ScopeKey`
 - `IX_KnowledgeChunk_EntityId_Index`

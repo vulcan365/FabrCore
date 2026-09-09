@@ -1,0 +1,25 @@
+{
+  "version": "fabrcore-memory-business-holdout-v1",
+  "memories": [
+    {"title":"Cedar invoices", "type":"Rule", "content":"Cedar invoices require a purchase-order identifier before posting to the ledger."},
+    {"title":"Cedar exceptions", "type":"Fact", "content":"Cedar invoice exceptions are reviewed by Nisha. Nisha's queue code is CDR-73."},
+    {"title":"Nisha reporting preference", "type":"Instruction", "content":"Nisha requests weekly exception summaries as CSV attachments, with amounts in euros."},
+    {"title":"Returns workflow", "type":"Procedural", "content":"For Cedar returns: verify the receipt, record the return authorization, inspect the package, then issue a credit note."},
+    {"title":"Cedar current payment terms", "type":"Fact", "content":"Effective August 15, 2026, Cedar invoices are payable within 45 days. The former 30-day term no longer applies to new invoices."},
+    {"title":"Cedar June payment terms", "type":"Observation", "content":"In June 2026, Cedar payment terms were 30 days.", "snapshot":true},
+    {"title":"Boreal payment terms", "type":"Fact", "content":"Boreal invoices are payable within 90 days; their exception reviewer is Luis."},
+    {"title":"Cedar import checkpoint", "type":"Observation", "content":"The Cedar import job finished file CDR-016. Resume with CDR-017. The duplicate-review step remains blocked on approval."},
+    {"title":"Currency display", "type":"Rule", "content":"Cedar financial statements display euros using the EUR currency code."},
+    {"title":"Sandbox environment", "type":"Fact", "content":"The invoice sandbox uses endpoint invoice-test.internal and cannot post to the production ledger."}
+  ],
+  "questions": [
+    {"id":"posting-prerequisite", "category":"single-session", "query":"What identifier must be present before posting a Cedar invoice?", "required":["purchase-order"], "forbidden":[]},
+    {"id":"reviewer-format", "category":"multi-session", "query":"Who reviews Cedar invoice exceptions and in what format should that person receive weekly summaries?", "required":["Nisha","CSV"], "forbidden":[]},
+    {"id":"reviewer-queue", "category":"identifier", "query":"What is the queue code for the Cedar exceptions reviewer?", "required":["CDR-73"], "forbidden":[]},
+    {"id":"returns", "category":"procedural", "query":"What is the Cedar returns procedure?", "required":["receipt","authorization","inspect","credit note"], "forbidden":[]},
+    {"id":"current-terms", "category":"knowledge-update", "query":"What payment term applies to new Cedar invoices after August 15, 2026?", "required":["45"], "forbidden":[]},
+    {"id":"historical-terms", "category":"temporal", "query":"What payment term applied to Cedar invoices in June 2026?", "required":["30"], "forbidden":[]},
+    {"id":"resume-import", "category":"continuity", "query":"Where should Cedar invoice import resume and what is blocking duplicate review?", "required":["CDR-017","approval"], "forbidden":[]},
+    {"id":"unknown-bank", "category":"abstention", "query":"What is Cedar's bank account number?", "required":[], "forbidden":[], "empty":true}
+  ]
+}

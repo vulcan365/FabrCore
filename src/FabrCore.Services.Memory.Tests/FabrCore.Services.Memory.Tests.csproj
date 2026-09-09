@@ -10,13 +10,14 @@
 
   <ItemGroup>
     <PackageReference Include="NSubstitute" Version="6.2.0" />
-    <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.12" />
     <PackageReference Include="Microsoft.Extensions.AI.Evaluation" Version="*" />
     <PackageReference Include="Microsoft.Extensions.AI.Evaluation.Quality" Version="*" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\FabrCore.Services.Memory\FabrCore.Services.Memory.csproj" />
+    <ProjectReference Include="..\FabrCore.Services.Memory.EvalConsole\FabrCore.Services.Memory.EvalConsole.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -26,10 +27,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Update="Microsoft.Testing.Extensions.CodeCoverage" Version="18.10.0" />
-    <PackageReference Update="Microsoft.Testing.Extensions.TrxReport" Version="2.3.3" />
-    <PackageReference Update="MSTest.TestAdapter" Version="4.3.3" />
-    <PackageReference Update="MSTest.TestFramework" Version="4.3.3" />
+    <PackageReference Update="Microsoft.Testing.Extensions.CodeCoverage" Version="18.11.0" />
+    <PackageReference Update="Microsoft.Testing.Extensions.TrxReport" Version="2.4.0" />
+    <PackageReference Update="MinVer" Version="8.0.0" />
+    <PackageReference Update="MSTest.TestAdapter" Version="4.4.0" />
+    <PackageReference Update="MSTest.TestFramework" Version="4.4.0" />
   </ItemGroup>
 
 </Project>

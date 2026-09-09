@@ -29,6 +29,166 @@ public sealed class SqlMemoryStoreIntegrationTests
     }
 
     [TestMethod]
+    public async Task MultipleMatchedChunksAreRankedBoundedAndScopeFiltered()
+    {
+        var active = await InsertMemoryAsync(_scope, "multi", MemoryType.Fact, "overview", UnitVector(1));
+        var expected = new List<Guid>();
+        for (var i = 1; i <= 4; i++)
+            expected.Add((await _database.Store.InsertChunkAsync(_scope, new MemoryChunkEntry {
+                EntityId = active.Id, ChunkIndex = i, Content = new string('x', 1000), Embedding = UnitVector(0) })).ChunkId);
+        var foreign = await InsertMemoryAsync(_database.CreateScopeKey("multi-other"), "other", MemoryType.Fact, "foreign", UnitVector(0));
+        var cold = await InsertMemoryAsync(_scope, "multi-cold", MemoryType.Fact, "cold", UnitVector(0));
+        cold.Temperature = MemoryTemperature.Cold;
+        await _database.Store.UpdateEntityAsync(_scope, cold);
+        var matches = await _database.Store.GetMatchedChunksAsync(_scope, UnitVector(0), [active.Id, foreign.Id, cold.Id], 3, 160);
+        Assert.HasCount(1, matches);
+        CollectionAssert.AreEqual(expected.Take(3).ToArray(), matches[active.Id].Select(c => c.ChunkId).ToArray());
+        Assert.IsTrue(matches[active.Id].All(c => c.Content.Length == 160 && c.IsTruncated));
+        Assert.AreEqual("overview", (await _database.Store.GetPrimaryChunkAsync(_scope, active.Id))!.Content);
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => _database.Store.GetMatchedChunksAsync(_scope, UnitVector(0), [active.Id], 9, 160));
+    }
+
+    [TestMethod]
+    public async Task MatchedChunkEvidenceLoadsNonPrimaryAndPreservesScopeAndBounds()
+    {
+        var active = await InsertMemoryAsync(_scope, "matched", MemoryType.Fact, "overview", UnitVector(1));
+        var chunk = await _database.Store.InsertChunkAsync(_scope, new MemoryChunkEntry
+        { EntityId = active.Id, ChunkIndex = 1, Content = new string('x', 1000), Embedding = UnitVector(0) });
+        var foreign = await InsertMemoryAsync(_database.CreateScopeKey("matched-other"), "other", MemoryType.Fact, "foreign", UnitVector(0));
+        var cold = await InsertMemoryAsync(_scope, "matched-cold", MemoryType.Fact, "cold", UnitVector(0));
+        cold.Temperature = MemoryTemperature.Cold;
+        await _database.Store.UpdateEntityAsync(_scope, cold);
+        var matches = await _database.Store.GetMatchedChunkEvidenceAsync(_scope, UnitVector(0), [active.Id, foreign.Id, cold.Id], 160);
+        Assert.HasCount(1, matches);
+        Assert.AreEqual(chunk.ChunkId, matches[active.Id].ChunkId);
+        Assert.AreEqual(1, matches[active.Id].ChunkIndex);
+        Assert.AreEqual(new string('x', 160), matches[active.Id].Content);
+        Assert.IsTrue(matches[active.Id].IsTruncated);
+        Assert.AreEqual("overview", (await _database.Store.GetPrimaryChunkAsync(_scope, active.Id))!.Content);
+    }
+
+    [TestMethod]
+    public async Task CandidatePreviewsAreBoundedAndDoNotExposeColdOrOtherScopes()
+    {
+        var active = await InsertMemoryAsync(_scope, "active", MemoryType.Fact, new string('x', 1000) + "hidden-tail", UnitVector(0));
+        var cold = await InsertMemoryAsync(_scope, "cold preview", MemoryType.Fact, "cold secret", UnitVector(0));
+        cold.Temperature = MemoryTemperature.Cold;
+        await _database.Store.UpdateEntityAsync(_scope, cold);
+        var foreign = await InsertMemoryAsync(_database.CreateScopeKey("preview-other"), "foreign", MemoryType.Fact, "other secret", UnitVector(0));
+        var previews = await _database.Store.GetCandidatePreviewsAsync(_scope, [active.Id, cold.Id, foreign.Id], 160);
+        Assert.HasCount(1, previews);
+        Assert.AreEqual(new string('x', 160), previews[active.Id]);
+        Assert.AreEqual("active", (await _database.Store.GetEntityByIdAsync(_scope, active.Id))!.Description);
+    }
+
+    [TestMethod]
+    public async Task HybridCandidatesKeepFiveCloseFactsAndOtherTypesWithinEightSlots()
+    {
+        var facts = new List<Guid>();
+        for (var i = 0; i < 5; i++)
+            facts.Add((await InsertMemoryAsync(_scope, $"fact {i}", MemoryType.Fact, "fact", UnitVector(0))).Id);
+        var procedure = await InsertMemoryAsync(_scope, "procedure", MemoryType.Procedural, "steps", UnitVector(1));
+        var rule = await InsertMemoryAsync(_scope, "rule", MemoryType.Rule, "constraint", UnitVector(1));
+        var observation = await InsertMemoryAsync(_scope, "observation", MemoryType.Observation, "observation", UnitVector(1));
+        for (var i = 0; i < 6; i++)
+            await InsertMemoryAsync(_scope, $"distractor {i}", MemoryType.Fact, "distractor", UnitVector(2));
+        var hybrid = await _database.Store.FindHybridCandidateHeadersAsync(_scope, UnitVector(0), 8);
+        CollectionAssert.AreEquivalent(facts.Concat(new[] { procedure.Id, rule.Id, observation.Id }).ToArray(),
+            hybrid.Select(h => h.MemoryId).ToArray());
+        procedure.Temperature = MemoryTemperature.Cold;
+        await _database.Store.UpdateEntityAsync(_scope, procedure);
+        var excluded = await _database.Store.FindHybridCandidateHeadersAsync(_scope, UnitVector(0), 8, [facts[0]]);
+        Assert.HasCount(8, excluded);
+        Assert.IsFalse(excluded.Any(h => h.MemoryId == procedure.Id || h.MemoryId == facts[0]));
+    }
+
+    [TestMethod]
+    public async Task DiverseCandidatesReserveSpaceForOtherTypesWithinSameLimit()
+    {
+        for (var i = 0; i < 5; i++)
+            await InsertMemoryAsync(_scope, $"region {i}", MemoryType.Fact, "region", UnitVector(0));
+        var procedure = await InsertMemoryAsync(_scope, "procedure", MemoryType.Procedural, "steps", UnitVector(1));
+        var ordinary = await _database.Store.FindCandidateHeadersAsync(_scope, UnitVector(0), 2);
+        Assert.IsFalse(ordinary.Any(h => h.MemoryId == procedure.Id));
+        var diverse = await _database.Store.FindDiverseCandidateHeadersAsync(_scope, UnitVector(0), 2);
+        Assert.HasCount(2, diverse);
+        Assert.IsTrue(diverse.Any(h => h.MemoryId == procedure.Id));
+        var excluded = await _database.Store.FindDiverseCandidateHeadersAsync(_scope, UnitVector(0), 2, [procedure.Id]);
+        Assert.HasCount(2, excluded);
+        Assert.IsFalse(excluded.Any(h => h.MemoryId == procedure.Id));
+        procedure.Temperature = MemoryTemperature.Cold;
+        await _database.Store.UpdateEntityAsync(_scope, procedure);
+        Assert.IsFalse((await _database.Store.FindDiverseCandidateHeadersAsync(_scope, UnitVector(0), 2))
+            .Any(h => h.MemoryId == procedure.Id));
+    }
+
+    [TestMethod]
+    public async Task SemanticCandidatesExcludeColdOtherScopesAndExcludedBeforeDistinctLimit()
+    {
+        var first = await InsertMemoryAsync(_scope, "first", MemoryType.Fact, "first", UnitVector(0));
+        await _database.Store.InsertChunkAsync(_scope, new MemoryChunkEntry
+        { EntityId = first.Id, Content = "second chunk", ChunkIndex = 1, Embedding = UnitVector(0) });
+        var second = await InsertMemoryAsync(_scope, "second", MemoryType.Rule, "second", UnitVector(0));
+        var cold = await InsertMemoryAsync(_scope, "cold", MemoryType.Fact, "cold", UnitVector(0));
+        cold.Temperature = MemoryTemperature.Cold;
+        await _database.Store.UpdateEntityAsync(_scope, cold);
+        await InsertMemoryAsync(_database.CreateScopeKey("other"), "foreign", MemoryType.Fact, "foreign", UnitVector(0));
+        var candidates = await _database.Store.FindCandidateHeadersAsync(_scope, UnitVector(0), 2);
+        CollectionAssert.AreEquivalent(new[] { first.Id, second.Id }, candidates.Select(h => h.MemoryId).ToArray());
+        var excluded = await _database.Store.FindCandidateHeadersAsync(_scope, UnitVector(0), 1, [second.Id]);
+        Assert.AreEqual(first.Id, excluded.Single().MemoryId);
+    }
+
+    [TestMethod]
+    public async Task CancelledMutationRollsBackBeforeReleasingScopeLock()
+    {
+        using var cancellation = new CancellationTokenSource();
+        await Assert.ThrowsAsync<OperationCanceledException>(() => _database.Store.MutateAsync(_scope, async ct =>
+        {
+            await InsertMemoryAsync(_scope, "cancelled", MemoryType.Fact, "must disappear", UnitVector(0));
+            cancellation.Cancel();
+            ct.ThrowIfCancellationRequested();
+            return true;
+        }, cancellation.Token));
+        Assert.IsEmpty(await _database.Store.GetHeadersAsync(_scope, 100));
+        await _database.Store.MutateAsync(_scope, _ => Task.FromResult(true), default);
+    }
+
+    [TestMethod]
+    public async Task MutationFailureRollsBackEntityChunkAndIndex()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _database.Store.MutateAsync<int>(_scope, async ct =>
+        {
+            var entry = await InsertMemoryAsync(_scope, "rollback", MemoryType.Fact, "must disappear", UnitVector(0));
+            await _database.Store.ModifyIndexContentAsync(_scope, _ => "{\"test\":true}", ct);
+            throw new InvalidOperationException("injected failure after all writes");
+        }, default));
+        Assert.IsEmpty(await _database.Store.GetHeadersAsync(_scope, 100));
+        Assert.IsNull(await _database.Store.GetIndexContentAsync(_scope));
+        await using var connection = new SqlConnection(_database.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = new SqlCommand("SELECT COUNT(*) FROM mem.MemoryChunk WHERE ScopeKey=@scope", connection);
+        command.Parameters.AddWithValue("@scope", _scope);
+        Assert.AreEqual(0, Convert.ToInt32(await command.ExecuteScalarAsync()));
+    }
+
+    [TestMethod]
+    public async Task IndependentStoreInstancesSerializeSharedScopeCorrections()
+    {
+        var entry = await InsertMemoryAsync(_scope, "counter", MemoryType.Fact, "0", UnitVector(0));
+        var stores = Enumerable.Range(0, 6).Select(_ => new SqlMemoryStore(_database.Options, _database.Configuration, NullLoggerFactory.Instance)).ToArray();
+        await Task.WhenAll(stores.Select(store => store.MutateAsync(_scope, async ct =>
+        {
+            var chunk = (await store.GetPrimaryChunkAsync(_scope, entry.Id, ct))!;
+            await Task.Delay(15, ct);
+            chunk.Content = (int.Parse(chunk.Content) + 1).ToString();
+            await store.UpdateChunkAsync(_scope, chunk, ct);
+            return true;
+        }, default)));
+        Assert.AreEqual("6", (await _database.Store.GetPrimaryChunkAsync(_scope, entry.Id))!.Content);
+    }
+
+    [TestMethod]
     public async Task SchemaInitialization_IsIdempotentAndCreatesVectorGraphSchema()
     {
         await MemorySchemaInitializer.EnsureSchemaAsync(

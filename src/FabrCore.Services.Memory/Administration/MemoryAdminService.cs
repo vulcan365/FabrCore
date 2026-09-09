@@ -195,6 +195,7 @@ internal sealed class MemoryAdminService : IMemoryAdminService
         await using var connection = CreateConnection();
         await connection.OpenAsync(ct);
         await using var transaction = connection.BeginTransaction();
+        await SqlMemoryStore.AcquireMutationLockAsync(connection, transaction, scopeKey, ct);
 
         try
         {
@@ -208,6 +209,7 @@ internal sealed class MemoryAdminService : IMemoryAdminService
 
             result.RelationshipsDeleted = await ExecAsync(
                 $"DELETE FROM {Schema}.MemoryRelationship WHERE ScopeKey = @scopeKey");
+            await ExecAsync($"DELETE FROM {Schema}.MemoryExtractionReceipt WHERE ScopeKey = @scopeKey");
             result.ChunksDeleted = await ExecAsync(
                 $"DELETE FROM {Schema}.MemoryChunk WHERE ScopeKey = @scopeKey");
             result.SummaryNodesDeleted = await ExecAsync(

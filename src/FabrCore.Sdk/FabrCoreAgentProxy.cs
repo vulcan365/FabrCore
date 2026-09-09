@@ -173,6 +173,7 @@ namespace FabrCore.Sdk
         {
             public required FabrCoreChatHistoryProvider Provider { get; init; }
             public required string ChatClientConfigName { get; init; }
+            public Func<FabrCoreChatHistoryProvider, CompactionConfig, Task<CompactionResult?>>? HistoryCompaction { get; init; }
             public ContextCompactionConfig? ContextCompactionConfig { get; set; }
             public CompactionConfig? CompactionConfig { get; set; }
             public ProjectionConfig? ProjectionConfig { get; set; }
@@ -537,7 +538,9 @@ namespace FabrCore.Sdk
             CompactionConfig compactionConfig,
             int estimatedTokens = 0)
         {
-            if (_compactionService is null || _chatClientConfigName is null)
+            var customCompaction = _chatHistoryCompactionRegistrations
+                .LastOrDefault(r => ReferenceEquals(r.Provider, chatHistoryProvider))?.HistoryCompaction;
+            if (customCompaction is null && (_compactionService is null || _chatClientConfigName is null))
                 return null;
 
             // Set status so the grain's heartbeat loop shows "Compacting.." instead of "Thinking.."
@@ -548,8 +551,10 @@ namespace FabrCore.Sdk
             using var _ = ChatRunSafetyScope.Current?.BeginHistoryCompaction();
             try
             {
-                return await _compactionService.CompactIfNeededAsync(
-                    chatHistoryProvider, compactionConfig, _chatClientConfigName);
+                if (customCompaction is not null)
+                    return await customCompaction(chatHistoryProvider, compactionConfig);
+                return await _compactionService!.CompactIfNeededAsync(
+                    chatHistoryProvider, compactionConfig, _chatClientConfigName!);
             }
             finally
             {

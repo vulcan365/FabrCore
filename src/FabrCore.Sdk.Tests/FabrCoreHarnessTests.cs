@@ -19,6 +19,23 @@ public sealed class FabrCoreHarnessTests
     private const string SessionKey = "_harness_session:main";
     private const string CorruptKey = "_harness_session_corrupt:main";
 
+    [TestMethod]
+    public async Task HistoryCompactionCallbackIsBoundToItsRegisteredProvider()
+    {
+        FabrCoreChatHistoryProvider? invoked = null;
+        var (agent, host, _) = CreateAgent(configure: options => options.HistoryCompaction = (history, config) =>
+        {
+            invoked = history;
+            return Task.FromResult<CompactionResult?>(new CompactionResult { WasCompacted = true });
+        });
+        await agent.OnInitialize();
+        var history = (FabrCoreChatHistoryProvider)agent.Harness!.Agent.GetService<ChatHistoryProvider>()!;
+        Assert.IsNotNull(history);
+        var result = await agent.OnCompaction(history, new CompactionConfig());
+        Assert.IsTrue(result!.WasCompacted);
+        Assert.AreSame(history, invoked);
+    }
+
     // ---------------------------------------------------------------------------------------------
     // Composition
     // ---------------------------------------------------------------------------------------------

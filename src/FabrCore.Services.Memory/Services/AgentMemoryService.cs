@@ -82,6 +82,9 @@ internal partial class AgentMemoryService : IAgentMemoryService
     {
         ct.ThrowIfCancellationRequested();
         ArgumentException.ThrowIfNullOrWhiteSpace(title);
+        if (_store is SqlMemoryStore { IsMutationActive: false } sql)
+            return await sql.MutateAsync(ScopeKey, token => SaveMemoryAsync(title, type, content,
+                description, metadata, isPointInTime, token), ct);
         // 1. Validate taxonomy
         var (isValid, reason) = MemoryTaxonomyRules.Validate(type, content, _options.AllowedMemoryTypes);
         if (!isValid)
@@ -113,7 +116,7 @@ internal partial class AgentMemoryService : IAgentMemoryService
                 var bestMatch = matches.FirstOrDefault(m => m.Entity.Type == type
                     && m.Entity.Temperature != MemoryTemperature.Cold
                     && !m.Entity.IsPointInTime && !isPointInTime
-                    && metadata is null && m.Entity.Metadata is not { Count: > 0 });
+                    && !SqlMemoryStore.HasUserMetadata(metadata) && !SqlMemoryStore.HasUserMetadata(m.Entity.Metadata));
 
                 if (bestMatch != default)
                 {
@@ -138,7 +141,7 @@ internal partial class AgentMemoryService : IAgentMemoryService
             Title = title,
             Type = type,
             Temperature = MemoryTemperature.Warm,
-            Description = description ?? title,
+            Description = description ?? ContentPreview(content),
             IsPointInTime = isPointInTime,
             Metadata = metadata
         };
@@ -170,7 +173,7 @@ internal partial class AgentMemoryService : IAgentMemoryService
         _logger.LogInformation("Saved new memory '{Title}' ({Type}) in scope '{Scope}' with ID {Id}",
             title, type, ScopeKey, entry.Id);
 
-        await _auditLog.RecordAsync("MemorySaved", ScopeKey, entry.Id, summary: title, actorId: ScopeKey, ct: ct);
+        await RecordAuditAsync("MemorySaved", ScopeKey, entry.Id, summary: title, actorId: ScopeKey, ct: ct);
 
         return entry;
     }
@@ -180,6 +183,7 @@ internal partial class AgentMemoryService : IAgentMemoryService
         string newTitle, string newContent, string? newDescription,
         bool isPointInTime, CancellationToken ct)
     {
+        var generatedDescription = existingEntity.Description == ContentPreview(existingChunk.Content);
         // LLM merge: combine old and new knowledge
         var mergedContent = await TryMergeContentAsync(existingChunk.Content, newContent, ct)
             ?? (existingChunk.Content == newContent ? newContent : existingChunk.Content + "\n\n" + newContent); // Preserve knowledge without a merge model.
@@ -205,6 +209,8 @@ internal partial class AgentMemoryService : IAgentMemoryService
         // Update entity metadata
         if (newDescription is not null)
             existingEntity.Description = newDescription;
+        else if (generatedDescription)
+            existingEntity.Description = ContentPreview(mergedContent);
         existingEntity.IsPointInTime = isPointInTime;
         existingEntity = await _store.UpdateEntityAsync(ScopeKey, existingEntity, ct);
 
@@ -217,7 +223,7 @@ internal partial class AgentMemoryService : IAgentMemoryService
         _logger.LogInformation("Merged into existing memory '{Title}' ({Id}) in scope '{Scope}'",
             existingEntity.Title, existingEntity.Id, ScopeKey);
 
-        await _auditLog.RecordAsync("MemoryMerged", ScopeKey, existingEntity.Id,
+        await RecordAuditAsync("MemoryMerged", ScopeKey, existingEntity.Id,
             summary: existingEntity.Title, actorId: ScopeKey, ct: ct);
 
         return existingEntity;
@@ -254,6 +260,7 @@ internal partial class AgentMemoryService : IAgentMemoryService
         // Step 4: Execute the plan step-by-step. Headers and selection are computed lazily and cached
         // so repeated steps do not double-charge.
         IReadOnlyList<MemoryHeader>? headers = null;
+        float[]? semanticEmbedding = null;
         var seenIds = new HashSet<Guid>();
 
         foreach (var step in plan.Steps)
@@ -265,14 +272,83 @@ internal partial class AgentMemoryService : IAgentMemoryService
 
                 case RetrievalStep.HeaderScanLlmSelect:
                 {
+                    if (_options.Retrieval.MatchedChunksPerMemory is < 1 or > 8)
+                        throw new ArgumentOutOfRangeException(nameof(RetrievalOptions.MatchedChunksPerMemory));
+                    if (_options.Retrieval.SelectMatchedChunks && _options.Retrieval.MatchedChunksPerMemory < 2)
+                        throw new InvalidOperationException("Chunk selection requires multiple matched chunks.");
+                    if (_options.Retrieval.SkipRedundantChunkSelection && !_options.Retrieval.SelectMatchedChunks)
+                        throw new InvalidOperationException("Skipping redundant chunk selection requires chunk selection.");
+                    if (_options.Retrieval.ChunkSelectionPreviewCharacters is < 0 or > 4096)
+                        throw new ArgumentOutOfRangeException(nameof(RetrievalOptions.ChunkSelectionPreviewCharacters));
+                    if (_options.Retrieval.ChunkSelectionPreviewCharacters > 0 && !_options.Retrieval.SelectMatchedChunks)
+                        throw new InvalidOperationException("Chunk selection previews require chunk selection.");
+                    if (_options.Retrieval.ChunkSelectionIncludeTail && _options.Retrieval.ChunkSelectionPreviewCharacters < 2)
+                        throw new InvalidOperationException("Split chunk previews require at least two characters.");
+                    if (_options.Retrieval.MatchedChunksPerMemory > 1 && !_options.Retrieval.UseMatchedChunkEvidence)
+                        throw new InvalidOperationException("Multiple matched chunks require matched evidence.");
+                    if (_options.Retrieval.UseMatchedChunkEvidence && !_options.Retrieval.UseSemanticCandidates)
+                        throw new InvalidOperationException("Matched chunk evidence requires semantic candidates.");
+                    if (headers is null && _options.Retrieval.UseSemanticCandidates)
+                    {
+                        var store = _store as IMemoryCandidateStore
+                            ?? throw new NotSupportedException("Semantic candidates require IMemoryCandidateStore.");
+                        var options = _options.Retrieval;
+                        if (options.HybridSemanticCandidates && options.DiversifySemanticCandidates)
+                            throw new InvalidOperationException("Choose either hybrid or diverse semantic candidates.");
+                        if (options.SemanticCandidateLimit < 1 || options.RecentCandidateLimit < 0
+                            || options.SemanticCandidateLimit > options.HeaderScanLimit
+                            || options.RecentCandidateLimit > options.HeaderScanLimit - options.SemanticCandidateLimit)
+                            throw new InvalidOperationException("Semantic and recent candidate limits must fit HeaderScanLimit.");
+                        var embedding = await _store.GenerateEmbeddingAsync(query, ct);
+                        semanticEmbedding = embedding;
+                        var semantic = options.HybridSemanticCandidates
+                            ? await store.FindHybridCandidateHeadersAsync(ScopeKey, embedding,
+                                options.SemanticCandidateLimit, alreadySurfacedIds?.ToArray(), ct)
+                            : options.DiversifySemanticCandidates
+                            ? await store.FindDiverseCandidateHeadersAsync(ScopeKey, embedding,
+                                options.SemanticCandidateLimit, alreadySurfacedIds?.ToArray(), ct)
+                            : await store.FindCandidateHeadersAsync(ScopeKey, embedding,
+                                options.SemanticCandidateLimit, alreadySurfacedIds?.ToArray(), ct);
+                        var recent = options.RecentCandidateLimit == 0 ? Array.Empty<MemoryHeader>()
+                            : await _retriever.ScanMemoryHeadersAsync(ScopeKey, options.RecentCandidateLimit, ct: ct);
+                        headers = semantic.Concat(recent).DistinctBy(h => h.MemoryId)
+                            .Take(options.HeaderScanLimit).ToArray();
+                    }
                     headers ??= await _retriever.ScanMemoryHeadersAsync(
                         ScopeKey, _options.Retrieval.HeaderScanLimit, ct: ct);
 
                     var candidates = FilterByPreferredTypes(headers, plan.PreferredTypes);
+                    if (_options.Retrieval.SelectionPreviewCharacters != 0)
+                    {
+                        var length = _options.Retrieval.SelectionPreviewCharacters;
+                        if (!_options.Retrieval.UseSemanticCandidates || length is < 1 or > 512)
+                            throw new InvalidOperationException("Selection previews require semantic candidates and a length of 1..512.");
+                        candidates = candidates.Where(h => !(alreadySurfacedIds?.Contains(h.MemoryId) ?? false)).ToArray();
+                        var perMemory = candidates.Count == 0 ? 0 : Math.Min(length, 4096 / candidates.Count);
+                        if (perMemory > 0)
+                        {
+                            var candidateStore = (IMemoryCandidateStore)_store;
+                            var ids = candidates.Select(h => h.MemoryId).ToArray();
+                            var previews = _options.Retrieval.UseMatchedChunkEvidence
+                                ? (await candidateStore.GetMatchedChunkEvidenceAsync(ScopeKey, semanticEmbedding!, ids, perMemory, ct))
+                                    .ToDictionary(p => p.Key, p => p.Value.Content)
+                                : await candidateStore.GetCandidatePreviewsAsync(ScopeKey, ids, perMemory, ct);
+                            candidates = candidates.Select(h => new MemoryHeader
+                            {
+                                MemoryId = h.MemoryId, Title = h.Title, Type = h.Type, UpdatedAt = h.UpdatedAt,
+                                IsPointInTime = h.IsPointInTime,
+                                Description = previews.TryGetValue(h.MemoryId, out var preview)
+                                    ? $"{h.Description}\nBody preview: {preview[..Math.Min(preview.Length, perMemory)]}"
+                                    : h.Description
+                            }).ToArray();
+                        }
+                    }
                     var selectedIds = await _retriever.SelectRelevantMemoriesAsync(
                         query, candidates, _options.Retrieval.WarmRetrievalLimit, alreadySurfacedIds, ct);
 
-                    var loadTask = LoadMemoriesWithChunksAsync(selectedIds, ct);
+                    var loadTask = _options.Retrieval.UseMatchedChunkEvidence
+                        ? LoadMatchedMemoriesAsync(selectedIds, semanticEmbedding!, query, candidates, ct)
+                        : LoadMemoriesWithChunksAsync(selectedIds, ct);
                     var graphTask = plan.Steps.Contains(RetrievalStep.GraphExpand) && _options.Retrieval.RecallGraphHops > 0
                         ? _retriever.GetRelatedEntitiesAsync(ScopeKey, selectedIds, _options.Retrieval.RecallGraphHops, ct)
                         : Task.FromResult<IReadOnlyList<MemoryEntry>>([]);
@@ -409,6 +485,107 @@ internal partial class AgentMemoryService : IAgentMemoryService
         return preferred;
     }
 
+    private async Task<List<MemoryEntry>> LoadMatchedMemoriesAsync(IReadOnlyList<Guid> ids, float[] embedding, string query, IReadOnlyList<MemoryHeader> headers, CancellationToken ct)
+    {
+        if (_options.Retrieval.MatchedChunksPerMemory > 1)
+            return await LoadMultipleMatchedMemoriesAsync(ids, embedding, query, headers, ct);
+        var result = new List<MemoryEntry>();
+        if (ids.Count == 0) return result;
+        var limit = Math.Min(4096, 12000 / ids.Count);
+        if (limit == 0) return result;
+        var evidence = await ((IMemoryCandidateStore)_store).GetMatchedChunkEvidenceAsync(ScopeKey, embedding, ids.ToArray(), limit, ct);
+        foreach (var id in ids)
+        {
+            if (!evidence.TryGetValue(id, out var chunk)) continue;
+            var entry = await _store.GetEntityByIdAsync(ScopeKey, id, ct);
+            if (entry is null || entry.Temperature == MemoryTemperature.Cold) continue;
+            entry.Content = chunk.Content[..Math.Min(chunk.Content.Length, limit)];
+            entry.RecalledChunkId = chunk.ChunkId;
+            entry.RecalledChunkIndex = chunk.ChunkIndex;
+            entry.IsContentTruncated = chunk.IsTruncated || chunk.Content.Length > limit;
+            if (_options.Retrieval.RecallGraphHops > 0)
+            {
+                var relationships = await _store.GetRelationshipsAsync(ScopeKey, id, ct);
+                if (relationships.Count > 0) entry.Relationships = relationships.ToList();
+            }
+            result.Add(entry);
+        }
+        return result;
+    }
+
+    private async Task<List<MemoryEntry>> LoadMultipleMatchedMemoriesAsync(IReadOnlyList<Guid> ids, float[] embedding, string query, IReadOnlyList<MemoryHeader> headers, CancellationToken ct)
+    {
+        var result = new List<MemoryEntry>();
+        if (ids.Count == 0) return result;
+        var count = _options.Retrieval.MatchedChunksPerMemory;
+        var entityLimit = Math.Min(4096, 12000 / ids.Count);
+        var chunkLimit = (entityLimit - 2 * (count - 1)) / count;
+        if (chunkLimit < 1) return result;
+        var evidence = await ((IMemoryCandidateStore)_store).GetMatchedChunksAsync(ScopeKey, embedding, ids.ToArray(), count, chunkLimit, ct);
+        foreach (var id in ids.Distinct())
+        {
+            if (!evidence.TryGetValue(id, out var matches)) continue;
+            var chunks = matches.DistinctBy(c => c.ChunkId).Take(count).Select(c => c with {
+                Content = c.Content[..Math.Min(c.Content.Length, chunkLimit)],
+                IsTruncated = c.IsTruncated || c.Content.Length > chunkLimit }).ToArray();
+            if (chunks.Length == 0) continue;
+            var entry = await _store.GetEntityByIdAsync(ScopeKey, id, ct);
+            if (entry is null || entry.Temperature == MemoryTemperature.Cold) continue;
+            entry.RecalledChunks = chunks;
+            entry.RecalledChunkId = null;
+            entry.RecalledChunkIndex = null;
+            entry.Content = string.Join("\n\n", chunks.Select(c => c.Content));
+            entry.IsContentTruncated = chunks.Any(c => c.IsTruncated);
+            if (_options.Retrieval.RecallGraphHops > 0)
+            {
+                var relationships = await _store.GetRelationshipsAsync(ScopeKey, id, ct);
+                if (relationships.Count > 0) entry.Relationships = relationships.ToList();
+            }
+            result.Add(entry);
+        }
+        if (_options.Retrieval.SelectMatchedChunks && result.Count > 0)
+        {
+            ct.ThrowIfCancellationRequested();
+            // Use the actual first-stage manifest, not freshly loaded descriptions: an edit can
+            // change evidence between reads. Every entity must qualify; mixed pools still select.
+            if (_options.Retrieval.SkipRedundantChunkSelection && result.All(entry =>
+                entry.RecalledChunks is { Count: 1 } chunks && !chunks[0].IsTruncated
+                && !string.IsNullOrWhiteSpace(chunks[0].Content)
+                && headers.Any(header => header.MemoryId == entry.Id
+                    && header.Description == chunks[0].Content && header.Title == entry.Title
+                    && header.Type == entry.Type && header.UpdatedAt == entry.UpdatedAt
+                    && header.IsPointInTime == entry.IsPointInTime)))
+                return result;
+            // Reuse structured relevance selection; chunk IDs, not entity IDs, define this manifest.
+            // Bodies have already been bounded, so selection cannot expand the evidence budget.
+            var manifest = result.SelectMany(entry => entry.RecalledChunks!.Select(chunk => new MemoryHeader {
+                MemoryId = chunk.ChunkId, Title = $"Evidence from {entry.Title}, chunk {chunk.ChunkIndex}",
+                Description = ChunkSelectionPreview(chunk.Content),
+                Type = entry.Type, UpdatedAt = entry.UpdatedAt,
+                IsPointInTime = entry.IsPointInTime })).ToArray();
+            var selected = (await _retriever.SelectRelevantMemoriesAsync(query, manifest, manifest.Length, null, ct)).ToHashSet();
+            foreach (var entry in result)
+            {
+                var chunks = entry.RecalledChunks!.Where(c => selected.Contains(c.ChunkId)).ToArray();
+                entry.RecalledChunks = chunks;
+                entry.Content = string.Join("\n\n", chunks.Select(c => c.Content));
+                entry.IsContentTruncated = chunks.Any(c => c.IsTruncated);
+            }
+            result.RemoveAll(entry => entry.RecalledChunks!.Count == 0);
+        }
+        return result;
+    }
+
+    private string ChunkSelectionPreview(string content)
+    {
+        var length = _options.Retrieval.ChunkSelectionPreviewCharacters;
+        if (length == 0 || content.Length <= length) return content;
+        if (!_options.Retrieval.ChunkSelectionIncludeTail)
+            return content[..length] + "\n[Selection preview truncated; remaining evidence not shown.]";
+        var tailLength = length / 2;
+        return content[..(length - tailLength)] + "\n[Middle omitted from selection preview.]\n" + content[^tailLength..];
+    }
+
     private async Task<List<MemoryEntry>> LoadMemoriesWithChunksAsync(
         IReadOnlyList<Guid> entityIds, CancellationToken ct)
     {
@@ -472,11 +649,23 @@ internal partial class AgentMemoryService : IAgentMemoryService
         foreach (var warm in recall.WarmMemories)
         {
             var pitTag = warm.IsPointInTime ? " [snapshot]" : "";
-            sb.AppendLine($"[{warm.Type}]{pitTag} {warm.Title}");
+            sb.AppendLine($"[{warm.Type}]{pitTag} {warm.Title} (id={warm.Id}, scope={warm.ScopeKey}, updated={warm.UpdatedAt:O})");
             if (!string.IsNullOrWhiteSpace(warm.Description))
                 sb.AppendLine(warm.Description);
-            if (!string.IsNullOrWhiteSpace(warm.Content))
+            if (warm.RecalledChunks is { Count: > 0 })
+            {
+                foreach (var chunk in warm.RecalledChunks)
+                {
+                    sb.AppendLine($"[Source chunk: {chunk.ChunkId}; index: {chunk.ChunkIndex}; truncated: {chunk.IsTruncated}]");
+                    sb.AppendLine(chunk.Content);
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(warm.Content))
+            {
+                if (warm.RecalledChunkId is { } chunkId)
+                    sb.AppendLine($"[Source chunk: {chunkId}; index: {warm.RecalledChunkIndex}; truncated: {warm.IsContentTruncated}]");
                 sb.AppendLine(warm.Content);
+            }
 
             // Show graph relationships if loaded
             if (warm.Relationships is { Count: > 0 })
@@ -537,9 +726,11 @@ internal partial class AgentMemoryService : IAgentMemoryService
 
     public async Task<MemoryConsolidationResult> ConsolidateAsync(CancellationToken ct = default)
     {
-        var result = await _compactor.ConsolidateAsync(ScopeKey, ct);
+        var result = _store is SqlMemoryStore sql
+            ? await sql.SerializeMaintenanceAsync(ScopeKey, token => _compactor.ConsolidateAsync(ScopeKey, token), ct)
+            : await _compactor.ConsolidateAsync(ScopeKey, ct);
 
-        await _auditLog.RecordAsync("ScopeConsolidated", ScopeKey,
+        await RecordAuditAsync("ScopeConsolidated", ScopeKey,
             summary: $"merged {result.DuplicatesMerged}, pruned {result.StaleMemoriesPruned}, " +
                      $"contradictions {result.ContradictionsResolved}, evicted {result.IndexEntriesEvicted}",
             actorId: ScopeKey, ct: ct);
@@ -549,13 +740,15 @@ internal partial class AgentMemoryService : IAgentMemoryService
 
     public async Task<bool> ForgetMemoryAsync(Guid memoryId, CancellationToken ct = default)
     {
+        if (_store is SqlMemoryStore { IsMutationActive: false } sql)
+            return await sql.MutateAsync(ScopeKey, token => ForgetMemoryAsync(memoryId, token), ct);
         await _indexManager.RemoveIndexEntryAsync(ScopeKey, memoryId, ct);
         var deleted = await _store.DeleteEntityAsync(ScopeKey, memoryId, ct);
 
         if (deleted)
         {
             _logger.LogInformation("Forgot memory {Id} in scope '{Scope}'", memoryId, ScopeKey);
-            await _auditLog.RecordAsync("MemoryForgotten", ScopeKey, memoryId, actorId: ScopeKey, ct: ct);
+            await RecordAuditAsync("MemoryForgotten", ScopeKey, memoryId, actorId: ScopeKey, ct: ct);
         }
 
         return deleted;
@@ -572,6 +765,9 @@ internal partial class AgentMemoryService : IAgentMemoryService
     {
         ct.ThrowIfCancellationRequested();
         if (title is not null) ArgumentException.ThrowIfNullOrWhiteSpace(title);
+        if (_store is SqlMemoryStore { IsMutationActive: false } sql)
+            return await sql.MutateAsync(ScopeKey, token => UpdateMemoryAsync(memoryId, title, type,
+                content, description, temperature, token), ct);
         if (temperature is not null && !Enum.IsDefined(temperature.Value))
             throw new ArgumentOutOfRangeException(nameof(temperature));
         var existing = await _store.GetEntityByIdAsync(ScopeKey, memoryId, ct)
@@ -589,6 +785,11 @@ internal partial class AgentMemoryService : IAgentMemoryService
             throw new InvalidOperationException($"Memory type '{type}' is not allowed for this configuration.");
         }
 
+        var existingChunk = content is null ? null : await _store.GetPrimaryChunkAsync(ScopeKey, memoryId, ct);
+        if (description is null && content is not null && existingChunk is not null
+            && existing.Description == ContentPreview(existingChunk.Content))
+            existing.Description = ContentPreview(content);
+
         // Update entity metadata — only the supplied fields change
         if (title is not null)
             existing.Title = title;
@@ -602,7 +803,7 @@ internal partial class AgentMemoryService : IAgentMemoryService
         // Update primary chunk content + embedding when content changed
         if (content is not null)
         {
-            var chunk = await _store.GetPrimaryChunkAsync(ScopeKey, memoryId, ct);
+            var chunk = existingChunk;
             var isNewChunk = chunk is null;
             chunk ??= new MemoryChunkEntry { EntityId = memoryId, ChunkIndex = 0 };
             chunk.Content = content;
@@ -634,7 +835,7 @@ internal partial class AgentMemoryService : IAgentMemoryService
         else
             await AddToHotIndexAsync(existing, ct);
 
-        await _auditLog.RecordAsync("MemoryUpdated", ScopeKey, memoryId,
+        await RecordAuditAsync("MemoryUpdated", ScopeKey, memoryId,
             summary: existing.Title, actorId: ScopeKey, ct: ct);
 
         return existing;
@@ -648,14 +849,32 @@ internal partial class AgentMemoryService : IAgentMemoryService
         IList<ChatMessage> messages,
         CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(messages);
+        ct.ThrowIfCancellationRequested();
+        // Recalled/system/tool text is not a new source of durable knowledge.
+        messages = messages.Where(m => (m.Role == ChatRole.User || m.Role == ChatRole.Assistant)
+            && m.AuthorName != "agent-memory" && !string.IsNullOrWhiteSpace(StripMemoryContextMarkers(m.Text ?? ""))).ToList();
         if (messages.Count == 0)
             return [];
+
+        if (_store is SqlMemoryStore { IsMutationActive: false } sql)
+        {
+            var source = JsonSerializer.Serialize(messages.Select(m => new { Role = m.Role.Value, m.AuthorName, Text = StripMemoryContextMarkers(m.Text ?? "") }));
+            var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(source)));
+            return await sql.MutateAsync<IReadOnlyList<MemoryEntry>>(ScopeKey, async token =>
+            {
+                var receipt = await sql.GetExtractionReceiptAsync(ScopeKey, hash, token);
+                if (receipt is not null) return await LoadMemoriesWithChunksAsync(receipt, token);
+                var extracted = await ExtractMemoriesAsync(messages, token);
+                await sql.SaveExtractionReceiptAsync(ScopeKey, hash, extracted.Select(e => e.Id), token);
+                return extracted;
+            }, ct);
+        }
 
         var chatClient = await GetChatClientAsync();
         if (chatClient is null)
         {
-            _logger.LogWarning("No IChatClient available for memory extraction, skipping");
-            return [];
+            throw new InvalidOperationException("A chat client is required for memory extraction.");
         }
 
         var conversationText = string.Join("\n\n", messages.Select(m =>
@@ -769,6 +988,7 @@ internal partial class AgentMemoryService : IAgentMemoryService
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     _logger.LogWarning(ex, "Failed to save extracted memory '{Title}'", mem.Title);
+                    throw;
                 }
             }
 
@@ -807,7 +1027,7 @@ internal partial class AgentMemoryService : IAgentMemoryService
 
             if (savedMap.Count > 0)
             {
-                await _auditLog.RecordAsync("MemoriesExtracted", ScopeKey,
+                await RecordAuditAsync("MemoriesExtracted", ScopeKey,
                     summary: $"{savedMap.Count} memories extracted from conversation",
                     actorId: ScopeKey, ct: ct);
             }
@@ -817,7 +1037,7 @@ internal partial class AgentMemoryService : IAgentMemoryService
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "Memory extraction failed for agent '{Agent}'", ScopeKey);
-            return [];
+            throw;
         }
     }
 
@@ -838,6 +1058,15 @@ internal partial class AgentMemoryService : IAgentMemoryService
         };
         await _indexManager.AddIndexEntryAsync(ScopeKey, indexEntry, ct);
     }
+
+    private Task RecordAuditAsync(string actionType, string scopeKey, Guid? memoryId = null, string? summary = null,
+        string? actorId = null, string? payload = null, long? durationMs = null, CancellationToken ct = default)
+    {
+        Task Record() => _auditLog.RecordAsync(actionType, scopeKey, memoryId, summary, actorId, payload, durationMs, ct);
+        return _store is SqlMemoryStore sql ? sql.AfterCommitAsync(Record) : Record();
+    }
+
+    private static string ContentPreview(string content) => content.Length <= 320 ? content : content[..317] + "...";
 
     private async Task EnsureScopeRegisteredAsync(CancellationToken ct)
     {
@@ -872,6 +1101,7 @@ internal partial class AgentMemoryService : IAgentMemoryService
                     allHeaders.Count, cap);
 
                 release = false; // released by the background task
+                using var suppressedFlow = ExecutionContext.SuppressFlow();
                 _ = Task.Run(async () =>
                 {
                     try
@@ -989,14 +1219,14 @@ internal partial class AgentMemoryService : IAgentMemoryService
             var jsonStart = responseText.IndexOf('{');
             var jsonEnd = responseText.LastIndexOf('}');
             if (jsonStart < 0 || jsonEnd <= jsonStart)
-                return [];
+                throw new JsonException("Invalid memory extraction response.");
 
             var json = responseText[jsonStart..(jsonEnd + 1)];
             using var doc = JsonDocument.Parse(json);
 
             if (!doc.RootElement.TryGetProperty("memories", out var arr) ||
                 arr.ValueKind != JsonValueKind.Array)
-                return [];
+                throw new JsonException("Invalid memory extraction response.");
 
             var results = new List<ExtractedMemory>();
             foreach (var item in arr.EnumerateArray())
@@ -1006,11 +1236,11 @@ internal partial class AgentMemoryService : IAgentMemoryService
                 var content = item.TryGetProperty("content", out var c) ? c.GetString() : null;
                 var description = item.TryGetProperty("description", out var d) ? d.GetString() : null;
 
-                if (title is null || content is null || typeStr is null)
-                    continue;
+                if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(content) || typeStr is null)
+                    throw new JsonException("Extracted memory requires title, content and type.");
 
-                if (!Enum.TryParse<MemoryType>(typeStr, ignoreCase: true, out var type))
-                    continue;
+                if (!Enum.TryParse<MemoryType>(typeStr, ignoreCase: true, out var type) || !Enum.IsDefined(type))
+                    throw new JsonException("Invalid extracted memory type.");
 
                 var isPointInTime = item.TryGetProperty("is_point_in_time", out var pit)
                     && pit.ValueKind == JsonValueKind.True;
@@ -1035,7 +1265,7 @@ internal partial class AgentMemoryService : IAgentMemoryService
         }
         catch
         {
-            return [];
+            throw new JsonException("Invalid memory extraction response.");
         }
     }
 }

@@ -56,6 +56,8 @@ internal class AgentMemoryProvider : IAgentMemoryProvider
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(scopeKey);
 
+        if (scopeKey.Trim().Length > 200) throw new ArgumentOutOfRangeException(nameof(scopeKey), "Memory scopes cannot exceed 200 characters.");
+
         return _services.GetOrAdd(scopeKey.Trim(), key =>
             new AgentMemoryService(
                 key,

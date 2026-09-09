@@ -82,11 +82,67 @@ public class HotIndexOptions
 /// <summary>Recall/retrieval pipeline tuning.</summary>
 public class RetrievalOptions
 {
+    /// <summary>Use short request-local labels in relevance prompts and schemas instead of GUIDs.
+    /// Labels are mapped back to stored IDs before returning results. Opt-in pending broader evaluation.</summary>
+    public bool UseCompactSelectionIds { get; set; }
+
+    /// <summary>Ask the selector for the smallest sufficient evidence set, avoiding adjacent
+    /// facts and unrequested newer states. Opt-in while precision/recall tradeoffs are evaluated.</summary>
+    public bool PreferMinimalSelection { get; set; }
+
+    /// <summary>Experimentally verify multi-memory selections against only their headers.
+    /// Adds at most one relevance-model call. Failures preserve the initial selection.</summary>
+    public bool VerifyMultiMemorySelection { get; set; }
+
     /// <summary>Maximum number of warm memories retrieved per query. Default: 5.</summary>
     public int WarmRetrievalLimit { get; set; } = 5;
 
     /// <summary>Maximum number of headers scanned during retrieval. Default: 200.</summary>
     public int HeaderScanLimit { get; set; } = 200;
+
+    /// <summary>Opt in to semantic candidates plus recent headers. Requires IMemoryCandidateStore; otherwise fails explicitly.</summary>
+    public bool UseSemanticCandidates { get; set; }
+
+    /// <summary>Opt in to interleaving semantic candidates across taxonomy types within the same budget.</summary>
+    public bool DiversifySemanticCandidates { get; set; }
+
+    /// <summary>Reserve limit/2+1 closest entities, filling remaining slots across types. Mutually exclusive with diversity.</summary>
+    public bool HybridSemanticCandidates { get; set; }
+
+    /// <summary>Opt-in primary-body prefix for semantic selection, 0 (off) to 512 characters each.
+    /// Combined preview content is capped at 4096 characters per selection.</summary>
+    public int SelectionPreviewCharacters { get; set; }
+
+    /// <summary>Opt-in query-matched chunk previews and recall bodies. Requires semantic candidates.
+    /// Recall bodies are capped at 4096 characters each and 12000 characters total.</summary>
+    public bool UseMatchedChunkEvidence { get; set; }
+
+    /// <summary>Closest embedded chunks per selected entity, 1 (default) to 8.
+    /// Values above one require matched evidence. Shares the existing entity and total body budgets.</summary>
+    public int MatchedChunksPerMemory { get; set; } = 1;
+
+    /// <summary>Opt-in second relevance selection over bounded matched bodies. Requires multiple matched chunks.
+    /// Adds one model call when evidence is available; semantic selection failures return no evidence.</summary>
+    public bool SelectMatchedChunks { get; set; }
+
+    /// <summary>Opt-in: skip second selection only when every returned entity has one untruncated
+    /// chunk exactly matching its original selection description and unchanged header metadata.
+    /// Requires SelectMatchedChunks. Does not make repeated model selection equivalent.</summary>
+    public bool SkipRedundantChunkSelection { get; set; }
+
+    /// <summary>Opt-in prefix length for the second selector, 1..4096 characters per chunk;
+    /// zero uses the full bounded evidence. Returned bodies retain their existing budget.</summary>
+    public int ChunkSelectionPreviewCharacters { get; set; }
+
+    /// <summary>Opt-in split of the selection preview between the beginning and end of each
+    /// bounded body. Requires a preview length of at least two. Omitted middle text may matter.</summary>
+    public bool ChunkSelectionIncludeTail { get; set; }
+
+    /// <summary>Distinct non-cold semantic candidates to offer the selector. Default: 20.</summary>
+    public int SemanticCandidateLimit { get; set; } = 20;
+
+    /// <summary>Recent headers added to semantic candidates. Default: 20. Total bounded by HeaderScanLimit.</summary>
+    public int RecentCandidateLimit { get; set; } = 20;
 
     /// <summary>Memories older than this many days get a freshness warning. Default: 1.</summary>
     public int FreshnessDaysThreshold { get; set; } = 1;

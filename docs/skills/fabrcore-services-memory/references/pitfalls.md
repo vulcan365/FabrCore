@@ -1,13 +1,37 @@
-# Integration pitfalls
+# Troubleshooting and integration pitfalls
 
-- **Two memory libraries:** `FabrCore.Sdk.Memory` is a separate API. These examples use `FabrCore.Services.Memory` and its provider, plugin, and SQL schema.
-- **No automatic injection:** returning a hot index does not update an existing model prompt. Recall and format when needed; avoid a stale initialization-only copy.
-- **Duplicate extraction:** use `FormatRecallContext` for injected recall. Its markers are a convention, not tamper-proof parsing. Plugin JSON results are not marker-wrapped; automatic extraction from tool history needs separate application consideration.
-- **Cold is retained:** ordinary recall excludes Cold, but explicit archive search includes all temperatures. Restoring requires an update. Neither index eviction nor search deletes a memory.
-- **Dimensions:** embedding dimensions are fixed in VECTOR columns. Changing models/dimensions requires a planned migration and re-embedding, with backups; do not drop production memory to change this setting.
-- **Scope reuse:** ephemeral handles create separate memory pools. Bind a stable scope for cross-session continuity and authorize shared scopes in trusted code.
-- **Tool discovery:** ensure the memory assembly is in plugin discovery, or explicitly initialize `AgentMemoryPlugin` and register its functions once. The supplied explicit template uses PascalCase function names.
-- **Compaction:** optional `MemoryCompactionHandler` integration extracts before summarizing. Ordinary chat compaction alone does not populate this store. Direct saves work with neither hook.
-- **Budgets:** hot index tokens are estimates. Graph expansion and individual content size can exceed the warm selection budget; apply a total context budget in your application.
-- **Failure handling:** SQL writes can fail partially. Avoid unconditional retry of saves because similarity matching is not exactly-once persistence. Background auto-consolidation is optional and not a durable job queue.
-- **Staleness:** freshness warnings are cues to verify source data, not a guarantee of correctness. Rebuild derived summaries after material changes when enabled.
+- **Registration alone does not inject memory.** Bare RecallAsync returns data. Use
+  WithMemory/WithMemoryLifecycle or explicitly format and inject it. Avoid doing both for
+  the same turn.
+- **Tools registered twice.** Choose configured agent-memory, manual plugin functions, or
+  includeTools on the harness for each agent. The harness rejects duplicate function names.
+- **Compaction runs twice.** Use the harness lifecycle callback or the manual OnCompaction
+  handler for the same history path. WithMemory alone adds recall, not extraction.
+- **A missing old fact.** Default recall scans capped headers and reads primary chunks.
+  Archive search and opt-in semantic/matched-chunk recall address different retrieval needs.
+  Raising caps increases cost; evaluate coverage before changing defaults.
+- **Bounded evidence looks complete.** Inspect truncation and chunk provenance. Graph
+  expansion is outside the matched-body budget; manual formatting has no universal final
+  context cap. Harness recall has a separate 12,000-character default cap.
+- **Memory disappears after a restart.** Check the resolved scope and stable agent handle,
+  database connection, and persistence. Provider eviction is not data deletion.
+- **A specialist changes core memory unexpectedly.** CoreOnly shares writes. CoreAndOwn
+  reads both but writes only to own. OwnOnly is the default. Bind scopes in trusted code
+  and use scoped tools/risk classification for background writes.
+- **Empty extraction hides an error.** Do not catch every exception and return an empty list.
+  Extraction errors and cancellation propagate; preserve source history for retry.
+- **Retry duplicates a write.** SQL extraction receipts cover the same extraction source,
+  not every arbitrary SaveMemoryAsync call. Post-commit callbacks may fail after commit.
+  Use known IDs for corrections and define ownership for concurrent writers.
+- **A hot memory is evicted.** Hot is a capped pointer index, not pinning. Index eviction
+  leaves the entity Warm. Archive explicitly to remove ordinary recall eligibility.
+- **Archive search returns a Warm fact.** Expected: it searches all retained embeddings.
+- **A fact still exists after deletion.** Built-in SQL invalidates derived summaries, but
+  chat, audit, backups, and exported copies need separate retention. Rebuild invalidated
+  summary trees if enabled.
+- **Repeated or missing recall after compaction.** Only suppress alreadySurfacedIds while
+  the corresponding evidence remains in context. Clear or rebuild the set after compaction.
+- **Instructions in memory override policy.** Treat recalled text as reference data under
+  current instructions. Markers, taxonomy, and scope strings are not authorization.
+- **Consolidation was expected to enforce a quota.** It is opt-in and does not establish a
+  hard retention deadline or storage limit.

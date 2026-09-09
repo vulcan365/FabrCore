@@ -13,6 +13,38 @@ namespace FabrCore.Sdk.Tests;
 public sealed class InternalAgentHardeningTests
 {
     [TestMethod]
+    public async Task MemoryWritesRequireBothScopedToolAndExplicitPolicy()
+    {
+        var proxy = CreateProxy(new FakeChatClientService(FakeChatClient.WithTextResponse("ok")));
+        var memoryTool = new TestMemoryFunction();
+        var risks = new Dictionary<string, InternalAgentToolRisk> { [memoryTool.Name] = InternalAgentToolRisk.MemoryWrite };
+        var options = Options("memory-child") with { Tools = [memoryTool], ToolRisks = risks };
+        await Assert.ThrowsAsync<InvalidOperationException>(() => proxy.CreateAsync(options));
+        var result = await proxy.CreateAsync(options with { ExecutionPolicy = InternalAgentExecutionPolicy.ConcurrentWithMemory });
+        Assert.IsNotNull(result.AsBackgroundAgent());
+
+        var unbound = AIFunctionFactory.Create(() => "external effect", new AIFunctionFactoryOptions { Name = "unbound" });
+        await Assert.ThrowsAsync<InvalidOperationException>(() => proxy.CreateAsync(Options("unbound") with {
+            Tools = [unbound], ExecutionPolicy = InternalAgentExecutionPolicy.ConcurrentWithMemory,
+            ToolRisks = new Dictionary<string, InternalAgentToolRisk> { ["unbound"] = InternalAgentToolRisk.MemoryWrite }
+        }));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => proxy.CreateAsync(Options("external") with {
+            Tools = [unbound], ExecutionPolicy = InternalAgentExecutionPolicy.ConcurrentWithMemory,
+            ToolRisks = new Dictionary<string, InternalAgentToolRisk> { ["unbound"] = InternalAgentToolRisk.ApprovalRequired }
+        }));
+        await proxy.DisposeAsync();
+    }
+
+    private sealed class TestMemoryFunction : AIFunction, IScopedAgentMemoryTool
+    {
+        public string WriteScope => "internal:owner:research";
+        public override string Name => "save_note";
+        public override System.Text.Json.JsonElement JsonSchema => System.Text.Json.JsonSerializer.SerializeToElement(new { type = "object" });
+        protected override ValueTask<object?> InvokeCoreAsync(AIFunctionArguments arguments, CancellationToken cancellationToken)
+            => ValueTask.FromResult<object?>("saved");
+    }
+
+    [TestMethod]
     public async Task FactoryUsesSeparateTrackedClientsAndRejectsDuplicateNames()
     {
         var service = new FakeChatClientService(FakeChatClient.WithTextResponse("ok"));

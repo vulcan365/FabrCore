@@ -19,13 +19,16 @@ namespace FabrCore.Services.Memory.Services;
 ///   MemoryChunk — content + embeddings (1+ per entity)
 ///   MemoryRelationship (EDGE) — typed edges between nodes
 /// </summary>
-internal class SqlMemoryStore : IMemoryStore
+internal partial class SqlMemoryStore : IMemoryStore
 {
     private const string SchemaName = MemorySchemaInitializer.SchemaName;
     internal const string IndexSentinelName = "__MEMORY_INDEX__";
     private const string IndexEntityType = "MemoryIndex";
     private const string MemoryVersionKey = "__memoryVersion";
     private const string MemoryVersionValue = "4";
+
+    internal static bool HasUserMetadata(Dictionary<string, string>? metadata)
+        => metadata?.Keys.Any(key => key != MemoryVersionKey) == true;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -64,11 +67,12 @@ internal class SqlMemoryStore : IMemoryStore
 
     public async Task<MemoryEntry> InsertEntityAsync(string scopeKey, MemoryEntry entry, CancellationToken ct = default)
     {
+        MarkKnowledgeChanged();
         entry.Metadata ??= [];
         entry.Metadata[MemoryVersionKey] = MemoryVersionValue;
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
+        await using var lease = await OpenConnectionAsync(ct);
+        var connection = lease.Connection;
 
         var sql = $"""
             INSERT INTO {SchemaName}.MemoryEntity
@@ -77,7 +81,7 @@ internal class SqlMemoryStore : IMemoryStore
             VALUES (NEWID(), @scopeKey, @name, @entityType, @description, @visibility, @isPointInTime, @metadata);
             """;
 
-        await using var cmd = new SqlCommand(sql, connection);
+        await using var cmd = new SqlCommand(sql, connection, ActiveTransaction);
         cmd.Parameters.AddWithValue("@scopeKey", scopeKey);
         cmd.Parameters.AddWithValue("@name", entry.Title);
         cmd.Parameters.AddWithValue("@entityType", entry.Type.ToString());
@@ -104,8 +108,8 @@ internal class SqlMemoryStore : IMemoryStore
 
     public async Task<MemoryEntry?> GetEntityByIdAsync(string scopeKey, Guid entityId, CancellationToken ct = default)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
+        await using var lease = await OpenConnectionAsync(ct);
+        var connection = lease.Connection;
 
         var sql = $"""
             SELECT EntityId, ScopeKey, Name, EntityType, Description, Visibility, IsPointInTime, Metadata, CreatedAt, UpdatedAt
@@ -113,7 +117,7 @@ internal class SqlMemoryStore : IMemoryStore
             WHERE ScopeKey = @scopeKey AND EntityId = @entityId
             """;
 
-        await using var cmd = new SqlCommand(sql, connection);
+        await using var cmd = new SqlCommand(sql, connection, ActiveTransaction);
         cmd.Parameters.AddWithValue("@scopeKey", scopeKey);
         cmd.Parameters.AddWithValue("@entityId", entityId);
 
@@ -126,11 +130,12 @@ internal class SqlMemoryStore : IMemoryStore
 
     public async Task<MemoryEntry> UpdateEntityAsync(string scopeKey, MemoryEntry entry, CancellationToken ct = default)
     {
+        MarkKnowledgeChanged();
         entry.Metadata ??= [];
         entry.Metadata[MemoryVersionKey] = MemoryVersionValue;
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
+        await using var lease = await OpenConnectionAsync(ct);
+        var connection = lease.Connection;
 
         var sql = $"""
             UPDATE {SchemaName}.MemoryEntity
@@ -145,7 +150,7 @@ internal class SqlMemoryStore : IMemoryStore
             WHERE ScopeKey = @scopeKey AND EntityId = @entityId
             """;
 
-        await using var cmd = new SqlCommand(sql, connection);
+        await using var cmd = new SqlCommand(sql, connection, ActiveTransaction);
         cmd.Parameters.AddWithValue("@scopeKey", scopeKey);
         cmd.Parameters.AddWithValue("@entityId", entry.Id);
         cmd.Parameters.AddWithValue("@name", entry.Title);
@@ -167,12 +172,14 @@ internal class SqlMemoryStore : IMemoryStore
 
     public async Task<bool> DeleteEntityAsync(string scopeKey, Guid entityId, CancellationToken ct = default)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
+        MarkKnowledgeChanged();
+        await using var lease = await OpenConnectionAsync(ct);
+        var connection = lease.Connection;
 
         // Chunks, relationships, and the entity must go together — a mid-way failure
         // would otherwise orphan rows.
-        await using var transaction = connection.BeginTransaction();
+        await using var ownedTransaction = ActiveTransaction is null ? connection.BeginTransaction() : null;
+        var transaction = ActiveTransaction ?? ownedTransaction!;
         int rows;
         try
         {
@@ -207,11 +214,11 @@ internal class SqlMemoryStore : IMemoryStore
                 rows = await cmd.ExecuteNonQueryAsync(ct);
             }
 
-            await transaction.CommitAsync(ct);
+            if (ownedTransaction is not null) await transaction.CommitAsync(ct);
         }
         catch
         {
-            await transaction.RollbackAsync(CancellationToken.None);
+            if (ownedTransaction is not null) await transaction.RollbackAsync(CancellationToken.None);
             throw;
         }
 
@@ -222,8 +229,8 @@ internal class SqlMemoryStore : IMemoryStore
     public async Task<IReadOnlyList<MemoryHeader>> GetHeadersAsync(
         string scopeKey, int limit, MemoryType? typeFilter = null, CancellationToken ct = default)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
+        await using var lease = await OpenConnectionAsync(ct);
+        var connection = lease.Connection;
 
         var sql = $"""
             SELECT TOP(@limit) EntityId, Name, EntityType, Description, UpdatedAt, IsPointInTime
@@ -238,7 +245,7 @@ internal class SqlMemoryStore : IMemoryStore
 
         sql += "\nORDER BY UpdatedAt DESC";
 
-        await using var cmd = new SqlCommand(sql, connection);
+        await using var cmd = new SqlCommand(sql, connection, ActiveTransaction);
         cmd.Parameters.AddWithValue("@limit", limit);
         cmd.Parameters.AddWithValue("@scopeKey", scopeKey);
         if (typeFilter.HasValue)
@@ -268,8 +275,9 @@ internal class SqlMemoryStore : IMemoryStore
 
     public async Task<MemoryChunkEntry> InsertChunkAsync(string scopeKey, MemoryChunkEntry chunk, CancellationToken ct = default)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
+        MarkKnowledgeChanged();
+        await using var lease = await OpenConnectionAsync(ct);
+        var connection = lease.Connection;
 
         var sql = $"""
             INSERT INTO {SchemaName}.MemoryChunk
@@ -280,7 +288,7 @@ internal class SqlMemoryStore : IMemoryStore
                     @chunkIndex, @metadata);
             """;
 
-        await using var cmd = new SqlCommand(sql, connection);
+        await using var cmd = new SqlCommand(sql, connection, ActiveTransaction);
         cmd.Parameters.AddWithValue("@scopeKey", scopeKey);
         cmd.Parameters.AddWithValue("@entityId", chunk.EntityId);
         cmd.Parameters.AddWithValue("@content", chunk.Content);
@@ -311,8 +319,9 @@ internal class SqlMemoryStore : IMemoryStore
 
     public async Task<MemoryChunkEntry> UpdateChunkAsync(string scopeKey, MemoryChunkEntry chunk, CancellationToken ct = default)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
+        MarkKnowledgeChanged();
+        await using var lease = await OpenConnectionAsync(ct);
+        var connection = lease.Connection;
 
         var sql = $"""
             UPDATE {SchemaName}.MemoryChunk
@@ -324,7 +333,7 @@ internal class SqlMemoryStore : IMemoryStore
             WHERE ChunkId = @chunkId AND ScopeKey = @scopeKey
             """;
 
-        await using var cmd = new SqlCommand(sql, connection);
+        await using var cmd = new SqlCommand(sql, connection, ActiveTransaction);
         cmd.Parameters.AddWithValue("@chunkId", chunk.ChunkId);
         cmd.Parameters.AddWithValue("@scopeKey", scopeKey);
         cmd.Parameters.AddWithValue("@content", chunk.Content);
@@ -349,8 +358,8 @@ internal class SqlMemoryStore : IMemoryStore
 
     public async Task<MemoryChunkEntry?> GetPrimaryChunkAsync(string scopeKey, Guid entityId, CancellationToken ct = default)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
+        await using var lease = await OpenConnectionAsync(ct);
+        var connection = lease.Connection;
 
         var sql = $"""
             SELECT TOP(1) ChunkId, EntityId, Content, ChunkIndex, Metadata, CreatedAt, UpdatedAt
@@ -359,7 +368,7 @@ internal class SqlMemoryStore : IMemoryStore
             ORDER BY ChunkIndex ASC
             """;
 
-        await using var cmd = new SqlCommand(sql, connection);
+        await using var cmd = new SqlCommand(sql, connection, ActiveTransaction);
         cmd.Parameters.AddWithValue("@scopeKey", scopeKey);
         cmd.Parameters.AddWithValue("@entityId", entityId);
 
@@ -372,8 +381,8 @@ internal class SqlMemoryStore : IMemoryStore
 
     public async Task<IReadOnlyList<MemoryChunkEntry>> GetChunksAsync(string scopeKey, Guid entityId, CancellationToken ct = default)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
+        await using var lease = await OpenConnectionAsync(ct);
+        var connection = lease.Connection;
 
         var sql = $"""
             SELECT ChunkId, EntityId, Content, ChunkIndex, Metadata, CreatedAt, UpdatedAt
@@ -382,7 +391,7 @@ internal class SqlMemoryStore : IMemoryStore
             ORDER BY ChunkIndex ASC
             """;
 
-        await using var cmd = new SqlCommand(sql, connection);
+        await using var cmd = new SqlCommand(sql, connection, ActiveTransaction);
         cmd.Parameters.AddWithValue("@scopeKey", scopeKey);
         cmd.Parameters.AddWithValue("@entityId", entityId);
 
@@ -405,8 +414,8 @@ internal class SqlMemoryStore : IMemoryStore
         string relationshipType, string? description = null, double weight = 1.0,
         Dictionary<string, string>? metadata = null, CancellationToken ct = default)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
+        await using var lease = await OpenConnectionAsync(ct);
+        var connection = lease.Connection;
 
         var sql = $"""
             INSERT INTO {SchemaName}.MemoryRelationship
@@ -418,7 +427,7 @@ internal class SqlMemoryStore : IMemoryStore
             );
             """;
 
-        await using var cmd = new SqlCommand(sql, connection);
+        await using var cmd = new SqlCommand(sql, connection, ActiveTransaction);
         cmd.Parameters.AddWithValue("@fromId", fromEntityId);
         cmd.Parameters.AddWithValue("@toId", toEntityId);
         cmd.Parameters.AddWithValue("@scopeKey", scopeKey);
@@ -436,8 +445,8 @@ internal class SqlMemoryStore : IMemoryStore
     public async Task<IReadOnlyList<MemoryRelationshipEntry>> GetRelationshipsAsync(
         string scopeKey, Guid entityId, CancellationToken ct = default)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
+        await using var lease = await OpenConnectionAsync(ct);
+        var connection = lease.Connection;
 
         // Get both outgoing and incoming relationships
         var sql = $"""
@@ -458,7 +467,7 @@ internal class SqlMemoryStore : IMemoryStore
               AND r.ScopeKey = @scopeKey
             """;
 
-        await using var cmd = new SqlCommand(sql, connection);
+        await using var cmd = new SqlCommand(sql, connection, ActiveTransaction);
         cmd.Parameters.AddWithValue("@entityId", entityId);
         cmd.Parameters.AddWithValue("@scopeKey", scopeKey);
 
@@ -490,8 +499,8 @@ internal class SqlMemoryStore : IMemoryStore
         string scopeKey, float[] queryEmbedding, int limit,
         MemoryType? typeFilter = null, CancellationToken ct = default)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
+        await using var lease = await OpenConnectionAsync(ct);
+        var connection = lease.Connection;
 
         var sql = $"""
             SELECT TOP(@limit)
@@ -513,7 +522,7 @@ internal class SqlMemoryStore : IMemoryStore
 
         sql += "\nORDER BY Distance";
 
-        await using var cmd = new SqlCommand(sql, connection);
+        await using var cmd = new SqlCommand(sql, connection, ActiveTransaction);
         cmd.Parameters.AddWithValue("@limit", limit);
         cmd.Parameters.AddWithValue("@scopeKey", scopeKey);
         cmd.Parameters.Add(new SqlParameter("@queryVector", SqlDbTypeExtensions.Vector)
@@ -556,8 +565,8 @@ internal class SqlMemoryStore : IMemoryStore
         string scopeKey, float[] queryEmbedding, int limit, double maxDistance,
         CancellationToken ct = default)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
+        await using var lease = await OpenConnectionAsync(ct);
+        var connection = lease.Connection;
 
         var sql = $"""
             SELECT TOP(@limit)
@@ -576,7 +585,7 @@ internal class SqlMemoryStore : IMemoryStore
             ORDER BY Distance
             """;
 
-        await using var cmd = new SqlCommand(sql, connection);
+        await using var cmd = new SqlCommand(sql, connection, ActiveTransaction);
         cmd.Parameters.AddWithValue("@limit", limit);
         cmd.Parameters.AddWithValue("@scopeKey", scopeKey);
         cmd.Parameters.AddWithValue("@maxDistance", maxDistance);
@@ -623,8 +632,8 @@ internal class SqlMemoryStore : IMemoryStore
     public async Task<IReadOnlyList<(Guid Id1, Guid Id2, double Distance)>> FindDuplicatePairsAsync(
         string scopeKey, double distanceThreshold, MemoryType? typeFilter = null, CancellationToken ct = default)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
+        await using var lease = await OpenConnectionAsync(ct);
+        var connection = lease.Connection;
 
         var sql = $"""
             SELECT
@@ -645,7 +654,7 @@ internal class SqlMemoryStore : IMemoryStore
         if (typeFilter.HasValue)
             sql += "\n    AND e1.EntityType = @entityType";
 
-        await using var cmd = new SqlCommand(sql, connection);
+        await using var cmd = new SqlCommand(sql, connection, ActiveTransaction);
         cmd.Parameters.AddWithValue("@scopeKey", scopeKey);
         cmd.Parameters.AddWithValue("@threshold", distanceThreshold);
         if (typeFilter.HasValue)
@@ -671,15 +680,15 @@ internal class SqlMemoryStore : IMemoryStore
 
     public async Task<string?> GetIndexContentAsync(string scopeKey, CancellationToken ct = default)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
+        await using var lease = await OpenConnectionAsync(ct);
+        var connection = lease.Connection;
 
         var sql = $"""
             SELECT Content FROM {SchemaName}.MemoryEntity
             WHERE ScopeKey = @scopeKey AND Name = '{IndexSentinelName}' AND EntityType = '{IndexEntityType}'
             """;
 
-        await using var cmd = new SqlCommand(sql, connection);
+        await using var cmd = new SqlCommand(sql, connection, ActiveTransaction);
         cmd.Parameters.AddWithValue("@scopeKey", scopeKey);
 
         var result = await cmd.ExecuteScalarAsync(ct);
@@ -688,24 +697,25 @@ internal class SqlMemoryStore : IMemoryStore
 
     public async Task UpsertIndexContentAsync(string scopeKey, string indexJson, CancellationToken ct = default)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
-        await UpsertIndexContentCoreAsync(connection, null, scopeKey, indexJson, ct);
+        await using var lease = await OpenConnectionAsync(ct);
+        var connection = lease.Connection;
+        await UpsertIndexContentCoreAsync(connection, ActiveTransaction, scopeKey, indexJson, ct);
     }
 
     public async Task ModifyIndexContentAsync(
         string scopeKey, Func<string?, string?> transform, CancellationToken ct = default)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
+        await using var lease = await OpenConnectionAsync(ct);
+        var connection = lease.Connection;
 
         // Serialize read-modify-write per scope across processes: agents sharing a scope
         // (and admin edits) would otherwise lose index entries to concurrent writers.
-        await using var transaction = connection.BeginTransaction();
+        await using var ownedTransaction = ActiveTransaction is null ? connection.BeginTransaction() : null;
+        var transaction = ActiveTransaction ?? ownedTransaction!;
         try
         {
             await using (var lockCmd = new SqlCommand(
-                "EXEC sp_getapplock @Resource = @resource, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 15000;",
+                "DECLARE @r int; EXEC @r = sp_getapplock @Resource = @resource, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 15000; IF @r < 0 THROW 51000, 'Memory index lock unavailable', 1;",
                 connection, transaction))
             {
                 lockCmd.Parameters.AddWithValue("@resource", $"mem-index-{scopeKey}");
@@ -728,11 +738,11 @@ internal class SqlMemoryStore : IMemoryStore
             if (newJson is not null && newJson != currentJson)
                 await UpsertIndexContentCoreAsync(connection, transaction, scopeKey, newJson, ct);
 
-            await transaction.CommitAsync(ct);
+            if (ownedTransaction is not null) await transaction.CommitAsync(ct);
         }
         catch
         {
-            await transaction.RollbackAsync(CancellationToken.None);
+            if (ownedTransaction is not null) await transaction.RollbackAsync(CancellationToken.None);
             throw;
         }
     }

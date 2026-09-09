@@ -377,3 +377,6 @@ FodyWeavers.xsd
 # Claude Code local settings
 .claude/
 /tmp
+
+# Local evaluation credentials
+**/appsettings.local.json

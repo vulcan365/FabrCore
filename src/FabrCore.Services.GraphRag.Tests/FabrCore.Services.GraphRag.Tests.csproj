@@ -25,10 +25,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Update="Microsoft.Testing.Extensions.CodeCoverage" Version="18.10.0" />
-    <PackageReference Update="Microsoft.Testing.Extensions.TrxReport" Version="2.3.3" />
-    <PackageReference Update="MSTest.TestAdapter" Version="4.3.3" />
-    <PackageReference Update="MSTest.TestFramework" Version="4.3.3" />
+    <PackageReference Update="Microsoft.Testing.Extensions.CodeCoverage" Version="18.11.0" />
+    <PackageReference Update="Microsoft.Testing.Extensions.TrxReport" Version="2.4.0" />
+    <PackageReference Update="MinVer" Version="8.0.0" />
+    <PackageReference Update="MSTest.TestAdapter" Version="4.4.0" />
+    <PackageReference Update="MSTest.TestFramework" Version="4.4.0" />
   </ItemGroup>
 
 </Project>

@@ -30,4 +30,9 @@
 		<Content Update="fabrcore-surface.json" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />
 	</ItemGroup>
 
+
+	<ItemGroup>
+	  <PackageReference Update="MinVer" Version="8.0.0" />
+	</ItemGroup>
+
 </Project>

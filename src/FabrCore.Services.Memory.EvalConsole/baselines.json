@@ -1,0 +1,8 @@
+{
+  "code": "artifacts/memory-evals/20260907T140055-55938e044c1149ac93397f70d358bb7d/report.json",
+  "tools": "artifacts/memory-evals/20260907T140117-132fa43da08e43a19cdce5bf4626d268/report.json",
+  "extract": "artifacts/memory-evals/20260907T140138-25abcc34b71746568e9ecf3b4f1be740/report.json",
+  "compact": "artifacts/memory-evals/20260907T140222-e4114e6e052f4ccc9ccf31c541530aab/report.json",
+  "harness": "artifacts/memory-evals/20260907T140257-b55e83fa4be0472da575226ccb92cca4/report.json",
+  "holdout": "artifacts/memory-evals/20260907T140337-20b6bf1ccd6b485ea6d3f7b502213202/report.json"
+}

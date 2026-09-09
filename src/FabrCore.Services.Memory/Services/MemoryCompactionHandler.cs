@@ -58,10 +58,10 @@ public class MemoryCompactionHandler
                 _memoryOptions.Models.CompactionModelName,
                 ct);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "Memory-aware compaction failed for agent '{Agent}'", _memoryService.ScopeKey);
-            return null;
+            throw;
         }
     }
 
@@ -74,6 +74,8 @@ public class MemoryCompactionHandler
         int keepLastN = 20,
         CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
+        ArgumentOutOfRangeException.ThrowIfNegative(keepLastN);
         try
         {
             var allMessages = await chatHistoryProvider.GetMessagesAsync(ct);
@@ -97,10 +99,10 @@ public class MemoryCompactionHandler
 
             return extracted;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "Memory extraction failed for agent '{Agent}'", _memoryService.ScopeKey);
-            return [];
+            throw;
         }
     }
 
@@ -112,6 +114,9 @@ public class MemoryCompactionHandler
         int keepLastN = 20,
         CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
+        ArgumentOutOfRangeException.ThrowIfNegative(keepLastN);
+        ArgumentNullException.ThrowIfNull(allMessages);
         try
         {
             if (allMessages.Count <= keepLastN)
@@ -132,10 +137,10 @@ public class MemoryCompactionHandler
 
             return extracted;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "Memory extraction failed for agent '{Agent}'", _memoryService.ScopeKey);
-            return [];
+            throw;
         }
     }
 }

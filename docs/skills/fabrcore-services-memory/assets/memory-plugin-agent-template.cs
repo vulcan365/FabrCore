@@ -61,6 +61,7 @@ public class {{AGENT_NAME}} : FabrCoreAgentProxy
                 - Rule: business rules, constraints, policies, conventions
                 - Instruction: user directives, preferences, standing orders
                 - Observation: patterns noticed, inferences, situational context
+                - Procedural: reusable workflows with triggers and ordered steps
 
                 Save only durable knowledge that will still be true and useful in future conversations.
                 Prefer fewer high-confidence memories over many speculative ones.

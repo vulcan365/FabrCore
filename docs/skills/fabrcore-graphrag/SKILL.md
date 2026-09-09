@@ -1,6 +1,6 @@
 ---
 name: fabrcore-graphrag
-description: Build with FabrCore.Services.GraphRag, the service-only GraphRAG package for FabrCore. Use when adding GraphRAG to a .NET 10 app, configuring AddGraphRagServices or AddGraphRagAdministration, creating scopes, ingesting documents, searching with scoped GraphRAG services, building admin UI/API endpoints, choosing an IMarkdownConversionService, using GraphRAG from FabrCore agents or plugins, troubleshooting the grag schema/database, or migrating consumers from FabrCore.Agents.GraphRagAgent to FabrCore.Services.GraphRag.
+description: Integrate, configure, troubleshoot, and evaluate FabrCore.Services.GraphRag in .NET apps. Use for scoped ingestion and search, extraction performance and quality, SQL graph/vector setup, administration APIs, or GraphRAG agent and plugin adapters.
 ---
 
 # FabrCore GraphRAG Service Skill
@@ -8,6 +8,12 @@ description: Build with FabrCore.Services.GraphRag, the service-only GraphRAG pa
 Use this skill to integrate `FabrCore.Services.GraphRag` into .NET 10 / FabrCore
 applications. Treat this as a service-first package: it provides GraphRAG
 contracts and operations, not UI components.
+
+Published skill snapshot: 2026-09-07. Available experimental options are not
+recommended defaults. Read [ingestion and evaluations](references/ingestion-and-evals.md)
+when tuning performance or resuming evals; that reference distinguishes implemented
+behavior from unfinished work. Console/Generic Host consumers are supported; Blazor
+is not required.
 
 ## Core Rule
 
@@ -56,8 +62,11 @@ Use the assets as copyable templates:
 
 - `assets/appsettings.graphrag.json` for configuration shape.
 - `assets/service-registration.cs` for DI setup.
-- `assets/minimal-api-endpoints.cs` for app-owned API endpoints.
-- `assets/background-ingestion-worker.cs` for queued ingestion patterns.
+- For app-owned ingestion endpoints and workers, use the request-based call in
+  `references/api-surface.md` and the concurrency guidance in
+  `references/ingestion-and-evals.md`. The two bundled `.cs` ingestion samples
+  (`minimal-api-endpoints.cs`, `background-ingestion-worker.cs`) retain the old
+  positional call and must be adapted; they are not current copy-and-build templates.
 - `assets/plugin-agent-config.json` for plugin/agent configuration.
 
 ## Reference Map
@@ -75,6 +84,8 @@ Read these references only when needed:
 - `references/ui-and-admin.md`: building your own UI/API layer using
   `IGraphRagAdminService`.
 - `references/troubleshooting.md`: common errors, causes, and fixes.
+- `references/ingestion-and-evals.md`: pipeline, actual defaults, optional caches,
+  experimental flags, measured recommendations, and the paused eval checkpoint.
 
 ## Service Registration Pattern
 
@@ -88,9 +99,10 @@ builder.Services.AddGraphRagServices(
 builder.Services.AddGraphRagAdministration();
 ```
 
-`extractionModelName` is optional. Use it when ingestion should perform
-LLM-assisted entity, relationship, domain, and category extraction. Omit it when
-the app only needs source documents/chunks or when extraction will be added later.
+`extractionModelName` selects an explicit model alias. When omitted, extraction
+tries `graphrag`, then `default`; omission does not disable extraction. An explicit
+alias does not silently fall back to another alias. To ingest without LLM graph
+extraction, set `GraphRag:Ingestion:EnableExtraction=false`; embeddings still run.
 
 `AddGraphRagServices` registers the schema hosted service. On app startup, the
 service resolves the configured connection string and runs schema/migration
@@ -146,10 +158,12 @@ var json = await search.SearchEntitiesAsync(request, ct);
 
 1. Ensure a scope exists with `IKnowledgeScopeService`.
 2. Inject `IKnowledgeIngestionService`.
-3. Call `IngestDocumentAsync(fileName, scopeKey, markdownContent, ct)`.
+3. Call `IngestDocumentAsync(new KnowledgeIngestionRequest(fileName, scopeKey,
+   markdownContent, extractionInstructions), ct)`. Instructions are not searchable source text.
 4. Store/display `SourceDocumentDto.DocumentId`, `Status`, `ChunkCount`,
    `ExtractedEntityCount`, `ExtractedRelationshipCount`, and `Reused`.
-5. For bulk or async ingestion, adapt `assets/background-ingestion-worker.cs`.
+5. For bulk ingestion, reuse the registered singleton and bound document concurrency;
+   see `references/ingestion-and-evals.md`.
 
 ### Search Knowledge
 
@@ -193,12 +207,15 @@ After modifying a consumer app:
 dotnet build
 ```
 
-For repositories using Microsoft.Testing.Platform, run tests from the directory
-containing the relevant `global.json`, and use `--project` when needed:
+In the FabrCore repository, the GraphRAG tests are a Microsoft.Testing.Platform
+executable. Use the verified unit-test invocation (not a solution-wide test assumption):
 
 ```powershell
-dotnet test --project path\to\Tests.csproj --filter "FullyQualifiedName~GraphRag"
+dotnet run --project src/FabrCore.Services.GraphRag.Tests --no-restore -- --filter FullyQualifiedName~Unit
 ```
+
+Do not run database/live-model evaluations as part of an unrelated documentation edit.
+For ingestion changes, check persisted factual edges as well as retrieval smoke gates.
 
 For a smoke check, verify:
 

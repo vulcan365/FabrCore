@@ -19,7 +19,7 @@ For source-based consumers:
 <ProjectReference Include="..\FabrCore.Services.GraphRag\FabrCore.Services.GraphRag.csproj" />
 ```
 
-For packaged consumers, use the package name once published:
+For packaged consumers, select the intended published version of:
 
 ```powershell
 dotnet add package FabrCore.Services.GraphRag
@@ -112,9 +112,21 @@ embeddings endpoint when:
 - `IHttpClientFactory` is registered.
 - `FabrCore:HostUrl` is configured.
 
-LLM extraction during ingestion is separate from embeddings. It is enabled by
-passing `extractionModelName` to `AddGraphRagServices`. The value maps to a named
-FabrCore chat model configuration resolved by `IFabrCoreChatClientService`.
+LLM extraction is enabled by default, independently of embeddings. An explicit
+`extractionModelName` selects that alias; when omitted, ingestion tries `graphrag`
+then `default`. Disable it with `GraphRag:Ingestion:EnableExtraction=false`, not by
+omitting the alias. Configure `IFabrCoreChatClientService` for local schema extraction.
+The Host API extraction fallback does not transport response schemas, so
+`UseExtractionJsonSchema=true` requires the local chat-client service.
+
+Core ingestion/search/scope registrations are singletons. Preserve that ingestion
+lifetime so concurrent documents share chat and embedding semaphores. Plain console
+or Generic Host applications work with the same dependencies; no Blazor lifecycle is
+required. A plain DI provider must initialize schema explicitly if hosted services
+are not started. Register `AddHttpClient()` when using Host API fallback.
+
+Read [ingestion and evaluations](ingestion-and-evals.md) for defaults, bounded
+parallelism, caching, experimental settings, and the current measured shortlist.
 
 ## Schema Initialization
 
@@ -155,9 +167,11 @@ Unit tests that only validate DI can use an in-memory configuration with a fake
 connection string. Tests that start hosted services or call database operations
 need a real SQL Server database.
 
-For Microsoft.Testing.Platform repos, run tests from the folder containing
-`global.json` and use:
+For this repository's executable test project:
 
 ```powershell
-dotnet test --project Tests.csproj --filter "FullyQualifiedName~GraphRag"
+dotnet run --project src/FabrCore.Services.GraphRag.Tests --no-restore -- --filter FullyQualifiedName~Unit
 ```
+
+Restore first if dependencies are unavailable. Live tests need configured SQL/model
+access; unit success does not imply live evaluation or all-fact coverage.

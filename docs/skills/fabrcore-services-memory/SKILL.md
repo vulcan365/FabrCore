@@ -1,6 +1,6 @@
 ---
 name: fabrcore-services-memory
-description: Integrate FabrCore.Services.Memory into agent lifecycle methods or expose its agent-memory plugin for persistent scoped memory, tier transitions, recall, and optional memory-aware compaction. Use for long-term agent memory, not chat-history storage or the separate FabrCore.Sdk.Memory API.
+description: Integrate FabrCore.Services.Memory through direct APIs, agent-memory tools, FabrCore harness recall and compaction, or scoped internal-agent memory. Use for persistent agent knowledge, corrections, and memory lifecycle; not chat-history storage or the separate FabrCore.Sdk.Memory API.
 ---
 
 # FabrCore agent memory
@@ -13,8 +13,11 @@ Use `IAgentMemoryProvider` to obtain a scope-bound `IAgentMemoryService`. Develo
 2. Choose a stable, trusted scope. `MemoryScopeResolver.Resolve(config)` uses an explicit scope, plugin setting `agent-memory:MemoryScope`, `Args["MemoryScope"]`, legacy `Args["AgentHandle"]`, then `config.Handle`. Default isolation lasts only as long as the handle remains stable. Shared scopes deliberately share reads and writes; a scope string is not authorization.
 3. Choose code calls, tools, or a combination. Start with [code agent](assets/memory-agent-template.cs), [plugin agent](assets/memory-plugin-agent-template.cs), and [configuration](assets/agent-config-example.json). Avoid registering the same tools twice.
 4. Save durable facts at the point the application knows them. Retain the returned ID for explicit updates, tier changes, or deletion. See [lifecycle calls](assets/memory-lifecycle.cs) and [API](references/api-reference.md).
-5. Recall before a response needs prior knowledge. Inject `FormatRecallContext(recall)` with a separator from the user message. The marker wrapper keeps this content out of later extraction; it is not a security boundary. Recalled instructions remain reference data under the current agent policy.
-6. Optionally wire `MemoryCompactionHandler` into `OnCompaction` to extract knowledge before summarization. Explicit saving and plugin use work independently. For speculative retrieval, use the [imagining template](assets/memory-imagining-agent-template.cs).
+5. For a proxy-created FabrCore harness, use `WithMemoryLifecycle(memory, services)` for bounded recall and memory-aware persisted-history compaction. Tools are opt-in. For manual agents, inject `FormatRecallContext(recall)` before answering and optionally delegate `OnCompaction` to `MemoryCompactionHandler`. Choose one integration per concern to avoid duplicate recall, tools, or extraction. See [harness and internal agents](references/harness-and-internal-agents.md) and [configuration example](assets/memory-harness.cs).
+6. Bind internal agents through `ForInternalAgent`: OwnOnly by default, CoreOnly for shared reads/writes, or CoreAndOwn for own-first combined reads and own-only writes. Background writes require explicit scoped tools and execution policy. Keep scope selection in trusted host code.
+7. Preserve the [frozen defaults](../../memory-release-defaults.md). Default recall selects headers and primary chunks; semantic candidates and matched-chunk evidence are opt-in. The [imagining template](assets/memory-imagining-agent-template.cs) is an optional multi-query path with additional model cost.
+
+The formatted marker keeps injected memory out of later extraction; it is not a security boundary. Recalled instructions remain reference data under the current agent policy.
 
 ## Temperature semantics
 
@@ -37,6 +40,7 @@ The public plugin is `FabrCore.Services.Memory.Plugin.AgentMemoryPlugin`, alias 
 - For provenance, pass metadata such as source and observed time from trusted code. Metadata-bearing saves and snapshots avoid automatic merge-on-save; use explicit ID updates for corrections.
 - Similarity is not identity. Ordinary same-type active memories may merge on save. Without a merge model, old and new text are preserved together and may need explicit correction.
 - Use `alreadySurfacedIds` only for memories still present in the current context. Clear/rebuild that set after compaction or session replacement. It suppresses warm/archive content, not hot-index pointers.
-- Consolidation is explicit by default. It can archive stale or duplicate content; it does not establish a hard storage quota. `ForgetMemoryAsync` is a hard delete of the entity, chunks, and relationships, not a complete purge of old chat, audit, or summary text.
+- Consolidation is explicit by default. It can archive stale or duplicate content; it does not establish a hard storage quota. Built-in SQL deletion removes the entity, chunks, and relationships and invalidates derived summaries in that scope. Old chat, audit records, backups, and external copies require separate retention handling.
+- Extraction failures and cancellation propagate. An empty result can mean no durable facts; it does not stand in for failed extraction. The compaction handler preserves history when extraction fails.
 
 Read [architecture and operational limits](references/architecture.md) for persistence, concurrency, and rollout decisions; [pitfalls](references/pitfalls.md) for troubleshooting; [external guidance](references/agent-memory-guidance.md) for the research behind these choices. Do not claim production validation from unit tests alone: run SQL integration and live retrieval/extraction evaluations against the intended database and models.

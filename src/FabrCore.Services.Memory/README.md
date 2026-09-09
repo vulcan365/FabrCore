@@ -1,3 +1,57 @@
+For harness integration, private-agent core/own memory, and the evaluation workflow, see [the memory harness design](../../docs/memory-harness-design.md) and [Memory EvalConsole](../FabrCore.Services.Memory.EvalConsole/README.md).
+
+For larger scopes, the opt-in `Retrieval.UseSemanticCandidates` combines 20 semantic matches
+with 20 recent headers before relevance selection. The SQL implementation searches beyond
+the recent-header cap while excluding cold memories. See [the measured experiment and limits](../../docs/memory-long-history-experiment.md).
+
+`Retrieval.DiversifySemanticCandidates` optionally interleaves those semantic candidates
+across memory types within the same limit, helping procedures compete with dense collections
+of facts. It adds no model calls. See [the experiment and tradeoffs](../../docs/memory-diverse-candidates-experiment.md).
+
+`Retrieval.HybridSemanticCandidates` instead reserves the closest matches before filling
+remaining semantic slots across types. It is mutually exclusive with the diversity modifier
+and remains opt-in. See [hybrid allocation](../../docs/memory-hybrid-candidates-experiment.md).
+
+`Retrieval.SelectionPreviewCharacters` optionally adds bounded primary-body prefixes during
+semantic selection when headers are poor. It defaults to zero; useful topic headers usually
+need no preview. See [quality and token-cost results](../../docs/memory-selection-preview-experiment.md).
+
+`Retrieval.UseMatchedChunkEvidence` opts semantic recall into query-matched previews and
+bounded chunk bodies with source chunk IDs, indexes and truncation flags. Primary retrieval
+and update APIs keep their existing semantics. See [matched-chunk evaluation](../../docs/memory-matched-chunks-experiment.md).
+
+`Retrieval.MatchedChunksPerMemory` optionally raises the returned nearest-chunk limit from
+one to at most eight when matched evidence is enabled. Each entity's existing body budget
+is divided among those chunks; selected bodies remain bounded to 12,000 characters total.
+`MemoryEntry.RecalledChunks` exposes each bounded body and source. `Content` joins the bodies,
+while singular source fields are null on this path. Previews still use one matched chunk.
+The limit does not imply complete coverage, and omitted chunks are not reported as truncated.
+See [multi-chunk coverage and context costs](../../docs/memory-bounded-chunks-experiment.md).
+
+`Retrieval.SelectMatchedChunks` optionally filters that bounded pool using structured relevance
+selection before returning evidence. It requires a chunk limit above one and defaults to false.
+The selector can remove offered chunks or abstain; it cannot recover a chunk outside the pool.
+This adds a selection call when bodies are available, plus optional verification if configured.
+See [selective chunk evaluation](../../docs/memory-selective-chunks-experiment.md).
+
+`Retrieval.SkipRedundantChunkSelection` optionally skips that second selection when every
+returned entity has one nonempty, untruncated chunk whose full text equals the description
+in the original selection manifest, with unchanged title/type/date/snapshot metadata. It
+requires chunk selection and defaults to false. Mixed or changed evidence still receives
+selection. This compares the original manifest rather than a newly loaded description.
+See [redundant selection experiment](../../docs/memory-redundant-selection-experiment.md).
+
+`Retrieval.ChunkSelectionPreviewCharacters` optionally limits each body shown to the second
+selector, with a truncation notice. Zero (the default) uses the existing full bounded body;
+positive values up to 4096 require chunk selection. Selected returned bodies and provenance
+keep their existing limits. Evidence beyond the preview may be missed. See [chunk preview
+evaluation](../../docs/memory-chunk-preview-experiment.md).
+
+`Retrieval.ChunkSelectionIncludeTail` optionally divides a positive selection-preview budget
+between the beginning and end of the already bounded body. It requires at least two characters
+and defaults to false. An omission notice separates the windows; returned bodies are unchanged.
+The tail is not necessarily the end of a longer stored chunk. See [split-window evaluation](../../docs/memory-chunk-windows-experiment.md).
+
 > For the reviewed code-call and plugin workflows, use the [distributed memory skill](../../docs/skills/fabrcore-services-memory/SKILL.md). See the [readiness review](../../docs/memory-readiness-review.md) for fixes, validation results, and remaining rollout checks. Hot is a bounded pointer index; Cold is excluded from ordinary warm recall, while archive search spans all retained embedded content. `AgentMemoryPlugin.UpdateMemory` supports corrections and tier changes.
 
 # FabrCore.Services.Memory
@@ -214,7 +268,21 @@ Cold Layer (searchable archive)
 
 ## Memory-Aware Compaction
 
-The library provides a multi-tier compaction service that replaces the default `CompactionService` for agents using memory. It runs automatically from `OnCompaction`:
+The library provides a multi-tier compaction service that replaces the default `CompactionService` for agents using memory.
+For a proxy-created FabrCore harness, configure the full lifecycle together:
+
+```csharp
+var harness = await CreateFabrCoreHarnessAgent(
+    config.Models ?? "default", "main",
+    configure: options => options.WithMemoryLifecycle(_memory!, serviceProvider, includeTools: true));
+```
+
+This installs bounded recall, scoped tools and the history compaction callback. Use
+`WithMemory` for recall/tools only, or `WithMemoryCompaction(handler)` for a separately
+constructed handler. Configure tools through one entry point; duplicate names are rejected.
+The default proxy `OnCompaction` honors the registered callback. Existing custom overrides
+must delegate to base or invoke the handler explicitly. For other proxy integrations, the
+manual hook remains available:
 
 ```csharp
 using FabrCore.Services.Memory.Services;

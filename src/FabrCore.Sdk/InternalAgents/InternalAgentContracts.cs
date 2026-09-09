@@ -14,7 +14,11 @@ public enum InternalAgentExecutionPolicy
     SerializedReadOnly,
 
     /// <summary>The agent may be called directly by the proxy but must not be supplied as a Harness background agent.</summary>
-    OrchestratorOnly
+    OrchestratorOnly,
+
+    /// <summary>Allows bounded concurrent reads, computation, and explicitly bound memory writes.
+    /// External mutation tools remain prohibited.</summary>
+    ConcurrentWithMemory
 }
 
 /// <summary>Security classification applied to an internal specialist's effective tools.</summary>
@@ -33,7 +37,18 @@ public enum InternalAgentToolRisk
     ApprovalRequired,
 
     /// <summary>Administrative or platform capability that is never exposed by default.</summary>
-    SystemOnly
+    SystemOnly,
+
+    /// <summary>Writes reference data to a trusted, fixed memory scope. Requires an
+    /// IScopedAgentMemoryTool and an execution policy that permits memory writes.</summary>
+    MemoryWrite
+}
+
+/// <summary>Host assertion that a tool only mutates agent memory in a fixed scope, never business
+/// resources. Implementations must derive this scope in trusted code, not from model arguments.</summary>
+public interface IScopedAgentMemoryTool
+{
+    string WriteScope { get; }
 }
 
 /// <summary>Options for a private <see cref="AIAgent"/> owned by one <see cref="FabrCoreAgentProxy"/> activation.</summary>
@@ -60,6 +75,10 @@ public sealed record InternalAgentOptions
     public int MaxConcurrency { get; init; } = 2;
 
     public bool EnableContextCompaction { get; init; } = true;
+
+    /// <summary>Trusted host context providers, for example scoped memory recall. These must not
+    /// introduce tools or writes that bypass the specialist's declared capability policy.</summary>
+    public IEnumerable<AIContextProvider>? AIContextProviders { get; init; }
     public bool EnableOpenTelemetry { get; init; } = true;
     public bool EnableSensitiveTelemetryData { get; init; } = true;
 }

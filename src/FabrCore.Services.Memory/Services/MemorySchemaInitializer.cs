@@ -23,6 +23,17 @@ internal static class MemorySchemaInitializer
 {
     internal const string SchemaName = "mem";
 
+    internal static string GetExtractionReceiptDdl() => $"""
+        IF OBJECT_ID('{SchemaName}.MemoryExtractionReceipt', 'U') IS NULL
+        CREATE TABLE {SchemaName}.MemoryExtractionReceipt (
+            ScopeKey NVARCHAR(200) NOT NULL,
+            SourceHash CHAR(64) NOT NULL,
+            EntityIds NVARCHAR(MAX) NOT NULL,
+            CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+            CONSTRAINT PK_MemoryExtractionReceipt PRIMARY KEY (ScopeKey, SourceHash)
+        );
+        """;
+
     internal static string GetSchemaDdl() => $"""
         IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = '{SchemaName}')
             EXEC('CREATE SCHEMA [{SchemaName}]');
@@ -229,6 +240,7 @@ internal static class MemorySchemaInitializer
             ("MemorySummaryNode table", GetMemorySummaryNodeDdl(embeddingDimensions)),
             ("MemoryScope table", GetMemoryScopeDdl()),
             ("MemoryAuditLog table", GetMemoryAuditLogDdl()),
+            ("MemoryExtractionReceipt table", GetExtractionReceiptDdl()),
             ("Indexes", GetIndexesDdl())
         };
 

@@ -43,6 +43,10 @@ public class MemoryAwareCompactionService
         if (!config.Enabled || config.MaxContextTokens <= 0)
             return new CompactionResult { WasCompacted = false };
 
+        ct.ThrowIfCancellationRequested();
+        if (config.KeepLastN < 0 || config.Threshold <= 0 || config.Threshold > 1)
+            throw new ArgumentOutOfRangeException(nameof(config));
+
         // Flush pending messages
         if (provider.HasPendingMessages)
             await provider.FlushAsync(ct);
@@ -116,25 +120,6 @@ public class MemoryAwareCompactionService
             splitIndex++;
         }
 
-        if (splitIndex > 0)
-        {
-            var olderMessages = ConvertToChatMessages(messages.Take(splitIndex).ToList());
-            if (olderMessages.Count > 0)
-            {
-                try
-                {
-                    var extracted = await memoryService.ExtractMemoriesAsync(olderMessages, ct);
-                    memoriesExtracted = extracted.Count;
-                    _logger.LogInformation("Tier 2: extracted {Count} durable memories from {Messages} older messages",
-                        extracted.Count, olderMessages.Count);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Tier 2: memory extraction failed, continuing with Tier 3");
-                }
-            }
-        }
-
         // ─── Tier 3: Structured summarization (LLM, last resort) ────
 
         var toSummarize = messages.Take(splitIndex).ToList();
@@ -171,6 +156,27 @@ public class MemoryAwareCompactionService
                 EstimatedTokensBefore = tokensBefore
             };
         }
+
+        if (splitIndex > 0)
+        {
+            var olderMessages = ConvertToChatMessages(messages.Take(splitIndex).ToList());
+            if (olderMessages.Count > 0)
+            {
+                try
+                {
+                    var extracted = await memoryService.ExtractMemoriesAsync(olderMessages, ct);
+                    memoriesExtracted = extracted.Count;
+                    _logger.LogInformation("Tier 2: extracted {Count} durable memories from {Messages} older messages",
+                        extracted.Count, olderMessages.Count);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogWarning(ex, "Memory extraction failed; preserving original history");
+                    throw;
+                }
+            }
+        }
+
 
         _logger.LogInformation("Tier 3: summarizing {Count} messages, keeping {Keep} recent messages",
             toSummarize.Count, toKeep.Count);
@@ -216,9 +222,15 @@ public class MemoryAwareCompactionService
         // Kept recent messages
         newMessages.AddRange(toKeep);
 
-        await provider.ReplaceAndResetCacheAsync(newMessages);
-
         var tokensAfter = CompactionService.EstimateTokens(newMessages);
+        if (tokensAfter >= tokensBefore)
+        {
+            _logger.LogWarning("Compaction would not reduce history ({Before} -> {After}); preserving original history", tokensBefore, tokensAfter);
+            return new CompactionResult { WasCompacted = false, OriginalMessageCount = originalCount,
+                CompactedMessageCount = originalCount, EstimatedTokensBefore = tokensBefore, EstimatedTokensAfter = tokensBefore };
+        }
+        ct.ThrowIfCancellationRequested();
+        await provider.ReplaceAndResetCacheAsync(newMessages);
 
         _logger.LogInformation(
             "Compaction complete: {Before}->{After} messages, ~{TokensBefore}->~{TokensAfter} tokens, " +
@@ -246,7 +258,7 @@ public class MemoryAwareCompactionService
         if (_chatClientService is null)
         {
             _logger.LogWarning("No IFabrCoreChatClientService available — Tier 3 summarization skipped");
-            return "Compaction summary unavailable (no chat client configured).";
+            throw new InvalidOperationException("A chat client is required before history can be replaced.");
         }
 
         var chatClient = await _chatClientService.GetChatClient(modelConfigName);
@@ -254,7 +266,7 @@ public class MemoryAwareCompactionService
         var formattedMessages = FormatMessagesForSummary(messages);
 
         var memoryNote = memoriesExtracted > 0
-            ? $"\n\nIMPORTANT: {memoriesExtracted} durable memories were extracted and saved to the agent's memory store before this compaction. The agent can retrieve them via its recall tool. The summary does not need to carry those details — focus on transient state that didn't qualify as durable memory."
+            ? $"\n\n{memoriesExtracted} durable memories were saved before compaction and can be recalled later. Still preserve all decisions, constraints, identifiers and pending work needed to continue the active task; extraction does not guarantee that every relevant detail was saved."
             : "";
 
         var systemPrompt = $"""
@@ -298,7 +310,8 @@ public class MemoryAwareCompactionService
             new ChatOptions { MaxOutputTokens = options.Compaction.SummaryMaxTokens },
             ct);
 
-        return response.Text ?? "Unable to generate summary.";
+        if (string.IsNullOrWhiteSpace(response.Text)) throw new InvalidOperationException("Empty compaction summary; history preserved.");
+        return response.Text;
     }
 
     private static string FormatMessagesForSummary(List<StoredChatMessage> messages)
@@ -329,7 +342,9 @@ public class MemoryAwareCompactionService
         var result = new List<ChatMessage>();
         foreach (var msg in stored)
         {
-            if (string.Equals(msg.Role, "tool", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(msg.Role, "system", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(msg.AuthorName, "agent-memory", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(msg.Role, "tool", StringComparison.OrdinalIgnoreCase))
                 continue; // Tool results don't carry user/assistant conversation content
 
             var role = string.Equals(msg.Role, "user", StringComparison.OrdinalIgnoreCase)

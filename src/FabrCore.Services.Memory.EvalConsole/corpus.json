@@ -1,0 +1,22 @@
+{
+  "version": "fabrcore-memory-v1",
+  "memories": [
+    {"title":"Delivery preference", "type":"Instruction", "content":"User Mira prefers release updates by email, never by telephone."},
+    {"title":"Atlas production region", "type":"Fact", "content":"As of September 7, 2026, Atlas production runs in westus3. The old eastus deployment was retired."},
+    {"title":"Atlas deployment procedure", "type":"Procedural", "content":"To deploy Atlas: first validate the migration, then take a backup, then deploy the service, finally run the health probe."},
+    {"title":"Atlas owner", "type":"Fact", "content":"Mira owns Atlas. Mira's escalation code is AMBER-42."},
+    {"title":"Atlas checkpoint", "type":"Observation", "content":"On September 7, 2026, Atlas migration batch 17 completed. Resume at batch 18. Approval of the final cutover is still pending."},
+    {"title":"Atlas previous checkpoint", "type":"Observation", "content":"On September 6, 2026, Atlas migration batch 9 completed.", "snapshot":true},
+    {"title":"Expense policy", "type":"Rule", "content":"Habitat line items must be classified as business meal expenses."},
+    {"title":"Orion region", "type":"Fact", "content":"Orion production runs in northeurope. Orion's owner is Tomas."}
+  ],
+  "questions": [
+    {"id":"preference", "category":"single-session", "query":"How does Mira want release updates delivered?", "required":["email"], "forbidden":[]},
+    {"id":"current-region", "category":"knowledge-update", "query":"What is the current Atlas production region?", "required":["westus3"], "forbidden":[]},
+    {"id":"workflow", "category":"procedural", "query":"What steps are required to deploy Atlas?", "required":["migration","backup","health"], "forbidden":[]},
+    {"id":"owner-preference", "category":"multi-session", "query":"Who owns Atlas and how should we send that owner release updates?", "required":["Mira","email"], "forbidden":[]},
+    {"id":"resume", "category":"continuity", "query":"Where should the Atlas migration resume and is cutover approved?", "required":["18","pending"], "forbidden":[]},
+    {"id":"historical", "category":"temporal", "query":"What Atlas migration batch was complete on September 6, 2026?", "required":["9"], "forbidden":[]},
+    {"id":"unknown", "category":"abstention", "query":"What is Mira's favorite ice cream flavor?", "required":[], "forbidden":[], "empty":true}
+  ]
+}

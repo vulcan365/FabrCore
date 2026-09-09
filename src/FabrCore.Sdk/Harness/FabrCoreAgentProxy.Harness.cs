@@ -242,7 +242,8 @@ public abstract partial class FabrCoreAgentProxy
         var compactionRegistration = new ChatHistoryCompactionRegistration
         {
             Provider = historyProvider,
-            ChatClientConfigName = chatClientConfigName
+            ChatClientConfigName = chatClientConfigName,
+            HistoryCompaction = options.HistoryCompaction
         };
         _chatHistoryCompactionRegistrations.Add(compactionRegistration);
         await EnsureCompactionInitializedAsync(compactionRegistration);

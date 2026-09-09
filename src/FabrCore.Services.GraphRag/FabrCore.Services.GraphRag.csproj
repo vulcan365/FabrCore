@@ -23,4 +23,8 @@
         <InternalsVisibleTo Include="FabrCore.Services.GraphRag.EvalConsole" />
 	</ItemGroup>
 
+	<ItemGroup>
+	  <PackageReference Update="MinVer" Version="8.0.0" />
+	</ItemGroup>
+
 </Project>

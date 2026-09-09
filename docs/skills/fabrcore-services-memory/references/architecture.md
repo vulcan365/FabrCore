@@ -2,34 +2,65 @@
 
 ## Persistence and retrieval
 
-`AddAgentMemoryServices` registers singleton infrastructure and a cached facade per trimmed scope key. SQL creates the `mem` schema with `MemoryEntity` (graph node), `MemoryChunk` (content and VECTOR embedding), `MemoryRelationship` (graph edge), `MemoryScope`, `MemoryAuditLog`, and `MemorySummaryNode`. No GraphRag service is required. The hot index is JSON in an internal `__MEMORY_INDEX__` sentinel entity.
+The service stores scoped entities, chunks, relationships, a bounded index, extraction
+receipts, and optional derived summaries in SQL Server 2025 / Azure SQL with the required
+VECTOR and SQL Graph support. Embedding dimensions must match the configured database/model.
+GraphRag is not a prerequisite.
 
-Save creates Warm content plus a bounded index pointer. Same-type similarity matching can update an active entity; snapshots and metadata-bearing saves skip merging. Header scans exclude Cold. Default recall uses a planner and header selection; unavailable chat selection falls back to recency. Graph expansion may add additional memories beyond the selection limit. Archive vector search spans all temperatures. Missing embeddings make a memory unavailable to vector search, although active memories remain accessible through header selection.
+IAgentMemoryProvider caches services per trimmed scope in process. SQL persists knowledge
+across service instances; a stable scope preserves access across agent activations. Host
+code must authorize scope bindings. A scope key alone is not a tenant security policy.
 
-Summary-tree building and LLM planning are opt-in. Summary nodes are derived text and can be stale after edits/deletions until rebuilt. `FormatRecallContext` includes hot pointers, selected content, archive matches, summary results, and freshness warnings. The returned text is not injected automatically.
+Hot is a bounded pointer index, Warm is active durable content, and Cold is archived
+retained content. Ordinary recall selects active headers and primary chunks. Archive search
+can retrieve all retained embeddings. Graph expansion can add related memories beyond the
+initial selection count. Semantic candidates, matched evidence, LLM planning, and summary
+trees are optional, not implied by registration.
 
-## Concurrency and failure behavior
+The harness uses a Microsoft Agent Framework context provider for bounded recall before
+model runs. Persisted-history compaction is wired separately by WithMemoryCompaction, or
+together through WithMemoryLifecycle. Context reduction, persisted chat history, and durable
+memory serve different purposes; none should silently substitute for the others.
 
-Hot-index read/modify/write uses a SQL application lock per scope. That protects index writers, not an entire save or merge transaction. Entity/chunk/index writes are separate operations; partial failures and concurrent updates can require reconciliation. Merge-on-save is not idempotent and has no optimistic concurrency token. Serialize conflicting application updates where needed; use returned IDs instead of retries that assume exactly-once behavior.
+## Mutations and retries
 
-The provider cache is process-local and can be evicted. Persistence survives a process restart if the same database and scope are used. A caller-selected scope is a namespace, not a tenant access check: derive it in trusted application code and enforce access before selecting shared scopes.
+The built-in SQL facade performs related mutations in a per-scope transaction with an
+application lock. Entity/chunk/index changes and derived-summary invalidation participate in
+that mutation. Extraction receipts record the source-history hash and resulting entity IDs
+in the transaction, allowing retries of the same committed extraction to reuse results.
 
-Startup fails on missing connection configuration, unsupported schema DDL, or missing embeddings registration (unless explicitly relaxed). Runtime persistence errors can propagate. Audit is best-effort and can fail independently. Do not equate graceful LLM fallbacks with guaranteed availability.
+These boundaries do not establish universal conflict-free memory. Concurrent writers can
+still disagree semantically; there is no public optimistic-version parameter that reconciles
+every correction automatically. Prefer explicit ID updates and application ownership rules.
+Different extraction histories are different receipt inputs.
 
-## Consolidation and retention
+Callbacks run after commit, so a callback failure can be reported after data is committed.
+Audit is best effort. Do not blindly assume every exception means nothing was persisted.
+Low-level store operations and custom store implementations need their own guarantees.
 
-Consolidation deduplicates compatible active memories, archives the source, prunes stale candidates to Cold, resolves contradictions, and enforces index caps. Snapshots, differing types, metadata-bearing entries, and already-Cold rows are excluded from deduplication. Instructions are excluded from age pruning. Without a merge model, the archived source still preserves its original content. Consolidation does not cap total SQL storage or provide a retention scheduler.
+Extraction and compaction failures propagate. Memory-aware compaction leaves original
+history available when extraction fails. Evaluate cancellation, extraction retries, shared
+corrections, and crash recovery against the deployed SQL and Orleans configuration.
 
-`ForgetMemoryAsync` deletes entity content and its edges, and removes its index pointer. It does not erase existing conversation copies, audit records, or summary text. Applications requiring complete erasure must coordinate those stores and derived artifacts.
+## Retention and summaries
 
-## Deployment checks
+Knowledge-changing SQL mutations invalidate derived summary nodes in that scope; rebuild
+them when needed if summary trees are enabled. They do not leave a deleted fact intentionally
+available through the existing derived summary tree.
 
-Use the test executable runner from the repository root:
+Consolidation is explicit by default and can archive candidates. MemoryFileCap is a
+consolidation trigger/scan bound, not a hard storage quota or scheduled deletion policy.
+Forget removes the entity, chunks, relationships and invalidates derived summaries.
+Audit, chat histories, backups, telemetry, and external copies require separate erasure rules.
 
-```powershell
-dotnet run --project src/FabrCore.Services.Memory.Tests/FabrCore.Services.Memory.Tests.csproj -- --filter 'TestCategory!=Integration&TestCategory!=Evaluation'
-dotnet run --project src/FabrCore.Services.Memory.Tests/FabrCore.Services.Memory.Tests.csproj -- --filter 'TestCategory=Integration'
-dotnet run --project src/FabrCore.Services.Memory.Tests/FabrCore.Services.Memory.Tests.csproj -- --filter 'TestCategory=Evaluation'
-```
+## Release and operations
 
-SQL tests require `FABRCORE_MEMORY_TEST_CONNECTION_STRING` or documented test credentials. Evaluations additionally require configured chat/embedding models. Skipped tests are not evidence that SQL persistence or model quality passed. Before rollout, exercise restart persistence, scope isolation, save/update/archive/restore/delete, concurrent writers, and retrieval relevance with representative data. Confirm database backup/restore and account for model/embedding costs.
+Keep the [frozen defaults](../../../memory-release-defaults.md) until a measured change is
+accepted. Run scripts/Run-MemoryEvals.ps1 from the repository for sequential mode comparisons;
+retain contemporary controls and do not automatically promote a candidate baseline.
+
+Unit coverage is not production certification. Release checks must include the intended
+SQL/model stack, bounded background runs, failures/cancellation, concurrent scope mutations,
+and persistence recovery. Monitor recall quality, stale facts, storage growth, latency, and
+memory context/model cost. Long-running agents also require checkpoints, scheduling,
+permissions, recovery, and execution budgets. Memory alone does not guarantee endless execution.

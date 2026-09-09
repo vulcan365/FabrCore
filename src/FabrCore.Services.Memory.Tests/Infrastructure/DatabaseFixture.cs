@@ -76,6 +76,7 @@ internal sealed class DatabaseFixture : IAsyncDisposable
         foreach (var sql in new[]
                  {
                      "DELETE FROM mem.MemoryRelationship WHERE ScopeKey = @scopeKey",
+                     "DELETE FROM mem.MemoryExtractionReceipt WHERE ScopeKey = @scopeKey",
                      "DELETE FROM mem.MemoryChunk WHERE ScopeKey = @scopeKey",
                      "DELETE FROM mem.MemorySummaryNode WHERE ScopeKey = @scopeKey",
                      "DELETE FROM mem.MemoryEntity WHERE ScopeKey = @scopeKey",

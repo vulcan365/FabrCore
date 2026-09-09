@@ -43,10 +43,21 @@ public class MemoryEntry
     // ─── Loaded from chunks and relationships (not stored on entity table) ───
 
     /// <summary>
-    /// Full content of the memory, populated from the primary chunk (ChunkIndex=0).
+    /// Content populated from the primary chunk (ChunkIndex=0) by ordinary loading.
+    /// Opt-in matched-chunk recall returns bounded evidence; inspect RecalledChunkId and IsContentTruncated.
     /// Not stored on the entity table — loaded from MemoryChunk when the entity is retrieved.
     /// </summary>
     public string? Content { get; set; }
+
+    /// <summary>Source chunk for opt-in matched-chunk recall. Null for ordinary primary-body loading.</summary>
+    public Guid? RecalledChunkId { get; set; }
+    public int? RecalledChunkIndex { get; set; }
+    /// <summary>True when the recalled body is a bounded prefix of its source chunk.</summary>
+    public bool IsContentTruncated { get; set; }
+
+    /// <summary>Per-chunk evidence for opt-in multi-chunk recall. Content joins these bounded bodies.
+    /// Null for ordinary loading; omitted chunks are not indicated by IsContentTruncated.</summary>
+    public IReadOnlyList<MemoryChunkEvidence>? RecalledChunks { get; set; }
 
     /// <summary>
     /// Vector embedding, populated from the primary chunk.

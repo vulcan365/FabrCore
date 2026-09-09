@@ -96,7 +96,7 @@ Check:
 
 Possible causes:
 
-- `extractionModelName` was omitted.
+- `EnableExtraction=false`, or no explicit/conventional model can be resolved.
 - `IFabrCoreChatClientService` is not registered.
 - The named model is missing from `fabrcore.json`.
 - Source content is too small or not meaningful.
@@ -104,7 +104,7 @@ Possible causes:
 
 Fix:
 
-- Pass `extractionModelName` to `AddGraphRagServices`.
+- Check `EnableExtraction`; verify the explicit alias or fallback `graphrag`/`default`.
 - Confirm the model exists and can be resolved.
 - Check `SourceDocumentDto.Status` and `ErrorMessage`.
 - Check ingestion metrics and action audit logs.
@@ -117,16 +117,44 @@ GraphRAG tracks source identity using:
 - `SourceKind`
 - `SourceKey`
 
-It also tracks content hash and version. If content is unchanged, ingestion may
+It also tracks content hash, extraction-instruction hash, and version. If content and
+instructions are unchanged, ingestion may
 return `Reused = true`.
 
 This is expected and avoids rewriting graph data unnecessarily.
 
 ## Microsoft.Testing.Platform Test Invocation
 
-If `dotnet test` reports old VSTest target errors, run tests from the directory
-that contains `global.json` and use `--project`:
+Use the GraphRAG executable test project in this repository:
 
 ```powershell
-dotnet test --project FabrCore.Tests\FabrCore.Tests.csproj --filter "FullyQualifiedName~GraphRag"
+dotnet run --project src/FabrCore.Services.GraphRag.Tests --no-restore -- --filter FullyQualifiedName~Unit
 ```
+
+## Slow Ingestion Or Missing Edges
+
+Inspect model resolution, phase metrics, provider calls/output, retries and persisted
+contributions. Cached chat-client instances are not cached responses. Provider prompt
+caching still generates output. Parallel stage times are not additive wall time.
+Reuse one ingestion service and bound document concurrency rather than giving every
+document a new set of request limits.
+
+Check `Status` and `ErrorMessage`: enabled document-plan extraction failures should
+not be mistaken for successful complete graphs. A valid JSON response can still have
+wrong relationships or missing endpoints; persistence requires resolvable endpoint
+names. `ResolveExtractionEndpointAliases` is an opt-in explicit acronym resolver,
+not fuzzy entity creation. Smoke retrieval success does not prove factual recall.
+
+A policy-obligation mismatch can trigger full split retries despite valid JSON.
+That option remains experimental. A suffix `[GraphRAG obligation v1: value]` in an
+edge description comes from that experimental storage format, not a database column.
+For remaining experiments and settings, read [ingestion and evaluations](ingestion-and-evals.md).
+
+## Schema Or Cache Options Do Not Take Effect
+
+Schema extraction requires a local `IFabrCoreChatClientService`; the Host API fallback
+does not carry schemas. Check flag dependencies before enabling combinations.
+`CacheTaxonomyResponses` only has effect with `UseExtractionResultCache`.
+Embedding caching requires an explicit decorator; there is no automatic production
+`UseEmbeddingCache` switch. Unchanged-document reuse may bypass the new extraction
+configuration entirely; force rebuilding when testing a setting change.

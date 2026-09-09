@@ -16,6 +16,265 @@ namespace FabrCore.Services.Memory.Tests.Unit;
 public sealed class AgentMemoryServiceTests
 {
     [TestMethod]
+    [DataRow(false, false)]
+    [DataRow(true, false)]
+    [DataRow(false, true)]
+    public async Task SemanticRecallCombinesOldAndRecentCandidatesBeforeSelection(bool diverse, bool hybrid)
+    {
+        var f = new ServiceFixture();
+        f.Options.Retrieval.UseSemanticCandidates = true;
+        f.Options.Retrieval.DiversifySemanticCandidates = diverse;
+        f.Options.Retrieval.HybridSemanticCandidates = hybrid;
+        f.Options.Retrieval.SemanticCandidateLimit = 2;
+        f.Options.Retrieval.RecentCandidateLimit = 1;
+        f.Planner.CreatePlanAsync(Arg.Any<string>(), Arg.Any<MemoryIndex>(), Arg.Any<CancellationToken>())
+            .Returns(new RetrievalPlan { Steps = [RetrievalStep.HeaderScanLlmSelect] });
+        var old = new MemoryHeader { MemoryId = Guid.NewGuid(), Title = "old fact" };
+        var recent = new MemoryHeader { MemoryId = Guid.NewGuid(), Title = "recent fact" };
+        f.Store.GenerateEmbeddingAsync("query", Arg.Any<CancellationToken>()).Returns(new float[] { 1, 0 });
+        ((IMemoryCandidateStore)f.Store).FindCandidateHeadersAsync(f.Scope, Arg.Any<float[]>(), 2,
+            Arg.Any<IReadOnlyCollection<Guid>?>(), Arg.Any<CancellationToken>()).Returns(new[] { old, recent });
+        ((IMemoryCandidateStore)f.Store).FindDiverseCandidateHeadersAsync(f.Scope, Arg.Any<float[]>(), 2,
+            Arg.Any<IReadOnlyCollection<Guid>?>(), Arg.Any<CancellationToken>()).Returns(new[] { old, recent });
+        ((IMemoryCandidateStore)f.Store).FindHybridCandidateHeadersAsync(f.Scope, Arg.Any<float[]>(), 2,
+            Arg.Any<IReadOnlyCollection<Guid>?>(), Arg.Any<CancellationToken>()).Returns(new[] { old, recent });
+        f.Retriever.ScanMemoryHeadersAsync(f.Scope, 1, null, Arg.Any<CancellationToken>()).Returns(new[] { recent });
+        await f.Service.RecallAsync("query");
+        await f.Store.Received(1).GenerateEmbeddingAsync("query", Arg.Any<CancellationToken>());
+        if (diverse || hybrid) await ((IMemoryCandidateStore)f.Store).DidNotReceiveWithAnyArgs()
+            .FindCandidateHeadersAsync(default!, default!, default);
+        await f.Retriever.Received(1).SelectRelevantMemoriesAsync("query",
+            Arg.Is<IReadOnlyList<MemoryHeader>>(h => h.Count == 2 && h[0].MemoryId == old.MemoryId && h[1].MemoryId == recent.MemoryId),
+            f.Options.Retrieval.WarmRetrievalLimit, null, Arg.Any<CancellationToken>());
+    }
+
+    [TestMethod]
+    [DataRow("same", true)]
+    [DataRow("new-body", false)]
+    [DataRow("truncated", false)]
+    [DataRow("mixed", false)]
+    [DataRow("changed-date", false)]
+    [DataRow("changed-title", false)]
+    [DataRow("empty", false)]
+    public async Task RedundantSelectionSkipRequiresEveryBodyToMatchOriginalManifest(string condition, bool skips)
+    {
+        var f = new ServiceFixture();
+        f.Options.Retrieval.UseSemanticCandidates = true;
+        f.Options.Retrieval.UseMatchedChunkEvidence = true;
+        f.Options.Retrieval.MatchedChunksPerMemory = 8;
+        f.Options.Retrieval.SelectMatchedChunks = true;
+        f.Options.Retrieval.SkipRedundantChunkSelection = true;
+        f.Options.Retrieval.RecallGraphHops = 0;
+        f.Options.Retrieval.RecentCandidateLimit = 0;
+        f.Planner.CreatePlanAsync(Arg.Any<string>(), Arg.Any<MemoryIndex>(), Arg.Any<CancellationToken>())
+            .Returns(new RetrievalPlan { Steps = [RetrievalStep.HeaderScanLlmSelect] });
+        var headers = Enumerable.Range(0, 2).Select(i => new MemoryHeader {
+            MemoryId = Guid.NewGuid(), Title = $"title {i}", Description = $"body {i}" }).ToArray();
+        var evidence = headers.ToDictionary(h => h.MemoryId, h => (IReadOnlyList<MemoryChunkEvidence>)new[] {
+            new MemoryChunkEvidence(Guid.NewGuid(), 0, h.Description!, false) });
+        var first = evidence[headers[0].MemoryId][0];
+        if (condition == "new-body") first = first with { Content = "new evidence not shown to the selector" };
+        if (condition == "truncated") first = first with { IsTruncated = true };
+        if (condition == "empty") { first = first with { Content = "" }; headers[0].Description = ""; }
+        evidence[headers[0].MemoryId] = condition == "mixed"
+            ? [first, new MemoryChunkEvidence(Guid.NewGuid(), 1, "another fact", false)] : [first];
+        f.Store.GenerateEmbeddingAsync("query", Arg.Any<CancellationToken>()).Returns(new float[] { 1, 0 });
+        var store = (IMemoryCandidateStore)f.Store;
+        store.FindCandidateHeadersAsync(f.Scope, Arg.Any<float[]>(), 20, null, Arg.Any<CancellationToken>()).Returns(headers);
+        f.Retriever.SelectRelevantMemoriesAsync("query", Arg.Any<IReadOnlyList<MemoryHeader>>(), Arg.Any<int>(), null, Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<Guid>());
+        f.Retriever.SelectRelevantMemoriesAsync("query", Arg.Any<IReadOnlyList<MemoryHeader>>(), 5, null, Arg.Any<CancellationToken>())
+            .Returns(headers.Select(h => h.MemoryId).ToArray());
+        store.GetMatchedChunksAsync(f.Scope, Arg.Any<float[]>(), Arg.Any<IReadOnlyCollection<Guid>>(), 8, 510, Arg.Any<CancellationToken>())
+            .Returns(evidence);
+        f.Store.GetEntityByIdAsync(f.Scope, Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(call => {
+            var header = headers.Single(h => h.MemoryId == call.ArgAt<Guid>(1));
+            return new MemoryEntry { Id = header.MemoryId,
+                Title = condition == "changed-title" ? "new title" : header.Title,
+                UpdatedAt = condition == "changed-date" ? header.UpdatedAt.AddSeconds(1) : header.UpdatedAt,
+                Description = evidence[header.MemoryId][0].Content };
+        });
+        var recall = await f.Service.RecallAsync("query");
+        Assert.HasCount(skips ? 2 : 0, recall.WarmMemories);
+        Assert.AreEqual(skips ? 1 : 2, f.Retriever.ReceivedCalls().Count(c => c.GetMethodInfo().Name == nameof(IMemoryRetriever.SelectRelevantMemoriesAsync)));
+        await f.Store.Received(1).GenerateEmbeddingAsync("query", Arg.Any<CancellationToken>());
+    }
+
+    [TestMethod]
+    [DataRow(0, false)]
+    [DataRow(3, false)]
+    [DataRow(2, true)]
+    [DataRow(3, true)]
+    [DataRow(6, true)]
+    public async Task ChunkSelectionOnlyKeepsOfferedEvidenceAndCanAbstainOrCancel(int previewLength, bool includeTail)
+    {
+        var f = new ServiceFixture();
+        f.Options.Retrieval.UseSemanticCandidates = true;
+        f.Options.Retrieval.UseMatchedChunkEvidence = true;
+        f.Options.Retrieval.MatchedChunksPerMemory = 3;
+        f.Options.Retrieval.SelectMatchedChunks = true;
+        f.Options.Retrieval.ChunkSelectionPreviewCharacters = previewLength;
+        f.Options.Retrieval.ChunkSelectionIncludeTail = includeTail;
+        f.Options.Retrieval.RecallGraphHops = 0;
+        f.Options.Retrieval.RecentCandidateLimit = 0;
+        f.Planner.CreatePlanAsync(Arg.Any<string>(), Arg.Any<MemoryIndex>(), Arg.Any<CancellationToken>())
+            .Returns(new RetrievalPlan { Steps = [RetrievalStep.HeaderScanLlmSelect] });
+        var id = Guid.NewGuid();
+        var chunks = Enumerable.Range(1, 3).Select(i => new MemoryChunkEvidence(Guid.NewGuid(), i, $"fact {i}", false)).ToArray();
+        f.Store.GenerateEmbeddingAsync("query", Arg.Any<CancellationToken>()).Returns(new float[] { 1, 0 });
+        var store = (IMemoryCandidateStore)f.Store;
+        store.FindCandidateHeadersAsync(f.Scope, Arg.Any<float[]>(), 20, null, Arg.Any<CancellationToken>())
+            .Returns(new[] { new MemoryHeader { MemoryId = id } });
+        f.Retriever.SelectRelevantMemoriesAsync("query", Arg.Any<IReadOnlyList<MemoryHeader>>(), 5, null, Arg.Any<CancellationToken>()).Returns(new[] { id });
+        f.Retriever.SelectRelevantMemoriesAsync("query", Arg.Any<IReadOnlyList<MemoryHeader>>(), 3, null, Arg.Any<CancellationToken>())
+            .Returns(new[] { chunks[1].ChunkId, Guid.NewGuid() });
+        store.GetMatchedChunksAsync(f.Scope, Arg.Any<float[]>(), Arg.Any<IReadOnlyCollection<Guid>>(), 3, 1364, Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<Guid, IReadOnlyList<MemoryChunkEvidence>> { [id] = chunks });
+        f.Store.GetEntityByIdAsync(f.Scope, id, Arg.Any<CancellationToken>()).Returns(_ => new MemoryEntry { Id = id });
+        var recall = await f.Service.RecallAsync("query");
+        Assert.HasCount(1, recall.WarmMemories);
+        Assert.AreEqual("fact 2", recall.WarmMemories[0].Content);
+        Assert.HasCount(1, recall.WarmMemories[0].RecalledChunks!);
+        Assert.AreEqual(chunks[1].ChunkId, recall.WarmMemories[0].RecalledChunks![0].ChunkId);
+        Assert.IsFalse(recall.WarmMemories[0].RecalledChunks![0].IsTruncated);
+        await f.Retriever.Received(1).SelectRelevantMemoriesAsync("query",
+            Arg.Is<IReadOnlyList<MemoryHeader>>(manifest => manifest.Count == 3 && manifest.All(h =>
+                h.Description == (previewLength == 0 || previewLength == 6 ? chunks.Single(c => c.ChunkId == h.MemoryId).Content
+                    : includeTail ? (previewLength == 2 ? "f" : "fa") + "\n[Middle omitted from selection preview.]\n" + chunks.Single(c => c.ChunkId == h.MemoryId).Content.Substring(5)
+                    : "fac\n[Selection preview truncated; remaining evidence not shown.]"))),
+            3, null, Arg.Any<CancellationToken>());
+        await f.Store.Received(1).GenerateEmbeddingAsync("query", Arg.Any<CancellationToken>());
+        f.Retriever.SelectRelevantMemoriesAsync("query", Arg.Any<IReadOnlyList<MemoryHeader>>(), 3, null, Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<Guid>());
+        Assert.IsEmpty((await f.Service.RecallAsync("query")).WarmMemories);
+        f.Retriever.SelectRelevantMemoriesAsync("query", Arg.Any<IReadOnlyList<MemoryHeader>>(), 3, null, Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyList<Guid>>(_ => throw new OperationCanceledException());
+        await Assert.ThrowsAsync<OperationCanceledException>(() => f.Service.RecallAsync("query"));
+    }
+
+    [TestMethod]
+    public async Task MultipleMatchedChunksEnforceSharedBudgetAndPreserveSources()
+    {
+        var f = new ServiceFixture();
+        f.Options.Retrieval.UseSemanticCandidates = true;
+        f.Options.Retrieval.UseMatchedChunkEvidence = true;
+        f.Options.Retrieval.MatchedChunksPerMemory = 5;
+        f.Options.Retrieval.RecallGraphHops = 0;
+        f.Options.Retrieval.RecentCandidateLimit = 0;
+        f.Planner.CreatePlanAsync(Arg.Any<string>(), Arg.Any<MemoryIndex>(), Arg.Any<CancellationToken>())
+            .Returns(new RetrievalPlan { Steps = [RetrievalStep.HeaderScanLlmSelect] });
+        var ids = Enumerable.Range(0, 5).Select(_ => Guid.NewGuid()).ToArray();
+        f.Store.GenerateEmbeddingAsync("query", Arg.Any<CancellationToken>()).Returns(new float[] { 1, 0 });
+        var store = (IMemoryCandidateStore)f.Store;
+        store.FindCandidateHeadersAsync(f.Scope, Arg.Any<float[]>(), 20, null, Arg.Any<CancellationToken>())
+            .Returns(ids.Select(id => new MemoryHeader { MemoryId = id }).ToArray());
+        f.Retriever.SelectRelevantMemoriesAsync("query", Arg.Any<IReadOnlyList<MemoryHeader>>(), 5, null, Arg.Any<CancellationToken>()).Returns(ids);
+        // Custom stores can exceed both requested bounds. The service must enforce them again.
+        store.GetMatchedChunksAsync(f.Scope, Arg.Any<float[]>(), Arg.Any<IReadOnlyCollection<Guid>>(), 5, 478, Arg.Any<CancellationToken>())
+            .Returns(ids.ToDictionary(id => id, id => (IReadOnlyList<MemoryChunkEvidence>)Enumerable.Range(1, 8)
+                .Select(i => new MemoryChunkEvidence(Guid.NewGuid(), i, new string('x', 5000), false)).ToArray()));
+        f.Store.GetEntityByIdAsync(f.Scope, Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(call => new MemoryEntry { Id = call.ArgAt<Guid>(1), ScopeKey = f.Scope });
+        var recall = await f.Service.RecallAsync("query");
+        Assert.HasCount(5, recall.WarmMemories);
+        Assert.IsLessThanOrEqualTo(12000, recall.WarmMemories.Sum(m => m.Content!.Length));
+        Assert.IsTrue(recall.WarmMemories.All(m => m.RecalledChunks!.Count == 5 && m.RecalledChunkId is null
+            && m.IsContentTruncated && m.RecalledChunks.All(c => c.Content.Length == 478 && c.IsTruncated)));
+        var formatted = f.Service.FormatRecallContext(recall);
+        foreach (var chunk in recall.WarmMemories.SelectMany(m => m.RecalledChunks!))
+            StringAssert.Contains(formatted, $"Source chunk: {chunk.ChunkId}; index: {chunk.ChunkIndex}");
+        await f.Store.Received(1).GenerateEmbeddingAsync("query", Arg.Any<CancellationToken>());
+        await f.Store.DidNotReceiveWithAnyArgs().GetPrimaryChunkAsync(default!, default);
+        store.GetMatchedChunksAsync(f.Scope, Arg.Any<float[]>(), Arg.Any<IReadOnlyCollection<Guid>>(), 5, 478, Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyDictionary<Guid, IReadOnlyList<MemoryChunkEvidence>>>(_ => throw new OperationCanceledException());
+        await Assert.ThrowsAsync<OperationCanceledException>(() => f.Service.RecallAsync("query"));
+    }
+
+    [TestMethod]
+    public async Task MatchedRecallUsesOneEmbeddingAndCapsBodiesWithProvenance()
+    {
+        var f = new ServiceFixture();
+        f.Options.Retrieval.UseSemanticCandidates = true;
+        f.Options.Retrieval.UseMatchedChunkEvidence = true;
+        f.Options.Retrieval.RecallGraphHops = 0;
+        f.Options.Retrieval.RecentCandidateLimit = 0;
+        f.Planner.CreatePlanAsync(Arg.Any<string>(), Arg.Any<MemoryIndex>(), Arg.Any<CancellationToken>())
+            .Returns(new RetrievalPlan { Steps = [RetrievalStep.HeaderScanLlmSelect] });
+        var ids = Enumerable.Range(0, 5).Select(_ => Guid.NewGuid()).ToArray();
+        f.Store.GenerateEmbeddingAsync("query", Arg.Any<CancellationToken>()).Returns(new float[] { 1, 0 });
+        var store = (IMemoryCandidateStore)f.Store;
+        store.FindCandidateHeadersAsync(f.Scope, Arg.Any<float[]>(), 20, null, Arg.Any<CancellationToken>())
+            .Returns(ids.Select(id => new MemoryHeader { MemoryId = id }).ToArray());
+        f.Retriever.SelectRelevantMemoriesAsync("query", Arg.Any<IReadOnlyList<MemoryHeader>>(), 5, null, Arg.Any<CancellationToken>()).Returns(ids);
+        store.GetMatchedChunkEvidenceAsync(f.Scope, Arg.Any<float[]>(), Arg.Any<IReadOnlyCollection<Guid>>(), 2400, Arg.Any<CancellationToken>())
+            .Returns(ids.ToDictionary(id => id, id => new MemoryChunkEvidence(id, 1, new string('x', 5000), false)));
+        f.Store.GetEntityByIdAsync(f.Scope, Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(call => new MemoryEntry { Id = call.ArgAt<Guid>(1), ScopeKey = f.Scope });
+        var recall = await f.Service.RecallAsync("query");
+        Assert.HasCount(5, recall.WarmMemories);
+        Assert.AreEqual(12000, recall.WarmMemories.Sum(m => m.Content!.Length));
+        Assert.IsTrue(recall.WarmMemories.All(m => m.RecalledChunkId == m.Id && m.RecalledChunkIndex == 1 && m.IsContentTruncated));
+        StringAssert.Contains(f.Service.FormatRecallContext(recall), "Source chunk:");
+        await f.Store.Received(1).GenerateEmbeddingAsync("query", Arg.Any<CancellationToken>());
+        await f.Store.DidNotReceiveWithAnyArgs().GetPrimaryChunkAsync(default!, default);
+    }
+
+    [TestMethod]
+    public async Task SelectionPreviewsShareTotalBudgetAndDoNotMutateHeaders()
+    {
+        var f = new ServiceFixture();
+        f.Options.Retrieval.UseSemanticCandidates = true;
+        f.Options.Retrieval.SemanticCandidateLimit = 200;
+        f.Options.Retrieval.RecentCandidateLimit = 0;
+        f.Options.Retrieval.SelectionPreviewCharacters = 512;
+        f.Planner.CreatePlanAsync(Arg.Any<string>(), Arg.Any<MemoryIndex>(), Arg.Any<CancellationToken>())
+            .Returns(new RetrievalPlan { Steps = [RetrievalStep.HeaderScanLlmSelect] });
+        var headers = Enumerable.Range(0, 200).Select(_ => new MemoryHeader { MemoryId = Guid.NewGuid() }).ToArray();
+        var store = (IMemoryCandidateStore)f.Store;
+        f.Store.GenerateEmbeddingAsync("query", Arg.Any<CancellationToken>()).Returns(new float[] { 1, 0 });
+        store.FindCandidateHeadersAsync(f.Scope, Arg.Any<float[]>(), 200, null, Arg.Any<CancellationToken>()).Returns(headers);
+        store.GetCandidatePreviewsAsync(f.Scope, Arg.Any<IReadOnlyCollection<Guid>>(), 20, Arg.Any<CancellationToken>())
+            .Returns(headers.ToDictionary(h => h.MemoryId, _ => new string('x', 512)));
+        await f.Service.RecallAsync("query");
+        await f.Retriever.Received(1).SelectRelevantMemoriesAsync("query",
+            Arg.Is<IReadOnlyList<MemoryHeader>>(h => h.Count == 200 && h.All(x => x.Description == "\nBody preview: " + new string('x', 20))),
+            f.Options.Retrieval.WarmRetrievalLimit, null, Arg.Any<CancellationToken>());
+        Assert.IsTrue(headers.All(h => h.Description is null));
+    }
+
+    [TestMethod]
+    public async Task ConflictingSemanticStrategiesFailBeforeEmbedding()
+    {
+        var f = new ServiceFixture();
+        f.Options.Retrieval.UseSemanticCandidates = true;
+        f.Options.Retrieval.DiversifySemanticCandidates = true;
+        f.Options.Retrieval.HybridSemanticCandidates = true;
+        f.Planner.CreatePlanAsync(Arg.Any<string>(), Arg.Any<MemoryIndex>(), Arg.Any<CancellationToken>())
+            .Returns(new RetrievalPlan { Steps = [RetrievalStep.HeaderScanLlmSelect] });
+        await Assert.ThrowsAsync<InvalidOperationException>(() => f.Service.RecallAsync("query"));
+        await f.Store.DidNotReceiveWithAnyArgs().GenerateEmbeddingAsync(default!);
+    }
+
+    [TestMethod]
+    public async Task ExtractionRejectsMalformedOutputInsteadOfReportingEmptySuccess()
+    {
+        using var services = new ServiceCollection().AddSingleton<IFabrCoreChatClientService>(
+            new TestChatClientService(FakeChatClient.WithText("{\"memories\":[{\"title\":\"incomplete\"}]}"))).BuildServiceProvider();
+        var fixture = new ServiceFixture(services: services);
+        await Assert.ThrowsAsync<System.Text.Json.JsonException>(() => fixture.Service.ExtractMemoriesAsync(
+            [new ChatMessage(ChatRole.User, "Remember the account preference for future work.")]));
+        await fixture.Store.DidNotReceiveWithAnyArgs().InsertEntityAsync(default!, default!);
+    }
+
+    [TestMethod]
+    public async Task SaveUsesContentPreviewWhenDescriptionIsOmitted()
+    {
+        var fixture = new ServiceFixture(); fixture.ConfigureNewEntityPersistence();
+        var entry = await fixture.Service.SaveMemoryAsync("Checkpoint", MemoryType.Observation, "On June 5, resume at file CDR-017.");
+        Assert.AreEqual("On June 5, resume at file CDR-017.", entry.Description);
+    }
+
+    [TestMethod]
     public async Task SaveMemory_NewMemoryPersistsChunkIndexScopeAndAudit()
     {
         var fixture = new ServiceFixture();
@@ -94,6 +353,7 @@ public sealed class AgentMemoryServiceTests
             ScopeKey = fixture.Scope,
             Title = "Deployment window",
             Type = MemoryType.Rule,
+            Metadata = new() { ["__memoryVersion"] = "4" },
             Description = "Old description"
         };
         var chunk = new MemoryChunkEntry
@@ -428,7 +688,7 @@ public sealed class AgentMemoryServiceTests
             IServiceProvider? services = null)
         {
             Options = options ?? new AgentMemoryOptions();
-            Store = Substitute.For<IMemoryStore>();
+            Store = Substitute.For<IMemoryStore, IMemoryCandidateStore>();
             Index = Substitute.For<IMemoryIndexManager>();
             Retriever = Substitute.For<IMemoryRetriever>();
             Compactor = Substitute.For<IMemoryCompactor>();

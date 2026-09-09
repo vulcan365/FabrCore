@@ -108,7 +108,7 @@ internal class MemoryCompactor : IMemoryCompactor
                 continue;
             if (entry1.Temperature == MemoryTemperature.Cold || entry2.Temperature == MemoryTemperature.Cold
                 || entry1.Type != entry2.Type || entry1.IsPointInTime || entry2.IsPointInTime
-                || entry1.Metadata is { Count: > 0 } || entry2.Metadata is { Count: > 0 })
+                || SqlMemoryStore.HasUserMetadata(entry1.Metadata) || SqlMemoryStore.HasUserMetadata(entry2.Metadata))
                 continue;
 
             // Load chunk content for both

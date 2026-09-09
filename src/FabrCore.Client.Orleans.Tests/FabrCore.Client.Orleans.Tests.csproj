@@ -13,13 +13,17 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="MSTest" Version="4.3.3" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
+    <PackageReference Include="MSTest" Version="4.4.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\FabrCore.Client.Orleans\FabrCore.Client.Orleans.csproj" />
     <ProjectReference Include="..\FabrCore.Host\FabrCore.Host.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Update="MinVer" Version="8.0.0" />
   </ItemGroup>
 
 </Project>
