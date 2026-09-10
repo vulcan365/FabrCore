@@ -71,7 +71,6 @@ namespace FabrCore.Core.Acl
     {
         public string Handle { get; set; } = string.Empty;
         public string? DisplayName { get; set; }
-        public string? Description { get; set; }
         public List<string> Roles { get; set; } = new();
     }
 

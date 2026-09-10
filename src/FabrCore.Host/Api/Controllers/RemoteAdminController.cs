@@ -94,7 +94,7 @@ public sealed class RemoteAdminController(
                     Name = "host-admin",
                     Version = typeof(RemoteAdminController).Assembly.GetName().Version?.ToString(),
                     ApiVersion = "1",
-                    Features = ["runtime", "blueprints", "skills", "acl", "audit", "monitor", "evidence", "capabilities", "principal-description"],
+                    Features = ["runtime", "blueprints", "skills", "acl", "audit", "monitor", "evidence", "capabilities"],
                     DataScope = "cluster",
                     MaxRequestBodyBytes = remoteAdministrationOptions.Value.MaxBodyBytes
                 }
