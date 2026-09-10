@@ -501,6 +501,7 @@ namespace FabrCore.Host.Grains
                 {
                     Handle = principalSeed.Handle,
                     DisplayName = principalSeed.DisplayName,
+                    Description = principalSeed.Description,
                     Roles = new List<string>(principalSeed.Roles)
                 });
             }
