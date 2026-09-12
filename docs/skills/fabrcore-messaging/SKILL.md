@@ -14,6 +14,10 @@ allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powers
 
 # FabrCore Messaging & Access Control
 
+## FabrCore 2.0 baseline
+
+FabrCore 2.0 GA supports messaging in both modes. Standalone trusts cross-principal agent communication; SQL mode enables enforced ACL and durable Orleans defaults. Authentication and ownership checks remain separate. WebSocket clients must use the v2 ticket/hello protocol; raw AgentMessage socket frames are unsupported.
+
 ## AgentMessage Structure
 
 All agent communication uses `AgentMessage`:
@@ -455,7 +459,7 @@ For message-level observability (who sent what to whom, without needing an exter
 Access control is documented in **fabrcore-acl** — principals, roles, groups, permission grants
 in 3-dot notation (`agent.message.allow` / `agent.create.deny`), enforcement modes
 (Disabled/AuditOnly/Enforce), the ACL management API, and the security audit provider. Summary
-of what matters for messaging:
+of what matters for messaging in SQL mode (standalone bypasses ACL):
 
 - **Same-principal traffic is implicitly allowed**; cross-principal traffic is **denied by
   default** until a `PermissionGrant` allows it (deny overrides allow).

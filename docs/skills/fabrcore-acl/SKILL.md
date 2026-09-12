@@ -1,36 +1,27 @@
 ---
 name: fabrcore-acl
-description: >
-  FabrCore access control and security audit — principals, roles, groups, permission grants
-  in 3-dot notation (entity.behavior.allow/deny), cross-principal agent-to-agent enforcement,
-  enforcement modes (Disabled/AuditOnly/Enforce), the unrestricted System principal, dynamic
-  groups (all-principals, all-agents), the ACL management REST API and SDK client methods,
-  application-defined permissions/roles for addons, and the pluggable IAuditProvider security
-  audit with the in-memory default.
-  Triggers on: "ACL", "access control", "permission grant", "PermissionGrant", "AclPrincipal",
-  "AclRole", "AclGroup", "acl-admin", "acl.manage", "enforcement mode", "AuditOnly",
-  "cross-principal", "cross talk", "boundary crossing", "System principal", "dynamic group",
-  "IAuditProvider", "audit events", "security audit", "IAclEvaluator", "agent.message.allow",
-  "A2A caller grants", "A2A principal".
-  Do NOT use for: agent lifecycle (fabrcore-agent), message routing mechanics (fabrcore-messaging),
-  signed evidence/SPIFFE (fabrcore-spiffe), message monitoring (fabrcore-agentmonitor).
+description: "Configure and manage FabrCore 2.0 relational ACL and security audit: principals, roles, groups, permission grants, enforcement modes, cross-principal access, administration APIs and custom audit providers. Use for ACL migration and SQL versus standalone authorization behavior; use fabrcore-spiffe for signed evidence."
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
 metadata:
   author: FabrCore
-  version: 1.0.0
+  version: 2.0.0
   documentation: https://fabrcore.ai/docs
 ---
 
 # FabrCore Access Control (ACL) & Security Audit
 
+## FabrCore 2.0 baseline
+
+FabrCore 2.0 GA enables relational ACL with ConnectionStrings:FabrCore. Without the feature database, standalone trusts cross-principal messaging and ACL administration is unavailable; authentication and storage/session ownership checks still apply. SQL mode persists ACL in the acl schema and security audit in fabrOps. JSON seeds/rules are migration input only and are rejected at normal startup.
+
 Full access-control platform for FabrCore: **principals**, **roles**, **groups**, and
 **permission grants**, enforced at every principal-initiated and agent-to-agent messaging
-boundary, persisted through the standard storage abstraction, managed via REST/SDK, and
+boundary in SQL mode, persisted in relational ACL tables, managed via REST/SDK, and
 observable through a pluggable security audit provider.
 
 ## Overview
 
-- **Deny by default across principals.** A principal (and its agents) always has full access to
+- **In SQL mode, deny by default across principals.** A principal (and its agents) always has full access to
   its own agents; anything cross-principal requires an explicit grant.
 - **Permissions use 3-dot notation:** `entity.behavior.effect` — e.g. `agent.message.allow`,
   `agent.create.deny`. Effects are only `allow` and `deny`; **deny overrides allow**.
@@ -43,10 +34,9 @@ observable through a pluggable security audit provider.
   warned, never blocked.
 - **The System principal is unrestricted** and bypasses all checks. Its handle is set in
   appsettings (`FabrCore:Acl:SystemPrincipal`, default `"system"`).
-- **Zero-config works.** With no `FabrCore:Acl` appsettings section you get: secure defaults, an auto-created
-  System principal, dynamic groups, in-memory audit, and (by default) a seeded grant letting
-  every principal message/read the System principal's agents so the shared-demo experience
-  keeps working.
+- **Database mode controls enforcement.** SQL initializes built-in System entities and optional
+  default System-agent grants. Without the feature database, standalone bypasses ACL and
+  does not expose ACL administration.
 
 ## Architecture
 
@@ -56,8 +46,8 @@ observable through a pluggable security audit provider.
 | `AclEnforcer` | Host service | Wraps evaluator + audit; throws `AclDeniedException` in Enforce mode; stamps breadcrumbs |
 | `IAclSnapshotProvider` / `AclSnapshot` | Core contract | Immutable indexed view of all entities, swapped atomically per version |
 | `IAclEntityStore` / `GrainBackedAclEntityStore` | Core contract / Host service | Async CRUD; per-silo snapshot cache with change-stream + TTL refresh |
-| `AclRegistryGrain` | Orleans grain (single activation, key `"acl"`) | Sole writer; persists entities + indexes; publishes `AclChanged` notifications; bootstraps |
-| `IAuditProvider` / `InMemoryAuditProvider` | `FabrCore.Core.Auditing` / Host service | Security audit sink (bounded FIFO default; `NullAuditProvider` to disable) |
+| `AclRegistryGrain` | Orleans grain (single activation, key `"acl"`) | Serialized writer; transactionally persists relational entities/version; publishes `AclChanged` notifications; bootstraps |
+| `IAuditProvider` / `InMemoryAuditProvider` | `FabrCore.Core.Auditing` / Host service | Security audit sink (SQL default in SQL mode, bounded FIFO in standalone; `NullAuditProvider` to disable) |
 | `AclController` / `AuditController` | REST | `fabrcoreapi/acl/*`, `fabrcoreapi/audit/*` |
 | `IFabrCoreHostApiClient` (ACL surface) | SDK | Typed client methods for everything above |
 
@@ -130,14 +120,14 @@ via groups).
 
 The A2A endpoints in `FabrCore.Host` (**fabrcore-a2a**) authenticate external A2A clients and map each
 to a FabrCore principal (`A2A:Principal:Strategy`). From that point on it is an ordinary principal,
-so the rules above apply unchanged — and the ACL implications follow from which strategy and which
+so the SQL-mode rules above apply — and the ACL implications follow from which strategy and which
 exposure style you chose:
 
 | A2A configuration | ACL consequence |
 |---|---|
 | `AgentTypes` + `Principal:Strategy = Fixed` (the default) | The addon provisions agents **under the caller's own principal**, so no grant is needed. Every A2A caller shares that one principal and therefore each other's agents and history |
 | `AgentTypes` + `Strategy = ContextId` / `ApiKey` / `Claim` | Each caller gets its own principal with its own agents. Still no grant needed, and callers are isolated from one another. Prefer this for multi-tenant exposure |
-| `AgentHandles` (for example `system:assistant`) | The A2A principal messages **another principal's** agent, so it needs `agent.message.allow` on that resource — unless the target is the unrestricted System principal, which bypasses checks |
+| `AgentHandles` (for example `system:assistant`) | The A2A principal messages **another principal's** agent, so it needs `agent.message.allow` on that resource — unless a configured grant permits it (built-in System-agent access is enabled by default) |
 
 Grant the A2A principal access to a shared agent owned by another principal (the default A2A
 principal handle is `a2a`; `A2A:Principal:Prefix` and the non-`Fixed` strategies change it):
@@ -156,9 +146,9 @@ instead of maintaining one grant per tenant.
 
 Because an A2A principal is reachable from outside your cluster, treat its grants as an external
 trust boundary: grant the specific resources it needs rather than `*:*`, prefer a per-caller
-principal strategy over one shared principal, and keep `AuditOnly` on while you tune the grants.
-Exposing a handle under the System principal skips ACL entirely, which is the most permissive
-option available — do it deliberately.
+principal strategy over one shared principal, and test grant decisions before enabling external access.
+The sending System principal bypasses ACL; targeting a System-owned agent uses the configured
+System-agent grants. Broad shared exposure is permissive — do it deliberately.
 
 ## Enforcement Modes
 
@@ -189,7 +179,10 @@ That transitive hop runs as P2 and is **not blocked** — it is made visible ins
 Enforcement identity always derives from the sending grain's key — `FromHandle` is spoofable
 routing metadata and is never trusted for authorization.
 
-## Configuration (appsettings.json)
+## Configuration and relational storage
+
+Enable SQL mode with `ConnectionStrings:FabrCore` from a secret provider. Configure host policy
+in appsettings; principals, roles, groups and grants are administration data, not startup JSON:
 
 ```json
 {
@@ -200,80 +193,36 @@ routing metadata and is never trusted for authorization.
       "AllPrincipalsGroupId": "all-principals",
       "AllAgentsGroupId": "all-agents",
       "CacheTtlSeconds": 30,
-      "SeedDefaultSystemAgentAccess": true,
-      "Seed": {
-        "Principals": [ { "Handle": "alice", "DisplayName": "Alice (dev)", "Roles": [ "ops-reader" ] } ],
-        "Roles": [
-          { "Name": "ops-reader", "Grants": [ { "Permission": "agent.read.allow", "Resource": "*:*" } ] }
-        ],
-        "Groups": [
-          { "Name": "partners", "Members": [ "principal:p1", "agent:p1:agent1" ] }
-        ],
-        "Grants": [
-          { "Subject": "principal:p1", "Permission": "agent.message.allow", "Resource": "p2:*" },
-          { "Subject": "agent:p1:agent1", "Permission": "agent.message.allow", "Resource": "p2:agent3" }
-        ]
-      }
+      "SeedDefaultSystemAgentAccess": true
     },
-    "Audit": {
-      "DefaultLevel": "Failures",
-      "Categories": { "AclDecision": "All" },
-      "MaxBufferedEvents": 10000
-    }
+    "Audit": { "DefaultLevel": "Failures", "Categories": { "AclDecision": "All" } }
   }
 }
 ```
 
-The `Acl` and `Audit` sections bind from `IConfiguration` under `FabrCore:Acl` and
-`FabrCore:Audit`. Put them in `appsettings.json` or another normal .NET configuration provider.
-FabrCore.Host reads the separate `fabrcore.json` file only through its model/API-key store; it does
-not add that file to `IConfiguration`. A root-level `Acl` section no longer binds. **Seeds apply on
-first bootstrap only** — after that, manage entities via the API (seed drift logs a warning).
+SQL startup initializes built-in System principal, dynamic groups, `acl-admin`, and configured
+System-agent access. Entities and version live in relational `acl` tables, independent of the
+Orleans provider. The registry serializes transactional writes and publishes changes; callers
+read immutable snapshots. Do not write ACL tables or old Orleans containers directly.
 
-Zero-config defaults: System = `"system"`, `Enforce`, in-memory audit at `Failures` level,
-own-principal traffic allowed, cross-principal denied, all-principals → message/read on
-`system:*` seeded (disable with `SeedDefaultSystemAgentAccess: false`).
+`FabrCore:Database:AclConnectionStringName` optionally selects a split ACL connection.
+`AutoInitialize=false` requires pre-provisioned schemas. Readiness includes ACL initialization
+and database connectivity. `FabrCore:AdminAuthentication:ApiKey` protects the bootstrap/import
+administration API; supply it through secrets.
 
-**Migration note:** the legacy rule-based shape (`Acl:Rules` / `Acl:Groups` with
-`UserHandlePattern`/`CallerPattern`/`AclPermission` flags) no longer binds and logs a startup
-warning. Mapping: `Message`→`agent.message.*`, `Configure`→`agent.create.*` /
-`agent.reconfigure.*` / `agent.destroy.*`, `Read`→`agent.read.*`, `Admin`→`acl.manage.*`;
-`CallerPattern` becomes the grant Subject (`"*"` → group `all-principals`), and
-`UserHandlePattern:AgentPattern` becomes the Resource. In this legacy config shape,
-`UserHandlePattern` meant the principal handle pattern.
+### Upgrade existing ACL data
 
-## Bootstrap & Secure Defaults
-
-`AclRegistryGrain.EnsureBootstrappedAsync()` runs at startup (driven by the
-`GrainBackedAclEntityStore` hosted service, with retry until the cluster is ready). Idempotent:
-
-1. Read the bootstrap marker (`fabrcore-acl-meta/bootstrap`); done if current schema version.
-2. Upsert the System principal (+ `acl-admin` role assignment).
-3. Upsert the dynamic groups.
-4. Upsert the `acl-admin` built-in role.
-5. If the grant store is empty and `SeedDefaultSystemAgentAccess`: seed the system-agent grants.
-6. Apply `FabrCore:Acl:Seed` entities.
-7. Write the marker **last** (a crash mid-bootstrap re-runs cleanly), emit a `Bootstrap` audit event.
-
-## Storage Layout
-
-Entities persist through `IUserScopedFabrCoreStorageProvider` (legacy provider name; the scope is
-the principal handle, and ACL data lives in the `system` principal) using the same backend as the
-Storage API:
-
-| Container | Keys |
-|---|---|
-| `fabrcore-acl-principals` | principal handle (lowercased) |
-| `fabrcore-acl-roles` / `-groups` / `-grants` | role name / group name / grant id |
-| `fabrcore-acl-meta` | `index/{container}`, `config` (version + mode override), `bootstrap` |
-
-**Do not write these containers directly** (via StorageController or `IFabrCoreStorageProvider`)
-— that bypasses index maintenance and cache invalidation. The registry self-heals dangling
-index entries on activation, but direct writes are unsupported.
+Normal startup rejects `FabrCore:Acl:Seed`, legacy `Acl:Seed`, and `FabrCore:Acl:Rules`.
+Export from the old host before upgrading, retain a backup, then import into a built-in-only
+2.0 SQL target using the migration utility bundled with
+[fabrcore-releases](../fabrcore-releases/SKILL.md). Import preserves IDs, validates references,
+and is transactional; it refuses to overwrite user-defined target data. An old seed JSON can
+be used as import input, but is not ongoing configuration. Remove seeds/rules from startup
+only after preserving migration input. Maintain ACL entities through the API thereafter.
 
 ## Management REST API
 
-All endpoints read the caller principal from `x-user-handle` (legacy header name). Mutations require `acl.manage.allow`;
+Available in SQL mode; standalone returns 404 for ACL administration. All endpoints read the caller principal from `x-user-handle` (legacy header name). Mutations require `acl.manage.allow`;
 reads/evaluate/check require `acl.read.allow` or `acl.manage.allow`; System bypasses. Every
 call emits an `AclManagement` audit event. Base route: `fabrcoreapi/acl`.
 
@@ -349,7 +298,7 @@ var isAdmin = await client.IsPrincipalInRoleAsync("surface-svc", "alice", "surfa
 ```
 
 Per-namespace delegated management (an app admin who can only manage `surface:*` entities) is
-planned for a later phase — v1 has a single `acl.manage` permission.
+planned for a later phase — 2.0 has a single `acl.manage` permission.
 
 ## Security Audit
 
@@ -363,14 +312,18 @@ Pluggable provider model mirroring the AgentMonitor pattern.
 - **Levels** (`FabrCore:Audit`): `None` / `Failures` / `All` — `DefaultLevel: Failures` with
   per-category overrides (`AclManagement`/`BoundaryCrossing`/`Bootstrap` default to `All`).
   Providers apply `AuditOptions.ShouldRecord`; emit sites always record.
-- **Default**: `InMemoryAuditProvider` (bounded FIFO, `MaxBufferedEvents`, lost on restart) —
-  chosen so denials are visible out of the box and `AuditOnly` mode is meaningful.
-  `options.UseNullAuditProvider()` disables recording; production should use
-  `options.UseAuditProvider<MyDurableSink>()` (database, SIEM, event hub).
+- **Default**: `SqlAuditProvider` in SQL mode; `InMemoryAuditProvider` in standalone.
+  SQL records in `fabrOps` survive restart, preserve IDs, and reject conflicting replacements.
+  `MaxBufferedEvents` applies only to memory storage. Custom `UseAuditProvider<T>()` and
+  `UseNullAuditProvider()` remain supported. Failed SQL writes log/count failure without a retry
+  spool or in-memory fallback. Reads propagate storage failures; retention is explicit.
 - **Push**: subscribe to `IAuditProvider.OnAuditEventRecorded` for live viewers.
 
 REST (`fabrcoreapi/audit`, gated like ACL reads): `GET events?category=&outcome=&subject=&since=&limit=`,
-`GET config`, `POST clear` (Development environments only).
+`GET config`, `POST clear` (Development environments only). SQL cursor pagination uses `before`
+and `beforeId` from the last event, with resource/trace filters. The SDK exposes
+`QueryAuditEventsAsync` with `AuditQuery`. Explicit pruning uses `SqlAuditProvider.DeleteBeforeAsync`;
+there is no automatic retention job. `FailedWrites`/`LastFailureUtc` counters cover this process.
 
 ## Custom Providers
 
@@ -391,11 +344,10 @@ silo for up to the TTL** — size `CacheTtlSeconds` to your revocation-latency t
 
 ## Troubleshooting
 
-- **Cross-principal send throws `AclDeniedException`** — expected default. Add a grant
+- **Cross-principal send throws `AclDeniedException`** — expected in SQL Enforce mode. Add a grant
   (`agent.message.allow`) for the sender subject and target resource, or set `Mode: AuditOnly`
   while developing.
-- **Legacy `Acl:Rules` warning at startup** — the old rule shape is ignored; migrate (see
-  Configuration above).
+- **Legacy ACL seeds/rules fail startup** - preserve/export the data, import into SQL ACL, and remove startup seed/rule sections.
 - **Grant added but still denied on another silo** — snapshot staleness; wait `CacheTtlSeconds`
   or lower it.
 - **403 from `fabrcoreapi/acl/*`** — caller lacks `acl.manage`/`acl.read`; call as the System

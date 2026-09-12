@@ -8,7 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="FabrCore.Services.GraphRag.Tests" />
-    <ProjectReference Include="../FabrCore.Services.GraphRag/FabrCore.Services.GraphRag.csproj" />
+    <ProjectReference Include="../FabrCore.Host/FabrCore.Host.csproj" />
     <None Update="corpus*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="appsettings*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

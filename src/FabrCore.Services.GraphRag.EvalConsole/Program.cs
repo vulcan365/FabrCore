@@ -29,7 +29,8 @@ static async Task<int> RunAsync(string[] args)
               --repair off|once              One bounded endpoint repair per document (requires spans)
               --evidence off|strict|spans           Source-evidence validation experiment (requires schema)
               --relations current|defined|policy|policy-obligation    Relationship convention experiment
-              --response prompt|schema       Response format experiment (default prompt)
+              --response prompt|schema|json|json-guided  JSON object modes; guided adds system shape guidance and temperature 0
+                         json-normalized    Guided JSON plus array flattening; retains original responses
               --description-chars N           Schema description target, 0 = unchanged
               --model NAME                   Extraction model alias (default default)
               --models PATH                  FabrCore JSON model/key configuration
@@ -92,7 +93,10 @@ static async Task<int> RunAsync(string[] args)
         var models = JsonSerializer.Deserialize<FabrCoreConfiguration>(await File.ReadAllTextAsync(modelPath, cancel.Token),
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? throw new InvalidOperationException("Invalid model configuration.");
         var resolver = new LocalModelResolver(models);
-        var clients = new MeasuredChatClientService(new FabrCoreChatClientService(config, logs, resolver), captureResponses: true);
+        var clients = new MeasuredChatClientService(new FabrCoreChatClientService(config, logs, resolver),
+            captureResponses: true, useJsonObjectResponses: options.Value("response", "prompt") is "json" or "json-guided" or "json-normalized",
+            guideJsonObjectResponses: options.Value("response", "prompt") is "json-guided" or "json-normalized",
+            normalizeJsonArrays: options.Value("response", "prompt") == "json-normalized");
         var embeddings = new MeasuredEmbeddings(new Embeddings(clients));
         var warmup = await embeddings.GetEmbeddings("GraphRAG evaluation embedding dimension probe");
         if (warmup.Vector.Length != 1536) throw new InvalidOperationException($"GraphRAG requires 1536 dimensions; provider returned {warmup.Vector.Length}.");

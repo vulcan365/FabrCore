@@ -1,29 +1,19 @@
 ---
 name: fabrcore-a2a
-description: >
-  Publish FabrCore agents over the open Agent2Agent (A2A) protocol, built into FabrCore.Host, and
-  connect them to Microsoft 365 Copilot Studio as A2A agents. Covers the A2A:Enabled feature flag,
-  A2AOptions, FabrCoreServerOptions.ConfigureA2A, registry-driven exposure with A2A:Discovery
-  (Described/All modes, include/exclude globs, [FabrCoreHidden], [FabrCoreNote] on cards, live
-  agent handle globs, stored FabrCore harness skills advertised from _HarnessSkills) and
-  A2A:Defaults, selecting which agent types or agent handles are exposed, agent cards on
-  /.well-known/agent-card.json and /.well-known/agent.json, the JSON-RPC and HTTP+JSON bindings,
-  message/send, message/stream, SSE streaming, tasks/get, tasks/cancel, task lifecycle, API key and
-  OAuth 2.0 (JwtBearer) authentication, principal mapping, reverse-proxy exposure, and Copilot
-  Studio's JSON-RPC-on-REST-route wire shape. Use for A2A,
-  agent2agent, agent card, A2AOptions, "Add agent > A2A agent", connected agents, Copilot Studio
-  Code/CoWork, message:stream, IA2APrincipalResolver, IA2ATaskStore, or A2A:Interop. Use
-  fabrcore-microsoft365copilot for the Copilot/Teams user-chat channel, fabrcore-server for general
-  hosting, fabrcore-agent for agent code, and fabrcore-acl for cross-principal grants.
+description: "Configure and test the Agent2Agent (A2A) protocol built into FabrCore.Host 2.0, including agent cards, discovery, authentication, principal mapping, task persistence, streaming and Copilot Studio interoperability. Use fabrcore-messaging for internal agent-to-agent messages."
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*) Bash(curl:*) Bash(devtunnel:*)"
 metadata:
   author: FabrCore
   # The FabrCore.Host line this skill describes. A copy whose value is older than the package you
   # reference is stale: the skill is what an agent acts on, so check this before following it.
-  appliesTo: FabrCore.Host 1.7.3+
+  appliesTo: FabrCore.Host 2.0.0
 ---
 
 # FabrCore ⇄ Agent2Agent (A2A)
+
+## FabrCore 2.0 baseline
+
+FabrCore 2.0 GA includes A2A in Host. SQL mode supplies durable task snapshots with ownership and execution leases; standalone uses a per-process store. SQL persists snapshots, not SSE replay, and interrupted work fails instead of automatically repeating effects. Cross-principal ACL enforcement applies in SQL mode; standalone remains a trusted workspace.
 
 `FabrCore.Host` publishes a server's agents over the open
 [A2A protocol](https://a2a-protocol.org). Microsoft 365 Copilot Studio uses A2A to add external
@@ -235,7 +225,7 @@ Unlike agent-type discovery this reads cluster state, so it is refreshed every
 reachable without a restart** — routes are parameterized, not mapped one per agent. A server with
 no handle globs configured makes no cluster calls at all.
 
-Cross-principal delivery still needs an `agent.message.allow` ACL grant for the mapped principals;
+In SQL mode, cross-principal delivery needs an `agent.message.allow` ACL grant for the mapped principals;
 see **fabrcore-acl**.
 
 ### Shared settings
@@ -276,7 +266,7 @@ name, or give one agent settings the rest of the fleet does not get.
 
 These merge with each other and with discovery; the first source to claim a route name keeps it.
 `AgentHandles` entries must be fully qualified (`principal:handle`) and cross-principal delivery
-needs an `agent.message.allow` ACL grant — see `fabrcore-acl`.
+needs an `agent.message.allow` ACL grant in SQL mode — see `fabrcore-acl`.
 
 ```json
 "Agents": [
@@ -451,7 +441,13 @@ progress.
 | `DefaultHistoryLength` | 10 | History turns returned when the client asks for none |
 | `StreamHeartbeatInterval` | 15 s | SSE keep-alive comments |
 
-The store is in-memory and per-process. For scale-out, register your own `IA2ATaskStore`.
+Standalone uses a per-process in-memory store. SQL mode supplies `SqlA2ATaskStore` in `fabrOps`:
+accepted, working and terminal snapshots persist with ownership checks and execution leases.
+Reads/cancellation work across hosts. A lost lease fences writes and interrupted work becomes
+failed instead of automatically replaying external effects. SSE streams remain local to their
+execution host; snapshots are not replayable event streams. Terminal retention defaults to one
+hour and does not evict active tasks. SQL errors do not fall back to memory. An explicitly
+registered custom `IA2ATaskStore` remains supported.
 
 ## Reverse proxy checklist
 

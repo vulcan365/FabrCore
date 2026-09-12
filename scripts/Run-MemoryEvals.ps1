@@ -27,7 +27,8 @@ try {
         $runExit = $LASTEXITCODE
         $report = Get-ChildItem -LiteralPath $output -Filter report.json -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
         $compareExit = $null
-        if ($runExit -ne 0) { $failed = $true }
+        if ($runExit -ne 0 -or -not $report) { $failed = $true }
+        if (-not $report) { Write-Warning "Missing evaluation report for $mode." }
         if ($report -and $baselines.ContainsKey($mode) -and (Test-Path -LiteralPath $baselines[$mode])) {
             & dotnet $assembly compare --baseline $baselines[$mode] --candidate $report.FullName
             $compareExit = $LASTEXITCODE
@@ -35,7 +36,7 @@ try {
         } else {
             Write-Warning "No available baseline comparison for $mode. Current run still has its own quality gates."
         }
-        $results += [pscustomobject]@{ Mode=$mode; RunExit=$runExit; CompareExit=$compareExit; Report=$report.FullName }
+        $results += [pscustomobject]@{ Mode=$mode; RunExit=$runExit; CompareExit=$compareExit; Report=$(if ($report) { $report.FullName } else { $null }) }
     }
     New-Item -ItemType Directory -Path $sessionOutput -Force | Out-Null
     $results | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $sessionOutput 'matrix.json')

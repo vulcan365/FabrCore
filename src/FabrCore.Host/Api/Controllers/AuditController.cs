@@ -42,13 +42,24 @@ namespace FabrCore.Host.Api.Controllers
             [FromQuery] string? outcome = null,
             [FromQuery] string? subject = null,
             [FromQuery] DateTimeOffset? since = null,
-            [FromQuery] int? limit = null)
+            [FromQuery] int? limit = null,
+            [FromQuery] string? resource = null,
+            [FromQuery] string? traceId = null,
+            [FromQuery] DateTimeOffset? before = null,
+            [FromQuery] string? beforeId = null)
         {
             if (Authorize(userHandle) is { } denied) return denied;
+
+            if ((before is null) != (beforeId is null) || beforeId is { Length: 0 or > 128 })
+                return BadRequest("before and beforeId must be supplied together; beforeId must contain 1–128 characters.");
 
             var query = new AuditQuery
             {
                 SubjectPrincipal = subject,
+                ResourcePrincipal = resource,
+                TraceId = traceId,
+                Before = before,
+                BeforeId = beforeId,
                 Since = since,
                 Limit = Math.Clamp(limit ?? DefaultLimit, 1, MaxLimit)
             };
@@ -82,6 +93,8 @@ namespace FabrCore.Host.Api.Controllers
             {
                 ProviderType = _audit.GetType().Name,
                 RecordingAvailable = _audit is not NullAuditProvider,
+                FailedWrites = (_audit as Database.SqlAuditProvider)?.FailedWrites,
+                LastFailureUtc = (_audit as Database.SqlAuditProvider)?.LastFailureUtc,
                 DefaultLevel = options.DefaultLevel.ToString(),
                 Categories = options.Categories.ToDictionary(c => c.Key.ToString(), c => c.Value.ToString()),
                 options.MaxBufferedEvents

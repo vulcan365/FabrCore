@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="FabrCore.Sdk" Version="*" />
+    <PackageReference Include="FabrCore.Sdk" Version="2.0.0" />
   </ItemGroup>
 
 </Project>

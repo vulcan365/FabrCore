@@ -1,3 +1,8 @@
+-- Illustrative schema for an application-owned custom evidence store only.
+-- FabrCore 2.0 SQL mode provisions its built-in fabrOps schema through Host startup.
+-- Do not apply this sample as the built-in store migration or assume it implements
+-- transactional append, write coordination, immutable retries or retention by itself.
+
 CREATE TABLE FabrCoreExecutionRecords (
     TraceId nvarchar(64) NOT NULL,
     SegmentId nvarchar(256) NOT NULL,

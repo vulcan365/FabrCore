@@ -16,7 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\FabrCore.Services.Memory\FabrCore.Services.Memory.csproj" />
+    <ProjectReference Include="..\FabrCore.Host\FabrCore.Host.csproj" />
     <ProjectReference Include="..\FabrCore.Services.Memory.EvalConsole\FabrCore.Services.Memory.EvalConsole.csproj" />
   </ItemGroup>
 

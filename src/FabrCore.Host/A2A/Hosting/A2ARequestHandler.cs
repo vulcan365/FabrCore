@@ -452,14 +452,20 @@ internal sealed class A2ARequestHandler
         A2ATaskExecution execution;
         try
         {
-            execution = _executor.Start(new A2AExecutionRequest(
-                agent, principalHandle, message, taskId, contextId, _principalResolver.DescribeCaller(context)));
+            execution = await _executor.StartAsync(new A2AExecutionRequest(
+                agent, principalHandle, message, taskId, contextId, _principalResolver.DescribeCaller(context)), context.RequestAborted);
         }
         catch (A2ATaskCapacityException)
         {
             context.Response.Headers.RetryAfter = "1";
             await WriteErrorAsync(context, request.Envelope, request.Id,
                 new A2AJsonRpcError { Code = A2AErrors.CapacityExceeded, Message = "The server is at its concurrent task limit." });
+            return;
+        }
+        catch (Exception ex) when (!context.RequestAborted.IsCancellationRequested)
+        {
+            _logger.LogError("A2A task acceptance failed ({Type}).", ex.GetType().Name);
+            await WriteErrorAsync(context, request.Envelope, request.Id, A2AErrors.Internal("The task could not be durably accepted."));
             return;
         }
 

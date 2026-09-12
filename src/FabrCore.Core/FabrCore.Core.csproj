@@ -1,9 +1,10 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<TargetFramework>net10.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
+		<EnableOrleansContractsAnalyzer>true</EnableOrleansContractsAnalyzer>
 	</PropertyGroup>
 	<PropertyGroup>
 		<Title>FabrCore Core</Title>
@@ -11,6 +12,7 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<InternalsVisibleTo Include="FabrCore.Services.Memory.Tests" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
 		<PackageReference Include="Microsoft.Orleans.Sdk" Version="10.3.1" />
 	</ItemGroup>
@@ -41,4 +43,5 @@
 	  <PackageReference Update="MinVer" Version="8.0.0" />
 	</ItemGroup>
 	
+<ItemGroup><PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="10.9.0" /></ItemGroup>
 </Project>

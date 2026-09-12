@@ -13,6 +13,10 @@ allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powers
 
 # FabrCore MCP Integration
 
+## FabrCore 2.0 baseline
+
+This skill targets FabrCore.Sdk 2.0.0 on .NET 10. MCP tools work in standalone and SQL modes. Tool output is shortened only in per-model-call working context; full output remains in history until durable compaction. Configure ContextWindowTokens and MaxOutputTokens, and optionally ContextWorkingSetTokens, for tool-heavy runs.
+
 FabrCore natively supports the Model Context Protocol (MCP) for connecting agents to external tool servers. MCP tools are resolved alongside plugin and standalone tools and presented to the LLM automatically.
 
 ## McpServerConfig Schema

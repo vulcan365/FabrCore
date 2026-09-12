@@ -33,6 +33,7 @@ Constants live on `FabrCore.Sdk.HarnessArgs` (`src/FabrCore.Sdk/Harness/HarnessA
 | `_HarnessLoopJudgePrompt` | string | framework default | Judge instructions for loop mode `judge` |
 | `_HarnessBackgroundAgents` | csv of handles | — | Agents the model may delegate to |
 | `_HarnessBackgroundTimeoutSeconds` | int | `120` | Bound on one delegation. Values below 1 are ignored |
+| `_HarnessBackgroundWaitTimeoutSeconds` | int | `300` | Bound on one wait-tool call; timeout leaves tasks running. Values outside 1–4294967 are ignored |
 | `_HarnessSkills` | csv of `name@version` | — | Principal-scoped immutable skills loaded from Host typed Storage |
 | `_HarnessMaxIterationsPerRequest` | int | `40` | Function-invocation iterations within one model request |
 | `_HarnessInstructions` | string | built-in preamble | Replaces the preamble. **Empty string drops it entirely** |
@@ -169,13 +170,35 @@ The string and `IEnumerable<ChatMessage>` overloads cannot see `AgentMessage.Arg
 The harness needs no harness-specific `fabrcore.json` keys. The compaction ladder reads
 `ContextWindowTokens` and `MaxOutputTokens` as its anchor, plus `ContextCompactionEnabled`,
 `PerTurnMaxInputTokens`, `MaxPromptInputTokens`, and the `_Context*` / `_Compaction*` /
-`_Projection*` args — see **fabrcore-agent → Context Management: the compaction ladder**.
+`_Projection*` args — see **fabrcore-agent → Context management in 2.0**.
 
 Set both `ContextWindowTokens` and `MaxOutputTokens`. Without them layer 1 cannot be composed and a
 harness agent runs its whole tool loop with no in-run context bound; the startup log says
 `context:unconfigured` when this happens.
 
+`ContextWorkingSetTokens` optionally sets a smaller conversation-input budget without changing the
+model window or output allowance. `_ContextWorkingSetTokens` overrides it for an agent. It must be
+positive and is capped at `ContextWindowTokens - MaxOutputTokens`. Existing eviction/truncation
+fractions apply to that budget; null preserves the previous thresholds. For example, a 32000-token
+working set excerpts old tool output at 16000 and tightens excerpts at 25600 with the default fractions. It is a compaction
+target, not a guarantee that every request fits: protected messages, instructions and tool schemas
+also consume tokens. Run safety remains the final guard.
+
+The harness places `CompactionProvider` inside function invocation, so newly produced tool results
+are considered before every model call. Memory recall and other context providers run once per
+agent invocation, not once per tool call. An outer loop re-invocation is another agent invocation.
+
+Budget estimates include instructions, function definitions and serialized tool results. They remain
+approximations; provider-reported input/output/cached/reasoning usage is authoritative. The legacy
+`ActualPromptInputTokens` field retains its name for compatibility and contains an estimate.
+Do not add framework loop response totals to FabrCore per-call totals: both describe the same calls.
+
+Use the wait tool for pending background work. A short wait timeout can cause extra model turns;
+configure it for responsiveness only when needed. Remote delegates have separate execution budgets.
+
 One interaction worth knowing: loop iterations and delegations multiply LLM calls, so a harness
 agent reaches a per-turn token budget sooner than a single-shot agent on the same model. If runs
 stop early with `_error` and `_fabrcore_run_stop_reason`, that is `ChatRunSafetyScope` doing its job
 — raise `PerTurnMaxInputTokens` or lower `_HarnessLoopMaxIterations`, and prefer the latter first.
+
+See [compaction correctness](../../../compaction-correctness.md) for protected content, model budgeting, and safe failure behavior.

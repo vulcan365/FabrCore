@@ -3,7 +3,7 @@
 Use `FabrCore.Services.Memory.Abstractions` for provider/service interfaces,
 `FabrCore.Services.Memory.Models` for memory models, and
 `FabrCore.Services.Memory.Configuration` for options and integration extensions.
-Some public contracts live in the Services.Contracts assembly; use their declared namespaces.
+Shared contracts live in FabrCore.Core; implementation in Host and remote clients/harness integration in SDK. Use their preserved declared namespaces.
 
 ## Scope binding
 

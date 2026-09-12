@@ -1,15 +1,19 @@
 ---
 name: fabrcore-services-memory
-description: Integrate FabrCore.Services.Memory through direct APIs, agent-memory tools, FabrCore harness recall and compaction, or scoped internal-agent memory. Use for persistent agent knowledge, corrections, and memory lifecycle; not chat-history storage or the separate FabrCore.Sdk.Memory API.
+description: "Integrate FabrCore.Services.Memory through direct APIs, agent-memory tools, FabrCore harness recall and compaction, or scoped internal-agent memory. Use for persistent agent knowledge, corrections, and memory lifecycle; not ordinary chat-history storage."
 ---
 
 # FabrCore agent memory
+
+## FabrCore 2.0 baseline
+
+In FabrCore 2.0 GA, Memory implementation ships in Host, shared interfaces/models in Core, and remote clients/harness integration in SDK. Existing FabrCore.Services.Memory namespaces remain. SQL mode is required; configure ConnectionStrings:FabrCore and AddFabrCoreServer. The retired FabrCore.Sdk.Memory API is removed and has no type-for-type replacement.
 
 Use `IAgentMemoryProvider` to obtain a scope-bound `IAgentMemoryService`. Developers can call it from `OnInitialize`, `OnMessage`, or other agent methods. The `agent-memory` plugin exposes the same service through model tools. Neither path requires chat compaction to save durable knowledge.
 
 ## Integration workflow
 
-1. Register `AddAgentMemoryServices("MemoryDb", options => ...)` on the host with a configured SQL Server 2025 / Azure SQL connection supporting VECTOR and SQL Graph. Configure FabrCore embeddings with matching dimensions. See [server registration](assets/server-registration.cs).
+1. Configure `ConnectionStrings:FabrCore` for SQL Server 2025 / Azure SQL with VECTOR and SQL Graph, and call `builder.AddFabrCoreServer()`. Bind Memory tuning under `FabrCore:Memory`; use `FabrCore:Database:MemoryConnectionStringName` for a split database. Configure `default` chat and 1536-dimensional `embeddings` models for the integrated feature set. See [server registration](assets/server-registration.cs) and [Memory options](assets/appsettings.memory.json).
 2. Choose a stable, trusted scope. `MemoryScopeResolver.Resolve(config)` uses an explicit scope, plugin setting `agent-memory:MemoryScope`, `Args["MemoryScope"]`, legacy `Args["AgentHandle"]`, then `config.Handle`. Default isolation lasts only as long as the handle remains stable. Shared scopes deliberately share reads and writes; a scope string is not authorization.
 3. Choose code calls, tools, or a combination. Start with [code agent](assets/memory-agent-template.cs), [plugin agent](assets/memory-plugin-agent-template.cs), and [configuration](assets/agent-config-example.json). Avoid registering the same tools twice.
 4. Save durable facts at the point the application knows them. Retain the returned ID for explicit updates, tier changes, or deletion. See [lifecycle calls](assets/memory-lifecycle.cs) and [API](references/api-reference.md).

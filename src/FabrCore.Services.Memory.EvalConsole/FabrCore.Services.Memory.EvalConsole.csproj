@@ -8,7 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="FabrCore.Services.Memory.Tests" />
-    <ProjectReference Include="../FabrCore.Services.Memory/FabrCore.Services.Memory.csproj" />
+    <ProjectReference Include="../FabrCore.Host/FabrCore.Host.csproj" />
     <None Update="appsettings*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="corpus*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

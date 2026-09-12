@@ -371,8 +371,6 @@ FodyWeavers.xsd
 # it stores the delivered configuration, including provider API keys, in plaintext)
 **/fabrcore.cloud-cache.json
 
-# Local NuGet publishing script (contains a user-supplied API key)
-/scripts/Push-NuGet.ps1
 
 # Claude Code local settings
 .claude/
@@ -380,3 +378,6 @@ FodyWeavers.xsd
 
 # Local evaluation credentials
 **/appsettings.local.json
+
+# Encrypted local NuGet publishing credential (never package or commit)
+/scripts/Push-NuGet.credential.clixml

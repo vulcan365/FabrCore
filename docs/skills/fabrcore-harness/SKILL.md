@@ -1,30 +1,14 @@
 ---
 name: fabrcore-harness
-description: >
-  Build long-running FabrCore agents that plan their own work and delegate it — the FabrCore agent
-  harness composes a model-managed todo list, an iteration loop that keeps the agent working until
-  the plan is done, and background delegation onto other FabrCore agents, with the whole session
-  persisted across grain deactivation.
-  Triggers on: "harness", "agent harness", "harness agent", "FabrCoreHarnessAgent",
-  "AsFabrCoreHarnessAgent", "CreateFabrCoreHarnessAgent", "FabrCoreHarnessOptions",
-  "FabrCoreHarnessResult", "HarnessLoopMode", "HarnessArgs", "HarnessSessionSnapshot",
-  "IHarnessSessionStore", "FabrCoreBackgroundAgent", "AgentRosterBuilder", "AgentRoster",
-  "TodoProvider", "todos_add", "todos_complete", "todo list", "LoopAgent", "LoopEvaluator",
-  "TodoCompletionLoopEvaluator", "BackgroundTaskCompletionLoopEvaluator",
-  "CompletionMarkerLoopEvaluator", "AIJudgeLoopEvaluator", "BackgroundAgentsProvider",
-  "CreateInternalAgentAsync", "InternalAgentResult", "private specialist", "in-proxy multi-agent",
-  "background_agents_start_task", "background agents", "delegate to another agent",
-  "agent fan-out", "iteration loop", "keep working until done", "_Harness", "_HarnessLoop",
-  "_HarnessBackgroundAgents", "_HarnessSkills", "AgentSkillsSource", "AgentSkillsProvider",
-  "load_skill", "read_skill_resource", "AsHarnessAgent", "Microsoft.Agents.AI.Harness", "HarnessAgent".
-  Do NOT use for: the FabrCore in-memory unit-test harness (FabrCoreTestHarness, TestFabrCoreAgentHost) — use fabrcore-testing.
-  Do NOT use for: ordinary single-turn agents built with CreateChatClientAgent — use fabrcore-agent.
-  Do NOT use for: AIAgent, AgentSession, or ChatClientAgent internals — use fabrcore-agentframework.
-  Do NOT use for: host-driven multi-agent squads and their blueprint extension — use fabrcore-surface.
+description: "Build FabrCore 2.0 harness agents with todo lists, plan/execute modes, bounded iteration, background delegation, durable session snapshots and managed Agent Skills. Use for CreateFabrCoreHarnessAgent, AsFabrCoreHarnessAgent, FabrCoreHarnessResult and AgentRosterBuilder. Use fabrcore-testing for the in-memory unit-test harness."
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
 ---
 
 # FabrCore Agent Harness
+
+## FabrCore 2.0 baseline
+
+Target FabrCore.Sdk 2.0.0 and Agent Framework 1.20.0. Harnesses work in standalone mode; durable snapshots survive process restart only with persistent Orleans storage. Long-term Memory is optional and requires integrated SQL mode. Run through FabrCoreHarnessResult.RunAsync; background waits default to 300 seconds via _HarnessBackgroundWaitTimeoutSeconds.
 
 Give an agent a work list, a loop, and colleagues. The harness composes a model-managed todo list, an iteration loop that re-invokes the agent until the plan is finished, and delegation onto other FabrCore agents — then persists the whole thing so it survives grain deactivation.
 

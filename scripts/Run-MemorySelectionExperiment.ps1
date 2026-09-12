@@ -8,6 +8,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Memory evaluation build failed.' }
     $assembly = Join-Path $repoRoot "$project/bin/Debug/net10.0/FabrCore.Services.Memory.EvalConsole.dll"
     $output = Join-Path $repoRoot ('artifacts/memory-selection-experiments/' + [DateTime]::UtcNow.ToString('yyyyMMddTHHmmss') + '-' + [Guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $output -Force | Out-Null
     $pairs = @(
         @{ Name='main'; Mode='code'; Corpus='corpus.json'; Order=@('control','compact') },
         @{ Name='holdout'; Mode='code'; Corpus='corpus-holdout.json'; Order=@('compact','control') },

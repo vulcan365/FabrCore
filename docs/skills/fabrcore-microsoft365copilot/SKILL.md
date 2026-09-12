@@ -1,22 +1,14 @@
 ---
 name: fabrcore-microsoft365copilot
-description: >
-  Integrate FabrCore agents with Microsoft 365 Copilot and Teams through
-  FabrCore.Services.Microsoft365Copilot. Covers /api/messages, AddMicrosoft365Copilot,
-  UseMicrosoft365Copilot, Microsoft365CopilotOptions, Azure Bot/Entra setup, identity and SSO/OBO,
-  principal mapping, app packages/manifests, streaming, Agents Playground, and opt-in proactive
-  delivery. Use for M365 Copilot, custom engine agent, Teams bot, bot messaging endpoint,
-  copilotAgents, ICopilotPrincipalResolver, SharedAgentHandle, PassUserTokenToAgent,
-  Proactive:Enabled, DeliveryEndpointId, stored conversation endpoints, or out-of-turn Teams
-  messages. Use fabrcore-a2a when Copilot Studio should call the agent as an A2A
-  connected agent (Add agent > A2A agent, Code/CoWork orchestration) rather than a person chatting
-  with it. Use fabrcore-server for general hosting, fabrcore-agent for agent code, fabrcore-acl
-  for grants, and fabrcore-principal-delivery for generic relay/provider and durable-outbox
-  internals.
+description: "Integrate FabrCore 2.0 with Microsoft 365 Copilot and Teams using the separate Copilot package: channel hosting, agent provisioning, authentication, principal resolution, streaming, attachments, cards, Entra SSO and proactive delivery. Use fabrcore-a2a for Copilot Studio A2A connected agents."
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*) Bash(az:*) Bash(curl:*) Bash(devtunnel:*)"
 ---
 
 # FabrCore ⇄ Microsoft 365 Copilot (Custom Engine Agent)
+
+## FabrCore 2.0 baseline
+
+Use FabrCore.Services.Microsoft365Copilot 2.0.0 with matching Host/SDK packages. Channel authentication and principal mapping still apply in standalone mode, while cross-principal ACL enforcement requires SQL mode. Proactive delivery state survives process restart only when the configured Orleans provider persists it; default standalone state is in memory.
 
 `FabrCore.Services.Microsoft365Copilot` is a server addon that exposes a FabrCore.Host's agents
 to Microsoft 365 Copilot, Teams, and other Azure Bot Service channels. It hosts the
@@ -177,7 +169,7 @@ Custom mapping: implement `ICopilotPrincipalResolver` and register it **before**
 - **Per-user (default):** each user gets `{oid}:copilot`, provisioned on first contact from the
   `Agent` template via `EnsureAgentsAsync`. Same-principal traffic — no ACL grants needed.
 - **Shared:** `Agent:SharedAgentHandle: "system:helpdesk"` routes everyone to one agent. Under the
-  default ACL `Enforce` mode, cross-principal sends require `agent.message.allow` grants for the
+  SQL-mode default ACL `Enforce` behavior, cross-principal sends require `agent.message.allow` grants for the
   mapped principals (see fabrcore-acl). If the handle starts with `system:` and `AgentType` is
   set, the addon provisions the system agent itself; otherwise provision it in host startup code.
 

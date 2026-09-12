@@ -45,6 +45,8 @@ public sealed class VerifiableExecutionRecorder : IVerifiableExecutionContext
         record.SpanId ??= activity?.SpanId.ToHexString();
         record.ParentSpanId ??= activity?.ParentSpanId == default ? null : activity?.ParentSpanId.ToHexString();
         record.SegmentId = string.IsNullOrWhiteSpace(record.AgentHandle) ? "host" : record.AgentHandle!;
+        await using var write = _store is IVerifiableExecutionWriteCoordinator coordinator
+            ? await coordinator.AcquireWriteAsync(record.TraceId, record.SegmentId, cancellationToken) : null;
         record.Sequence = await _store.GetNextSequenceAsync(record.TraceId, record.SegmentId, cancellationToken);
         record.Runtime = MergeRuntime(record.Runtime);
 

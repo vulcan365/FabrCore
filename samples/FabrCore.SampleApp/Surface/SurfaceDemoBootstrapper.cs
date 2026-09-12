@@ -49,7 +49,8 @@ public sealed class SurfaceDemoBootstrapper(
                 var blueprintClient = scope.ServiceProvider.GetRequiredService<ISurfaceBlueprintClient>();
                 var blueprintProvisioner = scope.ServiceProvider.GetRequiredService<SurfaceBlueprintProvisioner>();
 
-                await EnsureDemoPrincipalAsync(hostApiClient, cancellationToken);
+                if (scope.ServiceProvider.GetRequiredService<FabrCore.Core.FabrCoreFeatureState>().DatabaseEnabled)
+                    await EnsureDemoPrincipalAsync(hostApiClient, cancellationToken);
                 await blueprintClient.SaveAsync(PrincipalHandle, blueprint, cancellationToken);
                 var result = await blueprintProvisioner.ApplyAsync(PrincipalHandle, blueprint, cancellationToken);
 

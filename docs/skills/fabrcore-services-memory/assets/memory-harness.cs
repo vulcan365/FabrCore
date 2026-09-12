@@ -3,7 +3,7 @@ using FabrCore.Services.Memory.Configuration;
 using FabrCore.Sdk;
 
 // Configuration helpers: pass the returned options to the proxy's harness/internal-agent
-// creation APIs. Host services must already register AddAgentMemoryServices.
+// creation APIs. Host must already enable SQL mode through AddFabrCoreServer.
 public static class MemoryHarnessExample
 {
     public static FabrCoreHarnessOptions AttachMemory(

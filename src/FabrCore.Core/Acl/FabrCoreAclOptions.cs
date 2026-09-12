@@ -51,13 +51,10 @@ namespace FabrCore.Core.Acl
         /// </summary>
         public bool SeedDefaultSystemAgentAccess { get; set; } = true;
 
-        /// <summary>Optional entities applied once at first bootstrap (dev/demo convenience).</summary>
-        public AclSeedOptions? Seed { get; set; }
     }
 
     /// <summary>
-    /// Config-declared ACL entities applied at first bootstrap only. Plain string-property
-    /// DTOs so <c>IConfiguration</c> binding works.
+    /// Legacy import DTOs, accepted only by the explicit ACL migration utility.
     /// </summary>
     public class AclSeedOptions
     {
@@ -71,6 +68,7 @@ namespace FabrCore.Core.Acl
     {
         public string Handle { get; set; } = string.Empty;
         public string? DisplayName { get; set; }
+        public string? Description { get; set; }
         public List<string> Roles { get; set; } = new();
     }
 

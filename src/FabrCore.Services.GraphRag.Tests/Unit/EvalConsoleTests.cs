@@ -8,6 +8,64 @@ namespace FabrCore.Services.GraphRag.Tests.Unit;
 public sealed class EvalConsoleTests
 {
     [TestMethod]
+    public async Task JsonNormalization_PreservesFactsUsageAndOriginalResponse()
+    {
+        const string raw = """{"entities":[[{"name":"RFC 8259"}]],"relationships":[[{"from":"A","to":"B"}]]}""";
+        var normalized = JsonObjectChatClient.NormalizeArrays(raw)!;
+        using var parsed = System.Text.Json.JsonDocument.Parse(normalized);
+        Assert.AreEqual("RFC 8259", parsed.RootElement.GetProperty("entities")[0].GetProperty("name").GetString());
+        Assert.AreEqual("B", parsed.RootElement.GetProperty("relationships")[0].GetProperty("to").GetString());
+        Assert.IsNull(JsonObjectChatClient.NormalizeArrays("""{"entities":[["invalid"]]}"""));
+        Assert.IsNull(JsonObjectChatClient.NormalizeArrays("""{"entities":[]} trailing"""));
+        var usage = new UsageDetails { InputTokenCount = 12, OutputTokenCount = 34 };
+        var inner = new UsageClient { Response = new ChatResponse(new ChatMessage(ChatRole.Assistant, raw)) { Usage = usage } };
+        var proxy = System.Reflection.DispatchProxy.Create<IFabrCoreChatClientService, ClientServiceProxy>();
+        ((ClientServiceProxy)proxy).Client = inner;
+        var service = new MeasuredChatClientService(proxy, captureResponses: true, useJsonObjectResponses: true,
+            guideJsonObjectResponses: true, normalizeJsonArrays: true);
+        var client = await service.GetChatClient("test");
+        var response = await client.GetResponseAsync("Extract");
+        Assert.AreSame(usage, response.Usage);
+        Assert.AreEqual(raw, inner.Response.Text);
+        var sample = service.Drain().Single();
+        Assert.AreEqual(raw, sample.RawProviderResponseJson);
+        Assert.AreEqual(normalized, sample.ExtractionResponseJson);
+    }
+
+    [TestMethod]
+    public async Task GuidedJsonMode_PreservesMessagesAndRecordsExplicitGenerationChanges()
+    {
+        Assert.AreEqual("json-guided", Options.Parse(["run", "--response", "json-guided"]).Value("response", "prompt"));
+        var inner = new UsageClient { Response = new ChatResponse(new ChatMessage(ChatRole.Assistant, "{}")) };
+        using var client = new JsonObjectChatClient(inner, guided: true);
+        var original = new ChatMessage(ChatRole.User, "Source text");
+        var options = new ChatOptions { Temperature = 0.7f };
+        await client.GetResponseAsync([original], options);
+        Assert.AreEqual(0.7f, options.Temperature);
+        Assert.AreEqual(0f, inner.LastOptions!.Temperature);
+        Assert.AreEqual(ChatRole.System, inner.LastMessages[0].Role);
+        Assert.AreEqual(JsonObjectChatClient.Guidance, inner.LastMessages[0].Text);
+        Assert.AreSame(original, inner.LastMessages[1]);
+    }
+
+    [TestMethod]
+    public async Task JsonObjectMode_PreservesCallerOptionsAndUsesNoSchema()
+    {
+        Assert.AreEqual("json", Options.Parse(["run", "--response", "json"]).Value("response", "prompt"));
+        var inner = new UsageClient { Response = new ChatResponse(new ChatMessage(ChatRole.Assistant, "{}")) };
+        using var client = new JsonObjectChatClient(inner);
+        var options = new ChatOptions { MaxOutputTokens = 1024, Temperature = 0 };
+        await client.GetResponseAsync("Extract JSON", options);
+        Assert.IsNull(options.ResponseFormat);
+        Assert.AreNotSame(options, inner.LastOptions);
+        Assert.AreSame(ChatResponseFormat.Json, inner.LastOptions!.ResponseFormat);
+        Assert.AreEqual(1024, inner.LastOptions.MaxOutputTokens);
+        Assert.AreEqual(0f, inner.LastOptions.Temperature);
+        await client.GetResponseAsync("Extract JSON");
+        Assert.AreSame(ChatResponseFormat.Json, inner.LastOptions!.ResponseFormat);
+    }
+
+    [TestMethod]
     public async Task ReportCheckpoint_RetriesTemporaryWindowsSharingViolation()
     {
         if (!OperatingSystem.IsWindows()) return;
@@ -158,11 +216,13 @@ public sealed class EvalConsoleTests
     {
         public ChatResponse Response { get; set; } = null!;
         public ChatOptions? LastOptions { get; private set; }
+        public List<ChatMessage> LastMessages { get; private set; } = [];
         public bool Fail { get; set; }
         public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null,
             CancellationToken cancellationToken = default)
         {
             LastOptions = options;
+            LastMessages = messages.ToList();
             return Fail ? throw new InvalidOperationException("Test failure") : Task.FromResult(Response);
         }
         public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> messages,

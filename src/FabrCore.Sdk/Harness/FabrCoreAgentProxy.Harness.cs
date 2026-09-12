@@ -10,6 +10,18 @@ namespace FabrCore.Sdk;
 
 public abstract partial class FabrCoreAgentProxy
 {
+    private readonly List<FabrCoreHarnessResult> _harnessResults = [];
+
+    private async Task DisposeHarnessResourcesAsync()
+    {
+        foreach (var harness in _harnessResults)
+        {
+            try { await harness.DisposeAsync(); }
+            catch (Exception ex) { logger.LogWarning(ex, "Failed to release harness session {ThreadId}", harness.ThreadId); }
+        }
+        _harnessResults.Clear();
+    }
+
     /// <summary>Default loop iteration cap when <see cref="HarnessArgs.LoopMaxIterations"/> is not set.</summary>
     private const int DefaultHarnessLoopMaxIterations = 10;
 
@@ -134,6 +146,16 @@ public abstract partial class FabrCoreAgentProxy
         }
 
         AgentRoster? roster = null;
+        if (args.TryGetValue(HarnessArgs.BackgroundWaitTimeoutSeconds, out var waitStr)
+            && int.TryParse(waitStr, out var waitSeconds) && waitSeconds > 0
+            && waitSeconds <= (uint.MaxValue - 1L) / 1000)
+        {
+            options.BackgroundAgentsProviderOptions = new BackgroundAgentsProviderOptions
+            {
+                WaitTimeout = TimeSpan.FromSeconds(waitSeconds)
+            };
+        }
+
         if (args.TryGetValue(HarnessArgs.BackgroundAgents, out var backgroundSpec) && !string.IsNullOrWhiteSpace(backgroundSpec))
         {
             roster = await AgentRosterBuilder.BuildAsync(
@@ -262,7 +284,7 @@ public abstract partial class FabrCoreAgentProxy
             restored,
             delegationsLost);
 
-        return new FabrCoreHarnessResult(
+        var result = new FabrCoreHarnessResult(
             agent,
             session,
             threadId,
@@ -272,6 +294,8 @@ public abstract partial class FabrCoreAgentProxy
             restored,
             delegationsLost,
             logger);
+        _harnessResults.Add(result);
+        return result;
     }
 
     private async Task<(AgentSession Session, bool Restored, int DelegationsLost)> RestoreOrCreateHarnessSessionAsync(

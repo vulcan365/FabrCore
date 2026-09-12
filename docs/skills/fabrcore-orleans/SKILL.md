@@ -16,18 +16,22 @@ allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powers
 
 # Orleans Configuration for FabrCore
 
+## FabrCore 2.0 baseline
+
+FabrCore 2.0 GA uses Orleans 10.3.1. SQL Server hosting is built into FabrCore.Host; Azure Storage remains separate. ConnectionStrings:FabrCore enables integrated SQL features and SQL Orleans defaults unless explicitly overridden. Azure/custom Orleans storage alone does not enable relational ACL, Memory or GraphRAG. Preserve cluster/service/storage identities during upgrades.
+
 FabrCore uses Microsoft Orleans as its distributed runtime. This skill covers clustering, persistence, streaming, and advanced Orleans configuration.
 
 ## Simple Path: AddFabrCoreServer
 
 `AddFabrCoreServer()` configures Orleans automatically from `appsettings.json`. Use this when Localhost/SqlServer/AzureStorage modes are sufficient.
 
-Localhost mode is built into `FabrCore.Host`. The other modes live in provider packages that are auto-discovered — reference the package and set `FabrCore:Orleans:ClusteringMode`; no code changes needed:
+Localhost and SQL Server modes are built into `FabrCore.Host`. Azure Storage uses a separate provider package that is auto-discovered — reference the package and set `FabrCore:Orleans:ClusteringMode`; no code changes needed:
 
 | Mode | NuGet package |
 |------|---------------|
 | `Localhost` | (built into FabrCore.Host) |
-| `SqlServer` | `FabrCore.Host.SqlServer` |
+| `SqlServer` | `FabrCore.Host` |
 | `AzureStorage` | `FabrCore.Host.AzureStorage` |
 
 ```csharp
@@ -110,11 +114,11 @@ Configure in `appsettings.json`:
 }
 ```
 
-- Requires the `FabrCore.Host.SqlServer` package and a SQL Server instance
+- Requires the `FabrCore.Host` package and a SQL Server instance
 - Orleans tables are created automatically on startup (`AutoInitDatabase`, default true)
 - Persistent state survives restarts
 - Multi-silo clustering supported
-- Streams use the in-memory provider (Orleans has no SQL Server streaming provider)
+- Streams default to memory; set `FabrCore:Orleans:SqlServerStreams` to `AdoNet` for the optional Orleans 10.3.1-alpha.1 SQL streaming provider. See [upgrade and client setup](../../orleans-10.3-adoption.md).
 - `StorageConnectionString` optional (falls back to `ConnectionString`)
 
 FabrCore creates its Orleans SQL objects in the `orlns` schema. When
@@ -240,7 +244,7 @@ gateway URIs must use `gwy.tcp://host:port/generation`. `RequireOrleansTls` defa
 Development and true in other environments before an explicit configuration value is applied.
 
 ```xml
-<PackageReference Include="FabrCore.Client.Orleans" Version="*" />
+<PackageReference Include="FabrCore.Client.Orleans" Version="2.0.0" />
 ```
 
 ```json
@@ -377,7 +381,7 @@ When using the advanced path, you must register these providers:
 | | Simple (`AddFabrCoreServer`) | Advanced (`AddFabrCoreServices` + `UseOrleans` + `AddFabrCore`) |
 |---|---|---|
 | Orleans config | From `appsettings.json` | You code it directly |
-| Clustering | Localhost, SqlServer, AzureStorage (provider packages), or custom `IFabrCoreOrleansProvider` | Any Orleans provider |
+| Clustering | Localhost/SqlServer (Host), AzureStorage (separate package), or custom `IFabrCoreOrleansProvider` | Any Orleans provider |
 | Storage | Memory, ADO.NET, Azure Blob/Table | Any Orleans provider |
 | Streams | Memory (Localhost/SqlServer), Azure Queue (AzureStorage) | Any Orleans provider |
 | TimeProvider | `UseTimeProvider(...)`, app DI registration, or `TimeProvider.System` | Register `TimeProvider` in DI before Orleans starts |
@@ -447,8 +451,7 @@ client intentionally when moving it to a different cluster.
 
 The discovery endpoint does not secure the subsequent Orleans TCP connection. Direct Orleans
 access is for trusted backend applications on private networking, with mTLS required in
-production. The Host alone references `FabrCore.Host.SqlServer` or
-`FabrCore.Host.AzureStorage`; client projects do not reference those packages or receive their
+production. The Host uses its built-in SQL provider or references `FabrCore.Host.AzureStorage`; client projects do not reference those packages or receive their
 connection strings.
 
 ## Data Flow
@@ -532,3 +535,26 @@ You want one `*.orleans.proxy.*.g.cs` per grain interface. An empty directory, o
 | --- | --- |
 | `Type "X" is not allowed` at startup, naming a grain interface | The assembly declaring it lacks `Microsoft.Orleans.Sdk`, so no proxies were generated. Add the SDK reference; do not add allowed types |
 | Grain state vanishes on restart in development | Localhost clustering uses in-memory grain storage. Expected; switch to SqlServer or AzureStorage for restart-safe persistence |
+
+## 2.0 persisted JSON and optional SQL streams
+
+Orleans JSON storage validates `$type` metadata against its type manifest. Register custom
+persisted application types (including nested types) with `TypeManifestOptions.AddAllowedType`.
+This is distinct from a grain interface missing generated proxies, described above. Keep
+`AllowAllTypes` disabled. Restore-test existing SQL/Azure state before upgrading; the JsonElement
+converter cannot recover content already lost in previously written records.
+
+Memory streams remain default. Optional `FabrCore:Orleans:SqlServerStreams=AdoNet` uses the
+pinned `Microsoft.Orleans.Streaming.AdoNet` 10.3.1-alpha.1 dependency. FabrCore 2.0 is GA;
+this optional transport provider retains its upstream preview designation. Set the same mode
+on every silo, stop publishers/drain pending work, and restart the cluster when switching.
+Memory queues are not migrated. Direct stream clients use
+`client.AddFabrCoreSqlServerStreams(clusteringConnectionString)`; grain-only clients need no
+stream registration or SQL credential. Queues use the clustering database, not the grain-state
+storage connection. With Orleans `AutoInitDatabase=false`, apply the release streaming schema
+migration before enabling the provider. The SQL principal must resolve `OrleansQuery` and execute
+stream procedures (for example with `orlns` as its default schema). Keep consumers idempotent.
+
+Read the [release migration guide](../fabrcore-releases/references/2.0.md) for state restore,
+configuration and ACL migration. Contract baselines are build checks, not proof of mixed-version
+client or persisted-data compatibility.

@@ -1,25 +1,38 @@
 ---
 name: fabrcore-server
-description: >
-  Set up and configure FabrCore servers: AddFabrCoreServer, options, fabrcore.json LLM providers,
-  REST APIs, WebSocket, system agents, Blueprint provisioning, storage, custom providers, and deployment.
-  Use for: "FabrCore server", "AddFabrCoreServer", "AddFabrCoreServices", "UseFabrCoreServer",
-  "FabrCoreServerOptions", "TimeProvider", "fabrcore.json", "REST API", "/fabrcoreapi",
-  "Blueprint", "FabrCoreBlueprint", "IBlueprintExpander", "/fabrcoreapi/Blueprint",
-  "AgentBlueprintRequest", "EnsureBlueprintAgentsAsync", "agent/blueprint",
-  "ConfigureSystemAgentAsync", "IFabrCoreAgentService", "AgentManagementProvider",
-  "AdditionalAssemblies", "WebSocket", "server setup", "LLM provider", "Storage API",
-  "typed entity storage", "IFabrCoreStorageProvider", "UseVerifiableExecution",
-  "IVerifiableExecutionStore", "signed execution", or "evidence bundle".
-  Do NOT use for: Orleans clustering/configuration — use fabrcore-orleans; Microsoft 365
-  Copilot/Teams channel setup — use fabrcore-microsoft365copilot; Agent2Agent (A2A) endpoints,
-  agent cards, and Copilot Studio connected agents — use fabrcore-a2a.
+description: "Configure FabrCore.Host 2.0 startup, standalone/SQL modes, model providers, cloud configuration, service registration, Host REST APIs, blueprints, typed storage and telemetry. Use for AddFabrCoreServer, FabrCoreServerOptions and deployment configuration; use fabrcore-releases for release migration."
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
 ---
 
 # FabrCore Server Setup
 
+## FabrCore 2.0 baseline
+
+FabrCore.Host 2.0.0 includes SQL Server, Memory and GraphRAG. Without a database the default is a trusted standalone workspace with in-memory runtime state; ConnectionStrings:FabrCore enables SQL defaults, relational ACL, knowledge services and durable operational stores. Call AddFabrCoreServer once, remove old manual knowledge registrations, and migrate ACL seeds through fabrcore-releases before cutover.
+
 The FabrCore server hosts the Orleans silo, REST API, and WebSocket endpoints.
+
+## Database mode configuration
+
+Supply `ConnectionStrings:FabrCore` through secrets to enable SQL Orleans defaults, enforced
+ACL, Memory, GraphRAG and operational stores. The feature database must exist and support
+SQL Server 2025/Azure SQL graph/vector schemas. Configure `default` chat and 1536-dimensional
+`embeddings` models. Startup checks aliases/credentials without paid inference.
+
+Under `FabrCore:Database`, `ConnectionStringName` defaults to `FabrCore`; optional
+`MemoryConnectionStringName`, `GraphRagConnectionStringName`, `AclConnectionStringName`, and
+`OperationsConnectionStringName` preserve split databases. `AutoInitialize=false` validates
+pre-provisioned schemas. Failed SQL configuration/schema initialization never falls back to
+standalone. Mode changes require restart. Explicit Orleans provider/configuration wins over
+the SQL defaults, so review any old `ClusteringMode: Localhost` setting.
+
+Memory options bind from `FabrCore:Memory`; the extraction alias uses
+`FabrCore:GraphRag:ExtractionModelName`. GraphRAG ingestion tuning is an implementation exception:
+it still binds from top-level `GraphRag:Ingestion`. Do not relocate these keys blindly.
+
+SQL audit/evidence/A2A snapshots use `fabrOps`; ordinary monitoring remains separately configured.
+Evidence signing is opt-in. ACL entities live in `acl`, not Orleans storage. Normal startup
+rejects ACL seeds/rules; use [release migration](../fabrcore-releases/SKILL.md).
 
 ## Minimal Server
 
@@ -46,7 +59,7 @@ app.Run();
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="FabrCore.Host" Version="*" />
+    <PackageReference Include="FabrCore.Host" Version="2.0.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\MyProject.Agents\MyProject.Agents.csproj" />
@@ -145,7 +158,7 @@ For instance-based registration, FabrCore registers both `TimeProvider` and the 
 4. **Verifiable Execution Services** — `IVerifiableExecutionStore`, `IVerifiableExecutionSigner`, `IVerifiableExecutionVerifier`, `IVerifiableExecutionContext`, and SDK helper support for external effects (disabled/no-op unless enabled)
 5. **Background Services** — `AgentRegistryCleanupService`, `FileCleanupService`
 6. **Assembly Discovery** — Scans the exact `RegistryAssemblies` allowlist when supplied; otherwise uses legacy process-wide discovery
-7. **ACL & Security Audit** — Binds `FabrCore:Acl` and `FabrCore:Audit` from `IConfiguration` (normally `appsettings.json`), registers the ACL evaluator/enforcer, the `AclRegistryGrain`-backed entity store, and the audit provider (see fabrcore-acl)
+7. **ACL & Security Audit** — Binds `FabrCore:Acl` and `FabrCore:Audit` from `IConfiguration` (normally `appsettings.json`), registers the ACL evaluator/enforcer, SQL relational ACL and durable audit in database mode (standalone uses trusted ACL bypass and memory audit) (see fabrcore-acl)
 
 ## What UseFabrCoreServer Configures
 
@@ -396,12 +409,13 @@ below.
       "MaxOutputTokens": 16384,      // Optional: max tokens in response
       "ReasoningEffort": "none",    // Optional: none | low | medium | high | xhigh
       "ContextWindowTokens": 128000, // Optional: total context window — the compaction ladder anchor
+      "ContextWorkingSetTokens": 64000, // Optional: smaller input budget, capped by window minus output
       "ContextCompactionEnabled": true,   // Optional: layer 1, in-run context compaction (default true)
-      "ContextEvictThreshold": 0.5,       // Optional: evict old tool results at this fraction of input budget
-      "ContextTruncateThreshold": 0.8,    // Optional: truncate oldest groups at this fraction of input budget
+      "ContextEvictThreshold": 0.5,       // Optional: bound older tool results at this fraction of input budget
+      "ContextTruncateThreshold": 0.8,    // Optional: tighten older tool excerpts at this fraction of input budget
       "CompactionEnabled": true,     // Optional: layer 2, history compaction (default true)
       "CompactionKeepLastN": 20,     // Optional: messages to keep when rewriting the thread (default 20)
-      "CompactionThreshold": 0.87,   // Optional: 0.87 with layer 1 active, 0.75 without
+      // CompactionThreshold: omit for 70% of usable input working set, otherwise 75% fallback
       "CompactionStaleAfterMinutes": 60, // Optional: preflight-compact a dormant over-threshold thread
       "PerTurnMaxInputTokens": 120000, // Optional: cumulative input budget per agent turn
       "MaxPromptInputTokens": 128000,  // Optional: hard ceiling for one prompt
@@ -798,7 +812,7 @@ The Host stores each value internally in an envelope:
 | `CreatedUtc` | First write time |
 | `UpdatedUtc` | Last write time |
 
-Storage uses the configured Orleans grain storage provider named `FabrCoreOrleansConstants.StorageProviderName` (`"fabrcoreStorage"`). With the simple `AddFabrCoreServer` path, `ClusteringMode: Localhost` uses Orleans memory grain storage, so typed storage entities and grain state are lost when the process exits. Use `SqlServer` (FabrCore.Host.SqlServer package), `AzureStorage` (FabrCore.Host.AzureStorage package), or custom Orleans storage for restart-safe persistence.
+Storage uses the configured Orleans grain storage provider named `FabrCoreOrleansConstants.StorageProviderName` (`"fabrcoreStorage"`). With the simple `AddFabrCoreServer` path, `ClusteringMode: Localhost` uses Orleans memory grain storage, so typed storage entities and grain state are lost when the process exits. Use `SqlServer` (FabrCore.Host package), `AzureStorage` (FabrCore.Host.AzureStorage package), or custom Orleans storage for restart-safe persistence.
 
 Addressing:
 - `x-user-handle` is the principal handle partition and ACL boundary.
@@ -1214,7 +1228,7 @@ Server-to-client `delivery` frames are durable, ordered, and at-least-once per s
 
 ## OpenTelemetry exporter setup
 
-FabrCore depends only on **`OpenTelemetry.Api` v1.15.1** — no exporter is bundled. `UseFabrCoreServer` registers a process-wide `ActivityListener` for every `FabrCore.*` `ActivitySource` (see `src/FabrCore.Host/FabrCoreHostExtensions.cs:123-132`), so `Activity` instances materialize even without a full TracerProvider. To actually **see** spans, register your own exporter:
+FabrCore depends only on **`OpenTelemetry.Api` v1.18.0** — no exporter is bundled. `UseFabrCoreServer` registers a process-wide `ActivityListener` for every `FabrCore.*` `ActivitySource` (see `src/FabrCore.Host/FabrCoreHostExtensions.cs:123-132`), so `Activity` instances materialize even without a full TracerProvider. To actually **see** spans, register your own exporter:
 
 ```csharp
 // In your Program.cs, after AddFabrCoreServer:

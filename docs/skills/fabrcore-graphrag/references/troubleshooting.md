@@ -23,7 +23,7 @@ Connection string 'GraphRagDb' not found in configuration
 Fix:
 
 - Add `ConnectionStrings:GraphRagDb`.
-- Confirm the name passed to `AddGraphRagServices` matches configuration.
+- Confirm `FabrCore:Database:GraphRagConnectionStringName` (or the main connection name) matches configuration and SQL mode is enabled.
 - Confirm test configuration includes the same connection string.
 
 ## Schema Initialization Failure

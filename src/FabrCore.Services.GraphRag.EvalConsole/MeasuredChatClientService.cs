@@ -13,11 +13,14 @@ internal sealed record ChatCallSample(string ModelAlias, long ElapsedMs, long? I
     public string? ResponseSchemaName { get; init; }
     public int? InvalidSourceReferences { get; set; }
     public string? ExtractionResponseJson { get; init; }
+    public string? RawProviderResponseJson { get; init; }
     public EvidenceValidation? EvidenceValidation { get; set; }
 }
 
-/// <summary>Observes provider usage without changing prompts, options, or caching behavior.</summary>
-internal sealed class MeasuredChatClientService(IFabrCoreChatClientService inner, bool captureResponses = false) : IFabrCoreChatClientService
+/// <summary>Observes provider usage, with optional eval-only format adapters beneath the observer.</summary>
+internal sealed class MeasuredChatClientService(IFabrCoreChatClientService inner, bool captureResponses = false,
+    bool useJsonObjectResponses = false, bool guideJsonObjectResponses = false,
+    bool normalizeJsonArrays = false) : IFabrCoreChatClientService
 {
     private readonly ConcurrentQueue<ChatCallSample> _calls = new();
     private int active, peak;
@@ -40,7 +43,11 @@ internal sealed class MeasuredChatClientService(IFabrCoreChatClientService inner
     }
 
     public async Task<IChatClient> GetChatClient(string name, int networkTimeoutSeconds = 100)
-        => new MeasuredChatClient(await inner.GetChatClient(name, networkTimeoutSeconds), name, _calls, captureResponses, this);
+    {
+        var client = await inner.GetChatClient(name, networkTimeoutSeconds);
+        if (useJsonObjectResponses) client = new JsonObjectChatClient(client, guideJsonObjectResponses, normalizeJsonArrays);
+        return new MeasuredChatClient(client, name, _calls, captureResponses, this);
+    }
 
     public Task<ModelConfiguration> GetModelConfigurationAsync(string name) => inner.GetModelConfigurationAsync(name);
     public Task<IEmbeddingGenerator<string, Embedding<float>>> GetEmbeddingsClient(string name) => inner.GetEmbeddingsClient(name);
@@ -65,6 +72,7 @@ internal sealed class MeasuredChatClientService(IFabrCoreChatClientService inner
                 target.Enqueue(new(model, sw.ElapsedMilliseconds, usage?.InputTokenCount, usage?.OutputTokenCount,
                     usage?.CachedInputTokenCount, usage?.ReasoningTokenCount, null)
                 { ExtractionResponseJson = captureResponses ? response.Text : null,
+                    RawProviderResponseJson = captureResponses && response.AdditionalProperties?.TryGetValue(JsonObjectChatClient.RawResponseKey, out var raw) == true ? raw as string : null,
                     ResponseSchemaName = (options?.ResponseFormat as ChatResponseFormatJson)?.SchemaName });
                 return response;
             }

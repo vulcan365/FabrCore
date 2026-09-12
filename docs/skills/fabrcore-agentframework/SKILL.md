@@ -1,24 +1,14 @@
 ---
 name: fabrcore-agentframework
-description: >
-  Microsoft Agent Framework usage within FabrCore — AIAgent, AgentSession, ChatClientAgent, ChatClientAgentOptions,
-  AgentResponse, AgentResponseUpdate, thread management patterns, RunAsync vs RunStreamingAsync,
-  session serialization, agent-as-tool composition, middleware (AIAgentBuilder),
-  and Microsoft.Extensions.AI abstractions (IChatClient, AITool, AIFunctionFactory, ChatMessage).
-  Triggers on: "AIAgent", "AgentSession", "ChatClientAgent", "ChatClientAgentOptions", "ChatClientAgentResult",
-  "RunStreamingAsync", "RunAsync", "AgentResponse", "AgentResponseUpdate", "AgentRunOptions",
-  "ChatMessage", "ChatRole", "Microsoft Agent Framework", "IChatClient", "AIFunctionFactory",
-  "AITool", "thread pattern", "per-principal session", "per-message session",
-  "Microsoft.Extensions.AI", "Microsoft.Agents.AI", "AsAIAgent", "AsAIFunction",
-  "AIAgentBuilder", "agent middleware", "session serialization", "ChatHistoryProvider",
-  "AgentSessionStateBag", "CreateSessionAsync".
-  Do NOT use for: FabrCore-specific agent lifecycle (OnInitialize, OnMessage) — use fabrcore-agent.
-  Do NOT use for: plugin or tool development — use fabrcore-plugins-tools.
-  Do NOT use for: the harness providers (TodoProvider, LoopAgent, BackgroundAgentsProvider) or AsHarnessAgent — use fabrcore-harness.
+description: "Integrate Microsoft Agent Framework 1.20.0 with FabrCore.Sdk 2.0: AIAgent, AgentSession, chat clients, tools, middleware, streaming, context providers and compaction. Use for framework API integration; use fabrcore-harness for FabrCore managed execution loops."
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
 ---
 
 # Microsoft Agent Framework in FabrCore
+
+## FabrCore 2.0 baseline
+
+Target FabrCore.Sdk 2.0.0 with Microsoft Agent Framework 1.20.0. Standard SDK-created agents and harnesses compact working context before each model call inside the tool loop; durable history compaction is separate. Preserve upstream experimental API diagnostics where applicable. Compaction does not require long-term Memory or SQL.
 
 FabrCore wraps the Microsoft Agent Framework (`Microsoft.Agents.AI`) and `Microsoft.Extensions.AI` to provide LLM-powered agents. Understanding these underlying types helps you customize agent behavior beyond the defaults.
 

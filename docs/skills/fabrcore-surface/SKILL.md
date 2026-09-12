@@ -1,9 +1,13 @@
 ---
 name: fabrcore-surface
-description: Build, use, extend, or troubleshoot FabrCore.Surface, the FabrCore Razor class library for Adaptive Card rendering, SurfaceChatLink, SurfaceNotify, command-center chat, unread notifications, and Blazor app integration.
+description: "Build, use, extend, or troubleshoot FabrCore.Surface, the FabrCore Razor class library for Adaptive Card rendering, SurfaceChatLink, SurfaceNotify, command-center chat, unread notifications, and Blazor app integration."
 ---
 
 # FabrCore Surface
+
+## FabrCore 2.0 baseline
+
+Use FabrCore.Surface 2.0.0 with matching Host/SDK. Chat, cards, blueprints and orchestrator/task squads work without SQL; default standalone conversations/preferences backed by Orleans are lost on restart. Shared-agent ACL filtering depends on database mode. Memory/GraphRAG require SQL and remain explicit agent choices; Surface installation does not enable them.
 
 Use this skill when working with `FabrCore.Surface`, `DynamicAgentSurface`, `SurfaceChatLink`, `SurfaceNotify`, `/surface` command-center chat, unread notifications, `ui.render` / `ui.action` messages, Adaptive Card Surface envelopes, Adaptive Card template + data rendering, planning config, action routing, or Blazor app integration.
 

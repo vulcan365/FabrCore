@@ -1,23 +1,14 @@
 ---
 name: fabrcore-plugins-tools
-description: >
-  Build FabrCore plugins and standalone tools — IFabrCorePlugin, PluginAlias, ToolAlias, tool calling patterns,
-  plugin settings, DI access, disposable resources, and inter-agent communication from plugins.
-  Triggers on: "build plugin", "create plugin", "IFabrCorePlugin", "PluginAlias", "standalone tool", "ToolAlias",
-  "tool calling", "AIFunctionFactory", "add tools to agent", "[Description]", "plugin settings",
-  "GetPluginSetting", "plugin DI", "tool description", "tool method",
-  "AgentMessage.IsSystemMessage", "SystemMessageTypes", "_thinking", "_status",
-  "FabrCoreCapabilities", "FabrCoreNote", "plugin capabilities", "tool capabilities",
-  "IFabrCoreStorageProvider", "typed storage", "entity storage", "IVerifiableExecutionContext",
-  "attested external effect", "ExternalDbEffect", "ExternalHttpCall", "ExternalStorageEffect",
-  "ExternalLibraryCall", "RecordDbEffectAsync", "RecordHttpCallAsync", "RecordStorageEffectAsync",
-  "RecordLibraryCallAsync", "VerifiableExecutionHash".
-  Do NOT use for: MCP integration — use fabrcore-mcp.
-  Do NOT use for: agent lifecycle — use fabrcore-agent.
+description: "Create and register FabrCore.Sdk 2.0 plugins and standalone tools, resolve settings and state, generate embeddings, and apply tool discovery metadata. Use for IFabrCorePlugin, ToolAlias, IEmbeddings and registry behavior; use specialized Memory/GraphRAG skills for SQL knowledge integrations."
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
 ---
 
 # FabrCore Plugins and Standalone Tools
+
+## FabrCore 2.0 baseline
+
+Target FabrCore.Sdk 2.0.0. General tools and plugins work without SQL. Integrated Memory/GraphRAG plugins ship in Host and are unavailable in standalone mode; SQL mode does not attach them to every agent automatically. Existing FabrCore.Services.* namespaces remain despite package consolidation.
 
 ## When to Use a Plugin vs. a Standalone Tool
 

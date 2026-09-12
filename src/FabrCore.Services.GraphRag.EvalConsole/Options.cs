@@ -24,8 +24,8 @@ internal sealed record Options(string Command, Dictionary<string, string> Values
             throw new ArgumentException("--endpoint-aliases must be off or on.");
         if (values.TryGetValue("mode", out var mode) && mode is not ("document" or "legacy" or "vector"))
             throw new ArgumentException("--mode must be document, legacy, or vector.");
-        if (values.TryGetValue("response", out var response) && response is not ("prompt" or "schema"))
-            throw new ArgumentException("--response must be prompt or schema.");
+        if (values.TryGetValue("response", out var response) && response is not ("prompt" or "schema" or "json" or "json-guided" or "json-normalized"))
+            throw new ArgumentException("--response must be prompt, schema, json, json-guided, or json-normalized.");
         if (values.TryGetValue("relations", out var relations) && relations is not ("current" or "defined" or "policy" or "policy-obligation"))
             throw new ArgumentException("--relations must be current, defined, policy, or policy-obligation.");
         if (values.TryGetValue("evidence", out var evidence) && evidence is not ("off" or "strict" or "spans"))

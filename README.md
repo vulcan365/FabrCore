@@ -2,118 +2,106 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![NuGet](https://img.shields.io/nuget/v/FabrCore.Core.svg)](https://www.nuget.org/packages/FabrCore.Core)
-[![.NET 10](https://img.shields.io/badge/.NET-10.0-purple.svg)](https://dotnet.microsoft.com/)
-[![Orleans 10](https://img.shields.io/badge/Orleans-10.0-blue.svg)](https://learn.microsoft.com/en-us/dotnet/orleans/)
+[![.NET 10](https://img.shields.io/badge/.NET-10-purple.svg)](https://dotnet.microsoft.com/)
 
-**A .NET framework for building distributed AI agent systems on [Orleans](https://learn.microsoft.com/en-us/dotnet/orleans/) and [Microsoft Agent Framework](https://github.com/microsoft/Agents).**
+**Build AI agents in .NET. Run them as distributed Orleans actors. Connect them to your applications, tools, and knowledge.**
 
-FabrCore provides the building blocks for creating, hosting, and connecting to AI agents that run as Orleans grains. Agents are durable, scalable, and communicate through a structured message-passing architecture with built-in support for LLM providers, tool execution, MCP integration, and real-time monitoring.
+FabrCore combines [Microsoft Agent Framework](https://github.com/microsoft/agent-framework)
+with Orleans to provide agent hosting, conversations, tool execution, inter-agent messaging,
+and application integration. Start with a standalone host and Surface chat UI, or configure
+SQL for persistent state, access control, long-term memory, and GraphRAG.
 
-**Website:** [fabrcore.ai](https://fabrcore.ai) | **Built by:** [Vulcan365 AI](https://vulcan365.ai)
+Built by [Vulcan365 AI](https://vulcan365.ai). Explore [fabrcore.ai](https://fabrcore.ai)
+and the [guides and tutorials](https://fabrcore.ai/blogs).
 
-> **New to FabrCore?** Start with the [blogs and guides on fabrcore.ai/blogs](https://fabrcore.ai/blogs) for walkthroughs, architecture deep-dives, and real-world patterns.
+**Upgrading to 2.0?** This breaking release consolidates packages and changes database and ACL
+configuration. Read the [2.0 release notes](RELEASE_NOTES.md) and
+[migration guide](docs/database-modes.md#acl-administration-and-migration) before upgrading.
 
----
+## What you can build
 
-## Key Features
+- **Conversational and task-oriented agents** with model access, tools, plugins, MCP servers,
+  timers, reminders, and structured message handling.
+- **Multi-agent workflows** with private internal specialists, background delegation,
+  model-managed todos, plan/execute modes, bounded loops, and blueprint-defined squads.
+- **Knowledge-backed applications** with explicitly scoped Memory and GraphRAG in SQL mode.
+- **Interactive workspaces** using Surface: Blazor chat, command center, Adaptive Cards,
+  and squads without requiring a Forge account.
+- **Connected agents** through HTTP, WebSocket v2, A2A, Microsoft 365 Copilot, and Teams.
+- **Observable execution** with message and LLM monitoring, token usage, security audit,
+  and optional signed execution evidence.
 
-- **Distributed AI Agents** -- Orleans grains with durable state, timers, reminders, and health monitoring
-- **Microsoft Agent Framework** -- Built on `Microsoft.Agents.AI` with `ChatClientAgent`, sessions, and thread patterns
-- **Multi-LLM Support** -- Azure OpenAI, OpenAI, Anthropic, and custom providers via `Microsoft.Extensions.AI`
-- **Plugins and Tools** -- Stateful plugins and stateless standalone tools with dependency injection
-- **MCP Integration** -- Model Context Protocol servers via Stdio and HTTP transports
-- **Inter-Agent Messaging** -- Fan-out, pipeline, supervisor patterns with ACL-based access control
-- **Real-Time Monitoring** -- Agent message traffic, events, LLM request/response capture, and token tracking
-- **Audio Transcription** -- Azure OpenAI gpt-4o transcription model support
-- **Testing Harness** -- In-memory agent testing with mock and live LLM modes
-- **Blueprint-Driven Development** -- One source-controlled document for agents and Surface squads
-- **Standalone Surface UI** -- Blazor command center and chat with no Forge account required
-- **Optional Memory and GraphRAG** -- SQL Server 2025-backed durable memory and knowledge services
+The SDK uses `Microsoft.Extensions.AI` abstractions for model access. Context management
+preserves task instructions and tool-call relationships, bounds older tool output, and validates
+historical summaries before saving them. See [compaction correctness](docs/compaction-correctness.md)
+and [harness efficiency](docs/harness-efficiency.md) for behavior and tuning guidance.
 
-## Architecture
+## Start standalone, add persistence when needed
 
-```
-+---------------------------------------------------+
-|                Your Application                    |
-+-------------------+-------------------------------+
-|  HTTP/WebSocket   |        FabrCore.Host          |
-|  API Clients      |  AgentGrain (Orleans 10)      |
-|  Applications     |  PrincipalGrain               |
-|                   |  API / Chat Completions       |
-+-------------------+-------------------------------+
-|                  FabrCore.Sdk                      |
-|  FabrCoreAgentProxy  *  ChatClientAgent            |
-|  Plugins  *  Tools  *  MCP  *  Agent Monitor       |
-+---------------------------------------------------+
-|                 FabrCore.Core                      |
-|  Interfaces  *  Data Models  *  Grain Abstractions |
-+---------------------------------------------------+
-```
+| Capability | Default standalone host | Host with a FabrCore SQL connection |
+| --- | --- | --- |
+| Agents, harnesses, tools, MCP, blueprints, skills, squads | Available | Available |
+| Surface and application integrations | Available when configured | Available when configured |
+| Runtime state and conversations | In memory; lost on process restart | Persistent with the default SQL Orleans provider |
+| Cross-principal agent ACL | Trusted workspace; no grant enforcement | Enforced principals, roles, groups, and grants |
+| Long-term Memory and GraphRAG | Unavailable | Available; select plugins and scopes per agent |
+| Security audit, execution evidence, A2A task snapshots | In-memory defaults | SQL-backed defaults |
 
-## Packages
+Standalone mode still applies authentication, privileged administration authentication, and
+storage/session ownership checks. Use SQL-mode ACL enforcement when hosting mutually untrusted
+principals. Default standalone runtime state does not survive a process restart.
 
-| Package | Description |
-|---------|-------------|
-| **[FabrCore.Core](https://www.nuget.org/packages/FabrCore.Core)** | Core interfaces, data models, and grain abstractions |
-| **[FabrCore.Sdk](https://www.nuget.org/packages/FabrCore.Sdk)** | Agent SDK -- `FabrCoreAgentProxy`, plugins, tools, MCP, monitoring |
-| **FabrCore.Client.WebSocket** | Typed WebSocket v2 client with tickets, reconnect, durable delivery checkpoints, and explicit acknowledgements |
-| **[FabrCore.Host](https://www.nuget.org/packages/FabrCore.Host)** | Server host -- Orleans silo, REST API, chat completions, WebSocket, and Agent2Agent (A2A) endpoints for Copilot Studio and other A2A clients (in-memory Localhost mode built in) |
-| **[FabrCore.Host.SqlServer](https://www.nuget.org/packages/FabrCore.Host.SqlServer)** | SQL Server clustering, persistence, and reminders for the host, with automatic Orleans table deployment |
-| **[FabrCore.Host.AzureStorage](https://www.nuget.org/packages/FabrCore.Host.AzureStorage)** | Azure Storage clustering (tables), persistence (blob/tables), reminders, and streams (queues) for the host, with automatic resource provisioning |
-| **[FabrCore.Host.Testing](https://www.nuget.org/packages/FabrCore.Host.Testing)** | Test helpers -- stand the host's A2A endpoints up over an in-memory server with fake agent and registry services, to test your own exposure without an Orleans silo |
-| **[FabrCore.Services.Microsoft365Copilot](https://www.nuget.org/packages/FabrCore.Services.Microsoft365Copilot)** | Server addon -- surface FabrCore agents in Microsoft 365 Copilot and Teams (`/api/messages`, Entra auth, app package generation) |
-| **FabrCore.Services.Contracts** | Open Memory and GraphRAG administration protocol used by self-hosted tools and Forge |
-| **FabrCore.Services.Memory** | Optional scoped durable memory, taxonomy, consolidation, and audit services |
-| **FabrCore.Services.GraphRag** | Optional document ingestion, graph retrieval, search, and administration services |
-| **FabrCore.Surface** | Standalone Blazor command center, chat, Adaptive Cards, and squads |
+Supply `ConnectionStrings:FabrCore` through application configuration or a secret provider to
+enable the SQL feature set. The database must already exist and support the SQL Server 2025 /
+Azure SQL vector and graph schemas. Configure the required chat and embedding models as well.
 
-Forge is the commercial operations and governance product: hosted or on-prem fleet
-administration, identity/team management, incidents, and configuration distribution.
-Building agents, applying blueprints, and chatting in Surface remain standalone OSS
-capabilities.
-
-## Quick Start
-
-For the fastest full experience, run `samples/FabrCore.SampleApp`. It hosts FabrCore and
-Surface in one process with localhost Orleans, development fallback identity, and no SQL
-or Forge dependency. Copy `fabrcore.sample.json` to `fabrcore.json`, configure one model,
-then start the sample and open `/surface`.
-
-### 1. Install packages
-
-```bash
-dotnet add package FabrCore.Host
-```
-
-`FabrCore.Host` pulls in `FabrCore.Sdk` and `FabrCore.Core` transitively. Client applications should connect through the Host HTTP/WebSocket API. `FabrCore.Client.WebSocket` provides the typed production v2 live client; agent creation and Blueprint provisioning remain HTTP-only.
-
-### 2. Create an agent
-
-```csharp
-using FabrCore.Sdk;
-using FabrCore.Core;
-
-[AgentAlias("my-assistant")]
-public class MyAssistantAgent : FabrCoreAgentProxy
+```json
 {
-    public override async Task<AgentMessage> OnMessage(AgentMessage message)
-    {
-        var (agent, session) = await Host.CreateChatClientAgent(
-            modelName: "AzureProd",
-            instructions: "You are a helpful assistant."
-        );
-
-        var response = await agent.SendAsync(session, message.Text);
-        return message.ToReply(response);
-    }
+  "ConnectionStrings": {
+    "FabrCore": "Server=localhost;Database=fabrcore;Integrated Security=true;TrustServerCertificate=true"
+  }
 }
 ```
 
-### 3. Configure the server
+This example uses local-development connection settings. See [standalone and SQL modes](docs/database-modes.md)
+for deployment configuration, existing split databases, schema provisioning, and Azure/custom
+Orleans providers. Database selection requires a restart; a failed SQL startup never silently
+becomes a standalone host. Host includes SQL services, but standalone startup does not activate
+them. SDK-only agent libraries have no SQL implementation dependency.
+
+## Try the sample
+
+Install the **.NET 10 SDK**, then use a fresh checkout:
+
+```powershell
+git clone https://github.com/vulcan365/FabrCore.git
+cd FabrCore
+Copy-Item samples/FabrCore.SampleApp/fabrcore.sample.json samples/FabrCore.SampleApp/fabrcore.json
+```
+
+Edit `samples/FabrCore.SampleApp/fabrcore.json` and configure the `default` model and its API-key
+alias. Enable only the integrations you intend to use. Local `fabrcore.json` files are gitignored.
+
+```powershell
+dotnet run --project samples/FabrCore.SampleApp --launch-profile http
+```
+
+Open **http://localhost:5248/surface**. The sample runs Host and Surface together with localhost
+Orleans, a development fallback identity, and in-memory demo data. SQL, Forge, and Microsoft 365
+credentials are not required for this standalone experience. Model calls use your configured provider.
+
+## Add FabrCore to your application
+
+Install the host in an ASP.NET Core application:
+
+```shell
+dotnet add package FabrCore.Host
+```
 
 ```csharp
-var builder = WebApplication.CreateBuilder(args);
+using FabrCore.Host;
 
+var builder = WebApplication.CreateBuilder(args);
 builder.AddFabrCoreServer();
 
 var app = builder.Build();
@@ -121,84 +109,108 @@ app.UseFabrCoreServer();
 app.Run();
 ```
 
-### 4. Configure model access
+Host brings SDK and Core transitively. Put model configuration in `fabrcore.json`; put host
+settings such as `FabrCore:Database` and connection strings in application configuration.
+For a separate agent class library, reference `FabrCore.Sdk`.
 
-Copy `FabrCore.json.example` to `FabrCore.json` in your project root and add your LLM provider configuration:
+An agent handles messages through `FabrCoreAgentProxy`:
 
-```json
+```csharp
+using FabrCore.Core;
+using FabrCore.Sdk;
+using Microsoft.Agents.AI;
+
+[AgentAlias("my-assistant")]
+public sealed class MyAssistantAgent(
+    AgentConfiguration config,
+    IServiceProvider services,
+    IFabrCoreAgentHost host) : FabrCoreAgentProxy(config, services, host)
 {
-  "ModelConfigurations": [
+    private ChatClientAgentResult chat = null!;
+
+    public override async Task OnInitialize()
     {
-      "Name": "AzureProd",
-      "Provider": "Azure",
-      "Uri": "https://your-resource.cognitiveservices.azure.com/",
-      "Model": "gpt-4.1-mini",
-      "ApiKeyAlias": "AZURE_KEY",
-      "ReasoningEffort": "none",
-      "MaxOutputTokens": 1000
+        chat = await CreateChatClientAgent(
+            chatClientConfigName: "default",
+            threadId: "main");
     }
-  ],
-  "ApiKeys": [
+
+    public override async Task<AgentMessage> OnMessage(AgentMessage message)
     {
-      "Alias": "AZURE_KEY",
-      "Value": "your-api-key-here"
+        var result = await chat.Agent.RunAsync(message.Message ?? "", chat.Session);
+        var reply = message.Response();
+        reply.Message = result.Text;
+        return reply;
     }
-  ]
 }
 ```
 
-> **Note:** `FabrCore.json` is gitignored by default to prevent accidental secret commits.
+Configure a `default` model, reference the agent assembly from the host, and provision
+`my-assistant` through a [blueprint](docs/blueprints.md) or the Host API. Application assemblies
+and referenced FabrCore dependencies are discovered automatically. For todos, delegation,
+and completion loops, use the [FabrCore harness](docs/skills/fabrcore-harness/SKILL.md).
+
+## Packages
+
+| Package | Purpose |
+| --- | --- |
+| [FabrCore.Core](https://www.nuget.org/packages/FabrCore.Core) | Shared interfaces, models, protocols, and service contracts |
+| [FabrCore.Sdk](https://www.nuget.org/packages/FabrCore.Sdk) | Agent development, harnesses, tools, MCP, and typed HTTP clients |
+| [FabrCore.Host](https://www.nuget.org/packages/FabrCore.Host) | Orleans runtime and APIs, integrated SQL Server, Memory, GraphRAG, ACL, and operational stores |
+| [FabrCore.Client.Orleans](https://www.nuget.org/packages/FabrCore.Client.Orleans) | Direct Orleans client with host-assisted gateway discovery |
+| [FabrCore.Client.WebSocket](https://www.nuget.org/packages/FabrCore.Client.WebSocket) | Typed WebSocket v2 client with reconnect, replay, and acknowledgements |
+| [FabrCore.Host.AzureStorage](https://www.nuget.org/packages/FabrCore.Host.AzureStorage) | Optional Azure Storage provider for Orleans |
+| [FabrCore.Host.Testing](https://www.nuget.org/packages/FabrCore.Host.Testing) | In-memory Host/A2A integration-test helpers |
+| [FabrCore.Services.Microsoft365Copilot](https://www.nuget.org/packages/FabrCore.Services.Microsoft365Copilot) | Microsoft 365 Copilot and Teams channel integration |
+| [FabrCore.Surface](https://www.nuget.org/packages/FabrCore.Surface) | Blazor workspace, chat, Adaptive Cards, and squads |
+
+Most applications connect through the HTTP API or WebSocket client. Agent creation and
+blueprint provisioning remain HTTP operations. A2A endpoints are built into Host and enabled
+through configuration; the Microsoft 365 channel is a separate integration package.
+
+The former `FabrCore.Host.SqlServer`, `FabrCore.Services.Contracts`, `FabrCore.Services.Memory`,
+and `FabrCore.Services.GraphRag` packages are retired in 2.0. Their implementations and contracts
+have moved into Host, Core, and SDK. See the [package migration table](RELEASE_NOTES.md#breaking-changes-and-upgrade).
 
 ## Documentation
 
-Full documentation is available in the [`docs/skills`](docs/skills/) directory:
+| Topic | Start here |
+| --- | --- |
+| 2.0 upgrade and database choices | [Release notes](RELEASE_NOTES.md) · [Database modes and migration](docs/database-modes.md) |
+| Release upgrades | [1.6 / 1.7 / 1.8 to 2.0 skill](docs/skills/fabrcore-releases/SKILL.md) |
+| Agent development | [Agent guide](docs/skills/fabrcore-agent/SKILL.md) · [Internal specialists](docs/skills/fabrcore-agent/references/internal-agent-composition.md) |
+| Harnesses and context management | [Harness guide](docs/skills/fabrcore-harness/SKILL.md) · [Compaction](docs/compaction-correctness.md) |
+| Hosting and model configuration | [Server guide](docs/skills/fabrcore-server/SKILL.md) · [Orleans configuration](docs/skills/fabrcore-orleans/SKILL.md) |
+| Tools and integrations | [Plugins/tools](docs/skills/fabrcore-plugins-tools/SKILL.md) · [MCP](docs/skills/fabrcore-mcp/SKILL.md) · [A2A](docs/a2a.md) |
+| Applications and orchestration | [Sample application](samples/FabrCore.SampleApp) · [Blueprints](docs/blueprints.md) |
+| Memory behavior and evaluation | [Release defaults](docs/memory-release-defaults.md) · [Readiness review](docs/memory-readiness-review.md) |
+| Operations | [Monitoring](docs/skills/fabrcore-agentmonitor/SKILL.md) · [Cloud Server protocol](docs/cloud-server-protocol.md) |
+| Builds and releases | [Build instructions](builds/README.md) |
 
-| Topic | Description |
-|-------|-------------|
-| [FabrCore Overview](docs/skills/fabrcore/SKILL.md) | Architecture, prerequisites, and project templates |
-| [Agent Development](docs/skills/fabrcore-agent/SKILL.md) | Building agents with lifecycle methods, state, timers, and reminders |
-| [Microsoft Agent Framework](docs/skills/fabrcore-agentframework/SKILL.md) | `ChatClientAgent`, sessions, thread patterns, and `Microsoft.Extensions.AI` |
-| [Agent Harness](docs/skills/fabrcore-harness/SKILL.md) | Model-managed todo lists, iteration loops, background delegation, and durable sessions |
-| [Server Setup](docs/skills/fabrcore-server/SKILL.md) | Orleans silo, REST API, WebSocket, LLM providers, and system agents |
-| [Plugins and Tools](docs/skills/fabrcore-plugins-tools/SKILL.md) | Stateful plugins, stateless tools, and DI integration |
-| [MCP Integration](docs/skills/fabrcore-mcp/SKILL.md) | Model Context Protocol servers via Stdio and HTTP transports |
-| [Messaging and Access Control](docs/skills/fabrcore-messaging/SKILL.md) | Inter-agent communication patterns, routing, and ACL rules |
-| [Agent Monitor](docs/skills/fabrcore-agentmonitor/SKILL.md) | Message traffic monitoring, LLM call capture, and token tracking |
-| [Orleans Configuration](docs/skills/fabrcore-orleans/SKILL.md) | Clustering, persistence, streaming, reminders, and multi-silo |
-| [Testing](docs/skills/fabrcore-testing/SKILL.md) | In-memory test harness with mock and live LLM modes |
-| [Audio Transcription](docs/skills/fabrcore-transcription/SKILL.md) | Azure OpenAI gpt-4o audio transcription |
-| [Blueprints](docs/blueprints.md) | Canonical agent and squad configuration, storage, apply endpoints, and admin authentication |
+FabrCore is open source and works without Forge. Forge is the separate commercial operations
+and governance product for fleet administration, identity/team management, incidents, and
+configuration distribution. Cloud Server integration is optional.
 
-**Check out the [FabrCore Blog](https://fabrcore.ai/blogs)** for tutorials, architecture deep-dives, integration guides, and best practices.
+## Build and test
 
-## Technology Stack
+The current source targets **.NET 10**, **Orleans 10.3.1**, and **Microsoft Agent Framework 1.20.0**.
 
-- **.NET 10** -- Latest .NET runtime
-- **Orleans 10.0** -- Distributed actor framework for grain-based agents
-- **Microsoft.Agents.AI 1.0** -- Microsoft Agent Framework for AI agent patterns
-- **Microsoft.Extensions.AI** -- Unified AI abstractions for multi-provider LLM support
+See [Orleans 10.3 adoption](docs/orleans-10.3-adoption.md) for contract checks, storage compatibility,
+telemetry, and optional durable SQL streams (preview provider).
+With PowerShell 7 installed:
 
-## Building from Source
-
-```bash
-dotnet build src/FabrCore.sln
+```powershell
+./scripts/Build.ps1                  # Release build, deterministic tests, and nine packages
+./scripts/Build.ps1 -Version 2.0.0-blah # Build and pack an explicit version
+./scripts/Test-BuildScripts.ps1      # Validate inventory and release-script behavior
 ```
 
-## License
+SQL integration tests and live model evaluations are explicit workflows. See
+[build instructions](builds/README.md) for prerequisites, local package feeds, and release previews.
 
-Licensed under the [Apache License, Version 2.0](LICENSE).
+## Contributing and license
 
-See [NOTICE](NOTICE) for attribution requirements.
+Issues and pull requests are welcome at [vulcan365/FabrCore](https://github.com/vulcan365/FabrCore).
+Please include reproduction steps and relevant tests for behavior changes.
 
-## Contributing
-
-Contributions are welcome! Please open an issue or pull request on [GitHub](https://github.com/vulcan365/FabrCore).
-
-## Links
-
-- [FabrCore Website](https://fabrcore.ai)
-- [FabrCore Blog](https://fabrcore.ai/blogs)
-- [Vulcan365 AI](https://vulcan365.ai)
-- [NuGet Packages](https://www.nuget.org/packages?q=FabrCore)
-- [Orleans Documentation](https://learn.microsoft.com/en-us/dotnet/orleans/)
-- [Microsoft Agent Framework](https://github.com/microsoft/Agents)
+FabrCore is licensed under [Apache 2.0](LICENSE). See [NOTICE](NOTICE) for attribution requirements.

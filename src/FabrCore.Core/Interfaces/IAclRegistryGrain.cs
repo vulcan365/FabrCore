@@ -5,8 +5,7 @@ namespace FabrCore.Core.Interfaces
 {
     /// <summary>
     /// Single-activation registry grain (well-known key <c>"acl"</c>) that owns all writes to
-    /// persisted ACL entities. Serializing writes through one activation keeps the per-collection
-    /// index documents consistent on any storage backend, without exposed ETags.
+    /// SQL ACL entities. Mutations commit relational data and a version in one transaction.
     /// Reads on the hot path never hit this grain — silos cache immutable snapshots and refresh
     /// on change notifications (stream namespace <c>AclChanged</c>) or TTL expiry.
     /// </summary>
@@ -17,9 +16,12 @@ namespace FabrCore.Core.Interfaces
 
         /// <summary>
         /// Ensures built-in entities exist (System principal, dynamic groups, acl-admin role)
-        /// and applies configuration seeds on first run. Idempotent.
+        /// on first run. Idempotent.
         /// </summary>
         Task EnsureBootstrappedAsync();
+
+        /// <summary>Atomically imports legacy entities into an installation containing only built-in ACL data.</summary>
+        Task ImportAsync(AclSnapshotData snapshot);
 
         /// <summary>Gets the full entity set with its current version.</summary>
         Task<AclSnapshotData> GetSnapshotAsync();

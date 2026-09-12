@@ -32,8 +32,6 @@ public sealed class RemoteAdminController(
     IFabrCoreAgentService agents,
     IFabrCoreBlueprintService blueprints,
     IFabrCoreSkillCatalogService skills,
-    IAclEntityStore acl,
-    IAclSnapshotProvider aclSnapshot,
     IAuditProvider audit,
     IAgentMessageMonitor monitor,
     IVerifiableExecutionStore evidenceStore,
@@ -78,55 +76,7 @@ public sealed class RemoteAdminController(
     {
         if (RejectSpoofedTargetHeaders() is { } rejected) return rejected;
 
-        var document = new ClusterCapabilityDocument
-        {
-            HostVersion = typeof(RemoteAdminController).Assembly.GetName().Version?.ToString() ?? "unknown",
-            MaxRequestBodyBytes = remoteAdministrationOptions.Value.MaxBodyBytes,
-            BlueprintExtensions = blueprintExpanders
-                .Select(expander => expander.ExtensionKey)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Order()
-                .ToList(),
-            Services =
-            [
-                new ClusterServiceCapability
-                {
-                    Name = "host-admin",
-                    Version = typeof(RemoteAdminController).Assembly.GetName().Version?.ToString(),
-                    ApiVersion = "1",
-                    Features = ["runtime", "blueprints", "skills", "acl", "audit", "monitor", "evidence", "capabilities"],
-                    DataScope = "cluster",
-                    MaxRequestBodyBytes = remoteAdministrationOptions.Value.MaxBodyBytes
-                }
-            ]
-        };
-
-        if (services.GetService<IMemoryAdminService>() is not null)
-        {
-            document.Services.Add(new ClusterServiceCapability
-            {
-                Name = "memory",
-                Version = typeof(IMemoryAdminService).Assembly.GetName().Version?.ToString(),
-                ApiVersion = MemoryAdminCapability.CurrentApiVersion,
-                Features = ["dashboard", "scopes", "memories", "consolidation", "audit"],
-                DataScope = "cluster"
-            });
-        }
-
-        if (services.GetService<IGraphRagAdminService>() is not null)
-        {
-            document.Services.Add(new ClusterServiceCapability
-            {
-                Name = "graphrag",
-                Version = typeof(IGraphRagAdminService).Assembly.GetName().Version?.ToString(),
-                ApiVersion = GraphRagAdminCapability.CurrentApiVersion,
-                Features = ["dashboard", "scopes", "documents", "graph", "search", "maintenance", "upload"],
-                DataScope = "cluster",
-                MaxRequestBodyBytes = remoteAdministrationOptions.Value.MaxBodyBytes
-            });
-        }
-
-        return Ok(document);
+        return Ok(ClusterCapabilityFactory.Create(services.GetRequiredService<FabrCore.Core.FabrCoreFeatureState>(), blueprintExpanders, remoteAdministrationOptions.Value));
     }
 
     /// <summary>
@@ -414,137 +364,6 @@ public sealed class RemoteAdminController(
                 new Dictionary<string, string> { ["skillReference"] = reference });
             throw;
         }
-    }
-
-    [HttpGet("access")]
-    public async Task<IActionResult> GetAccess(CancellationToken cancellationToken)
-    {
-        if (RejectSpoofedTargetHeaders() is { } rejected) return rejected;
-        var snapshot = await acl.GetSnapshotAsync(cancellationToken);
-        return Ok(new
-        {
-            snapshot.Version,
-            EnforcementMode = aclSnapshot.Current.ModeOverride?.ToString(),
-            snapshot.Principals,
-            snapshot.Roles,
-            snapshot.Groups,
-            snapshot.Grants
-        });
-    }
-
-    [HttpPut("access/enforcement-mode")]
-    public Task<IActionResult> SetEnforcementMode(
-        [FromBody] RemoteAdminEnforcementModeRequest request,
-        CancellationToken cancellationToken) =>
-        MutateAsync(null, "access/enforcement-mode", async () =>
-        {
-            await acl.SetEnforcementModeOverrideAsync(request.Mode, cancellationToken);
-            return NoContent();
-        });
-
-    [HttpPut("access/principals/{handle}")]
-    public Task<IActionResult> SaveAclPrincipal(
-        string handle,
-        [FromBody] AclPrincipal principal,
-        CancellationToken cancellationToken) =>
-        MutateAsync(handle, $"access/principals/{handle}/save", async () =>
-        {
-            principal.Handle = handle;
-            await acl.UpsertPrincipalAsync(principal, cancellationToken);
-            return NoContent();
-        });
-
-    [HttpDelete("access/principals/{handle}")]
-    public Task<IActionResult> DeleteAclPrincipal(string handle, CancellationToken cancellationToken) =>
-        MutateAsync(handle, $"access/principals/{handle}/delete", async () =>
-            await acl.DeletePrincipalAsync(handle, cancellationToken) ? NoContent() : NotFound());
-
-    [HttpPut("access/roles/{name}")]
-    public Task<IActionResult> SaveAclRole(
-        string name,
-        [FromBody] AclRole role,
-        CancellationToken cancellationToken) =>
-        MutateAsync(null, $"access/roles/{name}/save", async () =>
-        {
-            role.Name = name;
-            await acl.UpsertRoleAsync(role, cancellationToken);
-            return NoContent();
-        });
-
-    [HttpDelete("access/roles/{name}")]
-    public Task<IActionResult> DeleteAclRole(string name, CancellationToken cancellationToken) =>
-        MutateAsync(null, $"access/roles/{name}/delete", async () =>
-            await acl.DeleteRoleAsync(name, cancellationToken) ? NoContent() : NotFound());
-
-    [HttpPut("access/groups/{name}")]
-    public Task<IActionResult> SaveAclGroup(
-        string name,
-        [FromBody] AclGroup group,
-        CancellationToken cancellationToken) =>
-        MutateAsync(null, $"access/groups/{name}/save", async () =>
-        {
-            group.Name = name;
-            await acl.UpsertGroupAsync(group, cancellationToken);
-            return NoContent();
-        });
-
-    [HttpDelete("access/groups/{name}")]
-    public Task<IActionResult> DeleteAclGroup(string name, CancellationToken cancellationToken) =>
-        MutateAsync(null, $"access/groups/{name}/delete", async () =>
-            await acl.DeleteGroupAsync(name, cancellationToken) ? NoContent() : NotFound());
-
-    [HttpPost("access/groups/{name}/members")]
-    public Task<IActionResult> AddAclGroupMember(
-        string name,
-        [FromBody] GroupMember member,
-        CancellationToken cancellationToken) =>
-        MutateAsync(null, $"access/groups/{name}/members/add", async () =>
-        {
-            await acl.AddGroupMemberAsync(name, member, cancellationToken);
-            return NoContent();
-        });
-
-    [HttpDelete("access/groups/{name}/members")]
-    public Task<IActionResult> RemoveAclGroupMember(
-        string name,
-        [FromQuery] SubjectKind kind,
-        [FromQuery] string handle,
-        CancellationToken cancellationToken) =>
-        MutateAsync(null, $"access/groups/{name}/members/remove", async () =>
-            await acl.RemoveGroupMemberAsync(name, new GroupMember(kind, handle), cancellationToken)
-                ? NoContent()
-                : NotFound());
-
-    [HttpPut("access/grants/{id}")]
-    public Task<IActionResult> SaveAclGrant(
-        string id,
-        [FromBody] PermissionGrant grant,
-        CancellationToken cancellationToken) =>
-        MutateAsync(null, $"access/grants/{id}/save", async () =>
-        {
-            grant.Id = id;
-            await acl.UpsertGrantAsync(grant, cancellationToken);
-            return NoContent();
-        });
-
-    [HttpDelete("access/grants/{id}")]
-    public Task<IActionResult> DeleteAclGrant(string id, CancellationToken cancellationToken) =>
-        MutateAsync(null, $"access/grants/{id}/delete", async () =>
-            await acl.DeleteGrantAsync(id, cancellationToken) ? NoContent() : NotFound());
-
-    [HttpGet("access/principals/{handle}/effective")]
-    public IActionResult GetEffectiveAccess(string handle)
-    {
-        if (RejectSpoofedTargetHeaders() is { } rejected) return rejected;
-        var snapshot = aclSnapshot.Current;
-        return Ok(new
-        {
-            Principal = handle,
-            Roles = snapshot.RolesOf(handle),
-            Groups = snapshot.GroupsOf(SubjectKind.Principal, handle)
-                .Append(snapshot.AllPrincipalsGroup)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-        });
     }
 
     [HttpGet("access/audit")]

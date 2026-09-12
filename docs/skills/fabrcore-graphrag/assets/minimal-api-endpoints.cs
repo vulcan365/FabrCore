@@ -29,9 +29,7 @@ app.MapPost("/api/graphrag/documents", async (
     CancellationToken ct) =>
 {
     var result = await ingestion.IngestDocumentAsync(
-        request.FileName,
-        request.ScopeKey,
-        request.MarkdownContent,
+        new KnowledgeIngestionRequest(request.FileName, request.ScopeKey, request.MarkdownContent),
         ct);
 
     return Results.Ok(result);

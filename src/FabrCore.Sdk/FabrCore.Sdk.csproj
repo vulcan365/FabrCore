@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<TargetFramework>net10.0</TargetFramework>
@@ -10,12 +10,6 @@
 		<Title>FabrCore Sdk</Title>
 		<Description>SDK for building AI agents with the FabrCore framework </Description>
 	</PropertyGroup>
-
-	<ItemGroup>
-	  <Compile Remove="Memory\**" />
-	  <EmbeddedResource Remove="Memory\**" />
-	  <None Remove="Memory\**" />
-	</ItemGroup>
 
 	<ItemGroup>
 		<ProjectReference Include="..\FabrCore.Core\FabrCore.Core.csproj" />
@@ -33,6 +27,7 @@
 
 	<ItemGroup>
 		<PackageReference Include="OpenTelemetry.Api" Version="1.18.0" />
+		<PackageReference Include="Microsoft.Extensions.Http" Version="10.0.12" />
 		<PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.12" />
 	</ItemGroup>
 	

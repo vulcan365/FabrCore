@@ -1,15 +1,18 @@
 ---
 name: fabrcore-graphrag
-description: Integrate, configure, troubleshoot, and evaluate FabrCore.Services.GraphRag in .NET apps. Use for scoped ingestion and search, extraction performance and quality, SQL graph/vector setup, administration APIs, or GraphRAG agent and plugin adapters.
+description: "Integrate, configure, troubleshoot, and evaluate the GraphRAG feature in FabrCore.Host 2.0. Use for scoped ingestion and search, extraction performance and quality, SQL graph/vector setup, administration APIs, or GraphRAG agent and plugin adapters."
 ---
 
 # FabrCore GraphRAG Service Skill
 
-Use this skill to integrate `FabrCore.Services.GraphRag` into .NET 10 / FabrCore
-applications. Treat this as a service-first package: it provides GraphRAG
-contracts and operations, not UI components.
+## FabrCore 2.0 baseline
 
-Published skill snapshot: 2026-09-07. Available experimental options are not
+In FabrCore 2.0 GA, GraphRAG implementation ships in FabrCore.Host and shared contracts in FabrCore.Core. Existing FabrCore.Services.GraphRag namespaces remain. Configure ConnectionStrings:FabrCore and call AddFabrCoreServer once; Host registers GraphRAG and its administration services. Do not install the retired service package or repeat manual registrations. Standalone does not expose SQL-only GraphRAG features.
+
+Use this skill to integrate `FabrCore.Services.GraphRag` into .NET 10 / FabrCore
+applications. The preserved namespaces expose Host services and Core contracts; UI belongs in the consuming application.
+
+Release baseline: FabrCore 2.0.0 GA. Available experimental options are not
 recommended defaults. Read [ingestion and evaluations](references/ingestion-and-evals.md)
 when tuning performance or resuming evals; that reference distinguishes implemented
 behavior from unfinished work. Console/Generic Host consumers are supported; Blazor
@@ -17,7 +20,7 @@ is not required.
 
 ## Core Rule
 
-Prefer the service package:
+Use the preserved namespaces (implementation in Host, shared contracts in Core):
 
 ```csharp
 using FabrCore.Services.GraphRag;
@@ -29,18 +32,17 @@ using FabrCore.Services.GraphRag.Administration.Models;
 Do not use the old `FabrCore.Agents.GraphRagAgent` namespace for new work unless
 the user explicitly asks to maintain legacy code.
 
-## What This Package Is
+## Integrated GraphRAG services
 
-`FabrCore.Services.GraphRag` provides:
+The Host GraphRAG feature provides:
 
 - SQL Server GraphRAG schema and migrations under the preserved `grag` schema.
-- DI registration with `AddGraphRagServices`.
-- Optional administration service registration with `AddGraphRagAdministration`.
+- Integrated service and administration registration through `AddFabrCoreServer` in SQL mode.
 - Scope management through `IKnowledgeScopeService`.
 - Document ingestion through `IKnowledgeIngestionService`.
 - Scope-enforced search through `IKnowledgeSearchService`.
 - Admin/dashboard/data-management operations through `IGraphRagAdminService`.
-- Open transport contracts and DTOs from `FabrCore.Services.Contracts`.
+- Open transport contracts and DTOs from `FabrCore.Core`.
 - Vendor-neutral `IMarkdownConversionService`; OSS defaults to pass-through conversion.
 - Optional plugin and agent adapters for FabrCore agent/tool-call scenarios.
 
@@ -49,24 +51,19 @@ assets. Build UI, controllers, pages, and API endpoints in the consuming app.
 
 ## First Steps In A Consumer App
 
-1. Add a package or project reference to `FabrCore.Services.GraphRag`.
-2. Add a SQL Server connection string, usually named `GraphRagDb`.
-3. Register `AddGraphRagServices("GraphRagDb")`.
-4. Register `AddGraphRagAdministration()` only when building admin screens,
-   dashboards, maintenance endpoints, or graph visualization APIs.
-5. Inject the service interfaces needed by the user-facing feature.
-6. Keep scope keys trusted: derive them from config, claims, tenant context, or
-   another authoritative source. Never let an LLM choose scopes.
+1. Reference `FabrCore.Host` 2.0.0 and configure `ConnectionStrings:FabrCore` through secrets.
+2. Call `builder.AddFabrCoreServer()` once. Host registers SQL knowledge and administration services.
+3. Configure `default` chat and 1536-dimensional `embeddings` models.
+4. For existing split storage, set `FabrCore:Database:GraphRagConnectionStringName`.
+5. Inject the required service interfaces and derive allowed scopes from trusted application context.
 
 Use the assets as copyable templates:
 
 - `assets/appsettings.graphrag.json` for configuration shape.
 - `assets/service-registration.cs` for DI setup.
-- For app-owned ingestion endpoints and workers, use the request-based call in
-  `references/api-surface.md` and the concurrency guidance in
-  `references/ingestion-and-evals.md`. The two bundled `.cs` ingestion samples
-  (`minimal-api-endpoints.cs`, `background-ingestion-worker.cs`) retain the old
-  positional call and must be adapted; they are not current copy-and-build templates.
+- `assets/minimal-api-endpoints.cs` and `assets/background-ingestion-worker.cs` use the
+  request-based ingestion API. Integrate application authorization and trusted scope selection
+  before exposing the endpoint examples.
 - `assets/plugin-agent-config.json` for plugin/agent configuration.
 
 ## Reference Map
@@ -89,24 +86,17 @@ Read these references only when needed:
 
 ## Service Registration Pattern
 
-Use this in the consuming app startup:
+Configure SQL mode and call `builder.AddFabrCoreServer()`; do not repeat low-level
+knowledge registrations. Set `FabrCore:GraphRag:ExtractionModelName` for an explicit alias.
+When absent, extraction tries `graphrag`, then `default`; omission does not disable it.
+An explicit invalid alias fails rather than silently falling back.
 
-```csharp
-builder.Services.AddGraphRagServices(
-    connectionStringName: "GraphRagDb",
-    extractionModelName: "graph-extraction");
+Ingestion tuning still binds from the legacy top-level `GraphRag:Ingestion` section,
+including `EnableExtraction=false` for embedding-only ingestion. Do not move these keys
+under `FabrCore` until the implementation supports that path.
 
-builder.Services.AddGraphRagAdministration();
-```
-
-`extractionModelName` selects an explicit model alias. When omitted, extraction
-tries `graphrag`, then `default`; omission does not disable extraction. An explicit
-alias does not silently fall back to another alias. To ingest without LLM graph
-extraction, set `GraphRag:Ingestion:EnableExtraction=false`; embeddings still run.
-
-`AddGraphRagServices` registers the schema hosted service. On app startup, the
-service resolves the configured connection string and runs schema/migration
-initialization.
+The integrated Host schema service initializes GraphRAG migrations. With
+`FabrCore:Database:AutoInitialize=false`, it validates pre-provisioned schemas instead.
 
 ## Scope Rules
 
@@ -146,7 +136,7 @@ var json = await search.SearchEntitiesAsync(request, ct);
 
 ### Build An Admin UI
 
-1. Register `AddGraphRagAdministration`.
+1. Enable Host SQL mode; administration services register automatically.
 2. Configure the Host's `FabrCoreAdmin` cluster key.
 3. Use the secured `/fabrcoreapi/graphrag/admin/v1` controller or inject
    `IGraphRagAdminService` in-process.
@@ -176,7 +166,7 @@ var json = await search.SearchEntitiesAsync(request, ct);
 
 ### Use GraphRAG In Agents Or Plugins
 
-1. Register `AddGraphRagServices` in the host app.
+1. Enable SQL mode through `AddFabrCoreServer` in the host app.
 2. Configure plugin/agent `ConnectionStringName`.
 3. Configure `AllowedScopes` for search-capable tools and agents.
 4. Read `references/agents-and-plugins.md`.
@@ -184,10 +174,10 @@ var json = await search.SearchEntitiesAsync(request, ct);
 
 ## Implementation Guardrails
 
-- Keep UI out of `FabrCore.Services.GraphRag`.
+- Keep GraphRAG UI in the consuming application, outside Host service implementations.
 - Keep vendor-specific document conversion out of OSS. The Vulcan365 adapter lives in the
   commercial `FabrCore.Services.GraphRag.Vulcan365` project.
-- Keep shared admin interfaces/DTOs in `FabrCore.Services.Contracts`; do not link-compile or
+- Keep shared admin interfaces/DTOs in `FabrCore.Core`; do not link-compile or
   type-forward them from the service package.
 - Keep consumer-specific auth and tenant resolution in the consuming app.
 - Use `IKnowledgeSearchService` as the authoritative search surface.

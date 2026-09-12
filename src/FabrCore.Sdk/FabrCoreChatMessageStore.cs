@@ -132,6 +132,11 @@ namespace FabrCore.Sdk
         {
             _logger?.LogDebug("ProvideChatHistoryAsync called for thread {ThreadId}", _threadId);
 
+            // A durable rewrite can retain the same final message and message count.
+            // The framework's incremental index cannot detect every such prefix rewrite.
+            // Rebuild this transient index from authoritative history once per invocation.
+            context.Session?.StateBag.TryRemoveValue(ContextCompaction.StateKey);
+
             // If we have cached messages, return from cache (no grain call needed)
             if (_cachedMessages != null)
             {
@@ -219,96 +224,23 @@ namespace FabrCore.Sdk
             if (projectedTokens <= budget)
                 return projected;
 
-            var perMessageBudget = Math.Max(2000, budget / Math.Max(1, projected.Count));
-            var trimmed = CompactionService.TruncateOversizedMessages(projected, perMessageBudget);
-            var trimmedTokens = CompactionService.EstimateTokens(trimmed);
-
-            _logger?.LogWarning(
-                "Projection trimmed oversized messages for thread {ThreadId}: ~{BeforeTokens} -> ~{AfterTokens} estimated tokens (budget {Budget})",
-                _threadId, projectedTokens, trimmedTokens, budget);
-
-            return trimmed;
+            throw new FabrCoreRunStoppedException(RunStopReason.PromptTooLarge,
+                "Protected history exceeds the projection budget. Compact history successfully or increase the configured budget.",
+                projectedTokens, 0, 0);
         }
 
         /// <summary>
-        /// Sliding-window projection: keep all leading system messages, plus as many of
-        /// the newest messages as fit under <see cref="ProjectionConfig.MaxContextTokens"/>
-        /// * <see cref="ProjectionConfig.Threshold"/>. Guarantees at least
-        /// <see cref="ProjectionConfig.MinKeepLastN"/> of the most recent messages. Keeps
-        /// tool-call groups paired (never drops an orphaned tool result).
+        /// Preserve all task-bearing messages. Only older tool output may be excerpted;
+        /// the caller stops explicitly if protected content cannot fit.
         /// </summary>
         internal static List<StoredChatMessage> ProjectForLlm(IReadOnlyList<StoredChatMessage> all, ProjectionConfig cfg)
         {
-            if (all.Count == 0)
-                return new List<StoredChatMessage>();
-
             var budget = (int)(cfg.MaxContextTokens * cfg.Threshold);
-            if (budget <= 0)
-                return all.ToList();
-
-            // Separate leading system messages — these are always kept (system prompt,
-            // compaction summary stub). They also count against the budget.
-            var leadingSystemCount = 0;
-            for (var i = 0; i < all.Count; i++)
-            {
-                if (string.Equals(all[i].Role, "system", StringComparison.OrdinalIgnoreCase))
-                    leadingSystemCount++;
-                else
-                    break;
-            }
-
-            var leadingSystem = all.Take(leadingSystemCount).ToList();
-            var nonSystem = all.Skip(leadingSystemCount).ToList();
-            if (nonSystem.Count == 0)
-                return leadingSystem;
-
-            // Tokens already consumed by required leading system messages.
-            var consumed = CompactionService.EstimateTokens(leadingSystem);
-
-            // Walk backwards through non-system messages, accumulating until budget.
-            var keptIndex = nonSystem.Count; // exclusive start index of the kept window
-            for (var i = nonSystem.Count - 1; i >= 0; i--)
-            {
-                var msgTokens = CompactionService.EstimateTokens(nonSystem[i]);
-                if (consumed + msgTokens > budget && (nonSystem.Count - i) > cfg.MinKeepLastN)
-                {
-                    break;
-                }
-                consumed += msgTokens;
-                keptIndex = i;
-            }
-
-            // Expand window forward past orphaned tool/function-result messages at the
-            // start — they must stay paired with their preceding assistant function-call.
-            // Specifically: if the first kept message is "tool" role, walk back one more
-            // (but we already walked back as far as we could). The safer fix: walk FORWARD
-            // from keptIndex while the message at keptIndex is "tool", since we cannot
-            // send an orphaned tool result without its assistant function-call.
-            while (keptIndex < nonSystem.Count &&
-                   string.Equals(nonSystem[keptIndex].Role, "tool", StringComparison.OrdinalIgnoreCase))
-            {
-                keptIndex++;
-            }
-
-            // Pathological case: budget too tight, everything got dropped. Force-keep
-            // at least MinKeepLastN most recent messages even if they blow the budget —
-            // better to overshoot than to send the LLM an empty history for the current turn.
-            if (keptIndex >= nonSystem.Count)
-            {
-                var force = Math.Min(cfg.MinKeepLastN, nonSystem.Count);
-                keptIndex = nonSystem.Count - force;
-                while (keptIndex < nonSystem.Count &&
-                       string.Equals(nonSystem[keptIndex].Role, "tool", StringComparison.OrdinalIgnoreCase))
-                {
-                    keptIndex++;
-                }
-            }
-
-            var result = new List<StoredChatMessage>(leadingSystem.Count + (nonSystem.Count - keptIndex));
-            result.AddRange(leadingSystem);
-            for (var i = keptIndex; i < nonSystem.Count; i++)
-                result.Add(nonSystem[i]);
-            return result;
+            if (budget <= 0 || CompactionService.EstimateTokens(all.ToList()) <= budget) return all.ToList();
+            var groups = CompactionTranscript.Groups(all);
+            var recent = groups.TakeLast(Math.Max(2, cfg.MinKeepLastN)).ToHashSet();
+            return groups.SelectMany(g => recent.Contains(g) ? g :
+                CompactionService.TruncateOversizedMessages(g, Math.Max(1, budget / Math.Max(1, all.Count)))).ToList();
         }
 
         /// <summary>
@@ -379,7 +311,7 @@ namespace FabrCore.Sdk
                 }
             }
 
-            return new ChatMessage(new ChatRole(m.Role), contents)
+            return new ChatMessage(new ChatRole(m.AuthorName == "compaction" ? "assistant" : m.Role), contents)
             {
                 AuthorName = m.AuthorName
             };
@@ -390,6 +322,26 @@ namespace FabrCore.Sdk
         /// </summary>
         public Task<List<StoredChatMessage>> GetStoredMessagesAsync()
             => _agentHost.GetThreadMessagesAsync(_threadId);
+
+        /// <summary>
+        /// Commits a validated compaction only while its source transcript is current.
+        /// Thread writers must be serialized by the host (as with the Orleans host).
+        /// </summary>
+        internal async Task ReplaceCompactedHistoryAsync(List<StoredChatMessage> expected,
+            List<StoredChatMessage> replacement, CancellationToken cancellationToken)
+        {
+            var current = await GetStoredMessagesAsync();
+            if (HasPendingMessages || !current.Select(Fingerprint).SequenceEqual(expected.Select(Fingerprint)))
+                throw new InvalidOperationException("History changed during compaction; replacement was abandoned.");
+            cancellationToken.ThrowIfCancellationRequested();
+            await _agentHost.ReplaceThreadMessagesAsync(_threadId, replacement);
+            lock (_syncLock)
+            {
+                _cachedMessages = [.. replacement, .. _pendingMessages];
+                // Messages arriving during the write still need to be flushed.
+            }
+            static object Fingerprint(StoredChatMessage m) => (m.Id, m.Role, m.AuthorName, m.Timestamp, m.ContentsJson);
+        }
 
         /// <summary>
         /// Replaces all messages in the thread and resets the local cache.

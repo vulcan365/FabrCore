@@ -99,7 +99,8 @@ internal sealed class FakeChatClient : IChatClient
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var response = await GetResponseAsync(chatMessages, options, cancellationToken);
-        yield return new ChatResponseUpdate(ChatRole.Assistant, response.Text ?? string.Empty);
+        foreach (var update in response.ToChatResponseUpdates())
+            yield return update;
     }
 
     public object? GetService(Type serviceType, object? serviceKey = null) => null;
@@ -207,16 +208,28 @@ internal sealed class FakeAgentHost : IFabrCoreAgentHost
     {
     }
 
+    public Dictionary<string, List<StoredChatMessage>> Threads { get; } = [];
+    public int HistoryReplacements { get; private set; }
+    public bool FailHistoryReplacement { get; set; }
     public Task<List<StoredChatMessage>> GetThreadMessagesAsync(string threadId)
-        => Task.FromResult(new List<StoredChatMessage>());
+        => Task.FromResult(Threads.TryGetValue(threadId, out var messages) ? messages.ToList() : []);
 
     public Task AddThreadMessagesAsync(string threadId, IEnumerable<StoredChatMessage> messages)
-        => Task.CompletedTask;
+    {
+        if (!Threads.TryGetValue(threadId, out var stored)) Threads[threadId] = stored = [];
+        stored.AddRange(messages);
+        return Task.CompletedTask;
+    }
 
-    public Task ClearThreadAsync(string threadId) => Task.CompletedTask;
+    public Task ClearThreadAsync(string threadId) { Threads.Remove(threadId); return Task.CompletedTask; }
 
     public Task ReplaceThreadMessagesAsync(string threadId, IEnumerable<StoredChatMessage> messages)
-        => Task.CompletedTask;
+    {
+        if (FailHistoryReplacement) throw new IOException("Simulated history write failure.");
+        HistoryReplacements++;
+        Threads[threadId] = messages.ToList();
+        return Task.CompletedTask;
+    }
 
     // A copy, so a proxy's in-memory cache cannot alias the durable store — the same isolation the grain has.
     public Task<Dictionary<string, JsonElement>> GetCustomStateAsync()
@@ -252,6 +265,7 @@ internal sealed class FakeChatClientService : IFabrCoreChatClientService
 
     /// <summary>Configuration names requested, in order.</summary>
     public List<string> RequestedClients { get; } = [];
+    public ModelConfiguration? ModelConfiguration { get; set; }
 
     public Task<IChatClient> GetChatClient(string name, int networkTimeoutSeconds = 100)
     {
@@ -268,7 +282,7 @@ internal sealed class FakeChatClientService : IFabrCoreChatClientService
         => throw new NotSupportedException();
 
     public Task<ModelConfiguration> GetModelConfigurationAsync(string name)
-        => Task.FromResult(new ModelConfiguration
+        => Task.FromResult(ModelConfiguration ?? new ModelConfiguration
         {
             Name = name,
             Provider = "Test",

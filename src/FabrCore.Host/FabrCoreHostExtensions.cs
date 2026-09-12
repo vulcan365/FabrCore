@@ -559,21 +559,21 @@ namespace FabrCore.Host
                     // DI activator would otherwise select it with an empty enumerable.
                     builder.Services.AddSingleton(serviceProvider =>
                         new FabrCore.Sdk.FabrCoreToolRegistry(
-                            serviceProvider.GetRequiredService<ILogger<FabrCore.Sdk.FabrCoreToolRegistry>>()));
+                            serviceProvider.GetRequiredService<ILogger<FabrCore.Sdk.FabrCoreToolRegistry>>()) { Features = serviceProvider.GetRequiredService<FabrCore.Core.FabrCoreFeatureState>() });
                     builder.Services.AddSingleton<FabrCore.Sdk.IFabrCoreRegistry>(serviceProvider =>
                         new FabrCore.Sdk.FabrCoreRegistry(
-                            serviceProvider.GetRequiredService<ILogger<FabrCore.Sdk.FabrCoreRegistry>>()));
+                            serviceProvider.GetRequiredService<ILogger<FabrCore.Sdk.FabrCoreRegistry>>()) { Features = serviceProvider.GetRequiredService<FabrCore.Core.FabrCoreFeatureState>() });
                 }
                 else
                 {
                     builder.Services.AddSingleton(serviceProvider =>
                         new FabrCore.Sdk.FabrCoreToolRegistry(
                             serviceProvider.GetRequiredService<ILogger<FabrCore.Sdk.FabrCoreToolRegistry>>(),
-                            registryAssemblies));
+                            registryAssemblies) { Features = serviceProvider.GetRequiredService<FabrCore.Core.FabrCoreFeatureState>() });
                     builder.Services.AddSingleton<FabrCore.Sdk.IFabrCoreRegistry>(serviceProvider =>
                         new FabrCore.Sdk.FabrCoreRegistry(
                             serviceProvider.GetRequiredService<ILogger<FabrCore.Sdk.FabrCoreRegistry>>(),
-                            registryAssemblies));
+                            registryAssemblies) { Features = serviceProvider.GetRequiredService<FabrCore.Core.FabrCoreFeatureState>() });
                 }
                 logger.LogDebug("FabrCoreToolRegistry added");
                 logger.LogDebug("FabrCoreRegistry added");
@@ -607,29 +607,13 @@ namespace FabrCore.Host
                 builder.Services.AddSingleton(typeof(IAgentManagementProvider), options.AgentManagementProviderType);
                 logger.LogDebug("AgentManagementProvider added: {ProviderType}", options.AgentManagementProviderType.Name);
 
-                // Configure ACL (principals/roles/groups/permission grants, persisted via the
-                // single-activation AclRegistryGrain through the configured fabrcoreStorage
-                // backend). All FabrCore configuration lives under the FabrCore node
-                // (FabrCore:Acl); the legacy root "Acl" section no longer binds.
+                var database = Database.FabrCoreDatabaseOptions.Resolve(builder.Configuration);
+                builder.Services.AddSingleton(database);
+                builder.Services.AddSingleton(new FabrCore.Core.FabrCoreFeatureState(database.Enabled));
                 builder.Services.Configure<FabrCoreAclOptions>(builder.Configuration.GetSection(FabrCoreAclOptions.SectionName));
-                builder.Services.AddSingleton<GrainBackedAclEntityStore>();
-                builder.Services.AddSingleton<IAclEntityStore>(sp => sp.GetRequiredService<GrainBackedAclEntityStore>());
-                builder.Services.AddSingleton<IAclSnapshotProvider>(sp => sp.GetRequiredService<GrainBackedAclEntityStore>());
-                builder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<GrainBackedAclEntityStore>());
-                builder.Services.AddSingleton(typeof(IAclEvaluator), options.AclEvaluatorType);
+                Database.FabrCoreDatabaseRegistration.AddServices(builder.Services, builder.Configuration, database, options.AclEvaluatorType);
                 builder.Services.AddSingleton<FabrCore.Core.Acl.AclEnforcer>();
                 builder.Services.AddSingleton<FabrCore.Host.Services.AclEnforcer>();
-                logger.LogDebug("ACL configured: evaluator {EvaluatorType}", options.AclEvaluatorType.Name);
-
-                // The legacy rule-based ACL config shape no longer binds — warn loudly so
-                // operators migrate to principals/roles/groups/grants (see fabrcore-acl skill).
-                if (builder.Configuration.GetSection("FabrCore:Acl:Rules").GetChildren().Any())
-                {
-                    logger.LogWarning(
-                        "Legacy ACL 'Rules' configuration detected and IGNORED. The rule-based ACL was replaced " +
-                        "by principals/roles/groups/permission grants — migrate to 'FabrCore:Acl:Seed:Grants' or the " +
-                        "ACL management API (see the fabrcore-acl skill for the mapping).");
-                }
 
                 // All FabrCore configuration now lives under the single "FabrCore" node. Legacy
                 // root-level keys no longer bind — flag them so misconfiguration is not silent
@@ -668,8 +652,11 @@ namespace FabrCore.Host
                 // out of the box; UseNullAuditProvider() opts out).
                 builder.Services.Configure<FabrCore.Core.Auditing.AuditOptions>(
                     builder.Configuration.GetSection(FabrCore.Core.Auditing.AuditOptions.SectionName));
-                builder.Services.AddSingleton(typeof(FabrCore.Core.Auditing.IAuditProvider), options.AuditProviderType);
-                logger.LogInformation("Security audit provider: {ProviderType}", options.AuditProviderType.Name);
+                var auditProviderType = database.Enabled && options.AuditProviderType == typeof(InMemoryAuditProvider)
+                    ? typeof(Database.SqlAuditProvider) : options.AuditProviderType;
+                builder.Services.AddSingleton(typeof(FabrCore.Core.Auditing.IAuditProvider), sp => sp.GetRequiredService(auditProviderType));
+                if (auditProviderType != typeof(Database.SqlAuditProvider)) builder.Services.AddSingleton(auditProviderType);
+                logger.LogInformation("Security audit provider: {ProviderType}", auditProviderType.Name);
 
                 // Bind tunable options (see FabrCoreHostOptions / AgentGrainOptions / PrincipalGrainOptions).
                 builder.Services.Configure<Configuration.FabrCoreHostOptions>(
@@ -743,7 +730,10 @@ namespace FabrCore.Host
                     logger.LogDebug("AgentMessageMonitor not configured — monitoring disabled");
                 }
 
-                builder.Services.AddSingleton(typeof(IVerifiableExecutionStore), options.VerifiableExecutionStoreType);
+                var evidenceStoreType = database.Enabled && options.VerifiableExecutionStoreType == typeof(InMemoryVerifiableExecutionStore)
+                    ? typeof(Database.SqlVerifiableExecutionStore) : options.VerifiableExecutionStoreType;
+                builder.Services.AddSingleton(typeof(IVerifiableExecutionStore), sp => sp.GetRequiredService(evidenceStoreType));
+                if (evidenceStoreType != typeof(Database.SqlVerifiableExecutionStore)) builder.Services.AddSingleton(evidenceStoreType);
                 builder.Services.AddSingleton(typeof(IVerifiableExecutionSigner), options.VerifiableExecutionSignerType);
                 builder.Services.AddSingleton<IVerifiableExecutionVerifier, VerifiableExecutionVerifier>();
                 builder.Services.AddSingleton<VerifiableExecutionRecorder>();
@@ -752,7 +742,7 @@ namespace FabrCore.Host
                 logger.LogInformation(
                     "Verifiable execution {State} (Store={StoreType}, Signer={SignerType})",
                     options.VerifiableExecutionOptions.Enabled ? "enabled" : "disabled",
-                    options.VerifiableExecutionStoreType.Name,
+                    evidenceStoreType.Name,
                     options.VerifiableExecutionSignerType.Name);
 
                 // Agent2Agent (A2A) endpoints. Available to every deployment and inert until
@@ -937,6 +927,9 @@ namespace FabrCore.Host
                     .GetSection(OrleansClusterOptions.SectionName)
                     .Get<OrleansClusterOptions>() ?? new OrleansClusterOptions();
 
+                Database.FabrCoreDatabaseOptions.Resolve(builder.Configuration)
+                    .ApplyOrleansDefaults(orleansOptions, builder.Configuration, options.OrleansProvider);
+
                 logger.LogInformation("Orleans clustering mode: {ClusteringMode}", orleansOptions.ClusteringMode);
                 activity?.SetTag("orleans.clustering_mode", orleansOptions.ClusteringMode.ToString());
 
@@ -1049,6 +1042,8 @@ namespace FabrCore.Host
                 }
                 return options.OrleansProvider;
             }
+
+            if (mode == ClusteringMode.SqlServer) return new SqlServer.SqlServerOrleansProvider();
 
             // Convention-based discovery: an assembly named FabrCore.Host.<Mode> containing a
             // public parameterless IFabrCoreOrleansProvider implementation. Referencing the

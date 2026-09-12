@@ -8,6 +8,8 @@ namespace FabrCore.Sdk
     {
         private readonly ILogger<FabrCoreRegistry> _logger;
         private readonly IReadOnlyList<Assembly>? _assemblies;
+        public FabrCore.Core.FabrCoreFeatureState? Features { get; init; }
+
         private readonly Lazy<Dictionary<string, Type>> _agentTypes;
         private readonly Lazy<Dictionary<string, Type>> _pluginTypes;
         private readonly Lazy<Dictionary<string, MethodInfo>> _toolMethods;
@@ -45,7 +47,7 @@ namespace FabrCore.Sdk
         public List<RegistryEntry> GetAgentTypes()
         {
             return _agentTypes.Value
-                .Where(kv => kv.Value.GetCustomAttribute<FabrCoreHiddenAttribute>() == null)
+                .Where(kv => kv.Value.GetCustomAttribute<FabrCoreHiddenAttribute>() == null && (Features?.IsAvailable(kv.Value) ?? true))
                 .GroupBy(kv => kv.Value.FullName ?? kv.Value.Name)
                 .Select(g =>
                 {
@@ -68,7 +70,7 @@ namespace FabrCore.Sdk
         public List<RegistryEntry> GetPlugins()
         {
             return _pluginTypes.Value
-                .Where(kv => kv.Value.GetCustomAttribute<FabrCoreHiddenAttribute>() == null)
+                .Where(kv => kv.Value.GetCustomAttribute<FabrCoreHiddenAttribute>() == null && (Features?.IsAvailable(kv.Value) ?? true))
                 .GroupBy(kv => kv.Value.FullName ?? kv.Value.Name)
                 .Select(g =>
                 {
@@ -100,7 +102,7 @@ namespace FabrCore.Sdk
         public List<RegistryEntry> GetTools()
         {
             return _toolMethods.Value
-                .Where(kv => kv.Value.GetCustomAttribute<FabrCoreHiddenAttribute>() == null)
+                .Where(kv => kv.Value.GetCustomAttribute<FabrCoreHiddenAttribute>() == null && (Features?.IsAvailable(kv.Value) ?? true))
                 .GroupBy(kv => $"{kv.Value.DeclaringType?.FullName ?? kv.Value.DeclaringType?.Name ?? "Unknown"}.{kv.Value.Name}")
                 .Select(g =>
                 {
@@ -144,6 +146,7 @@ namespace FabrCore.Sdk
                 return null;
 
             _agentTypes.Value.TryGetValue(alias, out var type);
+            if (type is not null) Features?.RequireAvailable(type);
             return type;
         }
 

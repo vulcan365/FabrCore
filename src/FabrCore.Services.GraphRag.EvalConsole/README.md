@@ -5,6 +5,40 @@ extraction, and retrieval evaluations. Blazor and a FabrCore web host are not
 required. The app uses the existing GraphRAG services and FabrCore SDK model client
 with a local model-configuration resolver.
 
+## JSON object provider experiments
+
+`--response json` requests provider JSON object mode instead of JSON Schema. It
+preserves the ingestion prompts and generation settings. `--response json-guided`
+also prepends the system instruction in `JsonObjectChatClient.Guidance` and sets
+temperature to zero. That instruction reinforces flat entity/relationship arrays,
+field types, source identifiers, and concise grounded extraction. Both modes are
+eval-only adapters; production GraphRAG configuration and parsing are unchanged.
+
+These modes guarantee neither the GraphRAG response shape nor factual correctness.
+`json` and `json-guided` do not repair or normalize returned JSON. The report records the selected
+`ResponseFormat`, raw responses, usage, ingestion status, and graph fact checks.
+Schema-only evidence, policy, repair, and description-budget experiments still
+require `--response schema`; JSON object mode is not a substitute for those contracts.
+
+`--response json-normalized` uses the guided settings and additionally flattens nested
+arrays beneath `entities` and `relationships`. It preserves every object and rejects
+normalization if it encounters a primitive or null array member. It never changes
+identifiers or supplies missing fields. For changed responses, `RawProviderResponseJson`
+retains the original and `ExtractionResponseJson` contains the normalized response
+used by ingestion and extraction traces. This is an explicit diagnostic adapter,
+not a production parser change or proof of factual correctness.
+
+Example using a locally configured model alias:
+
+```powershell
+dotnet run --project src/FabrCore.Services.GraphRag.EvalConsole -- run --model phi4-mini-reasoning --response json-guided --sections-per-batch 1 --max-chars 0
+```
+
+The model's effective serving limit must fit both input and output, including
+classification prompts. Smaller source sections do not by themselves reduce the
+separate document classification prompt. See the [Phi follow-up evaluation](../../docs/graphrag-phi4-mini-reasoning-followup-2026-09-11.md)
+for measured deployment limitations and results.
+
 ## Configuration
 
 `appsettings.json` contains ingestion defaults. `appsettings.local.json` contains

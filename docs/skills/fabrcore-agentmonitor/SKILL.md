@@ -1,22 +1,14 @@
 ---
 name: fabrcore-agentmonitor
-description: >
-  FabrCore agent message, event, and LLM call monitoring — IAgentMessageMonitor, InMemoryAgentMessageMonitor,
-  message traffic observation, event stream observation at OnEvent, internal LLM request/response capture,
-  LLM token tracking, building custom monitor providers, subscribing to message/event/LLM-call notifications for UI updates.
-  Triggers on: "agent monitor", "message monitor", "IAgentMessageMonitor", "InMemoryAgentMessageMonitor",
-  "monitor messages", "monitor events", "OnEvent", "event stream monitor", "track tokens", "agent token usage",
-  "message traffic", "monitor provider", "OnMessageRecorded", "OnEventRecorded", "OnLlmCallRecorded",
-  "MonitoredMessage", "MonitoredEvent", "MonitoredLlmCall", "LlmCaptureOptions", "LlmCallContext",
-  "AgentMessage.IsSystemMessage", "SystemMessageTypes",
-  "monitor LLM calls", "capture LLM prompts", "capture LLM responses", "AgentTokenSummary", "message observation",
-  "VerifiableExecutionId", "SignatureDigest", "VerificationStatus", "signed evidence".
-  Do NOT use for: agent lifecycle — use fabrcore-agent.
-  Do NOT use for: OpenTelemetry metrics — use fabrcore-server.
+description: "Implement FabrCore 2.0 message and LLM monitoring, lifecycle events, token and cost capture, REST/SSE viewers and custom providers. Use for observability and diagnostics; use fabrcore-acl for security audit and fabrcore-spiffe for signed evidence."
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
 ---
 
 # FabrCore Agent Message Monitor
+
+## FabrCore 2.0 baseline
+
+This skill targets FabrCore 2.0 GA. Ordinary message/LLM monitoring keeps its configured providers; SQL mode adds durable security audit and execution evidence separately. Subscribe to Microsoft.Orleans.* and FabrCore.* activity sources and Microsoft.Orleans/FabrCore.* meters. Orleans RPC tags now use rpc.system.name and orleans.rpc.service/target_id/source_id; rpc.method includes interface/method.
 
 ## Overview
 

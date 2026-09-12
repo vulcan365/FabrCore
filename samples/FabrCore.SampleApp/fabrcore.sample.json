@@ -4,7 +4,9 @@
       "Name": "default",
       "Provider": "OpenAI",
       "Model": "gpt-4o",
-      "ApiKeyAlias": "openai"
+      "ApiKeyAlias": "openai",
+      "ContextWindowTokens": 128000,
+      "MaxOutputTokens": 8192
     },
     {
       "Name": "embeddings",
@@ -18,7 +20,8 @@
       "Model": "gpt-5.4-mini",
       "ApiKeyAlias": "openai",
       "ReasoningEffort": "none",
-      "ContextWindowTokens": 75000
+      "ContextWindowTokens": 75000,
+      "MaxOutputTokens": 8192
     }
   ],
   "ApiKeys": [

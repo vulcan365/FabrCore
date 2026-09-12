@@ -30,7 +30,7 @@ Call path:
 GraphRagSchemaInitializer.EnsureSchemaAsync(connectionString, logger)
 ```
 
-`AddGraphRagServices` runs this automatically through a hosted service.
+Host SQL mode runs this through its integrated schema hosted service; `AutoInitialize=false` validates instead.
 
 ## Migration Runner
 

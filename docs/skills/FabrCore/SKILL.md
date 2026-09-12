@@ -1,31 +1,22 @@
 ---
 name: fabrcore
-description: >
-  FabrCore overview, architecture, prerequisites, NuGet packages, and project templates for
-  distributed .NET/Orleans AI agent systems. Use for general FabrCore questions, getting started,
-  or choosing a specialized skill. Route agent code to fabrcore-agent; Microsoft Agent Framework
-  to fabrcore-agentframework; todo lists, plan/execute modes, iteration loops, background delegation, and managed
-  Agent Skills to
-  fabrcore-harness; plugins/tools to fabrcore-plugins-tools; hosting/API to
-  fabrcore-server; Orleans to fabrcore-orleans; ordinary messages/orchestration to
-  fabrcore-messaging; durable proactive/out-of-turn delivery and relay providers to
-  fabrcore-principal-delivery; authorization/audit to fabrcore-acl; MCP to fabrcore-mcp;
-  verifiable execution/SPIFFE to fabrcore-spiffe; Microsoft 365 Copilot/Teams integration to
-  fabrcore-microsoft365copilot; Agent2Agent (A2A) endpoints and Copilot Studio connected agents to
-  fabrcore-a2a; Memory to fabrcore-services-memory; GraphRAG to
-  fabrcore-graphrag; Surface UI and squads to fabrcore-surface;
-  tests to fabrcore-testing; and August 2026 OSS/Forge ownership or cross-repo changes to
-  fabrcore-oss-aug2026.
+description: "FabrCore 2.0 overview, architecture, runtime modes, packages and project templates for distributed .NET AI agents. Use for getting started and choosing a specialized skill; use fabrcore-releases for upgrades from 1.6, 1.7 or 1.8."
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
 metadata:
   author: FabrCore
-  version: 1.0.0
+  version: 2.0.0
   documentation: https://fabrcore.ai/docs
 ---
 
 # FabrCore Development Skill
 
+## FabrCore 2.0 baseline
+
+FabrCore 2.0 GA targets .NET 10. Host includes SQL Server, Memory and GraphRAG; shared service contracts live in Core and remote Memory clients/harness integration in SDK. Use fabrcore-releases for migrations from 1.6, 1.7 or 1.8. Standalone defaults to in-memory runtime state and trusted cross-principal messaging; ConnectionStrings:FabrCore enables SQL features and enforced ACL.
+
 Build distributed AI agent systems with FabrCore — an open-source .NET 10 framework for creating, hosting, and orchestrating AI agents on Microsoft Orleans.
+
+For release upgrades, use [fabrcore-releases](../fabrcore-releases/SKILL.md).
 
 ## Quick Reference
 
@@ -53,8 +44,8 @@ Build distributed AI agent systems with FabrCore — an open-source .NET 10 fram
 | MCP | External tool protocol | `McpServerConfig` | fabrcore-mcp |
 | Microsoft 365 Copilot | Copilot/Teams channel addon | `AddMicrosoft365Copilot()`, `Microsoft365CopilotOptions` | fabrcore-microsoft365copilot |
 | A2A | Agent2Agent protocol endpoints (in `FabrCore.Host`) | `A2A:Enabled`, `A2AOptions`, agent cards | fabrcore-a2a |
-| Memory | Durable scoped agent memory | `AddAgentMemoryServices()`, `IAgentMemoryService` | fabrcore-services-memory |
-| GraphRAG | Scoped knowledge ingestion/search | `AddGraphRagServices()`, `IKnowledgeSearchService` | fabrcore-graphrag |
+| Memory | Durable scoped agent memory | `AddFabrCoreServer()` in SQL mode, `IAgentMemoryService` | fabrcore-services-memory |
+| GraphRAG | Scoped knowledge ingestion/search | `AddFabrCoreServer()` in SQL mode, `IKnowledgeSearchService` | fabrcore-graphrag |
 | Surface | OSS command-center UI | `AddFabrCoreSurface()`, `SurfaceChatLink` | fabrcore-surface |
 | Squads | Blueprint-defined agent squads | `SurfaceSquadType`, `squads` extension | fabrcore-surface |
 | Configuration | Agent definition | `AgentConfiguration` | fabrcore-server |
@@ -98,9 +89,9 @@ FabrCore layers on top of Orleans (distributed actor model) and Microsoft.Extens
 - **FabrCore.Core** — Interfaces (`IAgentGrain`, `IPrincipalGrain`), models (`AgentConfiguration`, `AgentMessage`, `EventMessage`, `AgentHealthStatus`, `AgentEvictionResult`), verifiable execution contracts, Orleans surrogates
 - **FabrCore.Sdk** — Agent base class (`FabrCoreAgentProxy`), plugin system, tool registry, chat client factory, MCP integration, the two-layer compaction ladder (`ContextCompaction` + `CompactionService`), state persistence, Host API client, typed entity storage contracts, blueprint ensure client types, LLM evidence integration
 - **FabrCore.Host** — Orleans grains (`AgentGrain`, `PrincipalGrain`), REST API controllers, streaming, WebSocket, agent service, verifiable execution recording/signing/verification
-- **FabrCore.Services.Contracts** — open Memory, GraphRAG, and cluster-capability transport contracts
-- **FabrCore.Services.Memory** — optional SQL Server 2025-backed durable agent memory
-- **FabrCore.Services.GraphRag** — optional SQL Server 2025-backed scoped knowledge services
+- **Core service contracts** — open Memory, GraphRAG, and cluster-capability transport contracts
+- **Host Memory** — SQL Server 2025-backed durable agent memory, enabled by the feature database
+- **Host GraphRAG** — SQL Server 2025-backed scoped knowledge services, enabled by the feature database
 - **FabrCore.Surface** — optional OSS Blazor command center, Adaptive Cards, and squads
 
 ## Prerequisites
@@ -128,8 +119,8 @@ Create `fabrcore.json` in the server project root with your LLM provider configu
 FabrCore uses two separate configuration documents:
 
 - `appsettings.json` contains host, client, Orleans, storage, delivery, ACL, audit, and other
-  runtime settings. Every FabrCore-owned appsettings key belongs under the single `FabrCore`
-  root element.
+  runtime settings. Host runtime settings belong under `FabrCore`; .NET connection strings remain top-level.
+  GraphRAG ingestion tuning currently uses the legacy top-level `GraphRag:Ingestion` section.
 - With the standard Host, `fabrcore.json` is consumed only as `ModelConfigurations` and `ApiKeys`
   by the local model configuration store. Do not put host runtime sections such as `Orleans`,
   `FileStorage`, or `Acl` at its root. An addon may explicitly document additional sections and
@@ -226,3 +217,10 @@ dotnet add src/MySystem.Server reference src/MySystem.Agents
 4. Copy and customize the asset templates for each project.
 
 For detailed reference on any topic, use the specialized skills listed in the Quick Reference table above.
+
+## Client and UI templates
+
+Use [Surface integration](../fabrcore-surface/references/integration.md) and its current templates
+for Blazor chat. The old FabrCore.Client, AddFabrCoreClient and ChatDock templates are retired.
+For protocol clients, use FabrCore.Client.WebSocket 2.0.0 (v2 tickets/hello/ACK/replay); for trusted
+backend Orleans access use FabrCore.Client.Orleans 2.0.0 and the Orleans skill.

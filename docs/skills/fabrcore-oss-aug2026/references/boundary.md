@@ -1,13 +1,13 @@
-# August 2026 repository boundary
+# FabrCore 2.0 repository boundary (August split lineage)
 
 ## Project ownership
 
 | Project or concern | Owner |
 |---|---|
 | Core, SDK, Host, Client.Orleans, Orleans providers | OSS |
-| `FabrCore.Services.Contracts` | OSS |
-| `FabrCore.Services.Memory` and tests | OSS |
-| `FabrCore.Services.GraphRag` and tests | OSS |
+| `FabrCore.Core` | OSS |
+| Memory implementation in Host, integration in SDK, and Memory tests | OSS |
+| GraphRAG implementation in Host and GraphRAG tests | OSS |
 | `FabrCore.Surface`, squads, and tests | OSS |
 | Sample app, Aspire sample host, ServiceDefaults | OSS |
 | Blueprint envelope, expanders, Host CRUD/apply | OSS |

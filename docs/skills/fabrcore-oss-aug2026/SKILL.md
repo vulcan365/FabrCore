@@ -10,6 +10,10 @@ description: >
 
 # FabrCore OSS August 2026
 
+## FabrCore 2.0 baseline
+
+This skill retains its historical name but describes the FabrCore 2.0 GA ownership boundary. Memory/GraphRAG implementations and SQL hosting now live in Host, contracts in Core, and remote Memory clients/harness integration in SDK. Do not recreate retired service/provider projects or forwarding packages. Forge remains optional; SQL mode provides OSS ACL, Memory and GraphRAG.
+
 Preserve a credible standalone OSS platform while keeping hosted administration, fleet
 operations, and commercial adapters in Forge.
 
@@ -41,7 +45,7 @@ operations, and commercial adapters in Forge.
 - Do not reintroduce the removed Swarm runtime (`SurfaceSquadType.Swarm`, the `"swarm"`
   extension, `swarm.*` messages), and do not add `SwarmV2`, `swarm2.*`, `squad2-*`,
   `surface.squads`, or parallel old/new shapes.
-- Keep Memory and GraphRAG contracts in `FabrCore.Services.Contracts`.
+- Keep Memory and GraphRAG contracts in `FabrCore.Core`.
 - Do not link-compile contracts or add type forwarders to the OSS service packages.
 - Keep the OSS GraphRAG markdown converter vendor-neutral. Put Vulcan365 conversion in
   `FabrCore.Services.GraphRag.Vulcan365` in the commercial repo.
@@ -77,21 +81,15 @@ gain interactive create/manage routes that duplicate Forge.
 5. Point the commercial build at that package version with
    `UseLocalFabrCoreSource=false`.
 6. Change Forge, Surface.Admin, or commercial adapters.
-7. Update both repositories' `docs/skills` and matching `.agents/skills` copies.
+7. Update maintained `docs/skills` in affected repositories; refresh installed copies only if present.
 8. Scan for stale names, deleted project references, caches, and credentials.
 
 ## Validation
 
 ```powershell
-dotnet build C:\repos\FabrCore\src\FabrCore.sln -c Release
-& C:\repos\FabrCore\scripts\Pack-Local.ps1
-
-# Do not run dotnet test on the mixed OSS solution. Run the VSTest projects
-# listed in .github/workflows/publish-nuget.yml individually, then run:
-dotnet run --project C:\repos\FabrCore\src\FabrCore.Services.Memory.Tests\FabrCore.Services.Memory.Tests.csproj `
-  -c Release --no-build --no-restore
-dotnet run --project C:\repos\FabrCore\src\FabrCore.Services.GraphRag.Tests\FabrCore.Services.GraphRag.Tests.csproj `
-  -c Release --no-build --no-restore
+# Uses builds/Projects.psd1 for the supported packages and both test-runner families.
+& C:\repos\FabrCore\scripts\Build.ps1 -Version 2.0.0
+# This validates and packs locally; it does not publish to NuGet.
 
 $ossVersion = "<local-version>"
 dotnet restore C:\repos\fabrcore-v365\src\FabrCore-V365.slnx `
@@ -121,7 +119,7 @@ dotnet publish C:\repos\fabrcore-v365\src\FabrCore.Forge.App\FabrCore.Forge.App.
   /p:UseLocalFabrCoreSource=false /p:FabrCoreOssVersion=$ossVersion
 ```
 
-The OSS tag workflow publishes only the eleven supported OSS libraries; never pack the whole
+The OSS tag workflow publishes only the nine supported OSS libraries from `builds/Projects.psd1`; never pack the whole
 solution because it also contains samples. The commercial local pack script publishes only
 DataIntelligence and the Vulcan365 GraphRAG adapter. Forge and Surface.Admin ship together as
 the Forge application image.

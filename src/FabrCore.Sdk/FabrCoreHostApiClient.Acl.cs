@@ -19,6 +19,8 @@ namespace FabrCore.Sdk
         public string DefaultLevel { get; set; } = string.Empty;
         public Dictionary<string, string> Categories { get; set; } = new();
         public int MaxBufferedEvents { get; set; }
+        public long? FailedWrites { get; set; }
+        public DateTimeOffset? LastFailureUtc { get; set; }
     }
 
     /// <summary>
@@ -99,6 +101,9 @@ namespace FabrCore.Sdk
             CancellationToken cancellationToken = default);
 
         Task<AuditConfigResponse> GetAuditConfigAsync(string callerUserHandle, CancellationToken cancellationToken = default);
+
+        Task<List<AuditEvent>> QueryAuditEventsAsync(string callerUserHandle, AuditQuery query, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException("This client does not support extended audit queries.");
     }
 
     public partial class FabrCoreHostApiClient
@@ -228,6 +233,24 @@ namespace FabrCore.Sdk
 
         public Task<AuditConfigResponse> GetAuditConfigAsync(string callerUserHandle, CancellationToken cancellationToken = default)
             => AclGetRequiredAsync<AuditConfigResponse>(callerUserHandle, "audit/config", "GetAuditConfig", cancellationToken);
+
+        public Task<List<AuditEvent>> QueryAuditEventsAsync(string callerUserHandle, AuditQuery query, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(query);
+            if ((query.Before is null) != (query.BeforeId is null))
+                throw new ArgumentException("Before and BeforeId must be supplied together.", nameof(query));
+            var parameters = new Dictionary<string, string?>
+            {
+                ["category"] = query.Category?.ToString(), ["outcome"] = query.Outcome?.ToString(),
+                ["subject"] = query.SubjectPrincipal, ["resource"] = query.ResourcePrincipal,
+                ["traceId"] = query.TraceId, ["since"] = query.Since?.ToString("O"),
+                ["limit"] = query.Limit?.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ["before"] = query.Before?.ToString("O"), ["beforeId"] = query.BeforeId
+            };
+            var path = "audit/events?" + string.Join("&", parameters.Where(p => p.Value is not null)
+                .Select(p => p.Key + "=" + Uri.EscapeDataString(p.Value!)));
+            return AclGetRequiredAsync<List<AuditEvent>>(callerUserHandle, path, "QueryAuditEvents", cancellationToken);
+        }
 
         // ── Shared HTTP helpers ──
 

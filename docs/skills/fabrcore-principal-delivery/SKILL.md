@@ -13,6 +13,10 @@ description: >
 
 # FabrCore Principal Delivery
 
+## FabrCore 2.0 baseline
+
+This skill targets FabrCore 2.0 GA. Outbox/checkpoint durability follows Orleans storage: default standalone storage loses delivery state on process restart; SQL mode supplies persistent defaults unless overridden. The SQL operational audit/A2A/evidence stores are separate from principal delivery. Keep relay consumers idempotent.
+
 Use FabrCore's provider-neutral principal-delivery pipeline for out-of-turn messages and messages
 explicitly addressed to an external channel:
 

@@ -1,23 +1,14 @@
 ---
 name: fabrcore-agent
-description: >
-  Build FabrCoreAgentProxy agents and implement lifecycle, state, compaction, timers, reminders,
-  health, telemetry, storage, and configuration. Covers the two-layer compaction ladder: context
-  compaction, history compaction, ContextCompaction, ContextCompactionEnabled, CompactionLadder,
-  the projection fuse, and run-safety budgets. Use for FabrCoreAgentProxy, AgentAlias,
-  OnInitialize, OnMessage, OnMessageBusy, OnEvent, OnCompaction, CreateChatClientAgent,
-  CreateInternalAgentAsync, ResolveInternalAgentToolsAsync, InternalAgentOptions,
-  InternalAgentExecutionPolicy, InternalAgentToolRisk, in-proxy multi-agent specialists,
-  SetStatusMessage, SendToUserAsync, proactive/out-of-turn notifications, AgentConfiguration,
-  GetStateAsync, TryGetStateAsync, FlushStateAsync, RegisterTimer, RegisterReminder,
-  SystemMessageTypes, and verifiable execution. Use fabrcore-agentframework for AIAgent or
-  AgentSession internals; fabrcore-harness for todo lists, iteration loops, or background
-  delegation (CreateFabrCoreHarnessAgent); fabrcore-plugins-tools/fabrcore-mcp for tools or MCP;
-  and fabrcore-principal-delivery for durable outbox internals and relay-provider authoring.
+description: "Build FabrCore.Sdk 2.0 agents with FabrCoreAgentProxy, lifecycle callbacks, model clients, tools, state, timers, reminders, internal specialists and context compaction. Use for agent implementation and persisted-state handling; use fabrcore-harness for todo loops and delegation workflows."
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
 ---
 
 # FabrCore Agent Development
+
+## FabrCore 2.0 baseline
+
+Target FabrCore.Sdk 2.0.0 on .NET 10. Ordinary agents, tools and compaction work without SQL. Default standalone state is lost on restart; use configured durable Orleans storage for persistence. Integrated long-term Memory requires Host SQL mode and explicit agent scope/plugin selection.
 
 Build agents by extending `FabrCoreAgentProxy` — the base class that connects your business logic to Orleans grains, LLM clients, tools, and inter-agent messaging.
 
@@ -524,113 +515,69 @@ Important pitfall for agents: when resolving `IFabrCoreStorageProvider` directly
 
 Do not reference Orleans storage APIs (`IGrainStorage`, `GrainId`, `IGrainState<T>`) from agent code. FabrCore keeps those Host-internal so agents and SDK consumers do not depend on Orleans storage internals.
 
-## Context Management: the compaction ladder
+## Context management in 2.0
 
-FabrCore bounds context with **five ordered rungs**, cheapest and most reversible first. Everything is anchored to one setting — `ContextWindowTokens` — so the rungs stay in order without tuning them individually.
+Working-context compaction runs before each model call inside the function-invocation loop for
+standard SDK-created agents and harnesses. Durable history compaction runs between turns.
+These are different budgets and lifecycles, not five strictly ordered execution steps.
 
-```
-0.50  layer 1  evict old tool results       free, reversible, no LLM call
-0.80  layer 1  truncate oldest groups       free, reversible, no LLM call
-0.87  layer 2  summarize + rewrite thread   one LLM call, permanent
-0.90  ---      projection fuse              blunt clip, insurance only
-1.00  ---      run-safety stop              FabrCoreRunStoppedException
-```
+| Layer | Behavior | Persistence |
+| --- | --- | --- |
+| Working context | Older tool results become bounded head/tail excerpts: 2,048 characters at 50% input usage, tightening to 512 at 80% | Original output stays in history |
+| Durable history | Bounded model summarization produces a validated handover | One validated history write |
+| Projection/run safety | Stops when protected content cannot fit | Does not rewrite history inside the tool loop |
 
-The two layers are distinguished by one question: **does it change what's on disk?**
+User text, instructions, assistant prose, handovers, and latest two interaction groups are
+protected in working context. Tool calls/results keep their pairing and IDs. Thresholds are
+soft targets; protected oversized content may stop the run rather than silently truncate.
+Transient compaction indices reset per history invocation and are excluded from snapshots.
 
-| | Layer 1 — *context* compaction | Layer 2 — *history* compaction |
-|---|---|---|
-| Runs | Before every model call, in the tool loop | Preflight + post-turn |
-| Bounds | What this LLM call sees | What is persisted in `MessageThreads` |
-| Reversible | Yes — groups marked excluded | No — the thread is rewritten |
-| Costs an LLM call | No | Yes (map-reduce summary) |
-| Implemented by | `Microsoft.Agents.AI.Compaction.CompactionProvider` | `CompactionService` |
-| Override hook | `CompactionStrategy` (code) | `OnCompaction` (virtual) |
+### Configuration
 
-Layer 1's state is deliberately **not persisted**. Its group index holds a full copy of every message it has seen; persisting it would duplicate the conversation into the agent state blob and let a stale index outlive a layer 2 rewrite. The strategy is deterministic and LLM-free, so rebuilding it each activation is free.
+Set `ContextWindowTokens` and `MaxOutputTokens` on each model. Missing metadata produces
+`context:unconfigured`. `ContextWorkingSetTokens` optionally reduces input context; it is capped
+by the physical window minus output reservation. Token estimates include UTF-8 content,
+instructions, tool definitions and framing.
 
-**No agent code is needed.** Set `ContextWindowTokens` and `MaxOutputTokens` on the model and both layers self-configure. Settings resolve in order: **defaults → host model config (fabrcore.json, or cloud server when enabled) → agent Args overrides**.
+| Setting | Purpose |
+| --- | --- |
+| `ContextCompactionEnabled` / `_ContextCompactionEnabled` | Enable working-context compaction |
+| `ContextWorkingSetTokens` / `_ContextWorkingSetTokens` | Smaller input working set |
+| `ContextEvictThreshold` / `_ContextEvictThreshold` | Initial tool excerpt threshold (0.5) |
+| `ContextTruncateThreshold` / `_ContextTruncateThreshold` | Tighter tool excerpt threshold (0.8) |
+| `_ContextWindowTokens`, `_ContextMaxOutputTokens` | Per-agent window/output overrides |
+| `CompactionEnabled` / `_CompactionEnabled` | Durable history compaction |
+| `CompactionThreshold` / `_CompactionThreshold` | Explicit durable threshold override |
+| `CompactionKeepLastN` / `_CompactionKeepLastN` | Recent-message retention target |
+| `_CompactionModelConfigName` | Separate summarization model alias |
+| `_PerTurnMaxInputTokens`, `_MaxPromptInputTokens` | Cumulative/per-call safety budgets |
+| `_RunawayBudgetBehavior` | Run-safety behavior |
 
-### Resolved-ladder diagnostics
+With usable context configuration, automatic durable compaction uses 70% of the input working
+set; otherwise its fallback threshold is 75%. The old 87% default is retired. Explicit settings
+still override defaults. Summarization requires model context metadata and reserves output plus
+headroom; reduction is bounded to eight passes and 64 model calls with no-progress detection.
 
-Every agent logs its resolved ladder once, at information level, when compaction initializes:
+Validated durable writes preserve instructions, latest user message, and latest interaction
+group. Empty, incomplete, length-limited, canceled, oversized, nonreducing, malformed-tool, or
+stale concurrent results leave history intact. Handovers have assistant authority; legacy
+system handovers are demoted on read. Summaries are not a guarantee of semantic fidelity.
 
-```
-Compaction ladder for 'my-agent' provider 'thread-1' (model config 'default'):
-  evict@92000 → truncate@147200 → history@174000 → fuse@180000 → stop@200000
-```
+### Diagnostics and custom compaction
 
-Disabled rungs render as `history:off` / `fuse:off` so a missing bound is visible rather than implied. `context:unconfigured` means `ContextWindowTokens` or `MaxOutputTokens` is missing and the agent is running with **no in-run context bound**. A `[OUT OF ORDER]` suffix means a later rung fires before an earlier one, making the earlier rung decorative — nearly always a misconfiguration.
+The resolved diagnostic reports `tool-excerpt@`, `tool-excerpt-tight@`, `history@`, `fuse@`, and
+`stop@`. This is a set of thresholds, not an execution sequence. History may run before the
+soft tool thresholds; `[OUT OF ORDER]` identifies a safety/projection bound below history.
+Monitor events include `compaction.history.started`, `.completed`, and `.failed`.
 
-Layer 2 also emits monitor events: `compaction.history.started`, `compaction.history.completed`, `compaction.history.failed`, each tagged with `trigger` (`preflight` or `post-turn`). Layer 1 emits OpenTelemetry spans through `CompactionTelemetry` instead.
+Override `OnCompaction` for custom durable history behavior, or select
+`CompactionConfig.SummaryModelConfigurationName` for a separate summarizer. Memory-aware
+compaction through `MemoryCompactionHandler`/`WithMemoryLifecycle` is explicit opt-in behavior;
+ordinary compaction needs neither SQL nor long-term Memory. Custom callbacks must preserve
+history on failure and should not be assumed to inherit every built-in validation safeguard.
 
-### Model-level settings
-
-On each model entry in `fabrcore.json`, or in the cluster config when the host uses a cloud server:
-
-| Field | Default | Description |
-|-------|---------|-------------|
-| `ContextWindowTokens` | unset | **The anchor.** Total context window in tokens |
-| `MaxOutputTokens` | unset | Output reserve. Layer 1 needs this and `ContextWindowTokens` |
-| `ContextCompactionEnabled` | `true` | Enable/disable layer 1 (in-run context compaction) |
-| `ContextEvictThreshold` | `0.5` | Fraction of input budget at which old tool results collapse |
-| `ContextTruncateThreshold` | `0.8` | Fraction of input budget at which oldest groups drop |
-| `CompactionEnabled` | `true` | Enable/disable layer 2 (history compaction) |
-| `CompactionKeepLastN` | `20` | Keep this many recent messages when rewriting the thread |
-| `CompactionThreshold` | `0.87` with layer 1, `0.75` without | Fraction of the window at which the thread is summarized |
-| `CompactionStaleAfterMinutes` | `60` | Preflight-compact a dormant over-threshold thread before the next turn |
-| `PerTurnMaxInputTokens` | unset | Stop a turn after cumulative input exceeds this budget |
-| `MaxPromptInputTokens` | `ContextWindowTokens` | Stop a single LLM call before sending an oversized prompt |
-| `RunawayBudgetBehavior` | `StopWithDiagnostic` | Behavior when a run-safety budget is exceeded |
-
-The **input budget** for layer 1 is `ContextWindowTokens - MaxOutputTokens`; its two thresholds are fractions of that. Layer 2's threshold is a fraction of `ContextWindowTokens` itself.
-
-### Agent-level overrides
-
-In `AgentConfiguration.Args`, prefixed with `_`:
-
-| Key | Layer | Description |
-|-----|-------|-------------|
-| `_ContextCompactionEnabled` | 1 | Turn off in-run context compaction |
-| `_ContextWindowTokens` | 1 | Override the window for this agent |
-| `_ContextMaxOutputTokens` | 1 | Override the output reserve |
-| `_ContextEvictThreshold` | 1 | Move the tool-eviction rung |
-| `_ContextTruncateThreshold` | 1 | Move the truncation rung |
-| `_CompactionEnabled` | 2 | Turn off history compaction |
-| `_CompactionMaxContextTokens` | 2 | Override the anchor used by layer 2 |
-| `_CompactionKeepLastN` | 2 | Override keep-last-N |
-| `_CompactionThreshold` | 2 | Move the history rung |
-| `_CompactionStaleAfterMinutes` | 2 | Override preflight staleness |
-| `_ProjectionEnabled` / `_ProjectionMaxContextTokens` / `_ProjectionThreshold` / `_ProjectionMinKeepLastN` | fuse | Move or disable the fuse |
-| `_PerTurnMaxInputTokens` | stop | Override cumulative per-turn input budget |
-| `_MaxPromptInputTokens` | stop | Override single-call prompt budget |
-| `_RunawayBudgetBehavior` | stop | Override runaway budget behavior |
-
-> **Retired:** `MidTurnCompactionEnabled` / `_MidTurnCompactionEnabled` no longer do anything. Mid-turn history compaction rewrote the persisted thread inside the tool loop, which corrupts a live layer 1 group index. Layer 1 replaces that job with a per-call mechanism that costs nothing and touches no storage. The setting is still accepted so existing `fabrcore.json` files keep loading; the value is ignored.
-
-### Customizing layer 2
-
-Override `OnCompaction` to change how the persisted thread is consolidated — a different prompt, model, or summarization strategy. This is **not** the hook for bounding a single LLM call; that is layer 1.
-
-```csharp
-public override async Task<CompactionResult?> OnCompaction(
-    FabrCoreChatHistoryProvider chatHistoryProvider,
-    CompactionConfig compactionConfig,
-    int estimatedTokens = 0)
-{
-    // Custom consolidation logic — your own prompt, model, or strategy.
-    // Or call the base implementation, which delegates to CompactionService:
-    return await base.OnCompaction(chatHistoryProvider, compactionConfig, estimatedTokens);
-}
-```
-
-`FabrCore.Services.Memory` overrides this hook to extract durable graph memories before summarizing — see the `fabrcore-services-memory` skill.
-
-### Two things that surprise people
-
-- **Two summary formats coexist in one thread.** Layer 1 inserts `[Tool Calls]` and `[Summary]` messages into the request; layer 2 writes `[Compacted History]` into storage. Seeing both in a transcript is expected.
-- **Layer 1's work is invisible in stored history.** Exclusions live in the session index, not in `MessageThreads`. Comparing "what the model saw" against stored messages will show a mismatch — that is the design, not a bug. Watch the `compaction.history.*` monitor events and `CompactionTelemetry` spans instead.
-- **Disabling layer 2 alone unbounds the state blob.** The model stays inside its window while stored history grows forever. FabrCore logs a warning when it sees this combination.
+`MidTurnCompactionEnabled` and `_MidTurnCompactionEnabled` are retired and ignored. Run safety
+no longer performs persisted-history checkpoints; do not use the removed checkpoint count API.
 
 ## Timers and Reminders
 

@@ -18,7 +18,7 @@ namespace FabrCore.Sdk;
 /// <see cref="Agent"/> directly — the wrapper applies per-message mode selection and snapshots the session
 /// afterwards, which is what carries todos and operating mode across user turns and grain deactivation.
 /// </remarks>
-public sealed class FabrCoreHarnessResult
+public sealed class FabrCoreHarnessResult : IAsyncDisposable
 {
     /// <summary>Snapshots above this size are written but logged as a warning.</summary>
     public const int SnapshotWarnBytes = 256 * 1024;
@@ -350,6 +350,7 @@ public sealed class FabrCoreHarnessResult
     /// </summary>
     public async Task ClearHarnessSessionAsync(CancellationToken cancellationToken = default)
     {
+        await ReleaseBackgroundSessionAsync(cancellationToken);
         if (store is not null)
         {
             try
@@ -371,4 +372,15 @@ public sealed class FabrCoreHarnessResult
             "Harness session cleared - Handle: {Handle}, ThreadId: {ThreadId}",
             agentHandle, ThreadId);
     }
+
+    /// <summary>Cancel and release local background work.
+    /// The shared chat client remains owned by the host. Cross-grain requests may continue remotely.</summary>
+    public async ValueTask DisposeAsync()
+    {
+        await ReleaseBackgroundSessionAsync(CancellationToken.None);
+    }
+
+    private Task ReleaseBackgroundSessionAsync(CancellationToken cancellationToken) =>
+        BackgroundAgents?.ReleaseSessionAsync(Session, cancellationToken: cancellationToken)
+        ?? Task.CompletedTask;
 }

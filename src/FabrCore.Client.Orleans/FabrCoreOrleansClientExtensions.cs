@@ -11,6 +11,22 @@ namespace FabrCore.Client.Orleans;
 public static class FabrCoreOrleansClientExtensions
 {
     /// <summary>
+    /// Registers durable SQL streams for clients which directly publish or subscribe to
+    /// fabrcoreStreams. Use the host's clustering database and enable AdoNet streams on every silo.
+    /// The Orleans ADO.NET streaming provider is currently a preview package.
+    /// </summary>
+    public static IClientBuilder AddFabrCoreSqlServerStreams(this IClientBuilder builder, string connectionString)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
+        return builder.AddAdoNetStreams("fabrcoreStreams", streams =>
+        {
+            streams.Invariant = "Microsoft.Data.SqlClient";
+            streams.ConnectionString = connectionString;
+        });
+    }
+
+    /// <summary>
     /// Configures an Orleans client from a previously fetched discovery document and registers
     /// the HTTP-backed gateway provider used for subsequent refreshes.
     /// </summary>
@@ -24,6 +40,7 @@ public static class FabrCoreOrleansClientExtensions
         ArgumentNullException.ThrowIfNull(initialDocument);
 
         discoveryClient.Validate(initialDocument);
+        builder.AddActivityPropagation();
         var refreshPeriod = TimeSpan.FromSeconds(initialDocument.RefreshPeriodSeconds);
 
         builder.Configure<ClusterOptions>(cluster =>

@@ -107,7 +107,7 @@ public sealed class CompactionLadderTests
             runSafety: new ChatRunSafetyConfig { MaxPromptInputTokens = 200_000 });
 
         Assert.AreEqual(
-            "evict@92000 → truncate@147200 → history@174000 → fuse@180000 → stop@200000",
+            "tool-excerpt@92000 → tool-excerpt-tight@147200 → history@174000 → fuse@180000 → stop@200000",
             ladder.Describe());
         Assert.IsFalse(ladder.IsOutOfOrder);
     }
@@ -125,7 +125,7 @@ public sealed class CompactionLadderTests
     }
 
     [TestMethod]
-    public void IsOutOfOrder_FlagsAHistoryRungBelowTheTruncationPoint()
+    public void IsOutOfOrder_AllowsHistoryBeforeToolCompaction()
     {
         // The legacy 25000 default against a large window: history compaction would fire long before
         // layer 1 truncates, making the free rung decorative.
@@ -135,8 +135,7 @@ public sealed class CompactionLadderTests
             projection: new ProjectionConfig { MaxContextTokens = 200_000, Threshold = 0.9 },
             runSafety: new ChatRunSafetyConfig { MaxPromptInputTokens = 200_000 });
 
-        Assert.IsTrue(ladder.IsOutOfOrder);
-        StringAssert.Contains(ladder.Describe(), "[OUT OF ORDER]");
+        Assert.IsFalse(ladder.IsOutOfOrder);
     }
 
     private static CompactionLadder Build(

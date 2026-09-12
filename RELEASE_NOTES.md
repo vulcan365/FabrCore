@@ -1,457 +1,227 @@
-# FabrCore release notes
-
-These notes cover the current unreleased changes after `v1.6.3` and the tagged repository
-history from `v1.0.0` onward. They are derived from Git history and tree diffs, including
-changes delivered through merge commits.
-
-[Current comparison: v1.6.3...develop](https://github.com/vulcan365/FabrCore/compare/v1.6.3...develop)
-
-## Unreleased - changes since v1.6.3
-
-Snapshot date: 2026-08-05
-
-### Highlights
-
-- Added a FabrCore-native agent harness built on Microsoft Agent Framework harness primitives.
-  Agents can maintain model-managed todo lists, keep working through bounded iteration loops,
-  and delegate work to other FabrCore agents while preserving session state across grain
-  deactivation.
-- Added a two-layer compaction ladder: reversible, per-call context compaction bounds what the
-  model sees, while history compaction continues to summarize persisted `MessageThreads`
-  between turns.
-- Added Agent2Agent (A2A) endpoints to `FabrCore.Host`, publishing a server's agents over the open
-  A2A protocol. Microsoft 365 Copilot Studio tenants can add FabrCore agents as A2A connected
-  agents, which is how they join Copilot's Code and CoWork orchestration. Every deployment has it;
-  `A2A:Enabled` (default false) turns it on with no code or package change.
-- Replaced the Surface Swarm runtime with simpler blueprint-defined `orchestrator` and `task`
-  squads. Task squads use harness todo, background-agent, and loop primitives to coordinate
-  executor and subject-matter-expert members.
-
-### Added
-
-- Added production WebSocket v2 with authenticated one-time tickets, explicit operation/delivery envelopes, durable ordered at-least-once delivery and replay, acknowledgements and gap detection, plus the typed reconnecting `FabrCore.Client.WebSocket` client. Agent creation and Blueprint provisioning remain HTTP-only.
-
-- Added `CreateFabrCoreHarnessAgent` for `FabrCoreAgentProxy` implementations and
-  `AsFabrCoreHarnessAgent` for direct `IChatClient` composition.
-- Added `FabrCoreHarnessOptions`, `FabrCoreHarnessResult`, `HarnessLoopMode`, `HarnessArgs`,
-  `HarnessSessionSnapshot`, `FabrCoreBackgroundAgent`, and `AgentRosterBuilder`.
-- Added production-hardened private internal specialists for one proxy:
-  `CreateInternalAgentAsync`, `ResolveInternalAgentToolsAsync`, explicit read/compute/effect risk
-  classification, per-specialist and per-proxy execution bounds, child LLM attribution, lifecycle
-  monitor events, and activation-scoped resource cleanup.
-- Added `MissingPlanModeBehavior` so Harness callers can preserve the current/default mode or select
-  execution when an inbound message omits `_plan-mode`, while retaining planning as the compatibility
-  default.
-- Added durable harness `plan` / `execute` modes, `_plan-mode` selection on inbound
-  `AgentMessage` values, mode-aware todo looping, and SDK helpers for inspecting or changing mode.
-- Added configurable todo, background-delegation, completion-marker, and AI-judge loop modes,
-  with a bounded iteration budget and APIs for reporting unfinished work.
-- Added durable per-thread harness snapshots for todos and delegation records. Unreadable or
-  incompatible snapshots start fresh, and delegations that were in flight during deactivation
-  are explicitly reported as lost.
-- Added health-probed background-agent rosters, collision-safe delegate names, descriptions and
-  capabilities from the FabrCore registry, delegation timeouts, and ACL-governed FabrCore
-  messaging.
-- Added `ContextCompaction`, `ContextCompactionConfig`, and `CompactionLadder`. The default ladder
-  evicts old tool results at 50% of the input budget, truncates old groups at 80%, history-compacts
-  at 87% of the context window, applies a projection fuse at 90%, and stops oversized runs at the
-  model window.
-- Added model settings `ContextCompactionEnabled`, `ContextEvictThreshold`, and
-  `ContextTruncateThreshold`, together with `_Context*` agent argument overrides.
-- Added resolved-ladder diagnostics and `compaction.history.started`,
-  `compaction.history.completed`, and `compaction.history.failed` monitor events.
-- Added Surface task-squad contracts and runtime support, including task options for the worker
-  model, persona prompt, delegation overlay, delegation timeout, and maximum loop iterations.
-- Added focused SDK tests for harness composition, durable sessions, delegation behavior,
-  configuration parsing, and compaction-ladder ordering.
-- Added the `A2A` configuration section and `FabrCoreServerOptions.ConfigureA2A` for code-level
-  settings. `AddFabrCoreServer` registers the A2A services and `UseFabrCoreServer` maps the routes,
-  both gated on `A2A:Enabled`. `A2A:AgentTypes`, `A2A:AgentHandles`, and `A2A:Agents` select which
-  agent types or existing handles are published.
-- Added A2A 0.3.0 protocol support: agent cards on `/.well-known/agent-card.json` and the pre-0.3
-  `/.well-known/agent.json`, the JSON-RPC binding at each agent's base path, the HTTP+JSON binding
-  under `/v1` (`message:send`, `message:stream`, `tasks/{id}`, `:cancel`, `:subscribe`), SSE
-  streaming with keep-alives, the full task lifecycle with cancellation and resubscribe, and an
-  agent catalog at `GET /a2a`.
-- Added native handling for Microsoft Copilot Studio's wire shape, which posts JSON-RPC bodies to
-  the HTTP+JSON `message:stream` URL and reads a single JSON response. `A2A:Interop` controls
-  whether that is accepted, whether the stream is collapsed, and the result shape, so no
-  middleware shim is needed.
-- Added A2A caller authentication (`None`, `ApiKey` with constant-time comparison and per-key agent
-  scoping, `JwtBearer` for OAuth 2.0/OIDC), principal mapping strategies (`Fixed`, `ContextId`,
-  `ApiKey`, `Claim`), and the `IA2APrincipalResolver`, `IA2ATaskStore`, `IA2AAgentCardFactory`, and
-  `IA2AAgentProvisioner` extension points.
-- Added registry-driven A2A exposure so the config section does not restate the agent catalog.
-  `A2A:Discovery:AgentTypes` (`Described` / `All`) publishes agent types straight from the FabrCore
-  registry with include/exclude globs, carrying each agent's `[Description]`,
-  `[FabrCoreCapabilities]`, and `[FabrCoreNote]` onto its agent card. `[FabrCoreHidden]` types are
-  excluded automatically, because discovery reads the same registry call that backs
-  `/fabrcoreapi/discovery`.
-- Added `A2A:Discovery:IncludeAgentHandles` globs that publish live agents by key (for example
-  `system:*`), refreshed on `Discovery:RefreshInterval`. A2A routes are parameterized rather than
-  mapped per agent, so agents created after startup become reachable without a restart.
-- Added `A2A:Defaults` for fleet-wide model, prompt, plugin, tool, arg, and card settings, with
-  per-agent entries overriding only what they state.
-- Added stored-harness-skill advertising: an agent that loads FabrCore harness skills (the
-  `_HarnessSkills` arg) resolves each `name@version` against its principal's skill catalog and
-  advertises them as A2A card skills tagged `harness-skill`. Resolution is limited to agents whose
-  principal does not depend on the caller (published by handle, or provisioned under
-  `Principal:Strategy = Fixed`), reads are cached, and a skill-store failure degrades the card
-  rather than failing it. `A2A:Discovery:IncludeHarnessSkills` turns it off.
-- `IA2APrincipalResolver.ResolvePrincipalHandle` is now
-  `ValueTask<string?> ResolvePrincipalHandleAsync(HttpContext, A2AExposedAgent, string, CancellationToken)`,
-  matching `ICopilotPrincipalResolver`. Mapping a caller to a real user means a store lookup, and the
-  synchronous signature forced implementations into cached snapshots behind a lock.
-  `DescribeCaller` stays synchronous.
-- Added `FabrCore.Host.Testing`: `FabrCoreA2ATestHost` stands the A2A endpoints up over an
-  in-memory server with `FakeFabrCoreAgentService` and `FakeFabrCoreRegistry`, so an application can
-  test its own exposure — agent cards, authentication, the Copilot Studio interop path, and which
-  agent grain a call reaches — without an Orleans silo. `AddA2A` / `UseA2A` are public for hosts
-  that compose the pipeline themselves; both are idempotent. `FabrCore.Host.Tests` runs its own A2A
-  suite through this package's public surface.
-- `scripts/Pack-Local.ps1` fails instead of falling back to a hardcoded `1.5.0` when no git tag is
-  found, and refuses to pack a version lower than one already in the output feed (override with
-  `-AllowVersionDowngrade`). The fallback silently produced builds that sorted below packages
-  consumers already referenced.
-- Added `docs/a2a.md` and the `fabrcore-a2a` skill. `samples/FabrCore.SampleApp` carries an `A2A`
-  section in `fabrcore.sample.json`, off until `A2A:Enabled` is set.
-- `FabrCore.Host` now references `Microsoft.AspNetCore.Authentication.JwtBearer`, which the A2A
-  OAuth 2.0 authentication mode uses.
-
-### Removed
-
-- Removed `FabrCore.Sdk.A2AAgentProxy` and `A2AAgentSession`. Despite the name they implemented
-  none of the Agent2Agent protocol — no agent card, transport, or task lifecycle — and were an
-  in-process `AIAgent` adapter for an earlier Microsoft agent-framework workflow with no callers.
-  Use `FabrCoreBackgroundAgent` for in-process delegation and the host's A2A endpoints for the
-  protocol.
-
-### Changed
-
-- Isolated the Cloud Server `/fabrcore-cloud/v2/connect` long poll from application-wide HTTP
-  resilience handlers. The host now uses a poll-aware timeout, sequential transient retries,
-  one active poll per host client, clean shutdown cancellation, and structured terminal outcomes;
-  normal empty polls no longer surface as Polly 10-second timeout exception chains.
-- `AddFabrCoreServer` and `AddFabrCoreServices` now load the application assembly and referenced
-  FabrCore project/package dependencies before registry discovery. Normal hosts no longer need
-  `AdditionalAssemblies`; it remains available for dynamically selected assemblies outside the
-  application dependency graph. Default registry DI construction now preserves process-wide
-  discovery even though exact-scope registry constructors are also available.
-- Changed Surface blueprints from the nested `swarm.squads` extension to a top-level `squads`
-  extension. Supported squad types are now `orchestrator` and `task`.
-- Reworked task squads around `SurfaceTaskHarnessAgent`. A task run tracks model-owned todos,
-  delegates concurrently to executor members, consults subject-matter-expert members, and loops
-  until no todos or delegations remain, subject to the configured iteration cap.
-- Changed history compaction to run only before or after a turn. When context compaction is active,
-  its default threshold is now 87%; without layer 1, it retains the legacy 75% default.
-- Changed read-side projection into a high-watermark fuse when context compaction is configured,
-  leaving the cheaper context and history compaction rungs to run first.
-- Changed the run-safety scope to stop over-budget work only; it no longer rewrites persisted
-  history inside a live tool loop.
-- Updated `Microsoft.Agents.AI` and `Microsoft.Agents.AI.OpenAi` from `1.15.0` to `1.16.0`.
-- Updated affected test projects to Microsoft.NET.Test.Sdk `18.8.1`, MSTest `4.3.3`, and
-  Microsoft.Testing.Extensions.TrxReport `2.3.3`.
-
-### Upgrade and compatibility notes
-
-- Native harness modes are enabled by default. Pass `AgentMessage.Args["_plan-mode"] = "false"`
-  for execution runs, or set `_HarnessMode=false` to retain the previous mode-independent todo loop.
-
-- Migrate Surface blueprint documents from:
-
-  ```json
-  { "swarm": { "squads": [/* ... */] } }
-  ```
-
-  to:
-
-  ```json
-  { "squads": [/* ... */] }
-  ```
-
-  Replace `squadType: "swarm"` with either `orchestrator` for one-hop routing or `task` for
-  harness-driven multi-step coordination.
-- The `FabrCore.Surface.Ai.Swarm` API surface, `SurfaceSwarm*` types, Swarm services and options,
-  and the former `SurfaceTaskRunnerAgent` were removed. Update integrations to
-  `FabrCore.Surface.Ai.Squads`, `FabrCore.Surface.Ai.Tasks`, `ISurfaceSquadService`, and
-  `SurfaceTaskHarnessAgent` as applicable.
-- `MidTurnCompactionEnabled` and `_MidTurnCompactionEnabled` are retired. The model property remains
-  deserializable but is obsolete and ignored; use `ContextCompactionEnabled` or
-  `_ContextCompactionEnabled` instead.
-- `FabrCoreRunStoppedException.CheckpointCount`, the constructor checkpoint-count parameter, and
-  the `_fabrcore_checkpoint_count` response diagnostic were removed because run safety no longer
-  performs compaction checkpoints.
-- Set both `ContextWindowTokens` and `MaxOutputTokens` to enable layer 1. If either value is missing,
-  FabrCore continues without in-run context compaction and reports `context:unconfigured` in the
-  resolved ladder diagnostic.
-- Harness APIs inherit the Microsoft Agent Framework experimental designation. Always execute via
-  `FabrCoreHarnessResult.RunAsync`; calling the inner agent directly bypasses durable snapshotting.
-- Harness snapshots preserve todos and delegation records, but work already running in another
-  agent cannot be resumed after grain deactivation and is reported as lost on restore.
-
-[Compare v1.6.3...develop](https://github.com/vulcan365/FabrCore/compare/v1.6.3...develop)
-
-## v1.0.0-v1.6.3 highlights
-
-- Added durable agent-to-principal delivery and proactive Microsoft 365 Copilot messaging.
-- Split Orleans hosting into provider packages and added provider-neutral Orleans client
-  gateway discovery.
-- Added model-level inference defaults, custom OpenAI endpoints, cloud-managed configuration,
-  and opt-in LLM gateway attribution.
-- Expanded the standalone OSS platform with Contracts, Memory, GraphRAG, Surface, supervised
-  Swarm orchestration, canonical blueprints, and a runnable Blazor sample application.
-- Added an outbound-only Cloud Server administration channel, capability discovery, and a
-  dedicated administration authentication policy.
-- Returned the project to the Apache License 2.0 in `v1.5.0` after the GPLv3 license used by
-  `v1.0.0` through `v1.4.1`.
-
-## Upgrade notes for v1.6.3
-
-- The final remote-administration configuration is `FabrCore:RemoteAdministration:Enabled`.
-  Earlier `CloudServer:Connect`, `CloudServer:RemoteAdministration`, and singular `Enable`
-  shapes should be migrated.
-- Remote administration requires `FabrCore:CloudServer:Enabled=true`, a Cloud Server API key,
-  and an absolute `FabrCore:HostUrl`. The Cloud Server API key is reused for the authenticated
-  local administration hop while remote administration is enabled.
-- SQL Server and Azure Storage hosting require their separate provider packages beginning with
-  `v1.1.0`; Localhost mode remains built into `FabrCore.Host`.
-- The `v1.3.0`, `v1.3.2`, and `v1.6.0` tags are version aliases: each points to the same commit
-  as its immediately preceding tag and contains no additional tree changes.
-
-## v1.6.3 — 2026-08-02
-
-### Fixed
-
-- Renamed `FabrCore:RemoteAdministration:Enable` to the consistent
-  `FabrCore:RemoteAdministration:Enabled` setting.
-- Updated validation, runtime enablement, capability reporting, authentication, tests, and
-  documentation to honor the corrected setting.
-
-[Compare v1.6.2...v1.6.3](https://github.com/vulcan365/FabrCore/compare/v1.6.2...v1.6.3)
-
-## v1.6.2 — 2026-08-02
-
-### Changed
-
-- Moved remote administration out of the Cloud Server subtree into the top-level
-  `FabrCore:RemoteAdministration` configuration section.
-- Reused `FabrCore:CloudServer:ApiKey` for both Cloud Server communication and the local
-  administration hop, removing the need to duplicate a separate local administration key.
-- Advertised host administration capabilities only when remote administration is enabled.
-- Added compatibility warnings for the obsolete nested configuration section.
-
-### Security
-
-- Extended the `FabrCoreAdmin` authentication handler to accept the Cloud Server key only when
-  both Cloud Server and remote administration are enabled.
-- Added coverage for standalone admin keys, Cloud Server keys, disabled modes, invalid keys,
-  and constant-time credential comparison.
-
-[Compare v1.6.1...v1.6.2](https://github.com/vulcan365/FabrCore/compare/v1.6.1...v1.6.2)
-
-## v1.6.1 — 2026-08-01
-
-### Changed
-
-- Renamed the Cloud Server `Connect` settings and diagnostics to `RemoteAdministration`.
-- Removed the alternate local admin target and made the required `FabrCore:HostUrl` the single
-  execution target for proxied administration commands.
-- Added validation and startup warnings for non-loopback host URLs carrying administration
-  credentials.
-- Updated the documented `appsettings` hierarchy and OSS/Forge boundary guidance.
-
-[Compare v1.6.0...v1.6.1](https://github.com/vulcan365/FabrCore/compare/v1.6.0...v1.6.1)
-
-## v1.6.0 — 2026-08-01
-
-This tag points to the same commit as `v1.5.0`; there are no additional repository changes.
-
-[Compare v1.5.0...v1.6.0](https://github.com/vulcan365/FabrCore/compare/v1.5.0...v1.6.0)
-
-## v1.5.0 — 2026-08-01
-
-This was the largest release in the range and established FabrCore as a broader standalone OSS
-agent platform.
-
-### Added
-
-- Added `FabrCore.Services.Contracts`, the open Memory and GraphRAG administration contracts.
-- Added `FabrCore.Services.Memory` with scoped hot/warm/cold memory, retrieval, compaction,
-  taxonomy, synthetic imagining, auditing, SQL storage, administration APIs, and tests.
-- Added `FabrCore.Services.GraphRag` with scoped ingestion, graph-backed retrieval, search,
-  migrations, auditing, administration APIs, and tests.
-- Added `FabrCore.Surface`, a standalone Blazor command center with agent chat, Adaptive Cards,
-  actions, attachments, monitoring, and supervised Swarm orchestration.
-- Added canonical `FabrCoreBlueprint` documents, extension expanders, host-side blueprint CRUD
-  and apply APIs, and the top-level `swarm.squads` extension.
-- Added `FabrCore.SampleApp`, its Aspire AppHost and ServiceDefaults, and sample/test coverage
-  for the standalone development experience.
-- Added cluster capability discovery, the `FabrCoreAdmin` bearer policy, and remote
-  administration endpoints.
-- Extended the Cloud Server protocol with the outbound-only v2 connect channel for proxied
-  administration commands and responses.
-- Added opt-in LLM attribution headers for agent handle, trace ID, and origin so compatible
-  gateways can meter and govern usage per agent.
-
-### Changed
-
-- Relicensed the repository from GPLv3 to Apache License 2.0 and documented the relicensing.
-- Consolidated public runtime, protocol, developer tooling, Memory, GraphRAG, Surface, and Swarm
-  into the OSS repository while keeping Forge administration and commercial adapters separate.
-- Updated the NuGet workflow, local packing scripts, solution, documentation, and skills for
-  the expanded OSS package set.
-
-### Fixed
-
-- Corrected Orleans SQL Server membership and reminder schema compatibility and added provider
-  regression coverage.
-
-[Compare v1.4.1...v1.5.0](https://github.com/vulcan365/FabrCore/compare/v1.4.1...v1.5.0)
-
-## v1.4.1 — 2026-07-25
-
-### Dependencies
-
-- Updated Microsoft Orleans packages from `10.2.1` to `10.2.2`.
-- Updated Microsoft Agent Framework packages from `1.14.0` to `1.15.0`.
-- Updated MSTest to `4.3.2` and Microsoft.NET.Test.Sdk to `18.8.1`.
-
-[Compare v1.4.0...v1.4.1](https://github.com/vulcan365/FabrCore/compare/v1.4.0...v1.4.1)
-
-## v1.4.0 — 2026-07-25
-
-### Added
-
-- Added the vendor-neutral Cloud Server configuration protocol under
-  `/fabrcore-cloud/v1`, including shared contracts in `FabrCore.Core`.
-- Added remote `fabrcore.json` retrieval with ETag-based refresh, retry/backoff behavior, and a
-  last-known-good disk cache.
-- Added per-silo heartbeat reporting with applied configuration versions and immediate refresh
-  requests.
-- Added configuration validation, startup failure policies, local cache tests, API client tests,
-  and sync-service tests.
-
-[Compare v1.3.2...v1.4.0](https://github.com/vulcan365/FabrCore/compare/v1.3.2...v1.4.0)
-
-## v1.3.2 — 2026-07-22
-
-This tag points to the same commit as `v1.3.1`; there are no additional repository changes.
-
-[Compare v1.3.1...v1.3.2](https://github.com/vulcan365/FabrCore/compare/v1.3.1...v1.3.2)
-
-## v1.3.1 — 2026-07-22
-
-### Added
-
-- Added `ReasoningEffort` to model configuration with support for `none`, `low`, `medium`,
-  `high`, and extra-high values.
-- Added a model-default chat client wrapper that applies configured reasoning effort and
-  `MaxOutputTokens` without overriding explicit per-call options.
-- Added model configuration API propagation, examples, validation, and test coverage.
-
-### Fixed
-
-- Ensured inference defaults from `fabrcore.json` reach both streaming and non-streaming chat
-  requests across supported providers.
-
-[Compare v1.3.0...v1.3.1](https://github.com/vulcan365/FabrCore/compare/v1.3.0...v1.3.1)
-
-## v1.3.0 — 2026-07-22
-
-This tag points to the same commit as `v1.2.1`; there are no additional repository changes.
-
-[Compare v1.2.1...v1.3.0](https://github.com/vulcan365/FabrCore/compare/v1.2.1...v1.3.0)
-
-## v1.2.1 — 2026-07-22
-
-### Changed
-
-- Removed the separate enable flag and ASP.NET Core authorization-policy requirement from the
-  Orleans gateway discovery endpoint.
-- Gateway discovery is now mapped with the normal FabrCore endpoints by `UseFabrCoreServer()`;
-  clients only need to provide an `HttpClient`.
-- Simplified host/client configuration, exception handling, tests, and documentation for the
-  unauthenticated discovery request. Orleans transport security remains a separate production
-  responsibility.
-
-[Compare v1.2.0...v1.2.1](https://github.com/vulcan365/FabrCore/compare/v1.2.0...v1.2.1)
-
-## v1.2.0 — 2026-07-21
-
-### Added
-
-- Added `FabrCore.Client.Orleans`, allowing trusted backend applications to discover active
-  Orleans gateways from a FabrCore Host without referencing its SQL Server or Azure Storage
-  provider package.
-- Added the cluster gateway discovery document, endpoint, validation, dynamic refresh, cached
-  fallback behavior, TLS requirements, and client/host test projects.
-- Added the repository-local `.agents/skills` catalog and synchronized FabrCore development
-  guidance and templates.
-
-### Fixed
-
-- Corrected provider isolation so Azure Storage dependencies no longer interfere with SQL
-  Server hosting mode.
-- Refreshed package and release-script references for the new client and provider layout.
-
-[Compare v1.1.0...v1.2.0](https://github.com/vulcan365/FabrCore/compare/v1.1.0...v1.2.0)
-
-## v1.1.0 — 2026-07-20
-
-### Added
-
-- Added the `FabrCore.Host.SqlServer` package for Orleans clustering, persistence, reminders,
-  automatic schema deployment, and SQL provider configuration.
-- Added the `FabrCore.Host.AzureStorage` package for table-based clustering and reminders,
-  blob/table persistence, queue streams, and automatic resource provisioning.
-- Added `IFabrCoreOrleansProvider`, built-in Localhost mode, provider auto-discovery, explicit
-  provider registration, and provider-focused tests.
-
-### Changed
-
-- Moved SQL Server implementation and schema assets out of `FabrCore.Host` into the SQL Server
-  provider package.
-- Updated packaging, release scripts, solution structure, README, and Orleans/server guidance
-  for independently installable provider packages.
-
-[Compare v1.0.2...v1.1.0](https://github.com/vulcan365/FabrCore/compare/v1.0.2...v1.1.0)
-
-## v1.0.2 — 2026-07-20
-
-### Fixed
-
-- OpenAI model configurations now honor a custom `Uri` from `fabrcore.json` by applying it to
-  `OpenAIClientOptions.Endpoint`.
-
-### Documentation
-
-- Added an Agentic Resource Discovery research report and proposed implementation plan.
-
-[Compare v1.0.1...v1.0.2](https://github.com/vulcan365/FabrCore/compare/v1.0.1...v1.0.2)
-
-## v1.0.1 — 2026-07-14
-
-### Added
-
-- Added durable agent-to-principal delivery for messages sent while no live user observer is
-  connected, including a persisted outbox, retries, backoff, expiry, endpoint selection, and
-  pluggable `IPrincipalMessageRelay` providers.
-- Added `SendToUserAsync` delivery overloads and targeted `PrincipalDeliveryTarget` routing.
-- Added the Microsoft 365 Copilot relay for proactive delivery to previously established
-  conversations.
-- Added Copilot activity, conversation-context, UI-action, app-package, and proactive-delivery
-  mapping with expanded automated tests.
-- Added relay configuration, operational documentation, a webhook sample, and a dedicated
-  principal-delivery skill.
-
-[Compare v1.0.0...v1.0.1](https://github.com/vulcan365/FabrCore/compare/v1.0.0...v1.0.1)
-
-## v1.0.0 — 2026-07-12
-
-### Changed
-
-- Marked the 1.x release line and changed the repository license from Apache License 2.0 to the
-  GNU General Public License v3.0. The project returned to Apache License 2.0 in `v1.5.0`.
-- Updated the SDK's Model Context Protocol dependency from `1.4.0` to `1.4.1`.
-
-[Compare v0.10.2...v1.0.0](https://github.com/vulcan365/FabrCore/compare/v0.10.2...v1.0.0)
+# FabrCore 2.0.0
+
+These consolidated release notes cover changes after `v1.7.0`, including the intervening
+1.7.x and 1.8.x development and the current 2.0 changes. They replace the previous cumulative
+release log; earlier history remains available in Git and [historical release documentation](docs/releases).
+
+FabrCore 2.0 simplifies hosting around two modes: a standalone, trusted workspace with no
+database, and a SQL-enabled host with persistent runtime state, enforced ACL, Memory,
+GraphRAG, and durable operational stores. This is a breaking package and configuration release.
+
+## Highlights
+
+- Added Orleans RPC contract build checks, persisted-JSON compatibility tests, Orleans telemetry,
+  and opt-in SQL streams using the Orleans 10.3.1-alpha.1 provider. See the
+  [Orleans adoption guide](docs/orleans-10.3-adoption.md) for migration and client configuration.
+- Consolidated SQL Server, Memory, GraphRAG, and service contracts into Host, Core, and SDK.
+- Added explicit standalone/SQL behavior, relational ACL storage, and ACL migration tooling.
+- Added built-in A2A hosting and durable SQL task snapshots, audit records, and execution evidence.
+- Updated Microsoft Agent Framework from 1.16.0 at `v1.7.0` to 1.20.0 and corrected both
+  per-model-call context compaction and durable conversation compaction.
+- Expanded Memory and GraphRAG ingestion, retrieval controls, and evaluation workflows.
+- Improved model configuration, assembly discovery, Microsoft 365 delivery, and release automation.
+
+## Breaking changes and upgrade
+
+### Replace retired package references
+
+| Retired package | 2.0 location |
+| --- | --- |
+| `FabrCore.Services.Contracts` | Shared contracts in `FabrCore.Core` |
+| `FabrCore.Services.Memory` | Implementation in `FabrCore.Host`; contracts in Core; remote clients in SDK |
+| `FabrCore.Services.GraphRag` | Implementation in `FabrCore.Host`; shared contracts in Core |
+| `FabrCore.Host.SqlServer` | SQL Server provider in `FabrCore.Host` |
+
+There are no forwarding packages. Update project references and rebuild consumers whose
+types moved assemblies. Remove the former manual Memory/GraphRAG service registrations;
+`AddFabrCoreServer` registers the integrated features according to the selected database mode.
+Agent class libraries can reference SDK without taking a SQL implementation dependency.
+
+### Choose the runtime mode explicitly when upgrading
+
+- **No FabrCore database connection:** the default host is a trusted standalone workspace.
+  Cross-principal agent communication does not require ACL grants. Authentication, privileged
+  administration authentication, and storage/session ownership checks still apply. Runtime state,
+  conversations, typed storage, delivery checkpoints, and reminders are in memory by default
+  and are lost on process restart. SQL-only plugins, agents, and ACL administration are unavailable.
+- **`ConnectionStrings:FabrCore` configured:** the host enables SQL Orleans defaults, enforced
+  ACL, Memory, GraphRAG, and durable operational stores. Memory remains an explicit per-agent
+  plugin/scope choice. A database connection does not attach memory to every agent.
+
+Existing Azure/custom Orleans providers can still be selected explicitly. Orleans storage
+selection is separate from enabling the integrated SQL feature set. Host ships SQL assemblies;
+standalone startup does not activate SQL services or connect to a database.
+
+### Migrate ACL configuration and data
+
+ACL principals, groups, roles, grants, and their version now live in relational `acl` tables,
+independent of the Orleans storage provider. Normal startup rejects JSON ACL seeds/rules.
+Use application configuration for database selection and administration authentication;
+use the ACL administration API for user ACL data.
+
+For an existing installation:
+
+1. Export ACL data from the old running host with `scripts/Migrate-Acl.ps1 -Mode Export`.
+2. Update package references and configure the new host's database and required models.
+3. Configure `FabrCore:AdminAuthentication:ApiKey` and initialize the new ACL schema.
+4. Import the export with `scripts/Migrate-Acl.ps1 -Mode Import` into a built-in-only target.
+5. Validate principal/group membership, grants, readiness, and application access before cutover.
+
+The migration tool preserves identifiers, validates references, imports transactionally, and
+refuses to overwrite user-defined ACL data. Legacy `FabrCore:Acl:Seed` configuration is accepted
+as migration input, not as ongoing startup configuration. Supply the tool's administration
+credential through `FABRCORE_ADMIN_API_KEY`.
+
+See [database modes and migration](docs/database-modes.md) for complete commands, connection
+overrides, prerequisites, and deployment behavior.
+
+## Database startup and durable operations
+
+- The feature database must already exist and support the SQL Server 2025 / Azure SQL vector
+  and graph schemas. Startup initializes required tables and applies GraphRAG migrations.
+  `FabrCore:Database:AutoInitialize=false` validates pre-provisioned schemas instead.
+- SQL mode validates required model configuration and credential aliases without paid inference.
+  Configure `default` chat and `embeddings`; GraphRAG requires 1536-dimensional embeddings.
+  Extraction model resolution uses an explicit override, then `graphrag`, then `default`.
+- Optional per-feature connection overrides support existing split databases. Database selection
+  requires a restart. Invalid configuration, missing schemas, or failed initialization never
+  silently downgrade a SQL host to standalone mode.
+- Readiness checks include ACL initialization and feature database connectivity. ACL evaluation
+  uses immutable cached snapshots; serialized, transactional writes update the version and
+  invalidate snapshots through write notifications and refresh behavior.
+
+SQL mode now selects durable defaults for three operational features, separate from ordinary
+message/LLM monitoring. Explicit custom providers remain supported.
+
+| Feature | 2.0 SQL behavior |
+| --- | --- |
+| Security audit | Stable record IDs, conflict detection, filtered cursor pagination, and explicit pruning |
+| Verifiable execution | Atomic evidence/signature/public certificate-chain storage, coordinated per-trace sequencing, and immutable retry validation |
+| A2A tasks | Durable accepted/working/terminal snapshots, ownership checks, cross-host reads/cancellation, and execution leases that fence stale writers |
+
+The stores use the `fabrOps` schema and do not fall back to in-memory storage on SQL failure.
+Audit writes retain their nonthrowing contract and report failures through logging/counters;
+there is no automatic retry spool or retention job. Evidence signing must still be enabled
+explicitly; SQL persistence alone does not sign records, and private keys are not stored there.
+
+A2A persistence stores task snapshots, not replayable SSE event streams. Interrupted execution
+is failed rather than automatically replayed. Terminal task retention defaults to one hour;
+active tasks are not evicted by terminal retention.
+
+## Harness, context compaction, and token management
+
+The two compaction layers now have distinct responsibilities: Microsoft Agent Framework
+compaction reduces the working context for each model call, while FabrCore compaction creates
+and saves a validated handover for older conversation history. Neither requires long-term Memory.
+
+### Per-model-call working context
+
+- Compaction runs inside the function-invocation loop for both harnesses and standard SDK-created
+  agents, so tool-heavy turns are checked before subsequent model calls. Recall and other
+  invocation-level providers retain their once-per-invocation behavior.
+- Older tool results retain a bounded head and tail: the default limit is 2,048 characters at
+  50% of the input working set, tightening to 512 at 80%. Full original tool output remains in
+  persisted history.
+- User text, instructions, assistant prose, handovers, and the latest two interaction groups
+  are protected. Tool calls and results preserve their pairing and identifiers.
+- `ContextWorkingSetTokens` / `_ContextWorkingSetTokens` can set a smaller working context,
+  capped by the physical context window minus output reservation. Protected oversized content
+  stops explicitly when it cannot fit; compaction targets are not guaranteed hard caps.
+- Transient framework compaction indices reset for each history invocation and are excluded
+  from snapshots, preventing stale state after same-length history rewrites.
+
+### Durable conversation history
+
+- Automatic durable compaction uses 70% of a configured input working set, with a 75% fallback
+  when that setting is absent. Physical context checks reserve model output space.
+- Summarization requires model context metadata, reserves summary output plus headroom, and
+  processes complete interaction groups within conservative UTF-8-aware budgets.
+- Summary reduction is bounded to eight passes and 64 model calls, with no-progress detection.
+  `_CompactionModelConfigName` or `CompactionConfig.SummaryModelConfigurationName` can select a
+  separate summarization model.
+- A single validated history write preserves original instructions, the latest user message,
+  and the latest interaction group. Empty, incomplete, length-limited, canceled, oversized,
+  nonreducing, malformed-tool, or concurrently stale results leave the original history intact.
+- Historical handovers use assistant context rather than system authority. Legacy compaction
+  messages are demoted when read.
+
+Token estimation now accounts for UTF-8 content, instructions, tool definitions, and framing.
+Harness narration/delegation instructions are leaner. Background-session cleanup cancels local
+work and releases resources without recreating evicted state; background waits have a configurable
+timeout through `_HarnessBackgroundWaitTimeoutSeconds` (300 seconds by default).
+
+These changes improve budgeting and correctness; they do not establish a universal token-saving
+percentage or guarantee semantic summary fidelity. Custom memory-aware compaction callbacks
+remain separate opt-in implementations. See [compaction correctness](docs/compaction-correctness.md)
+and [harness efficiency](docs/harness-efficiency.md) for safeguards, tests, and tuning limits.
+
+## A2A and channel integration
+
+- Added built-in A2A endpoints with agent cards, JSON-RPC/HTTP+JSON handling, streaming,
+  cancellation, task lookup, and resubscription support.
+- Added configurable discovery descriptions/capabilities, hidden-agent filtering, handle patterns,
+  and per-agent overrides, with API-key/JWT authentication and principal-resolution strategies.
+- Added asynchronous `IA2APrincipalResolver.ResolvePrincipalHandleAsync` and shared channel-agent
+  binding behavior, including canonical Entra principal handling across channels.
+- Improved Copilot Studio interoperability for JSON-RPC and streaming response shapes.
+- Added `FabrCore.Host.Testing` with in-memory Host/A2A test helpers.
+- Fixed Microsoft 365 streaming and Teams proactive-message delivery issues, and corrected
+  Surface chat header foreground/background styling.
+
+See [A2A hosting](docs/a2a.md) for configuration and protocol behavior.
+
+## Memory and GraphRAG
+
+Memory now has explicit lifecycle/context-provider integration through `WithMemory` and
+`WithMemoryLifecycle`, stronger scope policies for internal agents, and scope-constrained writes.
+Private specialists can use their own memory or read core memory while writing their own scope;
+core writes require explicit selection. Candidate handling, correction workflows, and retry
+behavior have additional coverage.
+
+Default recall selects headers and loads primary chunks; the hot index uses bounded pointers.
+Warm selection defaults to five memories from a scan of up to 200 headers; the hot index defaults
+to 20 entries and a 3,000-token budget. Automatic consolidation and summary trees remain off. Semantic/hybrid
+retrieval, diversity, chunk/evidence expansion, previews, and planning experiments remain opt-in.
+See [Memory release defaults](docs/memory-release-defaults.md) and the
+[readiness review](docs/memory-readiness-review.md) before enabling experimental paths.
+
+GraphRAG extraction now separates lossless source sections from overlapping vector chunks,
+with configurable batching, input budgets, concurrency, and bounded malformed/truncated-response
+retries. Small documents can combine graph extraction and taxonomy classification; larger
+documents use graph batches and a separate sampled-source classification pass.
+
+Additional improvements include optional structured JSON-schema output, relationship guidance,
+evidence quotes and source-span provenance, endpoint repair, instruction-hash tracking, and
+ingestion/extraction performance metrics. Schema migrations accompany the new persisted metadata.
+Memory and GraphRAG evaluation workflows now support more detailed baseline, cost, fidelity,
+relationship-direction, conditional-policy, and provenance checks. Live quality results still
+depend on the selected model, corpus, and enabled options.
+
+## Configuration and discovery
+
+- Application/reference assembly discovery avoids missing agents and tools in deployed builds.
+  `RegistryAssemblies` provides an explicit registry override; `AdditionalAssemblies` extends discovery.
+- Local model configuration resolves through `IFabrCoreModelConfigurationResolver` and the
+  configuration store, avoiding authenticated loopback HTTP. Remote model configuration endpoints
+  remain protected, with redirects disabled on the resolver client.
+- Cloud Server configuration includes bootstrap/provider/policy support, a settings catalog,
+  live-versus-restart-required behavior, and last-known-good/readiness handling. Long polling has
+  isolated HTTP resilience behavior. Cloud Server and Forge remain optional.
+
+## Builds, packaging, and validation
+
+- `builds/Projects.psd1` is the shared inventory for nine supported packages and test projects.
+  Build, pack, release, and CI workflows use that inventory, including both VSTest and
+  Microsoft.Testing.Platform projects.
+- Deterministic tests are separated from SQL integration tests and live evaluations. SQL/evaluation
+  scripts resolve paths independently of the caller's working directory and restore environment settings.
+- Release previews avoid repository mutations. Real releases require the expected branch and a clean
+  tree, use fast-forward-only updates, and fail before publishing when validation fails.
+- NuGet publishing reads `NUGET_API_KEY`; release workflows validate stable tags and run tests before
+  publishing. Local package creation and push previews use the same supported package list.
+- Current validation includes a Release build, 971 passing deterministic tests, eight passing SQL
+  integration tests, and inspection of all nine generated packages and internal dependencies.
+  Live model evaluations are separate from those deterministic checks.
+
+The source targets .NET 10, Orleans 10.3.1, and Microsoft Agent Framework 1.20.0.
+See [build and release instructions](builds/README.md) for reproducible commands.
