@@ -3,8 +3,9 @@ using FabrCore.Core.Blueprints;
 
 namespace FabrCore.Surface.Ai.Squads;
 
-public sealed class SurfaceSquadBlueprintExpander : IBlueprintExpander
+public sealed class SurfaceSquadBlueprintExpander : IBlueprintPreviewExpander
 {
+    public JsonElement? ConfigurationSchema => JsonSerializer.SerializeToElement(new { type = "array", items = new { type = "object" }, description = "Surface squad definitions" });
     public string ExtensionKey => "squads";
 
     public ValueTask<BlueprintExpansion> ExpandAsync(

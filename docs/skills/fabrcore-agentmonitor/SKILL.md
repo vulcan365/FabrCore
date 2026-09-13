@@ -1,22 +1,27 @@
 ---
 name: fabrcore-agentmonitor
-description: >
-  FabrCore agent message, event, and LLM call monitoring — IAgentMessageMonitor, InMemoryAgentMessageMonitor,
-  message traffic observation, event stream observation at OnEvent, internal LLM request/response capture,
-  LLM token tracking, building custom monitor providers, subscribing to message/event/LLM-call notifications for UI updates.
-  Triggers on: "agent monitor", "message monitor", "IAgentMessageMonitor", "InMemoryAgentMessageMonitor",
-  "monitor messages", "monitor events", "OnEvent", "event stream monitor", "track tokens", "agent token usage",
-  "message traffic", "monitor provider", "OnMessageRecorded", "OnEventRecorded", "OnLlmCallRecorded",
-  "MonitoredMessage", "MonitoredEvent", "MonitoredLlmCall", "LlmCaptureOptions", "LlmCallContext",
-  "AgentMessage.IsSystemMessage", "SystemMessageTypes",
-  "monitor LLM calls", "capture LLM prompts", "capture LLM responses", "AgentTokenSummary", "message observation",
-  "VerifiableExecutionId", "SignatureDigest", "VerificationStatus", "signed evidence".
-  Do NOT use for: agent lifecycle — use fabrcore-agent.
-  Do NOT use for: OpenTelemetry metrics — use fabrcore-server.
+description: "Implement FabrCore 2.0 message and LLM monitoring, lifecycle events, token and cost capture, bounded cloud queries, opt-in SQL retention, local REST/SSE viewers and custom providers. Use for observability and diagnostics; use fabrcore-acl for security audit and fabrcore-spiffe for signed evidence."
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
+metadata:
+  version: 2.0.0
 ---
 
 # FabrCore Agent Message Monitor
+
+## Retained cloud queries and SQL monitoring
+
+FabrCore 2.0 adds `IAgentMonitorQueryProvider` and `IAgentMonitorPayloadProvider`
+alongside recording interfaces. Read [cloud queries](references/cloud-queries.md)
+for filters, cursors, source coverage, SQL buffering and diagnostic attribution.
+Cloud viewers use bounded authenticated HTTP queries, manual refresh by default,
+and optional ten-second visible-view polling. Existing local notifications/SSE
+examples below do not prescribe a continuous cloud stream. SQL monitoring is opt-in;
+it is separate from audit and execution evidence.
+
+
+## FabrCore 2.0 baseline
+
+This skill targets FabrCore 2.0 GA. Ordinary message/LLM monitoring keeps its configured providers; SQL mode adds durable security audit and execution evidence separately. Subscribe to Microsoft.Orleans.* and FabrCore.* activity sources and Microsoft.Orleans/FabrCore.* meters. Orleans RPC tags now use rpc.system.name and orleans.rpc.service/target_id/source_id; rpc.method includes interface/method.
 
 ## Overview
 
@@ -87,7 +92,7 @@ builder.AddFabrCoreServer(options =>
 // Or use a custom implementation
 builder.AddFabrCoreServer(options =>
 {
-    options.UseAgentMessageMonitor<SqlAgentMessageMonitor>();
+    options.UseAgentMessageMonitor<MyAgentMessageMonitor>();
 });
 ```
 
@@ -515,7 +520,7 @@ public class ReportingAgent : FabrCoreAgentProxy
 Implement `IAgentMessageMonitor` and register it via `FabrCoreServerOptions`:
 
 ```csharp
-public class SqlAgentMessageMonitor : IAgentMessageMonitor
+public class MyAgentMessageMonitor : IAgentMessageMonitor
 {
     private readonly IDbConnection _db;
 
@@ -525,7 +530,7 @@ public class SqlAgentMessageMonitor : IAgentMessageMonitor
 
     public LlmCaptureOptions LlmCaptureOptions { get; }
 
-    public SqlAgentMessageMonitor(IDbConnection db, LlmCaptureOptions? llmCaptureOptions = null)
+    public MyAgentMessageMonitor(IDbConnection db, LlmCaptureOptions? llmCaptureOptions = null)
     {
         _db = db;
         LlmCaptureOptions = llmCaptureOptions ?? new LlmCaptureOptions();
@@ -615,7 +620,7 @@ public class SqlAgentMessageMonitor : IAgentMessageMonitor
 ```csharp
 builder.AddFabrCoreServer(options =>
 {
-    options.UseAgentMessageMonitor<SqlAgentMessageMonitor>();
+    options.UseAgentMessageMonitor<MyAgentMessageMonitor>();
 });
 ```
 

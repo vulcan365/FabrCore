@@ -1,5 +1,6 @@
 #pragma warning disable MAAI001 // Harness providers (LoopAgent, BackgroundAgentsProvider, loop evaluators) are for evaluation purposes only and may change.
 using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Compaction;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
@@ -34,7 +35,8 @@ namespace FabrCore.Sdk;
 /// <para>
 /// Compaction is composed by the caller, not here. <c>CreateFabrCoreHarnessAgent</c> passes a
 /// <c>CompactionProvider</c> through <see cref="FabrCoreHarnessOptions.AIContextProviders"/> as layer 1 of
-/// the ladder, and registers the history-compaction rungs separately — see <see cref="CompactionLadder"/>.
+/// the ladder. The assembler moves these providers inside the tool loop. The proxy registers the
+/// history-compaction rungs separately — see <see cref="CompactionLadder"/>.
 /// </para>
 /// </remarks>
 public sealed class FabrCoreHarnessAgent : DelegatingAIAgent
@@ -51,10 +53,9 @@ public sealed class FabrCoreHarnessAgent : DelegatingAIAgent
 
         - Think the task through before acting. Break complex work into clear steps.
         - Track multi-step work with the todo tools: add the steps up front, then complete each one as you finish it. Never mark a todo complete for work that did not actually happen.
-        - Say what you learned and what you are doing next between tool calls, so the person following along can see your reasoning.
-        - Avoid making more than 4 tool calls in a row without explaining what you are doing.
+        - Give concise progress updates when you learn something material or change direction. Avoid narrating routine tool calls.
         - If a tool call fails or returns something unexpected, adapt. Do not repeat the same call and expect a different result.
-        - When background agents are available, delegate independent work to them and start that work concurrently rather than one item at a time. Read their replies critically — a reply is not proof the work was done correctly.
+        - Delegate only substantial independent work that benefits from a specialist. Keep delegated instructions and requested results focused. Wait for running tasks with the wait tool rather than repeatedly polling status. Read replies critically — a reply is not proof the work was done correctly.
         - Finish with a clear, consolidated answer to what was actually asked, not a list of the steps you took.
         """;
 
@@ -128,6 +129,7 @@ public sealed class FabrCoreHarnessAgent : DelegatingAIAgent
         ArgumentNullException.ThrowIfNull(chatClient);
 
         var providers = new List<AIContextProvider>();
+        var perCallProviders = new List<AIContextProvider>();
 
         TodoProvider? todoProvider = null;
         if (options?.DisableTodoProvider is not true)
@@ -163,7 +165,12 @@ public sealed class FabrCoreHarnessAgent : DelegatingAIAgent
 
         if (options?.AIContextProviders is { } extraProviders)
         {
-            providers.AddRange(extraProviders);
+            foreach (var provider in extraProviders)
+            {
+                // Keep existing callers compatible, but execute compaction inside the tool loop.
+                // Recall and other context providers still run once per agent invocation.
+                (provider is CompactionProvider ? perCallProviders : providers).Add(provider);
+            }
         }
 
         AgentSkillsProvider? skillsProvider = null;
@@ -205,12 +212,18 @@ public sealed class FabrCoreHarnessAgent : DelegatingAIAgent
         // function-invocation client when the supplied one already exposes it, so the remaining default
         // decorators (approval binding, approval bypass) keep their normal positions.
         var innerChatClient = chatClient;
-        if (options?.MaximumIterationsPerRequest is int maxIterationsPerRequest)
+        if (options?.MaximumIterationsPerRequest is not null || perCallProviders.Count > 0)
         {
-            innerChatClient = chatClient
+            var clientBuilder = chatClient
                 .AsBuilder()
-                .UseFunctionInvocation(loggerFactory, ficc => ficc.MaximumIterationsPerRequest = maxIterationsPerRequest)
-                .Build(services);
+                .UseFunctionInvocation(loggerFactory, ficc =>
+                {
+                    if (options?.MaximumIterationsPerRequest is int maxIterationsPerRequest)
+                        ficc.MaximumIterationsPerRequest = maxIterationsPerRequest;
+                });
+            foreach (var provider in perCallProviders)
+                clientBuilder.UseAIContextProviders(provider);
+            innerChatClient = clientBuilder.Build(services);
         }
 
         var agentOptions = new ChatClientAgentOptions
@@ -223,7 +236,7 @@ public sealed class FabrCoreHarnessAgent : DelegatingAIAgent
             AIContextProviders = providers.Count > 0 ? providers : null
         };
 
-        var builder = new ChatClientAgent(innerChatClient, agentOptions).AsBuilder();
+        var builder = new ChatClientAgent(innerChatClient, agentOptions, loggerFactory, services).AsBuilder();
 
         if (options?.DisableOpenTelemetry is not true)
         {

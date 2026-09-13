@@ -4,13 +4,9 @@ using System.Text.Json.Serialization;
 using FabrCore.Host.Configuration;
 namespace FabrCore.Host.A2A.Protocol;
 
-// Wire types for A2A protocol version 0.3.0 (https://a2a-protocol.org). Property names are
-// serialized camelCase by A2AJson.Options, which matches the published JSON schema exactly.
-//
-// Union types in the schema (Part, SendMessageResponse result, streaming events) are modelled as
-// single classes carrying every member plus the schema's "kind" discriminator, and null members
-// are omitted on write. That produces byte-identical payloads without polymorphic converters, and
-// it keeps deserialization tolerant of the shape variations real clients send.
+// Execution/store DTOs. A2AV1 translates these into the A2A 1.0.1 wire schema at the HTTP
+// boundary, including content unions, enum values, and response wrappers. Internal kind
+// discriminators are never emitted on the public 1.0 interface.
 
 /// <summary>A single piece of content inside a message or artifact.</summary>
 public sealed class A2APart
@@ -200,4 +196,16 @@ public sealed class A2ATaskIdParams
 {
     public string Id { get; set; } = string.Empty;
     public Dictionary<string, JsonElement>? Metadata { get; set; }
+}
+
+/// <summary>Filters and pagination for A2A 1.0 ListTasks.</summary>
+public sealed class A2AListTasksParams
+{
+    public string? ContextId { get; set; }
+    public string? Status { get; set; }
+    public int? PageSize { get; set; }
+    public string? PageToken { get; set; }
+    public int? HistoryLength { get; set; }
+    public DateTimeOffset? StatusTimestampAfter { get; set; }
+    public bool IncludeArtifacts { get; set; }
 }

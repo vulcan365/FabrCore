@@ -51,14 +51,19 @@ namespace FabrCore.Core
         /// </remarks>
         public bool? ContextCompactionEnabled { get; set; }
 
+        /// <summary>Optional smaller conversation-input budget for context compaction.
+        /// Null retains the window-minus-output budget. Positive values are capped at that budget;
+        /// eviction and truncation thresholds apply to the resulting working set.</summary>
+        public int? ContextWorkingSetTokens { get; set; }
+
         /// <summary>
         /// Fraction of the input budget (window minus output reserve) at which old tool-call results
-        /// collapse into one-line summaries. Default is null (uses system default: 0.5).
+        /// receive bounded excerpts. Default is null (uses system default: 0.5).
         /// </summary>
         public double? ContextEvictThreshold { get; set; }
 
         /// <summary>
-        /// Fraction of the input budget at which the oldest message groups are dropped from the request.
+        /// Fraction of the input budget at which older tool excerpts are tightened further.
         /// Must be greater than or equal to <see cref="ContextEvictThreshold"/>.
         /// Default is null (uses system default: 0.8).
         /// </summary>
@@ -87,17 +92,14 @@ namespace FabrCore.Core
         /// <see cref="ContextWindowTokens"/>.
         /// </summary>
         /// <remarks>
-        /// Default is null, which resolves to 0.87 when context compaction is active — deliberately above
-        /// layer 1's truncation point so the free reversible rung always fires first and history
-        /// compaction acts as the between-turns consolidator. Falls back to 0.75 when context compaction
-        /// is not configured, since history compaction is then the first responder.
+        /// Default is null, resolving to 0.7 of the input working set when context compaction is active,
+        /// or 0.75 otherwise. Durable summarization runs between turns, before the higher soft target.
         /// </remarks>
         public double? CompactionThreshold { get; set; }
 
         /// <summary>
-        /// When a thread has been dormant for at least this many minutes AND stored tokens
-        /// exceed the history compaction threshold, compaction runs before the next OnMessage call
-        /// (preflight compaction). Default is null (uses system default: 60). Set to 0 to disable.
+        /// Legacy preflight switch. Positive enables threshold checks before each turn regardless of age;
+        /// zero or negative disables them. Default is null (uses system default: 60).
         /// </summary>
         public int? CompactionStaleAfterMinutes { get; set; }
 

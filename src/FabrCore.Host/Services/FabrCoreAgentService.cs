@@ -251,26 +251,21 @@ namespace FabrCore.Host.Services
 
         public async Task<AgentMessage> SendAndReceiveMessageAsync(string userHandle, string handle, string message)
         {
-            var key = BuildAgentKey(userHandle, handle);
-            var proxy = _clusterClient.GetGrain<IAgentGrain>(key);
             var msg = new AgentMessage
             {
-                ToHandle = key,
-                FromHandle = "AgentService",
                 Message = message
             };
-            msg.StampFromActivity(Activity.Current);
-            return await proxy.OnMessage(msg);
+            return await SendAndReceiveMessageAsync(userHandle, handle, msg);
         }
 
         public async Task<AgentMessage> SendAndReceiveMessageAsync(string userHandle, string handle, AgentMessage message)
         {
-            var key = BuildAgentKey(userHandle, handle);
-            message.ToHandle = key;
+            message.ToHandle = handle;
+            message.FromHandle = userHandle;
             if (string.IsNullOrEmpty(message.TraceId))
                 message.StampFromActivity(Activity.Current);
-            var proxy = _clusterClient.GetGrain<IAgentGrain>(key);
-            return await proxy.OnMessage(message);
+            var principal = _clusterClient.GetGrain<IPrincipalGrain>(userHandle);
+            return await principal.SendAndReceiveMessage(message);
         }
 
         public async Task<AgentHealthStatus> GetHealthAsync(string userHandle, string handle, HealthDetailLevel detailLevel = HealthDetailLevel.Basic)

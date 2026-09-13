@@ -43,6 +43,8 @@ public static class Microsoft365CopilotExtensions
         this IHostApplicationBuilder builder,
         Action<Microsoft365CopilotOptions>? configure = null)
     {
+        if (builder.Services.Any(d => d.ServiceType == typeof(Microsoft365CopilotMarker)))
+            return builder;
         // The Microsoft365Copilot section may live in fabrcore.json, which the FabrCore host does
         // not load into IConfiguration by itself. Pull it in when the section is not already
         // present from appsettings.json (or a host-added fabrcore.json).
@@ -65,6 +67,19 @@ public static class Microsoft365CopilotExtensions
             return builder;
         }
 
+        if (!string.IsNullOrWhiteSpace(options.Agent.Binding))
+        {
+            var binding = FabrCore.Host.Configuration.ChannelAgentBinding.Read(builder.Configuration, options.Agent.Binding);
+            if (!string.IsNullOrWhiteSpace(options.Agent.SharedAgentHandle) || options.Agent.AgentPerConversation)
+                throw new InvalidOperationException("Microsoft365Copilot: a shared binding requires per-principal routing without SharedAgentHandle or AgentPerConversation.");
+            options.Agent.Handle = binding.Handle;
+            options.Agent.AgentType = binding.AgentType;
+            options.Agent.Models = binding.Models;
+            options.Agent.SystemPrompt = binding.SystemPrompt;
+            options.Agent.Plugins = binding.Plugins;
+            options.Agent.Tools = binding.Tools;
+            options.Agent.Args = binding.Args;
+        }
         Validate(options, builder.Configuration);
 
         // Feed the Microsoft 365 Agents SDK the configuration shape it expects
@@ -108,6 +123,9 @@ public static class Microsoft365CopilotExtensions
     /// </summary>
     public static WebApplication UseMicrosoft365Copilot(this WebApplication app)
     {
+        const string mappedKey = "FabrCore.Microsoft365Copilot.RoutesMapped";
+        if (((Microsoft.AspNetCore.Builder.IApplicationBuilder)app).Properties.ContainsKey(mappedKey))
+            return app;
         var marker = app.Services.GetService<Microsoft365CopilotMarker>()
             ?? throw new InvalidOperationException(
                 "UseMicrosoft365Copilot requires AddMicrosoft365Copilot to be called on the builder first.");
@@ -122,6 +140,7 @@ public static class Microsoft365CopilotExtensions
         }
 
         var options = app.Services.GetRequiredService<IOptions<Microsoft365CopilotOptions>>().Value;
+        ((Microsoft.AspNetCore.Builder.IApplicationBuilder)app).Properties[mappedKey] = true;
 
         var messages = app.MapPost(
             options.MessagesEndpoint,

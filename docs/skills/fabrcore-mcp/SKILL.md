@@ -9,9 +9,15 @@ description: >
   Do NOT use for: plugins or standalone tools — use fabrcore-plugins-tools.
   Do NOT use for: general agent development — use fabrcore-agent.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
+metadata:
+  version: 2.0.0
 ---
 
 # FabrCore MCP Integration
+
+## FabrCore 2.0 baseline
+
+This skill targets FabrCore.Sdk 2.0.0 on .NET 10. MCP tools work in standalone and SQL modes. Tool output is shortened only in per-model-call working context; full output remains in history until durable compaction. Configure ContextWindowTokens and MaxOutputTokens, and optionally ContextWorkingSetTokens, for tool-heavy runs.
 
 FabrCore natively supports the Model Context Protocol (MCP) for connecting agents to external tool servers. MCP tools are resolved alongside plugin and standalone tools and presented to the LLM automatically.
 
@@ -30,6 +36,8 @@ public class McpServerConfig
 
     // Http transport
     public string Url { get; set; }                         // Server endpoint URL
+    public string? Connection { get; set; }                 // Optional agent connection alias
+    public string? Resource { get; set; }                   // Resource in that connection
     public Dictionary<string, string> Headers { get; set; } // HTTP headers
 }
 
@@ -37,6 +45,16 @@ public enum McpTransportType { Stdio, Http }
 ```
 
 ## Configuring MCP Servers
+
+For delegated OAuth, application credentials, or Agent ID, use
+[fabrcore-connections](../fabrcore-connections/SKILL.md) to provision the profile,
+grant the agent, and bind its alias. Set `Connection` and `Resource` on an HTTP
+MCP configuration; a connection-backed transport rejects static Authorization
+headers and Stdio. The authenticated client renews tokens per request and restricts
+destinations to its resource base URL. Reconfigure the agent's MCP session after
+disconnect/reauthorization or profile replacement. Work IQ MCP uses this generic
+path with the endpoint's own documented permissions; no special tool runtime is
+required. Existing static-header/unauthenticated configurations remain supported.
 
 Add MCP server configurations to `AgentConfiguration.McpServers`:
 

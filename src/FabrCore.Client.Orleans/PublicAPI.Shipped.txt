@@ -1,0 +1,29 @@
+#nullable enable
+FabrCore.Client.Orleans.FabrCoreGatewayDiscoveryClient
+FabrCore.Client.Orleans.FabrCoreGatewayDiscoveryClient.DiscoveryUri.get -> System.Uri!
+FabrCore.Client.Orleans.FabrCoreGatewayDiscoveryClient.FabrCoreGatewayDiscoveryClient(System.Net.Http.HttpClient! httpClient, FabrCore.Client.Orleans.FabrCoreOrleansClientOptions! options) -> void
+FabrCore.Client.Orleans.FabrCoreGatewayDiscoveryClient.GetGatewayDiscoveryAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.Connectivity.FabrCoreGatewayDiscoveryDocument!>!
+FabrCore.Client.Orleans.FabrCoreGatewayDiscoveryException
+FabrCore.Client.Orleans.FabrCoreGatewayDiscoveryException.FabrCoreGatewayDiscoveryException(string! message, System.Net.HttpStatusCode? statusCode = null, System.Exception? innerException = null) -> void
+FabrCore.Client.Orleans.FabrCoreGatewayDiscoveryException.StatusCode.get -> System.Net.HttpStatusCode?
+FabrCore.Client.Orleans.FabrCoreHostGatewayListProvider
+FabrCore.Client.Orleans.FabrCoreHostGatewayListProvider.Dispose() -> void
+FabrCore.Client.Orleans.FabrCoreHostGatewayListProvider.FabrCoreHostGatewayListProvider(FabrCore.Client.Orleans.FabrCoreGatewayDiscoveryClient! discoveryClient, FabrCore.Core.Connectivity.FabrCoreGatewayDiscoveryDocument! initialDocument, Microsoft.Extensions.Logging.ILogger<FabrCore.Client.Orleans.FabrCoreHostGatewayListProvider!>! logger) -> void
+FabrCore.Client.Orleans.FabrCoreHostGatewayListProvider.GetGateways() -> System.Threading.Tasks.Task<System.Collections.Generic.IList<System.Uri!>!>!
+FabrCore.Client.Orleans.FabrCoreHostGatewayListProvider.InitializeGatewayListProvider() -> System.Threading.Tasks.Task!
+FabrCore.Client.Orleans.FabrCoreHostGatewayListProvider.IsUpdatable.get -> bool
+FabrCore.Client.Orleans.FabrCoreHostGatewayListProvider.MaxStaleness.get -> System.TimeSpan
+FabrCore.Client.Orleans.FabrCoreOrleansClientExtensions
+FabrCore.Client.Orleans.FabrCoreOrleansClientOptions
+FabrCore.Client.Orleans.FabrCoreOrleansClientOptions.AllowInsecureOrleansTransport.get -> bool
+FabrCore.Client.Orleans.FabrCoreOrleansClientOptions.AllowInsecureOrleansTransport.set -> void
+FabrCore.Client.Orleans.FabrCoreOrleansClientOptions.FabrCoreHostUrl.get -> string?
+FabrCore.Client.Orleans.FabrCoreOrleansClientOptions.FabrCoreHostUrl.set -> void
+FabrCore.Client.Orleans.FabrCoreOrleansClientOptions.FabrCoreOrleansClientOptions() -> void
+FabrCore.Client.Orleans.FabrCoreOrleansClientOptions.GatewayDiscoveryPath.get -> string!
+FabrCore.Client.Orleans.FabrCoreOrleansClientOptions.GatewayDiscoveryPath.set -> void
+const FabrCore.Client.Orleans.FabrCoreOrleansClientOptions.DefaultGatewayDiscoveryPath = "/fabrcoreapi/cluster/gateways" -> string!
+const FabrCore.Client.Orleans.FabrCoreOrleansClientOptions.FabrCoreHostUrlConfigurationKey = "FabrCore:HostUrl" -> string!
+static FabrCore.Client.Orleans.FabrCoreOrleansClientExtensions.AddFabrCoreOrleansClientAsync(this Microsoft.Extensions.Hosting.IHostApplicationBuilder! builder, System.Net.Http.HttpClient! discoveryHttpClient, System.Action<FabrCore.Client.Orleans.FabrCoreOrleansClientOptions!>? configureOptions = null, System.Action<Orleans.Hosting.IClientBuilder!>? configureOrleans = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Hosting.IHostApplicationBuilder!>!
+static FabrCore.Client.Orleans.FabrCoreOrleansClientExtensions.AddFabrCoreSqlServerStreams(this Orleans.Hosting.IClientBuilder! builder, string! connectionString) -> Orleans.Hosting.IClientBuilder!
+static FabrCore.Client.Orleans.FabrCoreOrleansClientExtensions.UseFabrCoreHostClustering(this Orleans.Hosting.IClientBuilder! builder, FabrCore.Client.Orleans.FabrCoreGatewayDiscoveryClient! discoveryClient, FabrCore.Core.Connectivity.FabrCoreGatewayDiscoveryDocument! initialDocument) -> Orleans.Hosting.IClientBuilder!

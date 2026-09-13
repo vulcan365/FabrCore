@@ -1,5 +1,11 @@
 namespace FabrCore.Core.VerifiableExecution;
 
+/// <summary>Coordinates sequence allocation, signing and append for one chain across writers.</summary>
+public interface IVerifiableExecutionWriteCoordinator
+{
+    ValueTask<IAsyncDisposable> AcquireWriteAsync(string traceId, string segmentId, CancellationToken ct = default);
+}
+
 public interface IVerifiableExecutionStore
 {
     Task AppendRecordAsync(

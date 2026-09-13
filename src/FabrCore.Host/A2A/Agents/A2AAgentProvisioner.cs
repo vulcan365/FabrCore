@@ -30,7 +30,7 @@ internal sealed class A2AAgentProvisioner : IA2AAgentProvisioner
 {
     private readonly IFabrCoreAgentService _agentService;
     private readonly ILogger<A2AAgentProvisioner> _logger;
-    private readonly ConcurrentDictionary<string, Task> _ensured = new();
+    private readonly ConcurrentDictionary<string, Lazy<Task>> _ensured = new();
 
     public A2AAgentProvisioner(IFabrCoreAgentService agentService, ILogger<A2AAgentProvisioner> logger)
     {
@@ -57,9 +57,10 @@ internal sealed class A2AAgentProvisioner : IA2AAgentProvisioner
         var cacheKey = $"{principalHandle}:{handle}";
         try
         {
-            await _ensured.GetOrAdd(cacheKey, _ => EnsureCoreAsync(agent, principalHandle, handle));
+            await _ensured.GetOrAdd(cacheKey, _ => new Lazy<Task>(() => EnsureCoreAsync(agent, principalHandle, handle)))
+                .Value.WaitAsync(cancellationToken);
         }
-        catch
+        catch when (!cancellationToken.IsCancellationRequested)
         {
             // Never cache a failure — the next request should retry provisioning.
             _ensured.TryRemove(cacheKey, out _);

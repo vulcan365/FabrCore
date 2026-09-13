@@ -25,8 +25,8 @@ public sealed class A2ADiscoveryTests
 
         foreach (var path in new[]
                  {
-                     "/a2a/botanical-agent/v1/.well-known/agent-card.json",
-                     "/a2a/botanical-agent/v1/.well-known/agent.json",
+                     "/a2a/botanical-agent/.well-known/agent-card.json",
+                     "/a2a/botanical-agent/.well-known/agent.json",
                  })
         {
             using var card = await host.GetJsonAsync(path);

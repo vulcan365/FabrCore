@@ -16,6 +16,8 @@ namespace FabrCore.Sdk
 
     public interface IFabrCoreAgentProxy
     {
+        internal bool InternalIsProcessingAdmin { get; }
+        internal Task InternalOnAdminMessage(AdminDiagnosticContext context, CancellationToken cancellationToken);
         internal Task InternalInitialize();
         internal Task<AgentMessage> InternalOnMessage(AgentMessage message);
         internal Task InternalOnEvent(EventMessage message);
@@ -173,6 +175,7 @@ namespace FabrCore.Sdk
         {
             public required FabrCoreChatHistoryProvider Provider { get; init; }
             public required string ChatClientConfigName { get; init; }
+            public Func<FabrCoreChatHistoryProvider, CompactionConfig, Task<CompactionResult?>>? HistoryCompaction { get; init; }
             public ContextCompactionConfig? ContextCompactionConfig { get; set; }
             public CompactionConfig? CompactionConfig { get; set; }
             public ProjectionConfig? ProjectionConfig { get; set; }
@@ -300,7 +303,12 @@ namespace FabrCore.Sdk
             var client = await chatClientService.GetChatClient(name, networkTimeoutSeconds);
             var monitor = serviceProvider.GetService<FabrCore.Core.Monitoring.IAgentMessageMonitor>();
             var verifiableExecution = serviceProvider.GetService<FabrCore.Core.VerifiableExecution.IVerifiableExecutionContext>();
-            return new TokenTrackingChatClient(client, fabrcoreAgentHost.GetHandle(), monitor, verifiableExecution, logger);
+            var context = await BuildContextCompactionConfigAsync(name);
+            return new TokenTrackingChatClient(client, fabrcoreAgentHost.GetHandle(), monitor, verifiableExecution, logger)
+            {
+                ContextWindowTokens = context.MaxContextWindowTokens,
+                ReservedOutputTokens = context.MaxOutputTokens
+            };
         }
 
 #pragma warning disable MEAI001 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
@@ -343,7 +351,7 @@ namespace FabrCore.Sdk
                 ChatHistoryProvider = historyProvider
             };
 
-            // Layer 1 of the ladder: bound every call in the tool loop before anything expensive happens.
+            // Layer 1 of the ladder: bound every call in the tool loop with protected tool-output excerpts.
             // Added before configureOptions so a caller supplying its own providers can still see and
             // reorder ours rather than silently replacing them.
             var contextCompactionProvider = await TryCreateContextCompactionProviderAsync(chatClientConfigName);
@@ -356,6 +364,18 @@ namespace FabrCore.Sdk
 
             // Allow caller to configure options (including AIContextProviders)
             configureOptions?.Invoke(options);
+
+#pragma warning disable MAAI001
+            var perCallProviders = options.AIContextProviders?.OfType<Microsoft.Agents.AI.Compaction.CompactionProvider>().ToList();
+            if (perCallProviders is { Count: > 0 })
+            {
+                options.AIContextProviders = options.AIContextProviders!
+                    .Where(p => p is not Microsoft.Agents.AI.Compaction.CompactionProvider).ToList();
+                var clientBuilder = chatClient.AsBuilder().UseFunctionInvocation(serviceProvider.GetService<ILoggerFactory>());
+                foreach (var provider in perCallProviders) clientBuilder.UseAIContextProviders(provider);
+                chatClient = clientBuilder.Build(serviceProvider);
+            }
+#pragma warning restore MAAI001
 
             var agent = new ChatClientAgent(chatClient, options)
                 .AsBuilder()
@@ -452,6 +472,15 @@ namespace FabrCore.Sdk
             logger.LogInformation("Connecting to MCP server '{Name}' via {Transport}",
                 mcpConfig.Name ?? "(unnamed)", mcpConfig.TransportType);
 
+            HttpClient? authenticatedClient = null;
+            if (!string.IsNullOrWhiteSpace(mcpConfig.Connection))
+            {
+                if (mcpConfig.TransportType != McpTransportType.Http || string.IsNullOrWhiteSpace(mcpConfig.Resource))
+                    throw new ArgumentException("Authenticated MCP requires HTTP transport and a resource reference.");
+                if (mcpConfig.Headers.Keys.Any(k => k.Equals("Authorization", StringComparison.OrdinalIgnoreCase)))
+                    throw new ArgumentException("Connection-backed MCP cannot also configure an Authorization header.");
+                authenticatedClient = await Connections.GetHttpClientAsync(mcpConfig.Connection, mcpConfig.Resource);
+            }
             IClientTransport transport = mcpConfig.TransportType switch
             {
                 McpTransportType.Stdio => new StdioClientTransport(new StdioClientTransportOptions
@@ -464,6 +493,12 @@ namespace FabrCore.Sdk
                         : null
                 }, loggerFactory),
 
+                McpTransportType.Http when authenticatedClient is not null => new HttpClientTransport(new HttpClientTransportOptions
+                {
+                    Name = mcpConfig.Name,
+                    Endpoint = new Uri(mcpConfig.Url ?? throw new ArgumentException("MCP URL is required")),
+                    AdditionalHeaders = mcpConfig.Headers
+                }, authenticatedClient, loggerFactory, ownsHttpClient: true),
                 McpTransportType.Http => new HttpClientTransport(new HttpClientTransportOptions
                 {
                     Name = mcpConfig.Name,
@@ -502,10 +537,10 @@ namespace FabrCore.Sdk
         private const double DefaultHistoryThreshold = 0.75;
 
         /// <summary>
-        /// Default history-compaction threshold when context compaction is active. Deliberately above
-        /// layer 1's truncation point so the free reversible rung always fires first.
+        /// Default durable threshold within the input working set. Summarize between turns before
+        /// reaching the tighter in-run tool-excerpt target.
         /// </summary>
-        private const double DefaultHistoryThresholdWithContextCompaction = 0.87;
+        private const double DefaultHistoryThresholdWithContextCompaction = 0.7;
 
         /// <summary>Default projection threshold when projection is demoted to a fuse behind context compaction.</summary>
         private const double DefaultProjectionFuseThreshold = 0.9;
@@ -537,7 +572,9 @@ namespace FabrCore.Sdk
             CompactionConfig compactionConfig,
             int estimatedTokens = 0)
         {
-            if (_compactionService is null || _chatClientConfigName is null)
+            var customCompaction = _chatHistoryCompactionRegistrations
+                .LastOrDefault(r => ReferenceEquals(r.Provider, chatHistoryProvider))?.HistoryCompaction;
+            if (customCompaction is null && (_compactionService is null || _chatClientConfigName is null))
                 return null;
 
             // Set status so the grain's heartbeat loop shows "Compacting.." instead of "Thinking.."
@@ -548,8 +585,10 @@ namespace FabrCore.Sdk
             using var _ = ChatRunSafetyScope.Current?.BeginHistoryCompaction();
             try
             {
-                return await _compactionService.CompactIfNeededAsync(
-                    chatHistoryProvider, compactionConfig, _chatClientConfigName);
+                if (customCompaction is not null)
+                    return await customCompaction(chatHistoryProvider, compactionConfig);
+                return await _compactionService!.CompactIfNeededAsync(
+                    chatHistoryProvider, compactionConfig, _chatClientConfigName!);
             }
             finally
             {
@@ -573,11 +612,12 @@ namespace FabrCore.Sdk
             if (provider is null && contextConfig.Enabled)
             {
                 logger.LogWarning(
-                    "Context compaction is not configured for '{Handle}' (model config '{ModelConfig}'): ContextWindowTokens={Window}, MaxOutputTokens={Output}. " +
+                    "Context compaction is not configured for '{Handle}' (model config '{ModelConfig}'): ContextWindowTokens={Window}, MaxOutputTokens={Output}, WorkingSetTokens={WorkingSet}, EvictThreshold={Evict}, TruncateThreshold={Truncate}. " +
                     "The agent runs with no in-run context bound — only history compaction, the projection fuse, and the run-safety stop protect it. " +
-                    "Set both values on the model configuration to enable it.",
+                    "Set a positive window and smaller positive output reserve; working sets must be positive and thresholds ordered in (0, 1].",
                     config.Handle, chatClientConfigName,
-                    contextConfig.MaxContextWindowTokens, contextConfig.MaxOutputTokens);
+                    contextConfig.MaxContextWindowTokens, contextConfig.MaxOutputTokens, contextConfig.WorkingSetTokens,
+                    contextConfig.EvictThreshold, contextConfig.TruncateThreshold);
             }
 
             return provider;
@@ -646,8 +686,8 @@ namespace FabrCore.Sdk
             if (registration.Ladder.IsOutOfOrder)
             {
                 logger.LogWarning(
-                    "Compaction ladder for '{Handle}' is out of order: {Ladder}. A later rung fires before an earlier one, " +
-                    "which makes the earlier rung decorative. Check ContextTruncateThreshold, CompactionThreshold and the projection settings.",
+                    "Compaction budgets for '{Handle}' are out of order: {Ladder}. Projection or request safety may stop " +
+                    "before durable summarization triggers. Check history, projection and request budget settings.",
                     config.Handle, registration.Ladder.Describe());
             }
 
@@ -935,6 +975,7 @@ namespace FabrCore.Sdk
             var enabled = true;
             var windowTokens = 0;
             var outputTokens = 0;
+            int? workingSetTokens = null;
             var evictThreshold = ContextCompaction.DefaultEvictThreshold;
             var truncateThreshold = ContextCompaction.DefaultTruncateThreshold;
 
@@ -946,6 +987,7 @@ namespace FabrCore.Sdk
                     windowTokens = ctxTokens;
                 if (modelConfig.MaxOutputTokens is { } outTokens)
                     outputTokens = outTokens;
+                workingSetTokens = modelConfig.ContextWorkingSetTokens;
                 if (modelConfig.ContextCompactionEnabled is { } mcEnabled)
                     enabled = mcEnabled;
                 if (modelConfig.ContextEvictThreshold is { } mcEvict)
@@ -965,6 +1007,8 @@ namespace FabrCore.Sdk
                 windowTokens = windowVal;
             if (args.TryGetValue("_ContextMaxOutputTokens", out var outputStr) && int.TryParse(outputStr, out var outputVal))
                 outputTokens = outputVal;
+            if (args.TryGetValue("_ContextWorkingSetTokens", out var workingSetStr) && int.TryParse(workingSetStr, out var workingSetVal))
+                workingSetTokens = workingSetVal;
             if (args.TryGetValue("_ContextEvictThreshold", out var evictStr)
                 && double.TryParse(evictStr, System.Globalization.CultureInfo.InvariantCulture, out var evictVal))
                 evictThreshold = evictVal;
@@ -977,6 +1021,7 @@ namespace FabrCore.Sdk
                 Enabled = enabled,
                 MaxContextWindowTokens = windowTokens,
                 MaxOutputTokens = outputTokens,
+                WorkingSetTokens = workingSetTokens,
                 EvictThreshold = evictThreshold,
                 TruncateThreshold = truncateThreshold
             };
@@ -987,7 +1032,7 @@ namespace FabrCore.Sdk
         /// </summary>
         /// <remarks>
         /// The default threshold depends on whether layer 1 is active: with context compaction bounding
-        /// every call, history compaction defaults above layer 1's truncation point and acts as the
+        /// every call, history compaction defaults to 70% of the input working set and acts as the
         /// between-turns consolidator. Without it, history compaction is the first responder and keeps the
         /// original 0.75 default. An explicit setting always wins.
         /// </remarks>
@@ -1024,6 +1069,9 @@ namespace FabrCore.Sdk
                 logger.LogDebug(ex, "Could not load model configuration for history compaction settings fallback");
             }
 
+            // Align durable history with the input working set, including output reservation.
+            if (contextCompaction.IsUsable) maxContextTokens = contextCompaction.InputBudgetTokens;
+
             // Agent args override model config (prefixed with _)
             if (args.TryGetValue("_CompactionEnabled", out var enabledStr) && bool.TryParse(enabledStr, out var enabledVal))
                 enabled = enabledVal;
@@ -1042,6 +1090,7 @@ namespace FabrCore.Sdk
                 Enabled = enabled,
                 KeepLastN = keepLastN,
                 MaxContextTokens = maxContextTokens,
+                SummaryModelConfigurationName = args.GetValueOrDefault("_CompactionModelConfigName"),
                 Threshold = threshold ?? (contextCompaction.IsUsable
                     ? DefaultHistoryThresholdWithContextCompaction
                     : DefaultHistoryThreshold),
@@ -1062,7 +1111,7 @@ namespace FabrCore.Sdk
             // The stop is the last rung: anchor it to the real window when we know it, so it sits above
             // every compaction rung rather than cutting in underneath them.
             var maxPromptInputTokens = contextCompaction.MaxContextWindowTokens > 0
-                ? contextCompaction.MaxContextWindowTokens
+                ? Math.Max(0, contextCompaction.MaxContextWindowTokens - contextCompaction.MaxOutputTokens)
                 : compactionConfig.Enabled ? compactionConfig.MaxContextTokens : 0;
 
             try
@@ -1115,7 +1164,7 @@ namespace FabrCore.Sdk
 
             // Fuse mode: insurance below the provider hard limit. Legacy mode: inherit from compaction.
             var enabled = fuseMode || compaction.Enabled;
-            var maxContextTokens = fuseMode ? contextCompaction.MaxContextWindowTokens : compaction.MaxContextTokens;
+            var maxContextTokens = fuseMode ? contextCompaction.MaxContextWindowTokens - contextCompaction.MaxOutputTokens : compaction.MaxContextTokens;
             var threshold = fuseMode ? DefaultProjectionFuseThreshold : compaction.Threshold;
             var minKeepLastN = 2;
 
@@ -1377,6 +1426,7 @@ namespace FabrCore.Sdk
 
         async Task IFabrCoreAgentProxy.InternalDisposeAsync()
         {
+            await DisposeHarnessResourcesAsync();
             await DisposeInternalAgentResourcesAsync();
 
             if (_mcpClients.Count == 0)

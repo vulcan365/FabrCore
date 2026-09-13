@@ -14,93 +14,37 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: true
 
 jobs:
-  publish:
-    name: Pack & Publish
+  version:
     runs-on: ubuntu-latest
-
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - id: tag
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF_NAME -notmatch '^v\d+\.\d+\.\d+$') {
+            throw "Only stable v<major>.<minor>.<patch> tags are publishable."
+          }
+          "version=$($env:GITHUB_REF_NAME.Substring(1))" >> $env:GITHUB_OUTPUT
+  validate:
+    needs: version
+    uses: ./.github/workflows/release-validation.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+  publish:
+    needs: [version, validate]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
         with:
-          fetch-depth: 0  # Full history required for MinVer
-
-      - name: Setup .NET 10
-        uses: actions/setup-dotnet@v4
+          global-json-file: global.json
+      - uses: actions/download-artifact@v4
         with:
-          dotnet-version: '10.0.x'
-
-      - name: Restore
-        run: dotnet restore src/FabrCore.sln
-
-      - name: Build
-        run: dotnet build src/FabrCore.sln --configuration Release --no-restore
-
-      - name: Test VSTest projects
-        shell: pwsh
-        run: |
-          $projects = @(
-            'src/FabrCore.Sdk.Tests/FabrCore.Sdk.Tests.csproj',
-            'src/FabrCore.Host.Tests/FabrCore.Host.Tests.csproj',
-            'src/FabrCore.Client.Orleans.Tests/FabrCore.Client.Orleans.Tests.csproj',
-            'src/FabrCore.Client.WebSocket.Tests/FabrCore.Client.WebSocket.Tests.csproj',
-            'src/FabrCore.Services.Microsoft365Copilot.Tests/FabrCore.Services.Microsoft365Copilot.Tests.csproj',
-            'src/FabrCore.Surface.Tests/FabrCore.Surface.Tests.csproj',
-            'samples/FabrCore.SampleApp.Tests/FabrCore.SampleApp.Tests.csproj'
-          )
-
-          foreach ($project in $projects) {
-            dotnet test $project --configuration Release --no-build --no-restore
-            if ($LASTEXITCODE -ne 0) {
-              exit $LASTEXITCODE
-            }
-          }
-
-      - name: Test Microsoft Testing Platform projects
-        shell: pwsh
-        run: |
-          $projects = @(
-            'src/FabrCore.Services.Memory.Tests/FabrCore.Services.Memory.Tests.csproj',
-            'src/FabrCore.Services.GraphRag.Tests/FabrCore.Services.GraphRag.Tests.csproj'
-          )
-
-          foreach ($project in $projects) {
-            dotnet run --project $project --configuration Release --no-build --no-restore
-            if ($LASTEXITCODE -ne 0) {
-              exit $LASTEXITCODE
-            }
-          }
-
-      - name: Pack supported packages
-        shell: pwsh
-        run: |
-          $projects = @(
-            'FabrCore.Core',
-            'FabrCore.Sdk',
-            'FabrCore.Client.Orleans',
-            'FabrCore.Client.WebSocket',
-            'FabrCore.Services.Contracts',
-            'FabrCore.Host',
-            'FabrCore.Host.SqlServer',
-            'FabrCore.Host.AzureStorage',
-            'FabrCore.Services.Microsoft365Copilot',
-            'FabrCore.Services.Memory',
-            'FabrCore.Services.GraphRag',
-            'FabrCore.Surface'
-          )
-
-          foreach ($project in $projects) {
-            dotnet pack "src/$project/$project.csproj" `
-              --configuration Release `
-              --no-build `
-              --no-restore `
-              --output ./nupkgs
-            if ($LASTEXITCODE -ne 0) {
-              exit $LASTEXITCODE
-            }
-          }
-
-      - name: Push to NuGet.org
-        run: >
+          name: release-packages
+          path: nupkgs
+      - name: Push validated packages to NuGet.org
+        run: >-
           dotnet nuget push "./nupkgs/*.nupkg"
           --api-key ${{ secrets.NUGET_API_KEY }}
           --source https://api.nuget.org/v3/index.json

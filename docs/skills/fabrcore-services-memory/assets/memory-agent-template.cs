@@ -1,3 +1,5 @@
+using System.ComponentModel;
+using Microsoft.Extensions.Logging;
 using FabrCore.Core;
 using FabrCore.Services.Memory.Abstractions;
 using FabrCore.Services.Memory.Configuration;
@@ -41,14 +43,7 @@ public class {{AGENT_NAME}} : FabrCoreAgentProxy
             _memory, compactionService, memoryOptions,
             serviceProvider.GetRequiredService<ILoggerFactory>());
 
-        // 2. Inject hot layer index into system prompt
-        var index = await _memory.GetMemoryIndexAsync();
-        if (index.Entries.Count > 0)
-        {
-            var memoryBlock = string.Join("\n", index.Entries.Select(e =>
-                $"- [{e.Type}] {e.Title}: {e.DescriptionHook}"));
-            config.SystemPrompt += $"\n\n## Agent Memory\n{memoryBlock}";
-        }
+        // Recall at message time so the index reflects current memory.
 
         // 3. Set up tools and LLM agent
         var tools = await ResolveConfiguredToolsAsync();
@@ -66,13 +61,13 @@ public class {{AGENT_NAME}} : FabrCoreAgentProxy
         SetStatusMessage("Recalling memories...");
 
         // Recall relevant warm memories for this query
-        var recall = await _memory!.RecallAsync(message.Message);
+        var recall = await _memory!.RecallAsync(message.Message ?? "");
 
         // Format with memory-context markers (prevents re-extraction during compaction)
         var memoryContext = _memory.FormatRecallContext(recall);
 
         SetStatusMessage(null);
-        var chatMessage = new ChatMessage(ChatRole.User, message.Message + memoryContext);
+        var chatMessage = new ChatMessage(ChatRole.User, message.Message + "\n\n" + memoryContext);
         await foreach (var update in _agent!.RunStreamingAsync(chatMessage, _session!))
         {
             response.Message += update.Text;

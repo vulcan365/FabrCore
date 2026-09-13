@@ -5,6 +5,10 @@ state bag. FabrCore does not persist that bag for ordinary agents, so without th
 described here every harness feature would reset on each grain activation — the agent would look
 amnesiac while appearing to work.
 
+In 2.0, persistence across process restart depends on Orleans storage. Default standalone memory
+storage loses both snapshots and conversations on restart; SQL mode supplies persistent defaults
+unless overridden. Snapshot persistence alone does not make remote in-flight work resumable.
+
 ## What is stored, and where
 
 | | |
@@ -158,3 +162,15 @@ one, so `IsSessionPersistent` is `false` and nothing is written.
 
 Restore is deliberately *not* on the interface. It needs non-throwing reads and the ability to
 archive an unreadable payload intact, both of which are proxy concerns.
+
+## Releasing background work
+
+`ClearHarnessSessionAsync` releases the old background session before replacing it. Proxy disposal
+also releases every harness it created, using the framework's bounded `ReleaseSessionAsync`.
+When managing a `FabrCoreHarnessResult` outside a proxy, call `DisposeAsync` when finished.
+The shared chat client remains owned by its host.
+
+Disposal does not rewrite stored snapshots after the host has flushed state. Any running records
+in the previous snapshot are reported lost on restoration. A local delegate that observes its
+cancellation token stops; `FabrCoreBackgroundAgent` only cancels its wait for a remote grain.
+Remote execution can continue until its own budget or cancellation mechanism stops it.

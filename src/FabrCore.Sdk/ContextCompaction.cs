@@ -3,24 +3,12 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Agents.AI.Compaction;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.AI;
 
 namespace FabrCore.Sdk;
 
-/// <summary>
-/// Layer 1 of the FabrCore compaction ladder: <b>context compaction</b>.
-/// </summary>
-/// <remarks>
-/// <para>
-/// Context compaction bounds <i>what a single LLM call sees</i>. It runs before every model call inside
-/// the tool loop, costs no LLM call, and is non-destructive — message groups are marked excluded, the
-/// persisted thread in <c>MessageThreads</c> is never touched.
-/// </para>
-/// <para>
-/// Layer 2 is <see cref="CompactionService"/> (<b>history compaction</b>), which bounds what is
-/// <i>persisted</i> and does cost an LLM call. The two are ordered so the cheap reversible layer always
-/// fires first — see <see cref="CompactionLadder"/>.
-/// </para>
-/// </remarks>
+/// <summary>Per-call, reversible tool-output compaction settings.</summary>
+/// <remarks>Task-bearing messages remain intact. Working-set targets are soft; request safety enforces capacity.</remarks>
 public record ContextCompactionConfig
 {
     /// <summary>Whether context compaction is composed at all. Default true.</summary>
@@ -38,25 +26,30 @@ public record ContextCompactionConfig
     /// </summary>
     public int MaxOutputTokens { get; init; }
 
+    /// <summary>Optional conversation-input working set, independent of the physical model window.</summary>
+    public int? WorkingSetTokens { get; init; }
+
     /// <summary>
-    /// Fraction of the input budget at which old tool-call groups collapse into one-line summaries.
+    /// Fraction of the input budget at which older tool results receive bounded excerpts.
     /// This is the cheapest rung — free, reversible, and it degrades rather than deletes.
     /// </summary>
     public double EvictThreshold { get; init; } = ContextCompaction.DefaultEvictThreshold;
 
     /// <summary>
-    /// Fraction of the input budget at which the oldest non-system groups are dropped from the request.
+    /// Fraction of the input budget at which older tool excerpts are tightened further.
     /// Must be greater than or equal to <see cref="EvictThreshold"/>.
     /// </summary>
     public double TruncateThreshold { get; init; } = ContextCompaction.DefaultTruncateThreshold;
 
-    /// <summary>Tokens available for conversation input: window minus reserved output.</summary>
-    public int InputBudgetTokens => Math.Max(0, MaxContextWindowTokens - MaxOutputTokens);
+    /// <summary>Tokens available for conversation input: window minus reserved output, capped by the optional working set.</summary>
+    public int InputBudgetTokens => Math.Min(
+        Math.Max(0, MaxContextWindowTokens - MaxOutputTokens),
+        WorkingSetTokens ?? int.MaxValue);
 
     /// <summary>Absolute token count at which tool-result eviction fires.</summary>
     public int EvictAtTokens => (int)(InputBudgetTokens * EvictThreshold);
 
-    /// <summary>Absolute token count at which truncation fires.</summary>
+    /// <summary>Absolute token count at which tighter tool excerpts are applied.</summary>
     public int TruncateAtTokens => (int)(InputBudgetTokens * TruncateThreshold);
 
     /// <summary>
@@ -69,6 +62,7 @@ public record ContextCompactionConfig
         && MaxContextWindowTokens > 0
         && MaxOutputTokens > 0
         && MaxOutputTokens < MaxContextWindowTokens
+        && (WorkingSetTokens is null or > 0)
         && EvictThreshold is > 0.0 and <= 1.0
         && TruncateThreshold is > 0.0 and <= 1.0
         && TruncateThreshold >= EvictThreshold;
@@ -99,12 +93,9 @@ public static class ContextCompaction
     /// <paramref name="config"/> is not usable.
     /// </summary>
     /// <remarks>
-    /// The strategy is <see cref="ContextWindowCompactionStrategy"/>: evict old tool results at
-    /// <see cref="ContextCompactionConfig.EvictThreshold"/>, then truncate the oldest groups at
-    /// <see cref="ContextCompactionConfig.TruncateThreshold"/>. Summarization is deliberately not used
-    /// here — an LLM call before every model call would add latency to the hot path, and its output would
-    /// be discarded and re-billed on the next activation because this layer's state is not persisted.
-    /// Summarization belongs to layer 2.
+    /// Uses the framework group index with FabrCore's protected tool strategy. Older tool output is
+    /// excerpted at the two thresholds; user messages, instructions, assistant prose, handovers, tool
+    /// arguments and the latest two groups remain intact. This layer makes no summarization calls.
     /// </remarks>
     /// <remarks>
     /// Returns the base <see cref="Microsoft.Agents.AI.AIContextProvider"/> rather than the concrete
@@ -122,13 +113,67 @@ public static class ContextCompaction
             return null;
         }
 
-        var strategy = new ContextWindowCompactionStrategy(
-            maxContextWindowTokens: config.MaxContextWindowTokens,
-            maxOutputTokens: config.MaxOutputTokens,
-            toolEvictionThreshold: config.EvictThreshold,
-            truncationThreshold: config.TruncateThreshold);
+        var strategy = new ProtectedToolCompactionStrategy(config);
 
         return new CompactionProvider(strategy, StateKey, loggerFactory);
+    }
+
+    // Working-set targets are soft. Dropping user requests, constraints, summaries or
+    // assistant decisions to meet them is unsafe. The final request guard enforces capacity.
+    internal sealed class ProtectedToolCompactionStrategy(ContextCompactionConfig config)
+        : CompactionStrategy(_ => true)
+    {
+        protected override ValueTask<bool> CompactCoreAsync(CompactionMessageIndex index,
+            ILogger logger, CancellationToken cancellationToken)
+        {
+            var changed = CompactTools(2048, config.EvictAtTokens);
+            changed |= CompactTools(512, config.TruncateAtTokens);
+            return ValueTask.FromResult(changed);
+
+            bool CompactTools(int maxChars, int target)
+            {
+                var changedHere = false;
+                var included = index.Groups.Where(g => !g.IsExcluded).ToList();
+                var recent = included.Where(g => g.Kind != CompactionGroupKind.System).TakeLast(2).ToHashSet();
+                foreach (var group in included)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (ChatRunSafetyScope.EstimateTokens(index.GetIncludedMessages()) <= target) break;
+                    if (recent.Contains(group) || group.Kind != CompactionGroupKind.ToolCall) continue;
+                    var calls = group.Messages.SelectMany(m => m.Contents).OfType<FunctionCallContent>().Select(c => c.CallId).ToHashSet();
+                    var results = group.Messages.SelectMany(m => m.Contents).OfType<FunctionResultContent>().Select(c => c.CallId).ToHashSet();
+                    if (!calls.SetEquals(results)) continue;
+                    var changedGroup = false;
+                    List<ChatMessage> replacement = [];
+                    foreach (var message in group.Messages)
+                    {
+                        List<AIContent> contents = [];
+                        foreach (var content in message.Contents)
+                        {
+                            if (content is FunctionResultContent result)
+                            {
+                                var text = CompactionTranscript.ResultText(result.Result);
+                                if (text.Length > maxChars)
+                                {
+                                    contents.Add(new FunctionResultContent(result.CallId, CompactionTranscript.Bound(text, maxChars)));
+                                    changedGroup = true;
+                                    continue;
+                                }
+                            }
+                            contents.Add(content);
+                        }
+                        replacement.Add(new ChatMessage(message.Role, contents)
+                        { AuthorName = message.AuthorName, MessageId = message.MessageId, AdditionalProperties = message.AdditionalProperties });
+                    }
+                    if (!changedGroup) continue;
+                    group.IsExcluded = true;
+                    group.ExcludeReason = "Tool output excerpt; original remains in history.";
+                    index.InsertGroup(index.Groups.IndexOf(group) + 1, group.Kind, replacement, group.TurnIndex);
+                    changedHere = true;
+                }
+                return changedHere;
+            }
+        }
     }
 
     /// <summary>
@@ -142,7 +187,7 @@ public static class ContextCompaction
     /// that history compaction had already summarized away.
     /// </para>
     /// <para>
-    /// Dropping it is free. <see cref="ContextWindowCompactionStrategy"/> is deterministic and makes no
+    /// Dropping it is free. The protected tool strategy is deterministic and makes no
     /// LLM calls, so the index rebuilds itself from the message list on the next activation at no cost.
     /// </para>
     /// </remarks>

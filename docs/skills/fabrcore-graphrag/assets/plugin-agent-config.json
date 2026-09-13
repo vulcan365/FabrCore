@@ -1,13 +1,13 @@
 {
   "GraphRagSearchPlugin": {
-    "ConnectionStringName": "GraphRagDb",
+    "ConnectionStringName": "FabrCore",
     "AllowedScopes": "customer-a,customer-b"
   },
   "GraphRagIngestPlugin": {
-    "ConnectionStringName": "GraphRagDb"
+    "ConnectionStringName": "FabrCore"
   },
   "GraphRagSearchAgent": {
-    "ConnectionStringName": "GraphRagDb",
+    "ConnectionStringName": "FabrCore",
     "AllowedScopes": "customer-a"
   }
 }

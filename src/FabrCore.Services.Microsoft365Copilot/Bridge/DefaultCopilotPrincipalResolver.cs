@@ -32,13 +32,20 @@ internal sealed class DefaultCopilotPrincipalResolver : ICopilotPrincipalResolve
         var objectId = activity.From?.AadObjectId ?? GetTokenClaim(userAccessToken, "oid");
         var tenantId = activity.From?.TenantId
             ?? activity.Conversation?.TenantId
+            ?? GetChannelTenant(activity.ChannelData)
             ?? GetTokenClaim(userAccessToken, "tid");
+
+        if (_options.Principal.Strategy == CopilotPrincipalStrategy.CanonicalEntra)
+        {
+            var canonical = FabrCore.Core.EntraPrincipalHandle.Create(tenantId, objectId);
+            return ValueTask.FromResult(canonical is null ? null : _options.Principal.Prefix + canonical);
+        }
 
         string? handle = _options.Principal.Strategy switch
         {
             CopilotPrincipalStrategy.EntraObjectId => objectId,
             CopilotPrincipalStrategy.TenantAndObjectId =>
-                objectId is null ? null : $"{tenantId ?? "unknown-tenant"}-{objectId}",
+                string.IsNullOrWhiteSpace(objectId) || string.IsNullOrWhiteSpace(tenantId) ? null : $"{tenantId}-{objectId}",
             CopilotPrincipalStrategy.UserPrincipalName =>
                 GetTokenClaim(userAccessToken, "upn")
                 ?? GetTokenClaim(userAccessToken, "preferred_username")
@@ -110,5 +117,16 @@ internal sealed class DefaultCopilotPrincipalResolver : ICopilotPrincipalResolve
         {
             return null;
         }
+    }
+
+    private static string? GetChannelTenant(object? channelData)
+    {
+        if (channelData is null) return null;
+        var data = System.Text.Json.JsonSerializer.SerializeToElement(channelData);
+        return data.ValueKind == System.Text.Json.JsonValueKind.Object
+            && data.TryGetProperty("tenant", out var tenant)
+            && tenant.ValueKind == System.Text.Json.JsonValueKind.Object
+            && tenant.TryGetProperty("id", out var id)
+            && id.ValueKind == System.Text.Json.JsonValueKind.String ? id.GetString() : null;
     }
 }

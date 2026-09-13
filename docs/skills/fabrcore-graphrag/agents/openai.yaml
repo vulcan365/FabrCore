@@ -1,3 +1,4 @@
-display_name: FabrCore GraphRAG
-short_description: Build service-first GraphRAG integrations with FabrCore.Services.GraphRag.
-default_prompt: Use the FabrCore GraphRAG skill to add scoped GraphRAG services, ingestion, search, administration APIs, or agent/plugin usage to this app.
+interface:
+  display_name: "FabrCore GraphRAG"
+  short_description: "Integrate and evaluate scoped FabrCore GraphRAG"
+  default_prompt: "Use $fabrcore-graphrag to integrate or tune scoped ingestion and search using current defaults and evaluation findings."

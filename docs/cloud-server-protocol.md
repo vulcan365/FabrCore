@@ -3,13 +3,18 @@
 The **Cloud Server** feature lets a FabrCore host pull its model/API-key configuration (the
 `fabrcore.json` payload) from a remote server instead of the local file, and report periodic
 heartbeats. This document is the vendor-neutral wire specification: anyone can implement the
-server side. FabrCore Forge is the first-party implementation; a host configured with a
+server side. Vulcan365 Insights is the first-party implementation; a host configured with a
 different conforming server behaves identically.
 
 Protocol constants and DTOs ship in the `FabrCore.Core` NuGet package under
 `FabrCore.Core.CloudServer` (`CloudServerProtocol`, `CloudConfigurationEnvelope`,
 `CloudHeartbeatRequest`, `CloudHeartbeatResponse`). Server implementations may reference the
 package or implement the JSON contract directly.
+
+FabrCore 2.0 includes the [administration API](cloud-administration.md) for ACLs,
+blueprints, agents, isolated diagnostic sessions, monitoring and evidence exports.
+These capabilities use the existing outbound HTTP connection; cloud WebSockets
+and diagnostic token streaming are deferred. Existing audit APIs are unchanged.
 
 ## Host configuration
 

@@ -176,7 +176,7 @@ public sealed class GatewayDiscoveryTests
     }
 
     [TestMethod]
-    public void OrleansClusteringPackages_AreReferencedOnlyByTheirHostProviderProjects()
+    public void OrleansClusteringPackages_AreReferencedOnlyByTheirCurrentHostOwners()
     {
         var srcDirectory = FindSrcDirectory();
         var projectFiles = Directory.EnumerateFiles(srcDirectory, "*.csproj", SearchOption.AllDirectories)
@@ -192,7 +192,7 @@ public sealed class GatewayDiscoveryTests
             .Select(Path.GetFileName)
             .ToArray();
 
-        CollectionAssert.AreEqual(new[] { "FabrCore.Host.SqlServer.csproj" }, adoNetReferences);
+        CollectionAssert.AreEqual(new[] { "FabrCore.Host.csproj" }, adoNetReferences);
         CollectionAssert.AreEqual(new[] { "FabrCore.Host.AzureStorage.csproj" }, azureReferences);
     }
 

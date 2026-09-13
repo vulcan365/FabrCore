@@ -22,7 +22,12 @@ internal sealed class DatabaseFixture : IAsyncDisposable
         Audit = new GraphRagAuditLog(Configuration, NullLogger<GraphRagAuditLog>.Instance, TestEnvironment.ConnectionStringName);
         Embeddings = new DeterministicEmbeddings();
         Scopes = new KnowledgeScopeService(Configuration, NullLogger<KnowledgeScopeService>.Instance, TestEnvironment.ConnectionStringName, Audit);
-        Ingestion = new KnowledgeIngestionService(Configuration, NullLogger<KnowledgeIngestionService>.Instance, TestEnvironment.ConnectionStringName, Audit, Embeddings);
+        // This fixture's default ingestion exercises chunk/vector persistence without a chat provider.
+        // Keep Configuration unchanged for tests that explicitly attach a scripted extraction client.
+        var chunkOnlyConfiguration = new ConfigurationBuilder().AddConfiguration(Configuration)
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["GraphRag:Ingestion:EnableExtraction"] = "false" })
+            .Build();
+        Ingestion = new KnowledgeIngestionService(chunkOnlyConfiguration, NullLogger<KnowledgeIngestionService>.Instance, TestEnvironment.ConnectionStringName, Audit, Embeddings);
         Search = new KnowledgeSearchService(Configuration, NullLogger<KnowledgeSearchService>.Instance, TestEnvironment.ConnectionStringName, Audit, Embeddings);
     }
 

@@ -12,7 +12,7 @@
 
 ## Project Boundary
 
-`FabrCore.Services.GraphRag` does not ship UI. Consumers should build UI in their
+The Host GraphRAG implementation does not ship UI. Consumers should build UI in their
 own app using:
 
 ```csharp
@@ -25,8 +25,8 @@ Do not add Razor components or static web assets to the service package.
 ## Registration
 
 ```csharp
-builder.Services.AddGraphRagServices("GraphRagDb");
-builder.Services.AddGraphRagAdministration();
+// Configure ConnectionStrings:FabrCore and models first.
+builder.AddFabrCoreServer();
 ```
 
 Then inject:
@@ -93,7 +93,7 @@ Metrics:
 
 ## API Endpoint Guidance
 
-`AddGraphRagAdministration()` registers the versioned controller at
+Host SQL mode registers the versioned controller at
 `/fabrcoreapi/graphrag/admin/v1`. It requires the Host's `FabrCoreAdmin` bearer policy and uses
 `x-user-handle` for ACL and audit attribution. Prefer this open protocol for remote admin UIs.
 

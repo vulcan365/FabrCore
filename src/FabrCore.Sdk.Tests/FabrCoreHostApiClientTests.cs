@@ -10,6 +10,27 @@ namespace FabrCore.Sdk.Tests;
 public sealed class FabrCoreHostApiClientTests
 {
     [TestMethod]
+    public async Task AuditQueryEncodesFiltersAndPreservesPaginationCursor()
+    {
+        var handler = new RecordingHandler("[]");
+        var api = new FabrCoreHostApiClient(new HttpClient(handler),
+            new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> { ["FabrCore:HostUrl"]="https://fabrcore.test" }).Build(),
+            NullLogger<FabrCoreHostApiClient>.Instance);
+        var timestamp = DateTimeOffset.Parse("2026-09-09T01:02:03.1234567+00:00");
+        await api.QueryAuditEventsAsync("admin", new FabrCore.Core.Auditing.AuditQuery
+        {
+            ResourcePrincipal = "alice&limit=9999", TraceId = "trace/one", Limit = 2, Before = timestamp, BeforeId = "id+two"
+        });
+        var parameters = handler.RequestUri!.Query.TrimStart('?').Split('&').Select(p => p.Split('=', 2))
+            .ToDictionary(p => p[0], p => Uri.UnescapeDataString(p[1]));
+        Assert.AreEqual("alice&limit=9999", parameters["resource"]);
+        Assert.AreEqual("2", parameters["limit"]);
+        Assert.AreEqual("trace/one", parameters["traceId"]);
+        Assert.AreEqual(timestamp, DateTimeOffset.Parse(parameters["before"]));
+        Assert.AreEqual("id+two", parameters["beforeId"]);
+    }
+
+    [TestMethod]
     public async Task GetPrincipalsAsync_CallsPrincipalsEndpointWithStatusFilter()
     {
         var handler = new RecordingHandler("""

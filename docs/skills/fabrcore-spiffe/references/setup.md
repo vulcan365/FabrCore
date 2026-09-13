@@ -33,7 +33,7 @@ builder.AddFabrCoreServer(new FabrCoreServerOptions()
 
 This uses:
 
-- `InMemoryVerifiableExecutionStore`
+- `InMemoryVerifiableExecutionStore` in standalone, or `SqlVerifiableExecutionStore` in SQL mode
 - `LocalCertificateVerifiableExecutionSigner`
 - `VerifiableExecutionRecorder`
 - `VerifiableExecutionVerifier`
@@ -53,12 +53,16 @@ Because the default signer is `NullVerifiableExecutionSigner`, bundles verify as
 
 ## Custom Store
 
-Use a SQL/event-log/object-store implementation when evidence must survive restarts and support audit/export.
+SQL mode already supplies `SqlVerifiableExecutionStore`; no custom registration is needed.
+It atomically stores evidence/signatures/public chains in `fabrOps`, coordinates per-trace writers,
+and rejects conflicting replacements and stale predecessors. Private keys are not stored there.
+No automatic retention job is installed. Choose a custom event-log/object-store implementation
+when application requirements call for one.
 
 ```csharp
 builder.AddFabrCoreServer(new FabrCoreServerOptions()
 .UseVerifiableExecution()
-.UseVerifiableExecutionStore<SqlVerifiableExecutionStore>()
+.UseVerifiableExecutionStore<MyDurableEvidenceStore>()
 .UseLocalCertificateVerifiableExecutionSigner());
 ```
 
@@ -72,7 +76,11 @@ Implement `IVerifiableExecutionStore`:
 
 Provider rules:
 
-- Append records; do not mutate prior rows.
+- Append record/signature/certificate atomically; reject conflicting retries and stale predecessors.
+- Coordinate sequence allocation, signing and append across writers through
+  `IVerifiableExecutionWriteCoordinator.AcquireWriteAsync` for a distributed custom store.
+- Keep attestations immutable and accept identical retries.
+- Do not mutate prior rows.
 - Enforce unique `(TraceId, SegmentId, Sequence)`.
 - Store certificates/chains by digest.
 - Return records/signatures in deterministic sequence order.

@@ -10,12 +10,13 @@ namespace FabrCore.Services.Memory.Tests.Unit;
 public sealed class MemoryContractAssemblyTests
 {
     [TestMethod]
-    public void SharedAdministrationTypesAreOwnedByContractsAssembly()
+    public void SharedAdministrationTypesAreOwnedByCoreAssembly()
     {
         var serviceAssembly = typeof(MemoryServiceExtensions).Assembly;
         var contractAssembly = typeof(IMemoryAdminService).Assembly;
 
-        Assert.AreEqual("FabrCore.Services.Contracts", contractAssembly.GetName().Name);
+        Assert.AreEqual("FabrCore.Core", contractAssembly.GetName().Name);
+        Assert.AreEqual("FabrCore.Host", serviceAssembly.GetName().Name);
         Assert.AreNotSame(serviceAssembly, contractAssembly);
         Assert.AreSame(contractAssembly, typeof(AdminMemoryDashboardStats).Assembly);
         Assert.AreSame(contractAssembly, typeof(MemoryAuditEntry).Assembly);

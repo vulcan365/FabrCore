@@ -54,8 +54,15 @@ public sealed class FabrCoreHarnessOptions
     /// </summary>
     public ChatHistoryProvider? ChatHistoryProvider { get; set; }
 
-    /// <summary>Extra context providers appended after the harness's own.</summary>
+    /// <summary>Extra context providers appended after the harness's own.
+    /// CompactionProvider instances run inside the tool loop before every model call;
+    /// other providers run once per agent invocation.</summary>
     public IEnumerable<AIContextProvider>? AIContextProviders { get; set; }
+
+    /// <summary>Optional history compaction callback registered by CreateFabrCoreHarnessAgent.
+    /// The default proxy OnCompaction dispatches to it for this history provider only.
+    /// Standalone harness construction does not run the proxy's history lifecycle.</summary>
+    public Func<FabrCoreChatHistoryProvider, CompactionConfig, Task<CompactionResult?>>? HistoryCompaction { get; set; }
 
     /// <summary>
     /// Explicit skill source. When set, the harness composes an <see cref="AgentSkillsProvider"/>.

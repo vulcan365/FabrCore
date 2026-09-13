@@ -19,7 +19,7 @@ namespace FabrCore.Host.Api.Controllers
     /// <see cref="AuditCategory.AclManagement"/> audit event.
     /// </para>
     /// </summary>
-    [ApiController]
+    [FabrCore.Core.RequiresFabrCoreDatabase]    [ApiController]
     [Route("fabrcoreapi/acl")]
     public class AclController : ControllerBase
     {

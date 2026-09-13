@@ -273,7 +273,11 @@ internal sealed class CloudServerSyncService : BackgroundService
             capabilities["host.admin.scope"] = "cluster";
             capabilities["host.admin.maxBodyBytes"] = remoteAdministration.MaxBodyBytes.ToString(
                 System.Globalization.CultureInfo.InvariantCulture);
-            capabilities["host.admin.features"] = "runtime,blueprints,skills,acl,audit,monitor,evidence";
+            var features = new List<string> { "runtime", "blueprints", "skills", "audit", "monitor", "evidence", "admin-conversations", "agent-management", "blueprint-management", "operations", "principal-directory" };
+            if (serviceProvider.GetService<FabrCore.Core.Acl.IAclEntityStore>() is not null) features.AddRange(["acl", "acl-conditional"]);
+            if (serviceProvider.GetService<FabrCore.Core.Monitoring.IAgentMessageMonitor>() is FabrCore.Core.Monitoring.IAgentMonitorQueryProvider) features.Add("monitor-query");
+            if (serviceProvider.GetService<FabrCore.Core.VerifiableExecution.IVerifiableExecutionStore>() is FabrCore.Core.VerifiableExecution.IVerifiableExecutionQueryProvider) features.Add("evidence-query");
+            capabilities["host.admin.features"] = string.Join(",", features);
         }
 
         if (serviceProvider.GetService<IMemoryAdminService>() is not null)
@@ -298,6 +302,8 @@ internal sealed class CloudServerSyncService : BackgroundService
             capabilities["surface.admin.scope"] = "cluster";
         }
 
+        if (serviceProvider.GetService<FabrCore.Connections.IConnectionService>() is not null)
+            capabilities["connections.admin"] = "1";
         return capabilities;
     }
 
@@ -338,6 +344,15 @@ internal sealed class CloudServerSyncService : BackgroundService
 
             try
             {
+                if (blueprintService is FabrCore.Host.Services.FabrCoreBlueprintService)
+                {
+                    var cluster = serviceProvider.GetRequiredService<Orleans.IClusterClient>();
+                    var result = await cluster.GetGrain<FabrCore.Core.Interfaces.IBlueprintAdministrationGrain>(deployment.PrincipalId)
+                        .ExecuteAsync("cloud", deployment.Blueprint.Name!, System.Text.Json.JsonSerializer.Serialize(deployment, System.Text.Json.JsonSerializerOptions.Web), null);
+                    var receipt = System.Text.Json.JsonSerializer.Deserialize<FabrCore.Core.CloudServer.AdminApiResult>(result, System.Text.Json.JsonSerializerOptions.Web)!;
+                    if (receipt.StatusCode >= 400) throw new InvalidOperationException(receipt.Body.ToString());
+                    continue;
+                }
                 await blueprintService.SaveAsync(
                     deployment.PrincipalId,
                     deployment.Blueprint,
@@ -438,12 +453,12 @@ internal sealed class CloudServerSyncService : BackgroundService
     {
         if (string.IsNullOrWhiteSpace(command.CommandId))
         {
-            return Failed(command.CommandId, 400, "Connect-channel command id is required.");
+            return Failed(command.CommandId, 400, "Connect-channel command id is required.", command.LeaseToken);
         }
 
         if (command.ExpiresAt <= DateTimeOffset.UtcNow)
         {
-            return Failed(command.CommandId, 408, "Connect-channel command expired before execution.");
+            return Failed(command.CommandId, 408, "Connect-channel command expired before execution.", command.LeaseToken);
         }
 
         if (!string.IsNullOrWhiteSpace(command.TargetHostInstanceId) &&
@@ -454,7 +469,7 @@ internal sealed class CloudServerSyncService : BackgroundService
 
         if (string.IsNullOrWhiteSpace(command.LeaseToken))
         {
-            return Failed(command.CommandId, 400, "Connect-channel lease token is required.");
+            return Failed(command.CommandId, 400, "Connect-channel lease token is required.", command.LeaseToken);
         }
 
         if (!IsAllowedAdminPath(command.PathAndQuery) ||
@@ -466,7 +481,7 @@ internal sealed class CloudServerSyncService : BackgroundService
 
         if (command.Body?.Length > remoteAdministration.MaxBodyBytes)
         {
-            return Failed(command.CommandId, 413, "Connect-channel request body exceeds the configured limit.");
+            return Failed(command.CommandId, 413, "Connect-channel request body exceeds the configured limit.", command.LeaseToken);
         }
 
         HttpMethod method;
@@ -476,13 +491,13 @@ internal sealed class CloudServerSyncService : BackgroundService
         }
         catch (FormatException)
         {
-            return Failed(command.CommandId, 400, "Connect-channel HTTP method is invalid.");
+            return Failed(command.CommandId, 400, "Connect-channel HTTP method is invalid.", command.LeaseToken);
         }
 
         if (method != HttpMethod.Get && method != HttpMethod.Post && method != HttpMethod.Put &&
             method != HttpMethod.Patch && method != HttpMethod.Delete)
         {
-            return Failed(command.CommandId, 405, $"HTTP method {method} is not allowed.");
+            return Failed(command.CommandId, 405, $"HTTP method {method} is not allowed.", command.LeaseToken);
         }
 
         try
@@ -490,6 +505,10 @@ internal sealed class CloudServerSyncService : BackgroundService
             var target = new Uri(
                 $"{remoteAdministration.HostUrl!.TrimEnd('/')}{command.PathAndQuery}",
                 UriKind.Absolute);
+            if (!IsAllowedAdminPath(target.PathAndQuery))
+                return Failed(command.CommandId, 403, "Normalized target is outside the administration allowlist.", command.LeaseToken);
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            deadline.CancelAfter(TimeSpan.FromMilliseconds(Math.Max(1, Math.Min(600000, (command.ExpiresAt - DateTimeOffset.UtcNow).TotalMilliseconds))));
             using var request = new HttpRequestMessage(method, target);
             if (command.Body is not null)
             {
@@ -536,11 +555,11 @@ internal sealed class CloudServerSyncService : BackgroundService
             using var response = await client.SendAsync(
                 request,
                 HttpCompletionOption.ResponseHeadersRead,
-                cancellationToken);
+                deadline.Token);
             var body = await ReadLimitedAsync(
                 response.Content,
                 remoteAdministration.MaxBodyBytes,
-                cancellationToken);
+                deadline.Token);
 
             var headers = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
             if (response.Content.Headers.ContentType is not null)
@@ -551,6 +570,8 @@ internal sealed class CloudServerSyncService : BackgroundService
             {
                 headers["ETag"] = [response.Headers.ETag.ToString()];
             }
+            foreach (var name in new[] { "Location", "Retry-After" })
+                if (response.Headers.TryGetValues(name, out var values)) headers[name] = values.ToArray();
 
             return new CloudAdminCommandResponse
             {
@@ -560,6 +581,14 @@ internal sealed class CloudServerSyncService : BackgroundService
                 Body = body,
                 LeaseToken = command.LeaseToken
             };
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return Failed(command.CommandId, 408, "Command deadline elapsed; a mutation may have completed. Inspect its receipt before retrying.", command.LeaseToken);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("response body exceeds", StringComparison.Ordinal))
+        {
+            return Failed(command.CommandId, 413, "Response exceeds the transport limit; use paged queries or export chunks.", command.LeaseToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -581,6 +610,8 @@ internal sealed class CloudServerSyncService : BackgroundService
         {
             return false;
         }
+
+        if (path.Contains((char)92) || path.Contains('#') || path.Split('/').Any(segment => segment is "." or "..") || path.Contains('%') || path.StartsWith("//", StringComparison.Ordinal)) return false;
 
         if (path.StartsWith("/fabrcoreapi/agent/chat/", StringComparison.OrdinalIgnoreCase) ||
             path.StartsWith("/fabrcoreapi/agent/event/", StringComparison.OrdinalIgnoreCase))

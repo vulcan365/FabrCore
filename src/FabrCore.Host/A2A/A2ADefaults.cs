@@ -1,4 +1,4 @@
-﻿using FabrCore.Host.Configuration;
+using FabrCore.Host.Configuration;
 namespace FabrCore.Host.A2A;
 
 /// <summary>
@@ -73,8 +73,8 @@ public static class A2ADefaults
     {
         "",
         "/v1",
-        "/v1/message:stream",
-        "/v1/message:send",
+        "/message:stream",
+        "/message:send",
     };
 
     // Keys stamped onto AgentMessage.Args so FabrCore agents and plugins can see the A2A context

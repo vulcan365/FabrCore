@@ -1,5 +1,9 @@
 # Agent2Agent (A2A) for FabrCore
 
+The public protocol now targets **A2A 1.0**, specification release **1.0.1**. See
+[shared channel identity and migration](channel-agent-identity.md) for the current wire format,
+delegated Entra authentication, shared agent bindings, and operational limits. A2A 0.3 is not supported.
+
 FabrCore hosts publish their agents over the open
 [Agent2Agent (A2A) protocol](https://a2a-protocol.org). Any A2A client can discover and call them —
 including **Microsoft 365 Copilot Studio**, which uses A2A to delegate work to agents hosted
@@ -12,7 +16,7 @@ keep their handles, their ACLs, their monitors, and their durable state. A2A is 
 Copilot Studio / any A2A client
         │  GET  /a2a/support/.well-known/agent-card.json     ← discovery
         │  POST /a2a/support                                 ← JSON-RPC binding
-        │  POST /a2a/support/v1/message:stream               ← HTTP+JSON binding (SSE)
+        │  POST /a2a/support/message:stream               ← HTTP+JSON binding (SSE)
         ▼
 FabrCore.Host A2A ──── authenticate ──► map to a FabrCore principal
         │                                          │
@@ -156,7 +160,7 @@ Two different things share the word *skill*:
 | | FabrCore **harness skill** | A2A **skill** |
 |---|---|---|
 | What it is | A versioned, principal-scoped package of instructions and resources an agent loads at runtime | A line of agent-card metadata |
-| Where it lives | The FabrCore API, under `/fabrcoreapi/admin/v1/principals/{principal}/skills` | The agent card |
+| Where it lives | The FabrCore API, under `/fabrcoreapi/admin/principals/{principal}/skills` | The agent card |
 | What it does | Changes what the agent can actually do | Tells a remote orchestrator when to call the agent |
 
 They line up well, so an agent that loads harness skills advertises them. Give the agent the
@@ -304,25 +308,25 @@ For an agent named `support`, mounted at `/a2a/support`:
 | `GET` | `/a2a/support/.well-known/agent-card.json` | Agent card (A2A 0.3 path) |
 | `GET` | `/a2a/support/.well-known/agent.json` | Agent card (pre-0.3 path) |
 | `GET` | `/a2a/support/.well-known/{agentcard,agent_card}.json` | Same card, under the remaining spellings clients probe |
-| `GET` | `/a2a/support/v1/card` | Agent card (HTTP+JSON binding) |
-| `GET` | `/a2a/support/v1/.well-known/*` | Same five spellings, for a client configured with the `/v1` URL |
-| `GET` | `/a2a/support/v1/message:stream/.well-known/*` | Same again, for a client configured with the *message* endpoint |
-| `GET` | `/a2a/support/v1/message:send/.well-known/*` | Same again |
+| `GET` | `/a2a/support/card` | Agent card (HTTP+JSON binding) |
+| `GET` | `/a2a/support/.well-known/*` | Same five spellings, for a client configured with the `/v1` URL |
+| `GET` | `/a2a/support/message:stream/.well-known/*` | Same again, for a client configured with the *message* endpoint |
+| `GET` | `/a2a/support/message:send/.well-known/*` | Same again |
 | `GET` | `/a2a/support` | Agent card — last-resort bare `GET` on the endpoint |
-| `GET` | `/a2a/support/v1/message:stream` | Agent card — same, on the streaming endpoint |
-| `GET` | `/a2a/support/v1/message:send` | Agent card — same, on the send endpoint |
+| `GET` | `/a2a/support/message:stream` | Agent card — same, on the streaming endpoint |
+| `GET` | `/a2a/support/message:send` | Agent card — same, on the send endpoint |
 | `GET` | `/a2a/.well-known/*` | The primary agent's card, under the route prefix |
 | `POST` | `/a2a/support` | JSON-RPC binding — every method |
-| `POST` | `/a2a/support/v1/message:send` | HTTP+JSON — send, buffered |
-| `POST` | `/a2a/support/v1/message:stream` | HTTP+JSON — send, streamed over SSE |
-| `GET` | `/a2a/support/v1/tasks/{taskId}` | Read a task back |
-| `POST` | `/a2a/support/v1/tasks/{taskId}:cancel` | Cancel a running task |
-| `POST` | `/a2a/support/v1/tasks/{taskId}:subscribe` | Resubscribe to a running task's stream |
+| `POST` | `/a2a/support/message:send` | HTTP+JSON — send, buffered |
+| `POST` | `/a2a/support/message:stream` | HTTP+JSON — send, streamed over SSE |
+| `GET` | `/a2a/support/tasks/{taskId}` | Read a task back |
+| `POST` | `/a2a/support/tasks/{taskId}:cancel` | Cancel a running task |
+| `GET` | `/a2a/support/tasks/{taskId}:subscribe` | Resubscribe to a running task's stream |
 | `GET` | `/.well-known/agent-card.json` | The primary agent's card, from the server root; with several agents and no `PrimaryAgent`, returns a 404 naming each agent's card URL |
 | `GET` | `/a2a` | Catalog of every exposed agent and its endpoints |
 
-Supported JSON-RPC methods: `message/send`, `message/stream`, `tasks/get`, `tasks/cancel`,
-`tasks/resubscribe`. Push notification configuration is answered with the protocol's
+Supported JSON-RPC methods: `SendMessage`, `SendStreamingMessage`, `GetTask`, `ListTasks`, `CancelTask`,
+`SubscribeToTask`. Push notification configuration is answered with the protocol's
 `PushNotificationNotSupportedError` (`-32003`) rather than silently ignored.
 
 The catalog at `GET /a2a` is the fastest way to check your wiring — it lists routes, not secrets,
@@ -332,8 +336,8 @@ and is always anonymous.
 
 A2A clients do not resolve `/.well-known/agent-card.json` against the agent's base path. They
 append it to whatever URL they were configured with. Copilot Studio, configured with
-`…/a2a/support/v1/message:stream`, asks for
-`…/a2a/support/v1/message:stream/.well-known/agent-card.json` — the method segment and all — then
+`…/a2a/support/message:stream`, asks for
+`…/a2a/support/message:stream/.well-known/agent-card.json` — the method segment and all — then
 tries four more spellings (`agent.json`, `agentcard.json`, `agentCard.json`, `agent_card.json`),
 then the server root, then a bare `GET` on the endpoint itself. Serving only the two spec paths at
 the agent base leaves the card sitting at a URL such clients never request.
@@ -350,7 +354,7 @@ mapping both throws `AmbiguousMatchException` and answers **500** to every reque
    the tunnel port must be **public**, not private.
 2. In Copilot Studio open your agent → **Agents** → **Add agent** → **A2A agent**.
 3. For **Endpoint URL** enter the *message* endpoint, not the card:
-   `https://agents.contoso.com/a2a/support/v1/message:stream`
+   `https://agents.contoso.com/a2a/support/message:stream`
 4. Copilot Studio fetches the card and fills in the name and description. It does this with a
    cross-origin `fetch()` **from the browser**, so the card routes must send
    `Access-Control-Allow-Origin`. FabrCore does by default (`A2A:AgentCardCorsOrigins`, default
@@ -375,14 +379,14 @@ mapping both throws `AmbiguousMatchException` and answers **500** to every reque
 
 ### The Copilot Studio wire shape
 
-Copilot Studio is configured with the REST-style `/v1/message:stream` URL but posts **JSON-RPC**
+Copilot Studio is configured with the REST-style `/message:stream` URL but posts **JSON-RPC**
 bodies and reads a **single JSON response**:
 
 ```json
 {
   "jsonrpc": "2.0",
   "id": "…",
-  "method": "message/send",
+  "method": "SendMessage",
   "params": {
     "message": {
       "contextId": "ee1e68ee-75fc-42bb-83d7-25fd26e559c3",
@@ -397,22 +401,18 @@ bodies and reads a **single JSON response**:
 }
 ```
 
-That mixes the two bindings, so a strict A2A server rejects it — Microsoft's own sample bolts on a
-middleware shim to bridge it. FabrCore handles it natively instead: a JSON-RPC envelope on an
-HTTP+JSON route is answered with a matching JSON-RPC envelope, buffered rather than streamed, with
-the reply as a flat agent `Message` so a connector expecting one answer finds it. `A2A:Interop`
-controls all of it:
+When enabled, a JSON-RPC envelope on an HTTP+JSON route is answered with a matching JSON-RPC
+envelope. `SendMessage` returns a buffered answer; `SendStreamingMessage` streams. Both use
+the A2A 1.0 task/message wrappers. A connector that still emits 0.3 method names must be upgraded.
 
 | Setting | Default | Effect |
 | --- | --- | --- |
-| `AcceptJsonRpcOnHttpRoutes` | `true` | Accept a JSON-RPC envelope on the `/v1/...` routes at all |
-| `CollapseStreamForJsonRpcOnHttpRoutes` | `true` | Answer such a request with one buffered response instead of SSE |
-| `CompatibilityResultShape` | `Message` | Result shape for that path — a flat `Message`; `Task` for the full task object |
+| `AcceptJsonRpcOnHttpRoutes` | `true` | Accept a JSON-RPC envelope on the `/...` routes at all |
 | `ResultShape` | `Task` | Result shape on the standard A2A routes |
 | `PassMessageMetadataToAgent` | `true` | Copy the caller's `metadata` to `AgentMessage.Args["A2A:Metadata"]` |
 
-Standard A2A clients are unaffected: they get strict JSON-RPC on the base path and strict HTTP+JSON
-under `/v1`, with real SSE streaming and `Task` results.
+JSON-RPC uses the agent base path. HTTP+JSON uses `/message:send`, `/message:stream`, and `/tasks`
+under that base, with SSE streaming and task/message response wrappers.
 
 The inbound `metadata` — including that chat history — reaches your agent as
 `AgentMessage.Args["A2A:Metadata"]`.
@@ -508,7 +508,7 @@ Tuning lives under `A2A:Tasks`:
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | `ExecutionTimeout` | 5 minutes | How long an agent gets before the task fails |
-| `Retention` | 1 hour | How long a finished task stays readable through `tasks/get` |
+| `Retention` | 1 hour | How long a finished task stays readable through `GetTask` |
 | `MaxRetainedTasks` | 1000 | Cap on the in-memory store; running tasks are never evicted |
 | `DefaultHistoryLength` | 10 | Turns of history returned when the client does not ask for a length |
 | `StreamHeartbeatInterval` | 15 seconds | SSE keep-alive comments, so intermediaries do not time the stream out |
@@ -550,7 +550,7 @@ The five things worth pinning, in rough order of how much they cost when wrong:
 | Test | Catches |
 | --- | --- |
 | Principal and handle at the agent boundary | Which grain a turn actually lands in — `AgentService.Sends` carries both |
-| A JSON-RPC envelope on `/v1/message:stream` returns one buffered JSON body | The Copilot Studio interop path, which has no second implementation to compare against |
+| A JSON-RPC envelope on `/message:stream` returns one buffered JSON body | The Copilot Studio interop path, which has no second implementation to compare against |
 | Agent card contents | An empty or wrong `description`, the usual cause of "the connected agent is never called" |
 | 401 without a credential, 200 for the card | The anonymous-card / authenticated-call split |
 | `metadata` reaching the agent | `copilotstudio.microsoft.com/a2a/chathistory` arriving as `Args["A2A:Metadata"]` |
@@ -714,7 +714,7 @@ implicated.
 **Copilot Studio's tooltip and its documentation disagree on the URL to enter.** The in-product
 tooltip says the base URI (`https://your-domain.com/a2a`, card at `{base}/.well-known/agent-card.json`);
 [the Learn article](https://learn.microsoft.com/en-us/microsoft-copilot-studio/add-agent-agent-to-agent)
-and its quickstart say the message endpoint (`…/v1/message:stream`). FabrCore serves the card at
+and its quickstart say the message endpoint (`…/message:stream`). FabrCore serves the card at
 every location either reading implies, so discovery works with both — but **enter the message
 endpoint**. Because the card is never actually read, Copilot Studio POSTs to whatever URL you typed,
 and `/a2a` only answers `GET`.
@@ -722,8 +722,8 @@ and `/a2a` only answers `GET`.
 **Calls return 401.** The card is anonymous but calls are not. Confirm Copilot Studio is sending
 the header name your config expects, and that the proxy forwards it.
 
-**Responses arrive empty.** If a custom client reads only the top-level result, set
-`A2A:Interop:CompatibilityResultShape` to `Message` (the default) rather than `Task`.
+**Responses arrive empty.** Update the client to read A2A 1.0's `result.task` or `result.message`
+payload (or `task` / `message` for REST). A flat 0.3 response reader is incompatible.
 
 **Streaming hangs.** A buffering proxy. Disable buffering for `/a2a/*` and confirm the read timeout
 exceeds `ExecutionTimeout`.

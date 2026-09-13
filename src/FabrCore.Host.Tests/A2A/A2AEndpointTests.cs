@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Text.Json;
 
 using FabrCore.Host.A2A;
@@ -17,7 +17,7 @@ public sealed class A2AEndpointTests
         ["A2A:AgentTypes:0"] = "botanical-agent",
     };
 
-    private static string SendEnvelope(string text, string? contextId = null, string method = "message/send")
+    private static string SendEnvelope(string text, string? contextId = null, string method = "SendMessage")
         => JsonSerializer.Serialize(new
         {
             jsonrpc = "2.0",
@@ -47,13 +47,13 @@ public sealed class A2AEndpointTests
                  {
                      "/a2a/botanical-agent/.well-known/agent-card.json",
                      "/a2a/botanical-agent/.well-known/agent.json",
-                     "/a2a/botanical-agent/v1/card",
+                     "/a2a/botanical-agent/card",
                  })
         {
             using var card = await host.GetJsonAsync(path);
             var root = card.RootElement;
 
-            Assert.AreEqual("0.3.0", root.GetProperty("protocolVersion").GetString(), path);
+            Assert.AreEqual("1.0", root.GetProperty("supportedInterfaces")[0].GetProperty("protocolVersion").GetString(), path);
             Assert.AreEqual("Botanical Agent", root.GetProperty("name").GetString(), path);
             Assert.AreEqual(
                 "Answers questions about plants and botany.",
@@ -61,9 +61,9 @@ public sealed class A2AEndpointTests
                 path);
             Assert.AreEqual(
                 "https://agents.contoso.com/a2a/botanical-agent",
-                root.GetProperty("url").GetString(),
+                root.GetProperty("supportedInterfaces")[0].GetProperty("url").GetString(),
                 path);
-            Assert.AreEqual("JSONRPC", root.GetProperty("preferredTransport").GetString(), path);
+            Assert.AreEqual("JSONRPC", root.GetProperty("supportedInterfaces")[0].GetProperty("protocolBinding").GetString(), path);
             Assert.IsTrue(root.GetProperty("capabilities").GetProperty("streaming").GetBoolean(), path);
             Assert.AreEqual(1, root.GetProperty("skills").GetArrayLength(), path);
         }
@@ -81,7 +81,7 @@ public sealed class A2AEndpointTests
         await using var host = await A2ATestHost.StartAsync(OpenConfig());
 
         var probes = new List<string>();
-        foreach (var segment in new[] { "", "/v1", "/v1/message:stream", "/v1/message:send" })
+        foreach (var segment in new[] { "", "/v1", "/message:stream", "/message:send" })
         {
             foreach (var fileName in new[]
                      {
@@ -101,8 +101,8 @@ public sealed class A2AEndpointTests
         probes.Add("/.well-known/agentCard.json");
         probes.Add("/.well-known/agent_card.json");
         probes.Add("/a2a/botanical-agent");
-        probes.Add("/a2a/botanical-agent/v1/message:stream");
-        probes.Add("/a2a/botanical-agent/v1/message:send");
+        probes.Add("/a2a/botanical-agent/message:stream");
+        probes.Add("/a2a/botanical-agent/message:send");
 
         foreach (var path in probes)
         {
@@ -124,8 +124,8 @@ public sealed class A2AEndpointTests
         foreach (var path in new[]
                  {
                      "/a2a/botanical-agent/.well-known/agent-card.json",
-                     "/a2a/botanical-agent/v1/message:stream/.well-known/agent-card.json",
-                     "/a2a/botanical-agent/v1/card",
+                     "/a2a/botanical-agent/message:stream/.well-known/agent-card.json",
+                     "/a2a/botanical-agent/card",
                      "/a2a/.well-known/agent-card.json",
                      "/.well-known/agent-card.json",
                      "/a2a/botanical-agent",
@@ -152,7 +152,7 @@ public sealed class A2AEndpointTests
         await using var host = await A2ATestHost.StartAsync(OpenConfig());
 
         using var request = new HttpRequestMessage(
-            HttpMethod.Post, "/a2a/botanical-agent/v1/message:send");
+            HttpMethod.Post, "/a2a/botanical-agent/message:send");
         request.Headers.Add("Origin", "https://evil.example");
         request.Content = new StringContent(
             SendEnvelope("hello"), System.Text.Encoding.UTF8, "application/json");
@@ -212,15 +212,15 @@ public sealed class A2AEndpointTests
         await using var host = await A2ATestHost.StartAsync(OpenConfig());
         using var card = await host.GetJsonAsync("/a2a/botanical-agent/.well-known/agent-card.json");
 
-        var interfaces = card.RootElement.GetProperty("additionalInterfaces")
+        var interfaces = card.RootElement.GetProperty("supportedInterfaces")
             .EnumerateArray()
-            .Select(i => (i.GetProperty("transport").GetString(), i.GetProperty("url").GetString()))
+            .Select(i => (i.GetProperty("protocolBinding").GetString(), i.GetProperty("url").GetString()))
             .ToList();
 
         CollectionAssert.Contains(
             interfaces, ("JSONRPC", "https://agents.contoso.com/a2a/botanical-agent"));
         CollectionAssert.Contains(
-            interfaces, ("HTTP+JSON", "https://agents.contoso.com/a2a/botanical-agent/v1"));
+            interfaces, ("HTTP+JSON", "https://agents.contoso.com/a2a/botanical-agent"));
     }
 
     [TestMethod]
@@ -243,12 +243,12 @@ public sealed class A2AEndpointTests
 
         // The card must stay readable without the key, because a client fetches it first.
         using var card = await host.GetJsonAsync("/a2a/botanical-agent/.well-known/agent-card.json");
-        var scheme = card.RootElement.GetProperty("securitySchemes").GetProperty("apiKey");
+        var scheme = card.RootElement.GetProperty("securitySchemes").GetProperty("apiKey").GetProperty("apiKeySecurityScheme");
 
-        Assert.AreEqual("apiKey", scheme.GetProperty("type").GetString());
+        Assert.IsFalse(scheme.TryGetProperty("type", out _));
         Assert.AreEqual("x-api-key", scheme.GetProperty("name").GetString());
-        Assert.AreEqual("header", scheme.GetProperty("in").GetString());
-        Assert.AreEqual(1, card.RootElement.GetProperty("security").GetArrayLength());
+        Assert.AreEqual("header", scheme.GetProperty("location").GetString());
+        Assert.AreEqual(1, card.RootElement.GetProperty("securityRequirements").GetArrayLength());
     }
 
     [TestMethod]
@@ -260,8 +260,8 @@ public sealed class A2AEndpointTests
         await using var host = await A2ATestHost.StartAsync(config);
         using var card = await host.GetJsonAsync("/a2a/botanical-agent/.well-known/agent-card.json");
 
-        StringAssert.EndsWith(card.RootElement.GetProperty("url").GetString(), "/a2a/botanical-agent");
-        StringAssert.StartsWith(card.RootElement.GetProperty("url").GetString(), "http://");
+        StringAssert.EndsWith(card.RootElement.GetProperty("supportedInterfaces")[0].GetProperty("url").GetString(), "/a2a/botanical-agent");
+        StringAssert.StartsWith(card.RootElement.GetProperty("supportedInterfaces")[0].GetProperty("url").GetString(), "http://");
     }
 
     // ── JSON-RPC binding ───────────────────────────────────────────────────────────────────
@@ -284,9 +284,9 @@ public sealed class A2AEndpointTests
         Assert.AreEqual("2.0", root.GetProperty("jsonrpc").GetString());
         Assert.AreEqual(7, root.GetProperty("id").GetInt32());
 
-        var task = root.GetProperty("result");
-        Assert.AreEqual("task", task.GetProperty("kind").GetString());
-        Assert.AreEqual("completed", task.GetProperty("status").GetProperty("state").GetString());
+        var task = root.GetProperty("result").GetProperty("task");
+        Assert.IsFalse(task.TryGetProperty("kind", out _));
+        Assert.AreEqual("TASK_STATE_COMPLETED", task.GetProperty("status").GetProperty("state").GetString());
         Assert.AreEqual(
             "Tomatoes need more light than strawberries.",
             task.GetProperty("artifacts")[0].GetProperty("parts")[0].GetProperty("text").GetString());
@@ -300,15 +300,15 @@ public sealed class A2AEndpointTests
     {
         await using var host = await A2ATestHost.StartAsync(OpenConfig());
 
-        var events = await ReadSseAsync(host, "/a2a/botanical-agent", SendEnvelope("hello", method: "message/stream"));
+        var events = await ReadSseAsync(host, "/a2a/botanical-agent", SendEnvelope("hello", method: "SendStreamingMessage"));
 
-        var kinds = events.Select(e => e.GetProperty("result").GetProperty("kind").GetString()).ToList();
+        var kinds = events.Select(e => e.GetProperty("result").EnumerateObject().Single().Name).ToList();
         CollectionAssert.AreEqual(
-            new[] { "task", "status-update", "artifact-update", "status-update" }, kinds);
+            new[] { "task", "statusUpdate", "artifactUpdate", "statusUpdate" }, kinds);
 
-        var final = events[^1].GetProperty("result");
-        Assert.IsTrue(final.GetProperty("final").GetBoolean());
-        Assert.AreEqual("completed", final.GetProperty("status").GetProperty("state").GetString());
+        var final = events[^1].GetProperty("result").GetProperty("statusUpdate");
+        Assert.IsFalse(final.TryGetProperty("final", out _));
+        Assert.AreEqual("TASK_STATE_COMPLETED", final.GetProperty("status").GetProperty("state").GetString());
 
         // Streaming frames stay inside the JSON-RPC envelope, echoing the request id.
         Assert.AreEqual(7, events[0].GetProperty("id").GetInt32());
@@ -336,7 +336,7 @@ public sealed class A2AEndpointTests
 
         var response = await host.PostJsonAsync(
             "/a2a/botanical-agent",
-            """{"jsonrpc":"2.0","id":1,"method":"tasks/pushNotificationConfig/set","params":{}}""");
+            """{"jsonrpc":"2.0","id":1,"method":"CreateTaskPushNotificationConfig","params":{}}""");
 
         using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.AreEqual(-32003, body.RootElement.GetProperty("error").GetProperty("code").GetInt32());
@@ -350,7 +350,7 @@ public sealed class A2AEndpointTests
         await using var host = await A2ATestHost.StartAsync(OpenConfig());
 
         var response = await host.PostJsonAsync(
-            "/a2a/botanical-agent/v1/message:send",
+            "/a2a/botanical-agent/message:send",
             """{"message":{"kind":"message","role":"user","messageId":"m-1","parts":[{"kind":"text","text":"hi"}]}}""");
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
@@ -358,8 +358,8 @@ public sealed class A2AEndpointTests
 
         // No JSON-RPC envelope on the REST binding.
         Assert.IsFalse(body.RootElement.TryGetProperty("jsonrpc", out _));
-        Assert.AreEqual("task", body.RootElement.GetProperty("kind").GetString());
-        Assert.AreEqual("completed", body.RootElement.GetProperty("status").GetProperty("state").GetString());
+        Assert.IsTrue(body.RootElement.TryGetProperty("task", out var task));
+        Assert.AreEqual("TASK_STATE_COMPLETED", task.GetProperty("status").GetProperty("state").GetString());
     }
 
     [TestMethod]
@@ -369,11 +369,11 @@ public sealed class A2AEndpointTests
 
         var events = await ReadSseAsync(
             host,
-            "/a2a/botanical-agent/v1/message:stream",
+            "/a2a/botanical-agent/message:stream",
             """{"message":{"kind":"message","role":"user","messageId":"m-1","parts":[{"kind":"text","text":"hi"}]}}""");
 
-        var kinds = events.Select(e => e.GetProperty("kind").GetString()).ToList();
-        CollectionAssert.AreEqual(new[] { "task", "status-update", "artifact-update", "status-update" }, kinds);
+        var kinds = events.Select(e => e.EnumerateObject().Single().Name).ToList();
+        CollectionAssert.AreEqual(new[] { "task", "statusUpdate", "artifactUpdate", "statusUpdate" }, kinds);
     }
 
     [TestMethod]
@@ -383,11 +383,11 @@ public sealed class A2AEndpointTests
 
         var send = await host.PostJsonAsync("/a2a/botanical-agent", SendEnvelope("hi"));
         using var sent = JsonDocument.Parse(await send.Content.ReadAsStringAsync());
-        var taskId = sent.RootElement.GetProperty("result").GetProperty("id").GetString();
+        var taskId = sent.RootElement.GetProperty("result").GetProperty("task").GetProperty("id").GetString();
 
-        using var fetched = await host.GetJsonAsync($"/a2a/botanical-agent/v1/tasks/{taskId}");
+        using var fetched = await host.GetJsonAsync($"/a2a/botanical-agent/tasks/{taskId}");
         Assert.AreEqual(taskId, fetched.RootElement.GetProperty("id").GetString());
-        Assert.AreEqual("completed", fetched.RootElement.GetProperty("status").GetProperty("state").GetString());
+        Assert.AreEqual("TASK_STATE_COMPLETED", fetched.RootElement.GetProperty("status").GetProperty("state").GetString());
     }
 
     [TestMethod]
@@ -395,11 +395,11 @@ public sealed class A2AEndpointTests
     {
         await using var host = await A2ATestHost.StartAsync(OpenConfig());
 
-        var response = await host.Client.GetAsync("/a2a/botanical-agent/v1/tasks/does-not-exist");
+        var response = await host.Client.GetAsync("/a2a/botanical-agent/tasks/does-not-exist");
 
         Assert.AreEqual(HttpStatusCode.NotFound, response.StatusCode);
         using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.AreEqual(-32001, body.RootElement.GetProperty("error").GetProperty("code").GetInt32());
+        Assert.AreEqual("https://a2a-protocol.org/errors/task-not-found", body.RootElement.GetProperty("type").GetString());
     }
 
     // ── Copilot Studio compatibility ───────────────────────────────────────────────────────
@@ -411,12 +411,14 @@ public sealed class A2AEndpointTests
         {
             Reply = "Tomatoes need more light than strawberries.",
         };
-        await using var host = await A2ATestHost.StartAsync(OpenConfig(), agentService);
+        var config = OpenConfig();
+        config["A2A:Interop:ResultShape"] = "Message";
+        await using var host = await A2ATestHost.StartAsync(config, agentService);
 
-        // Copilot Studio is configured with the /v1/message:stream URL but posts JSON-RPC bodies
+        // Copilot Studio is configured with the /message:stream URL but posts JSON-RPC bodies
         // and reads a single JSON response.
         var response = await host.PostJsonAsync(
-            "/a2a/botanical-agent/v1/message:stream",
+            "/a2a/botanical-agent/message:stream",
             SendEnvelope("Which plant needs more light?"));
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
@@ -429,9 +431,9 @@ public sealed class A2AEndpointTests
         Assert.AreEqual(7, root.GetProperty("id").GetInt32());
 
         // The compatibility shape is a flat agent Message, so a connector that reads one answer finds it.
-        var result = root.GetProperty("result");
-        Assert.AreEqual("message", result.GetProperty("kind").GetString());
-        Assert.AreEqual("agent", result.GetProperty("role").GetString());
+        var result = root.GetProperty("result").GetProperty("message");
+        Assert.IsFalse(result.TryGetProperty("kind", out _));
+        Assert.AreEqual("ROLE_AGENT", result.GetProperty("role").GetString());
         Assert.AreEqual(
             "Tomatoes need more light than strawberries.",
             result.GetProperty("parts")[0].GetProperty("text").GetString());
@@ -441,14 +443,14 @@ public sealed class A2AEndpointTests
     public async Task CopilotStudioShape_CanBeConfiguredToReturnTheFullTask()
     {
         var config = OpenConfig();
-        config["A2A:Interop:CompatibilityResultShape"] = "Task";
+        config["A2A:Interop:ResultShape"] = "Task";
 
         await using var host = await A2ATestHost.StartAsync(config);
 
-        var response = await host.PostJsonAsync("/a2a/botanical-agent/v1/message:stream", SendEnvelope("hi"));
+        var response = await host.PostJsonAsync("/a2a/botanical-agent/message:stream", SendEnvelope("hi"));
         using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
 
-        Assert.AreEqual("task", body.RootElement.GetProperty("result").GetProperty("kind").GetString());
+        Assert.IsTrue(body.RootElement.GetProperty("result").TryGetProperty("task", out _));
     }
 
     [TestMethod]
@@ -460,7 +462,7 @@ public sealed class A2AEndpointTests
         {
             jsonrpc = "2.0",
             id = 1,
-            method = "message/send",
+            method = "SendMessage",
             @params = new
             {
                 message = new
@@ -481,7 +483,7 @@ public sealed class A2AEndpointTests
             },
         });
 
-        await host.PostJsonAsync("/a2a/botanical-agent/v1/message:stream", payload);
+        await host.PostJsonAsync("/a2a/botanical-agent/message:stream", payload);
 
         var args = host.AgentService.Sends.Single().Message.Args!;
         Assert.AreEqual("ee1e68ee-75fc-42bb-83d7-25fd26e559c3", args["A2A:ContextId"]);
@@ -498,7 +500,7 @@ public sealed class A2AEndpointTests
 
         await using var host = await A2ATestHost.StartAsync(config);
 
-        var response = await host.PostJsonAsync("/a2a/botanical-agent/v1/message:send", SendEnvelope("hi"));
+        var response = await host.PostJsonAsync("/a2a/botanical-agent/message:send", SendEnvelope("hi"));
         Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
@@ -584,9 +586,9 @@ public sealed class A2AEndpointTests
 
         var response = await host.PostJsonAsync("/a2a/botanical-agent", SendEnvelope("hi"));
         using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        var task = body.RootElement.GetProperty("result");
+        var task = body.RootElement.GetProperty("result").GetProperty("task");
 
-        Assert.AreEqual("failed", task.GetProperty("status").GetProperty("state").GetString());
+        Assert.AreEqual("TASK_STATE_FAILED", task.GetProperty("status").GetProperty("state").GetString());
         Assert.AreEqual(
             "the model refused",
             task.GetProperty("status").GetProperty("message").GetProperty("parts")[0].GetProperty("text").GetString());
@@ -607,7 +609,7 @@ public sealed class A2AEndpointTests
             "https://agents.contoso.com/a2a/botanical-agent/.well-known/agent-card.json",
             agent.GetProperty("agentCard").GetString());
         Assert.AreEqual(
-            "https://agents.contoso.com/a2a/botanical-agent/v1/message:stream",
+            "https://agents.contoso.com/a2a/botanical-agent/message:stream",
             agent.GetProperty("httpJson").GetProperty("stream").GetString());
     }
 

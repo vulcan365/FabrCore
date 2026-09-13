@@ -10,19 +10,19 @@ namespace FabrCore.Host.A2A.Protocol;
 public static class A2AProtocol
 {
     /// <summary>Value written to <see cref="A2AAgentCard.ProtocolVersion"/>.</summary>
-    public const string Version = "0.3.0";
+    public const string Version = "1.0";
 
     // JSON-RPC method names.
-    public const string MethodMessageSend = "message/send";
-    public const string MethodMessageStream = "message/stream";
-    public const string MethodTasksGet = "tasks/get";
-    public const string MethodTasksCancel = "tasks/cancel";
-    public const string MethodTasksResubscribe = "tasks/resubscribe";
-    public const string MethodPushNotificationSet = "tasks/pushNotificationConfig/set";
-    public const string MethodPushNotificationGet = "tasks/pushNotificationConfig/get";
-    public const string MethodPushNotificationList = "tasks/pushNotificationConfig/list";
-    public const string MethodPushNotificationDelete = "tasks/pushNotificationConfig/delete";
-    public const string MethodAgentAuthenticatedExtendedCard = "agent/getAuthenticatedExtendedCard";
+    public const string MethodMessageSend = "SendMessage";
+    public const string MethodMessageStream = "SendStreamingMessage";
+    public const string MethodTasksGet = "GetTask";
+    public const string MethodTasksCancel = "CancelTask";
+    public const string MethodTasksResubscribe = "SubscribeToTask";
+    public const string MethodPushNotificationSet = "CreateTaskPushNotificationConfig";
+    public const string MethodPushNotificationGet = "GetTaskPushNotificationConfig";
+    public const string MethodPushNotificationList = "ListTaskPushNotificationConfigs";
+    public const string MethodPushNotificationDelete = "DeleteTaskPushNotificationConfig";
+    public const string MethodAgentAuthenticatedExtendedCard = "GetExtendedAgentCard";
 }
 
 /// <summary>Shared serializer settings. A2A is camelCase and omits null members.</summary>
@@ -94,6 +94,9 @@ public static class A2AErrors
     public const int ContentTypeNotSupported = -32005;
     public const int InvalidAgentResponse = -32006;
     public const int AuthenticatedExtendedCardNotConfigured = -32007;
+    public const int VersionNotSupported = -32009;
+    /// <summary>FabrCore server-defined backpressure error.</summary>
+    public const int CapacityExceeded = -32050;
 
     public static A2AJsonRpcError Parse(string? detail = null)
         => new() { Code = ParseError, Message = "Invalid JSON payload", Data = detail };
@@ -128,11 +131,12 @@ public static class A2AErrors
     /// </summary>
     public static int ToHttpStatus(int code) => code switch
     {
-        ParseError or InvalidRequest or InvalidParams or ContentTypeNotSupported => StatusCodes.Status400BadRequest,
+        CapacityExceeded => StatusCodes.Status429TooManyRequests,
+        ParseError or InvalidRequest or InvalidParams or ContentTypeNotSupported or VersionNotSupported => StatusCodes.Status400BadRequest,
         MethodNotFound => StatusCodes.Status404NotFound,
         TaskNotFound => StatusCodes.Status404NotFound,
-        TaskNotCancelable => StatusCodes.Status409Conflict,
-        PushNotificationNotSupported or UnsupportedOperation => StatusCodes.Status501NotImplemented,
+        TaskNotCancelable or AuthenticatedExtendedCardNotConfigured => StatusCodes.Status400BadRequest,
+        PushNotificationNotSupported or UnsupportedOperation => StatusCodes.Status400BadRequest,
         _ => StatusCodes.Status500InternalServerError,
     };
 }

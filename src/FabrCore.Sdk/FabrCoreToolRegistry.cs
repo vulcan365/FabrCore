@@ -13,6 +13,8 @@ namespace FabrCore.Sdk
     {
         private readonly ILogger<FabrCoreToolRegistry> _logger;
         private readonly IReadOnlyList<Assembly>? _assemblies;
+        public FabrCore.Core.FabrCoreFeatureState? Features { get; init; }
+
         private readonly Lazy<Dictionary<string, Type>> _pluginTypes;
         private readonly Lazy<Dictionary<string, MethodInfo>> _toolMethods;
 
@@ -145,6 +147,7 @@ namespace FabrCore.Sdk
                 _logger.LogWarning("Plugin alias '{Alias}' not found", alias);
                 return (new List<AITool>(), new List<string>(), null);
             }
+            Features?.RequireAvailable(pluginType);
 
             // Create plugin-scoped provider that includes IFabrCoreAgentHost
             var pluginServiceProvider = agentHost != null
@@ -218,6 +221,7 @@ namespace FabrCore.Sdk
                 _logger.LogWarning("Tool alias '{Alias}' not found", alias);
                 return null;
             }
+            Features?.RequireAvailable(method);
 
             try
             {

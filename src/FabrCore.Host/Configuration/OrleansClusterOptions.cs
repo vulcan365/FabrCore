@@ -21,7 +21,7 @@ namespace FabrCore.Host.Configuration
         public string ServiceId { get; set; } = "fabrcore-service";
 
         /// <summary>
-        /// The clustering mode to use. Defaults to Localhost for development.
+        /// The clustering mode to use. Defaults to Localhost for standalone workloads; integrated SQL mode selects SqlServer.
         /// </summary>
         public ClusteringMode ClusteringMode { get; set; } = ClusteringMode.Localhost;
 
@@ -48,6 +48,9 @@ namespace FabrCore.Host.Configuration
         /// AzureStorage: tables, blob container, and stream queues). Defaults to true.
         /// </summary>
         public bool AutoInitDatabase { get; set; } = true;
+
+        /// <summary>SQL Server stream transport. All silos must use the same mode.</summary>
+        public SqlServerStreamMode SqlServerStreams { get; set; } = SqlServerStreamMode.Memory;
     }
 
     /// <summary>
@@ -56,7 +59,7 @@ namespace FabrCore.Host.Configuration
     public enum ClusteringMode
     {
         /// <summary>
-        /// In-memory localhost clustering for development. Not suitable for production or multi-silo deployments.
+        /// In-memory localhost clustering for a standalone process. State does not survive restart.
         /// </summary>
         Localhost,
 
@@ -70,5 +73,14 @@ namespace FabrCore.Host.Configuration
         /// Azure Storage Table clustering for Azure deployments.
         /// </summary>
         AzureStorage
+    }
+
+    /// <summary>Stream transport used with SQL Server clustering.</summary>
+    public enum SqlServerStreamMode
+    {
+        /// <summary>Ephemeral streams, retained as the backwards-compatible default.</summary>
+        Memory,
+        /// <summary>Durable ADO.NET queues in the clustering database.</summary>
+        AdoNet
     }
 }

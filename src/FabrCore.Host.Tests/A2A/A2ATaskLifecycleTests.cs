@@ -11,6 +11,23 @@ namespace FabrCore.Host.Tests.A2A;
 [TestClass]
 public sealed class A2ATaskLifecycleTests
 {
+    [TestMethod]
+    public async Task ConcurrentTaskLimit_RejectsExcessWork_AndReleasesAfterCompletion()
+    {
+        var config = Config();
+        config["A2A:Tasks:MaxConcurrentTasks"] = "1";
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var host = await A2ATestHost.StartAsync(config, GatedAgent(gate));
+        var id = await StartNonBlockingAsync(host);
+        var rejected = await host.PostJsonAsync("/a2a/botanical-agent", NonBlockingSend());
+        using var denial = JsonDocument.Parse(await rejected.Content.ReadAsStringAsync());
+        Assert.AreEqual(-32050, denial.RootElement.GetProperty("error").GetProperty("code").GetInt32());
+        gate.SetResult();
+        await PollAsync(host, id, "TASK_STATE_COMPLETED");
+        var accepted = await host.PostJsonAsync("/a2a/botanical-agent", NonBlockingSend());
+        using var body = JsonDocument.Parse(await accepted.Content.ReadAsStringAsync());
+        Assert.IsTrue(body.RootElement.TryGetProperty("result", out _));
+    }
     private static Dictionary<string, string?> Config() => new()
     {
         ["A2A:Enabled"] = "true",
@@ -32,9 +49,9 @@ public sealed class A2ATaskLifecycleTests
 
     private static string NonBlockingSend() =>
         """
-        {"jsonrpc":"2.0","id":1,"method":"message/send","params":{
+        {"jsonrpc":"2.0","id":1,"method":"SendMessage","params":{
           "message":{"kind":"message","role":"user","messageId":"m-1","parts":[{"kind":"text","text":"hi"}]},
-          "configuration":{"blocking":false}}}
+          "configuration":{"returnImmediately":true}}}
         """;
 
     private static async Task<string> StartNonBlockingAsync(FabrCoreA2ATestHost host)
@@ -43,11 +60,11 @@ public sealed class A2ATaskLifecycleTests
         response.EnsureSuccessStatusCode();
 
         using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        var task = body.RootElement.GetProperty("result");
+        var task = body.RootElement.GetProperty("result").GetProperty("task");
 
-        Assert.AreEqual("task", task.GetProperty("kind").GetString());
+        Assert.IsFalse(task.TryGetProperty("kind", out _));
         Assert.IsFalse(
-            task.GetProperty("status").GetProperty("state").GetString() is "completed" or "failed",
+            task.GetProperty("status").GetProperty("state").GetString() is "TASK_STATE_COMPLETED" or "TASK_STATE_FAILED",
             "A non-blocking send must return before the agent has answered.");
 
         return task.GetProperty("id").GetString()!;
@@ -62,7 +79,7 @@ public sealed class A2ATaskLifecycleTests
         var taskId = await StartNonBlockingAsync(host);
 
         gate.SetResult();
-        var completed = await PollAsync(host, taskId, "completed");
+        var completed = await PollAsync(host, taskId, "TASK_STATE_COMPLETED");
 
         Assert.AreEqual(
             "the answer",
@@ -79,11 +96,11 @@ public sealed class A2ATaskLifecycleTests
 
         var cancel = await host.PostJsonAsync(
             "/a2a/botanical-agent",
-            $$"""{"jsonrpc":"2.0","id":2,"method":"tasks/cancel","params":{"id":"{{taskId}}"} }""");
+            $$"""{"jsonrpc":"2.0","id":2,"method":"CancelTask","params":{"id":"{{taskId}}"} }""");
 
         using var body = JsonDocument.Parse(await cancel.Content.ReadAsStringAsync());
         Assert.AreEqual(
-            "canceled",
+            "TASK_STATE_CANCELED",
             body.RootElement.GetProperty("result").GetProperty("status").GetProperty("state").GetString());
 
         gate.TrySetResult();
@@ -98,12 +115,12 @@ public sealed class A2ATaskLifecycleTests
         var taskId = await StartNonBlockingAsync(host);
 
         var cancel = await host.Client.PostAsync(
-            $"/a2a/botanical-agent/v1/tasks/{taskId}:cancel",
+            $"/a2a/botanical-agent/tasks/{taskId}:cancel",
             new StringContent("{}", Encoding.UTF8, "application/json"));
 
         Assert.AreEqual(HttpStatusCode.OK, cancel.StatusCode);
         using var body = JsonDocument.Parse(await cancel.Content.ReadAsStringAsync());
-        Assert.AreEqual("canceled", body.RootElement.GetProperty("status").GetProperty("state").GetString());
+        Assert.AreEqual("TASK_STATE_CANCELED", body.RootElement.GetProperty("status").GetProperty("state").GetString());
 
         gate.TrySetResult();
     }
@@ -115,13 +132,13 @@ public sealed class A2ATaskLifecycleTests
 
         var send = await host.PostJsonAsync(
             "/a2a/botanical-agent",
-            """{"jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":{"kind":"message","role":"user","messageId":"m-1","parts":[{"kind":"text","text":"hi"}]}}}""");
+            """{"jsonrpc":"2.0","id":1,"method":"SendMessage","params":{"message":{"kind":"message","role":"user","messageId":"m-1","parts":[{"kind":"text","text":"hi"}]}}}""");
         using var sent = JsonDocument.Parse(await send.Content.ReadAsStringAsync());
-        var taskId = sent.RootElement.GetProperty("result").GetProperty("id").GetString();
+        var taskId = sent.RootElement.GetProperty("result").GetProperty("task").GetProperty("id").GetString();
 
         var cancel = await host.PostJsonAsync(
             "/a2a/botanical-agent",
-            $$"""{"jsonrpc":"2.0","id":2,"method":"tasks/cancel","params":{"id":"{{taskId}}"} }""");
+            $$"""{"jsonrpc":"2.0","id":2,"method":"CancelTask","params":{"id":"{{taskId}}"} }""");
 
         using var body = JsonDocument.Parse(await cancel.Content.ReadAsStringAsync());
         Assert.AreEqual(-32002, body.RootElement.GetProperty("error").GetProperty("code").GetInt32());
@@ -134,7 +151,7 @@ public sealed class A2ATaskLifecycleTests
 
         var cancel = await host.PostJsonAsync(
             "/a2a/botanical-agent",
-            """{"jsonrpc":"2.0","id":2,"method":"tasks/cancel","params":{"id":"nope"}}""");
+            """{"jsonrpc":"2.0","id":2,"method":"CancelTask","params":{"id":"nope"}}""");
 
         using var body = JsonDocument.Parse(await cancel.Content.ReadAsStringAsync());
         Assert.AreEqual(-32001, body.RootElement.GetProperty("error").GetProperty("code").GetInt32());
@@ -150,7 +167,7 @@ public sealed class A2ATaskLifecycleTests
 
         // Subscribe after the task started: the events already emitted must be replayed, so a
         // late subscriber cannot miss the terminal event.
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"/a2a/botanical-agent/v1/tasks/{taskId}:subscribe")
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/a2a/botanical-agent/tasks/{taskId}:subscribe")
         {
             Content = new StringContent("{}", Encoding.UTF8, "application/json"),
         };
@@ -177,11 +194,11 @@ public sealed class A2ATaskLifecycleTests
 
         response.Dispose();
 
-        Assert.AreEqual("task", events[0].GetProperty("kind").GetString());
-        Assert.AreEqual("status-update", events[^1].GetProperty("kind").GetString());
-        Assert.IsTrue(events[^1].GetProperty("final").GetBoolean());
-        Assert.AreEqual("completed", events[^1].GetProperty("status").GetProperty("state").GetString());
-        Assert.IsTrue(events.Any(e => e.GetProperty("kind").GetString() == "artifact-update"));
+        Assert.IsTrue(events[0].TryGetProperty("task", out _));
+        var final = events[^1].GetProperty("statusUpdate");
+        Assert.IsFalse(final.TryGetProperty("final", out _));
+        Assert.AreEqual("TASK_STATE_COMPLETED", final.GetProperty("status").GetProperty("state").GetString());
+        Assert.IsTrue(events.Any(e => e.TryGetProperty("artifactUpdate", out _)));
     }
 
     [TestMethod]
@@ -189,9 +206,7 @@ public sealed class A2ATaskLifecycleTests
     {
         await using var host = await A2ATestHost.StartAsync(Config());
 
-        var response = await host.Client.PostAsync(
-            "/a2a/botanical-agent/v1/tasks/nope:subscribe",
-            new StringContent("{}", Encoding.UTF8, "application/json"));
+        var response = await host.Client.GetAsync("/a2a/botanical-agent/tasks/nope:subscribe");
 
         Assert.AreEqual(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -207,12 +222,12 @@ public sealed class A2ATaskLifecycleTests
 
         var response = await host.PostJsonAsync(
             "/a2a/botanical-agent",
-            """{"jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":{"kind":"message","role":"user","messageId":"m-1","parts":[{"kind":"text","text":"hi"}]}}}""");
+            """{"jsonrpc":"2.0","id":1,"method":"SendMessage","params":{"message":{"kind":"message","role":"user","messageId":"m-1","parts":[{"kind":"text","text":"hi"}]}}}""");
 
         using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        var task = body.RootElement.GetProperty("result");
+        var task = body.RootElement.GetProperty("result").GetProperty("task");
 
-        Assert.AreEqual("failed", task.GetProperty("status").GetProperty("state").GetString());
+        Assert.AreEqual("TASK_STATE_FAILED", task.GetProperty("status").GetProperty("state").GetString());
         StringAssert.Contains(
             task.GetProperty("status").GetProperty("message").GetProperty("parts")[0].GetProperty("text").GetString(),
             "did not respond");
@@ -224,7 +239,7 @@ public sealed class A2ATaskLifecycleTests
     {
         for (var attempt = 0; attempt < 100; attempt++)
         {
-            using var task = await host.GetJsonAsync($"/a2a/botanical-agent/v1/tasks/{taskId}");
+            using var task = await host.GetJsonAsync($"/a2a/botanical-agent/tasks/{taskId}");
             if (task.RootElement.GetProperty("status").GetProperty("state").GetString() == expectedState)
             {
                 return task.RootElement.Clone();

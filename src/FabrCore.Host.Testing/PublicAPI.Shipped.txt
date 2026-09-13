@@ -1,0 +1,93 @@
+#nullable enable
+FabrCore.Host.Testing.FabrCoreA2ATestHost
+FabrCore.Host.Testing.FabrCoreA2ATestHost.AgentService.get -> FabrCore.Host.Testing.FakeFabrCoreAgentService!
+FabrCore.Host.Testing.FabrCoreA2ATestHost.Client.get -> System.Net.Http.HttpClient!
+FabrCore.Host.Testing.FabrCoreA2ATestHost.DisposeAsync() -> System.Threading.Tasks.ValueTask
+FabrCore.Host.Testing.FabrCoreA2ATestHost.GetJsonAsync(string! path, string? apiKey = null) -> System.Threading.Tasks.Task<System.Text.Json.JsonDocument!>!
+FabrCore.Host.Testing.FabrCoreA2ATestHost.PostJsonAsync(string! path, string! json, string? apiKey = null) -> System.Threading.Tasks.Task<System.Net.Http.HttpResponseMessage!>!
+FabrCore.Host.Testing.FabrCoreA2ATestHost.ReadServerSentEventsAsync(string! path, string! json, string? apiKey = null) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<System.Text.Json.JsonElement>!>!
+FabrCore.Host.Testing.FakeFabrCoreAgentService
+FabrCore.Host.Testing.FakeFabrCoreAgentService.AddThreadMessagesAsync(string! userHandle, string! handle, string! threadId, System.Collections.Generic.IEnumerable<FabrCore.Core.StoredChatMessage!>! messages) -> System.Threading.Tasks.Task!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.ClearThreadMessagesAsync(string! userHandle, string! handle, string! threadId) -> System.Threading.Tasks.Task!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.ConfigureAgentAsync(string! userHandle, FabrCore.Core.AgentConfiguration! config, FabrCore.Core.HealthDetailLevel detailLevel = FabrCore.Core.HealthDetailLevel.Basic) -> System.Threading.Tasks.Task<FabrCore.Core.AgentHealthStatus!>!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.ConfigureAgentsAsync(string! userHandle, System.Collections.Generic.List<FabrCore.Core.AgentConfiguration!>! configs, FabrCore.Core.HealthDetailLevel detailLevel = FabrCore.Core.HealthDetailLevel.Basic) -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.AgentHealthStatus!>!>!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.ConfigureSystemAgentAsync(FabrCore.Core.AgentConfiguration! config, FabrCore.Core.HealthDetailLevel detailLevel = FabrCore.Core.HealthDetailLevel.Basic) -> System.Threading.Tasks.Task<FabrCore.Core.AgentHealthStatus!>!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.DeactivateAgentAsync(string! key, string! reason) -> System.Threading.Tasks.Task!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.DeactivatePrincipalAsync(string! principalHandle, string! reason) -> System.Threading.Tasks.Task!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.EnsureAgentsAsync(string! userHandle, System.Collections.Generic.List<FabrCore.Core.AgentConfiguration!>! configs, FabrCore.Core.HealthDetailLevel detailLevel = FabrCore.Core.HealthDetailLevel.Basic) -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.AgentHealthStatus!>!>!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.Ensured.get -> System.Collections.Generic.List<FabrCore.Host.Testing.FakeFabrCoreAgentService.EnsuredAgents!>!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.EnsuredAgents
+FabrCore.Host.Testing.FakeFabrCoreAgentService.EnsuredAgents.<Clone>$() -> FabrCore.Host.Testing.FakeFabrCoreAgentService.EnsuredAgents!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.EnsuredAgents.Configs.get -> System.Collections.Generic.IReadOnlyList<FabrCore.Core.AgentConfiguration!>!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.EnsuredAgents.Configs.init -> void
+FabrCore.Host.Testing.FakeFabrCoreAgentService.EnsuredAgents.Deconstruct(out string! Principal, out System.Collections.Generic.IReadOnlyList<FabrCore.Core.AgentConfiguration!>! Configs) -> void
+FabrCore.Host.Testing.FakeFabrCoreAgentService.EnsuredAgents.EnsuredAgents(string! Principal, System.Collections.Generic.IReadOnlyList<FabrCore.Core.AgentConfiguration!>! Configs) -> void
+FabrCore.Host.Testing.FakeFabrCoreAgentService.EnsuredAgents.Equals(FabrCore.Host.Testing.FakeFabrCoreAgentService.EnsuredAgents? other) -> bool
+FabrCore.Host.Testing.FakeFabrCoreAgentService.EnsuredAgents.Principal.get -> string!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.EnsuredAgents.Principal.init -> void
+FabrCore.Host.Testing.FakeFabrCoreAgentService.EvictAgentAsync(string! userHandle, string! handle) -> System.Threading.Tasks.Task<FabrCore.Core.AgentEvictionResult!>!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.FakeFabrCoreAgentService() -> void
+FabrCore.Host.Testing.FakeFabrCoreAgentService.GetAgentInfoAsync(string! key) -> System.Threading.Tasks.Task<FabrCore.Core.AgentInfo?>!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.GetAgentStatisticsAsync() -> System.Threading.Tasks.Task<System.Collections.Generic.Dictionary<string!, int>!>!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.GetAgentTypes() -> System.Collections.Generic.List<FabrCore.Sdk.RegistryEntry!>!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.GetAgentsAsync(string? status = null) -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.AgentInfo!>!>!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.GetAgentsByEntityTypeAsync(FabrCore.Core.EntityType entityType) -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.AgentInfo!>!>!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.GetAgentsCalls.get -> int
+FabrCore.Host.Testing.FakeFabrCoreAgentService.GetCollisions() -> System.Collections.Generic.List<FabrCore.Sdk.RegistryCollision!>!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.GetCustomStateAsync(string! userHandle, string! handle) -> System.Threading.Tasks.Task<System.Collections.Generic.Dictionary<string!, System.Text.Json.JsonElement>!>!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.GetHealthAsync(string! userHandle, string! handle, FabrCore.Core.HealthDetailLevel detailLevel = FabrCore.Core.HealthDetailLevel.Basic) -> System.Threading.Tasks.Task<FabrCore.Core.AgentHealthStatus!>!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.GetPlugins() -> System.Collections.Generic.List<FabrCore.Sdk.RegistryEntry!>!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.GetPrincipalInfoAsync(string! handle) -> System.Threading.Tasks.Task<FabrCore.Core.AgentInfo?>!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.GetPrincipalsAsync(string? status = null) -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.AgentInfo!>!>!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.GetThreadMessagesAsync(string! userHandle, string! handle, string! threadId) -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.StoredChatMessage!>!>!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.GetTools() -> System.Collections.Generic.List<FabrCore.Sdk.RegistryEntry!>!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.LiveAgents.get -> System.Collections.Generic.List<FabrCore.Core.AgentInfo!>!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.MergeCustomStateAsync(string! userHandle, string! handle, System.Collections.Generic.Dictionary<string!, System.Text.Json.JsonElement>! changes, System.Collections.Generic.IEnumerable<string!>! deletes) -> System.Threading.Tasks.Task!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.PurgeDeactivatedAgentsAsync(System.TimeSpan olderThan) -> System.Threading.Tasks.Task<int>!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.RegisterAgentAsync(string! key, string! agentType, string! handle) -> System.Threading.Tasks.Task!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.RegisterPrincipalAsync(string! principalHandle) -> System.Threading.Tasks.Task!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.RemoveAgentAsync(string! key) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.ReplaceThreadMessagesAsync(string! userHandle, string! handle, string! threadId, System.Collections.Generic.IEnumerable<FabrCore.Core.StoredChatMessage!>! messages) -> System.Threading.Tasks.Task!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.Reply.get -> string!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.Reply.set -> void
+FabrCore.Host.Testing.FakeFabrCoreAgentService.ReplyFactory.get -> System.Func<FabrCore.Core.AgentMessage!, System.Threading.Tasks.Task<FabrCore.Core.AgentMessage!>!>?
+FabrCore.Host.Testing.FakeFabrCoreAgentService.ReplyFactory.set -> void
+FabrCore.Host.Testing.FakeFabrCoreAgentService.SendAndReceiveMessageAsync(string! userHandle, string! handle, FabrCore.Core.AgentMessage! message) -> System.Threading.Tasks.Task<FabrCore.Core.AgentMessage!>!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.SendAndReceiveMessageAsync(string! userHandle, string! handle, string! message) -> System.Threading.Tasks.Task<FabrCore.Core.AgentMessage!>!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.SendEventAsync(string! userHandle, string! handle, FabrCore.Core.EventMessage! message) -> System.Threading.Tasks.Task!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.SendMessageAsync(string! userHandle, string! handle, FabrCore.Core.AgentMessage! message) -> System.Threading.Tasks.Task!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.SendMessageAsync(string! userHandle, string! handle, string! message) -> System.Threading.Tasks.Task!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.Sends.get -> System.Collections.Generic.List<FabrCore.Host.Testing.FakeFabrCoreAgentService.SentMessage!>!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.SentMessage
+FabrCore.Host.Testing.FakeFabrCoreAgentService.SentMessage.<Clone>$() -> FabrCore.Host.Testing.FakeFabrCoreAgentService.SentMessage!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.SentMessage.Deconstruct(out string! Principal, out string! Handle, out FabrCore.Core.AgentMessage! Message) -> void
+FabrCore.Host.Testing.FakeFabrCoreAgentService.SentMessage.Equals(FabrCore.Host.Testing.FakeFabrCoreAgentService.SentMessage? other) -> bool
+FabrCore.Host.Testing.FakeFabrCoreAgentService.SentMessage.Handle.get -> string!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.SentMessage.Handle.init -> void
+FabrCore.Host.Testing.FakeFabrCoreAgentService.SentMessage.Message.get -> FabrCore.Core.AgentMessage!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.SentMessage.Message.init -> void
+FabrCore.Host.Testing.FakeFabrCoreAgentService.SentMessage.Principal.get -> string!
+FabrCore.Host.Testing.FakeFabrCoreAgentService.SentMessage.Principal.init -> void
+FabrCore.Host.Testing.FakeFabrCoreAgentService.SentMessage.SentMessage(string! Principal, string! Handle, FabrCore.Core.AgentMessage! Message) -> void
+FabrCore.Host.Testing.FakeFabrCoreAgentService.WithLiveAgent(string! key, string! agentType = "chat-agent") -> FabrCore.Host.Testing.FakeFabrCoreAgentService!
+FabrCore.Host.Testing.FakeFabrCoreRegistry
+FabrCore.Host.Testing.FakeFabrCoreRegistry.FakeFabrCoreRegistry() -> void
+FabrCore.Host.Testing.FakeFabrCoreRegistry.FindAgentType(string! alias) -> System.Type?
+FabrCore.Host.Testing.FakeFabrCoreRegistry.GetAgentTypes() -> System.Collections.Generic.List<FabrCore.Sdk.RegistryEntry!>!
+FabrCore.Host.Testing.FakeFabrCoreRegistry.GetCollisions() -> System.Collections.Generic.List<FabrCore.Sdk.RegistryCollision!>!
+FabrCore.Host.Testing.FakeFabrCoreRegistry.GetPlugins() -> System.Collections.Generic.List<FabrCore.Sdk.RegistryEntry!>!
+FabrCore.Host.Testing.FakeFabrCoreRegistry.GetTools() -> System.Collections.Generic.List<FabrCore.Sdk.RegistryEntry!>!
+FabrCore.Host.Testing.FakeFabrCoreRegistry.WithAgentType(string! alias, string? description = null, string? capabilities = null, params string![]! notes) -> FabrCore.Host.Testing.FakeFabrCoreRegistry!
+override FabrCore.Host.Testing.FakeFabrCoreAgentService.EnsuredAgents.Equals(object? obj) -> bool
+override FabrCore.Host.Testing.FakeFabrCoreAgentService.EnsuredAgents.GetHashCode() -> int
+override FabrCore.Host.Testing.FakeFabrCoreAgentService.EnsuredAgents.ToString() -> string!
+override FabrCore.Host.Testing.FakeFabrCoreAgentService.SentMessage.Equals(object? obj) -> bool
+override FabrCore.Host.Testing.FakeFabrCoreAgentService.SentMessage.GetHashCode() -> int
+override FabrCore.Host.Testing.FakeFabrCoreAgentService.SentMessage.ToString() -> string!
+static FabrCore.Host.Testing.FabrCoreA2ATestHost.MessageSendRequest(string! text, string? contextId = null, object? id = null) -> string!
+static FabrCore.Host.Testing.FabrCoreA2ATestHost.RegistryFor(params System.Reflection.Assembly![]! assemblies) -> FabrCore.Sdk.IFabrCoreRegistry!
+static FabrCore.Host.Testing.FabrCoreA2ATestHost.StartAsync(System.Collections.Generic.IDictionary<string!, string?>! configuration, FabrCore.Host.Testing.FakeFabrCoreAgentService? agentService = null, FabrCore.Sdk.IFabrCoreRegistry? registry = null, System.Action<Microsoft.Extensions.DependencyInjection.IServiceCollection!>? configureServices = null) -> System.Threading.Tasks.Task<FabrCore.Host.Testing.FabrCoreA2ATestHost!>!
+static FabrCore.Host.Testing.FakeFabrCoreAgentService.EnsuredAgents.operator !=(FabrCore.Host.Testing.FakeFabrCoreAgentService.EnsuredAgents? left, FabrCore.Host.Testing.FakeFabrCoreAgentService.EnsuredAgents? right) -> bool
+static FabrCore.Host.Testing.FakeFabrCoreAgentService.EnsuredAgents.operator ==(FabrCore.Host.Testing.FakeFabrCoreAgentService.EnsuredAgents? left, FabrCore.Host.Testing.FakeFabrCoreAgentService.EnsuredAgents? right) -> bool
+static FabrCore.Host.Testing.FakeFabrCoreAgentService.SentMessage.operator !=(FabrCore.Host.Testing.FakeFabrCoreAgentService.SentMessage? left, FabrCore.Host.Testing.FakeFabrCoreAgentService.SentMessage? right) -> bool
+static FabrCore.Host.Testing.FakeFabrCoreAgentService.SentMessage.operator ==(FabrCore.Host.Testing.FakeFabrCoreAgentService.SentMessage? left, FabrCore.Host.Testing.FakeFabrCoreAgentService.SentMessage? right) -> bool

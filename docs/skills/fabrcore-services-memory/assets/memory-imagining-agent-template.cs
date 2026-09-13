@@ -1,3 +1,5 @@
+using System.ComponentModel;
+using Microsoft.Extensions.Logging;
 using FabrCore.Core;
 using FabrCore.Services.Memory.Abstractions;
 using FabrCore.Services.Memory.Configuration;
@@ -23,6 +25,7 @@ public class {{AGENT_NAME}} : FabrCoreAgentProxy
     private MemoryCompactionHandler? _compactionHandler;
     private AIAgent? _agent;
     private AgentSession? _session;
+    private FabrCoreChatHistoryProvider? _history;
 
     /// <summary>
     /// Track memory IDs already surfaced in this conversation to avoid repeating
@@ -51,15 +54,6 @@ public class {{AGENT_NAME}} : FabrCoreAgentProxy
             _memory, compactionService, memoryOptions,
             serviceProvider.GetRequiredService<ILoggerFactory>());
 
-        // 2. Inject hot layer index into system prompt
-        var index = await _memory.GetMemoryIndexAsync();
-        if (index.Entries.Count > 0)
-        {
-            var memoryBlock = string.Join("\n", index.Entries.Select(e =>
-                $"- [{e.Type}] {e.Title}: {e.DescriptionHook}"));
-            config.SystemPrompt += $"\n\n## Agent Memory\n{memoryBlock}";
-        }
-
         // 3. Set up tools and LLM agent
         var tools = await ResolveConfiguredToolsAsync();
         var result = await CreateChatClientAgent(
@@ -68,6 +62,7 @@ public class {{AGENT_NAME}} : FabrCoreAgentProxy
             tools: tools);
         _agent = result.Agent;
         _session = result.Session;
+        _history = result.ChatHistoryProvider ?? throw new InvalidOperationException("Chat history is required.");
     }
 
     public override async Task<AgentMessage> OnMessage(AgentMessage message)
@@ -77,9 +72,9 @@ public class {{AGENT_NAME}} : FabrCoreAgentProxy
 
         // 4. Synthetic imagining: LLM analyzes conversation to generate diverse queries
         var imaginingResult = await _imagining!.ImagineAsync(
-            chatHistoryProvider,         // current conversation context
-            message.Message,             // latest user message (primary search anchor)
-            config.Handle,               // agent handle for memory scoping
+            _history!,                   // current conversation context
+            message.Message ?? "",       // latest user message (primary search anchor)
+            _memory!.ScopeKey,            // same resolved scope as code calls
             _surfacedMemoryIds);         // skip memories already shown this conversation
 
         // 5. Track surfaced IDs so they aren't repeated in future turns
@@ -95,7 +90,7 @@ public class {{AGENT_NAME}} : FabrCoreAgentProxy
 
         // 7. Run LLM with enriched context
         SetStatusMessage(null);
-        var chatMessage = new ChatMessage(ChatRole.User, message.Message + memoryContext);
+        var chatMessage = new ChatMessage(ChatRole.User, message.Message + "\n\n" + memoryContext);
         await foreach (var update in _agent!.RunStreamingAsync(chatMessage, _session!))
         {
             response.Message += update.Text;
@@ -110,6 +105,8 @@ public class {{AGENT_NAME}} : FabrCoreAgentProxy
         int estimatedTokens = 0)
     {
         // Three-tier cascade: tool compression -> memory extraction -> structured summary
-        return await _compactionHandler!.CompactAsync(chatHistoryProvider, compactionConfig);
+        var result = await _compactionHandler!.CompactAsync(chatHistoryProvider, compactionConfig);
+        if (result is not null) _surfacedMemoryIds.Clear();
+        return result;
     }
 }

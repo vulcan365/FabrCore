@@ -12,6 +12,19 @@ namespace FabrCore.Host.Tests;
 public sealed class FabrCoreAgentServiceTrackingTests
 {
     [TestMethod]
+    public async Task RequestReply_UsesCallerPrincipalAuthorization_AndPreservesQualifiedTarget()
+    {
+        var principal = new FakePrincipalGrain("user1");
+        var service = CreateService(new Dictionary<string, FakePrincipalGrain> { ["user1"] = principal });
+        var message = new AgentMessage { FromHandle = "spoofed", Message = "hello" };
+        await service.SendAndReceiveMessageAsync("user1", "system:assistant", message);
+        Assert.AreSame(message, principal.Request);
+        Assert.AreEqual("user1", principal.Request!.FromHandle);
+        Assert.AreEqual("system:assistant", principal.Request.ToHandle);
+        principal.Deny = true;
+        await Assert.ThrowsExactlyAsync<UnauthorizedAccessException>(() => service.SendAndReceiveMessageAsync("user1", "system:assistant", "hello"));
+    }
+    [TestMethod]
     public async Task ConfigureAgentAsync_WithBareHandle_CreatesThroughPrincipalGrainAndTracksAgent()
     {
         var principalGrain = new FakePrincipalGrain("user1");
@@ -249,7 +262,14 @@ public sealed class FabrCoreAgentServiceTrackingTests
 
         public Task AcknowledgeWebSocket(string clientId, long sequence) => throw new NotSupportedException();
 
-        public Task<AgentMessage> SendAndReceiveMessage(AgentMessage request) => throw new NotSupportedException();
+        public AgentMessage? Request { get; private set; }
+        public bool Deny { get; set; }
+        public Task<AgentMessage> SendAndReceiveMessage(AgentMessage request)
+        {
+            if (Deny) throw new UnauthorizedAccessException();
+            Request = request;
+            return Task.FromResult(new AgentMessage { Message = "ok" });
+        }
 
         public Task SendMessage(AgentMessage request) => throw new NotSupportedException();
 

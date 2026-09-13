@@ -43,9 +43,7 @@ public sealed class GraphRagIngestionWorker : BackgroundService
             try
             {
                 var result = await _ingestion.IngestDocumentAsync(
-                    job.FileName,
-                    job.ScopeKey,
-                    job.MarkdownContent,
+                    new KnowledgeIngestionRequest(job.FileName, job.ScopeKey, job.MarkdownContent),
                     stoppingToken);
 
                 _logger.LogInformation(

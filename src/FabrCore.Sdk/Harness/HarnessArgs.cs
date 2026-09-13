@@ -45,6 +45,9 @@ public static class HarnessArgs
     /// <summary>Int. Seconds a single delegation may take before it is abandoned as failed. Default 120.</summary>
     public const string BackgroundTimeoutSeconds = "_HarnessBackgroundTimeoutSeconds";
 
+    /// <summary>Int. Maximum seconds the background wait tool blocks. Default 300; a timeout leaves work running.</summary>
+    public const string BackgroundWaitTimeoutSeconds = "_HarnessBackgroundWaitTimeoutSeconds";
+
     /// <summary>Int. Function-invocation iterations allowed within one model request. Default 40.</summary>
     public const string MaxIterationsPerRequest = "_HarnessMaxIterationsPerRequest";
 

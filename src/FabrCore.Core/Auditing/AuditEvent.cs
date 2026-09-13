@@ -99,6 +99,11 @@ namespace FabrCore.Core.Auditing
     /// <summary>Filter for querying recorded audit events.</summary>
     public class AuditQuery
     {
+        public string? ResourcePrincipal { get; set; }
+        public string? TraceId { get; set; }
+        /// <summary>Exclusive keyset cursor: timestamp and ID of the last event in the previous page.</summary>
+        public DateTimeOffset? Before { get; set; }
+        public string? BeforeId { get; set; }
         /// <summary>Only events in this category.</summary>
         public AuditCategory? Category { get; set; }
 

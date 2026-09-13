@@ -29,7 +29,6 @@ public class OrleansProviderTests
     }
 
     [TestMethod]
-    [DataRow(ClusteringMode.SqlServer)]
     [DataRow(ClusteringMode.AzureStorage)]
     public void ConventionDiscovery_FindsProviderInModeNamedAssembly(ClusteringMode mode)
     {

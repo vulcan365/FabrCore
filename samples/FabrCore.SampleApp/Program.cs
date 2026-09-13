@@ -1,4 +1,4 @@
-﻿using FabrCore.Core;
+using FabrCore.Core;
 using FabrCore.SampleApp.Components;
 using FabrCore.SampleApp.Contoso;
 using FabrCore.SampleApp.Crm;
@@ -51,17 +51,6 @@ namespace FabrCore.SampleApp
 
             builder.AddFabrCoreSurfaceFromConfig("fabrcore-surface.json", "crm-demo");
 
-            // Optional SQL-backed services are inert unless their connection strings exist.
-            if (builder.Configuration.GetConnectionString("MemoryDb") is { Length: > 0 })
-            {
-                builder.Services.AddAgentMemoryServices("MemoryDb");
-                builder.Services.AddMemoryAdministration();
-            }
-            if (builder.Configuration.GetConnectionString("GraphRagDb") is { Length: > 0 })
-            {
-                builder.Services.AddGraphRagServices("GraphRagDb");
-                builder.Services.AddGraphRagAdministration();
-            }
             builder.Services.Configure<SurfaceOptions>(options =>
             {
                 options.DevelopmentFallbackPrincipalId = SurfaceDemoBootstrapper.PrincipalHandle;

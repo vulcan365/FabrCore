@@ -46,3 +46,9 @@ public interface IBlueprintExpander
         JsonElement extension,
         CancellationToken cancellationToken = default);
 }
+
+/// <summary>Explicit opt-in to side-effect-free remote preview. Implementations must only compute configurations.</summary>
+public interface IBlueprintPreviewExpander : IBlueprintExpander
+{
+    JsonElement? ConfigurationSchema { get; }
+}

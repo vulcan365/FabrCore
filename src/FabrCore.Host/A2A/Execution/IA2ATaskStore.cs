@@ -10,10 +10,8 @@ namespace FabrCore.Host.A2A;
 /// task has finished.
 /// </summary>
 /// <remarks>
-/// The default implementation is per-process and in-memory, which is correct for a single server
-/// and for the common case where a client reads a task back on the same connection it created it
-/// on. Register your own singleton before <c>AddA2A</c> to make tasks readable across a scaled-out
-/// deployment.
+/// SQL-mode Host registration uses durable shared snapshots; standalone uses per-process memory.
+/// Register a custom singleton before Host registration to replace the built-in store.
 /// </remarks>
 public interface IA2ATaskStore
 {
@@ -22,6 +20,18 @@ public interface IA2ATaskStore
 
     /// <summary>Stores or replaces a task snapshot.</summary>
     ValueTask SaveAsync(A2ATask task, CancellationToken cancellationToken = default);
+
+    /// <summary>Lists retained snapshots. Custom stores should override to support ListTasks.</summary>
+    ValueTask<IReadOnlyList<A2ATask>> ListAsync(CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("This task store does not support listing.");
+}
+
+/// <summary>Coordinates active executions across hosts without replaying uncertain external effects.</summary>
+public interface IDurableA2ATaskStore
+{
+    TimeSpan HeartbeatInterval { get; }
+    ValueTask<bool> RequestCancellationAsync(string taskId, CancellationToken ct = default);
+    ValueTask<bool> IsCancellationRequestedAsync(string taskId, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -66,6 +76,10 @@ internal sealed class InMemoryA2ATaskStore : IA2ATaskStore
     private bool IsExpired(Entry entry)
         => A2ATaskStates.IsTerminal(entry.Task.Status.State)
            && _timeProvider.GetUtcNow() - entry.SavedAt > _options.Retention;
+
+    public ValueTask<IReadOnlyList<A2ATask>> ListAsync(CancellationToken cancellationToken = default)
+        => ValueTask.FromResult<IReadOnlyList<A2ATask>>(_tasks.Values
+            .Where(entry => !IsExpired(entry)).Select(entry => entry.Task).ToList());
 
     private void Trim()
     {

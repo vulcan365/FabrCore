@@ -27,6 +27,11 @@ namespace FabrCore.Sdk
         private readonly LlmCaptureOptions? _capture;
         private readonly ILogger? _logger;
 
+        /// <summary>Known physical window. Zero leaves capacity enforcement to the caller.</summary>
+        public int ContextWindowTokens { get; init; }
+        /// <summary>Output reserve when a call does not specify its own limit.</summary>
+        public int ReservedOutputTokens { get; init; }
+
         /// <summary>Back-compat constructor used by tests and code paths that don't have monitor wiring.</summary>
         public TokenTrackingChatClient(IChatClient innerClient) : base(innerClient) { }
 
@@ -57,7 +62,7 @@ namespace FabrCore.Sdk
             var sw = Stopwatch.StartNew();
 
             var materialized = messages as IReadOnlyList<ChatMessage> ?? messages.ToList();
-            var callInfo = await PrepareRunSafetyCallAsync(materialized, streaming: false, cancellationToken);
+            var callInfo = await PrepareRunSafetyCallAsync(materialized, streaming: false, cancellationToken, options);
 
             ChatResponse? response = null;
             Exception? error = null;
@@ -104,7 +109,7 @@ namespace FabrCore.Sdk
             string? finishReason = null;
 
             var materialized = messages as IReadOnlyList<ChatMessage> ?? messages.ToList();
-            var callInfo = await PrepareRunSafetyCallAsync(materialized, streaming: true, cancellationToken);
+            var callInfo = await PrepareRunSafetyCallAsync(materialized, streaming: true, cancellationToken, options);
 
             // Accumulate updates only when the monitor is interested in the full response.
             List<ChatResponseUpdate>? collectedUpdates = (_capture?.Enabled == true) ? new List<ChatResponseUpdate>() : null;
@@ -161,19 +166,25 @@ namespace FabrCore.Sdk
 
         private bool ShouldCapturePayloads() => _capture is { Enabled: true, CapturePayloads: true };
 
-        private static async Task<ChatRunSafetyCallInfo> PrepareRunSafetyCallAsync(
+        private async Task<ChatRunSafetyCallInfo> PrepareRunSafetyCallAsync(
             IReadOnlyList<ChatMessage> materialized,
             bool streaming,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            ChatOptions? options)
         {
-            var promptEstimate = ChatRunSafetyScope.EstimateTokens(materialized);
+            var promptEstimate = ChatRunSafetyScope.EstimateTokens(materialized, options);
+            var outputReserve = Math.Max(ReservedOutputTokens, options?.MaxOutputTokens ?? 0);
+            if (ContextWindowTokens > 0 && promptEstimate > (long)ContextWindowTokens - outputReserve)
+                throw new FabrCoreRunStoppedException(RunStopReason.PromptTooLarge,
+                    "The complete request exceeds the model input capacity after reserving output. Protected context was retained.",
+                    promptEstimate, 0, 0);
             var fallback = new ChatRunSafetyCallInfo(promptEstimate, ChatRunSafetyScope.Current?.TurnCumulativeInputTokens ?? 0, promptEstimate);
 
             var runSafety = ChatRunSafetyScope.Current;
             if (ShouldBypassRunSafety())
                 return fallback;
 
-            return await runSafety!.PrepareCallAsync(materialized, streaming, cancellationToken);
+            return await runSafety!.PrepareCallAsync(materialized, streaming, cancellationToken, options);
         }
 
         private static bool ShouldBypassRunSafety()
@@ -232,7 +243,16 @@ namespace FabrCore.Sdk
                 MaxPromptInputTokensPerCall = ChatRunSafetyScope.Current?.MaxPromptInputTokensPerCall ?? callInfo.MaxPromptInputTokensPerCall,
             };
 
-            if (_capture?.CapturePayloads == true)
+            // Admin transcripts are stored only in the actor-scoped diagnostic session store.
+            var adminCall = scope?.OriginContext?.StartsWith("_admin:", StringComparison.Ordinal) == true;
+            if (adminCall)
+            {
+                call.OriginContext = scope!.OriginContext!;
+                call.AdministrationActor = AdminDiagnosticContext.Current.Value?.Session.Actor;
+                call.AdministrationSessionId = AdminDiagnosticContext.Current.Value?.Session.Id;
+                call.ErrorMessage = error is null ? null : error.GetType().Name;
+            }
+            if (_capture?.CapturePayloads == true && !adminCall)
             {
                 call.RequestMessages = SnapshotMessages(requestMessages, _capture);
                 call.ResponseMessages = SnapshotMessages(response?.Messages, _capture);
@@ -258,7 +278,11 @@ namespace FabrCore.Sdk
                         })),
                         Metadata = new Dictionary<string, string?>(StringComparer.Ordinal)
                         {
-                            ["origin"] = origin,
+                            ["origin"] = call.OriginContext,
+                            ["channel"] = adminCall ? "_admin" : null,
+                            ["executionCategory"] = adminCall ? "admin" : "runtime",
+                            ["adminActor"] = call.AdministrationActor,
+                            ["adminSessionId"] = call.AdministrationSessionId,
                             ["parent_message_id"] = parentId,
                             ["model"] = call.Model,
                             ["streaming"] = streaming.ToString(),

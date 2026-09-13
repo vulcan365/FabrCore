@@ -20,6 +20,7 @@ public class ForkedChatHistoryProvider : ChatHistoryProvider
     private readonly List<ChatMessage> _newMessages = new();
     private readonly string? _originalThreadId;
     private readonly object _syncLock = new();
+    private readonly SemaphoreSlim _persistenceGate = new(1);
     private readonly ILogger? _logger;
 
     /// <summary>
@@ -35,7 +36,8 @@ public class ForkedChatHistoryProvider : ChatHistoryProvider
         string? originalThreadId = null,
         ILogger? logger = null)
     {
-        _originalMessages = originalMessages ?? throw new ArgumentNullException(nameof(originalMessages));
+        ArgumentNullException.ThrowIfNull(originalMessages);
+        _originalMessages = Snapshot(originalMessages);
         _originalThreadId = originalThreadId;
         _logger = logger;
 
@@ -72,7 +74,7 @@ public class ForkedChatHistoryProvider : ChatHistoryProvider
     /// </summary>
     public IReadOnlyList<ChatMessage> NewMessages
     {
-        get { lock (_syncLock) { return _newMessages.ToList(); } }
+        get { lock (_syncLock) { return Snapshot(_newMessages); } }
     }
 
     /// <inheritdoc/>
@@ -84,7 +86,7 @@ public class ForkedChatHistoryProvider : ChatHistoryProvider
 
         lock (_syncLock)
         {
-            _newMessages.AddRange(allNewMessages);
+            _newMessages.AddRange(Snapshot(allNewMessages));
         }
 
         _logger?.LogDebug("Added {Count} new messages to forked provider (total new: {Total})",
@@ -103,7 +105,7 @@ public class ForkedChatHistoryProvider : ChatHistoryProvider
 
         lock (_syncLock)
         {
-            allMessages = _originalMessages.Concat(_newMessages).ToList();
+            allMessages = Snapshot(_originalMessages.Concat(_newMessages));
         }
 
         _logger?.LogDebug("ProvideChatHistoryAsync: Returning {OriginalCount} original + {NewCount} new = {Total} total messages",
@@ -127,6 +129,10 @@ public class ForkedChatHistoryProvider : ChatHistoryProvider
         ArgumentNullException.ThrowIfNull(agentHost);
         ArgumentNullException.ThrowIfNull(threadId);
 
+        if (threadId == _originalThreadId) throw new ArgumentException("A fork cannot overwrite its source thread.", nameof(threadId));
+        await _persistenceGate.WaitAsync(cancellationToken);
+        try
+        {
         List<ChatMessage> allMessages;
         lock (_syncLock)
         {
@@ -142,9 +148,10 @@ public class ForkedChatHistoryProvider : ChatHistoryProvider
             ContentsJson = JsonSerializer.Serialize(m.Contents, ChatMessageSerializerOptions.Instance)
         }).ToList();
 
-        await agentHost.AddThreadMessagesAsync(threadId, storedMessages);
-
+        await agentHost.ReplaceThreadMessagesAsync(threadId, storedMessages);
         _logger?.LogDebug("Persisted {Count} messages to thread {ThreadId}", storedMessages.Count, threadId);
+        }
+        finally { _persistenceGate.Release(); }
     }
 
     /// <summary>
@@ -162,6 +169,10 @@ public class ForkedChatHistoryProvider : ChatHistoryProvider
         ArgumentNullException.ThrowIfNull(agentHost);
         ArgumentNullException.ThrowIfNull(threadId);
 
+        if (threadId == _originalThreadId) throw new ArgumentException("A fork cannot overwrite its source thread.", nameof(threadId));
+        await _persistenceGate.WaitAsync(cancellationToken);
+        try
+        {
         List<ChatMessage> newMessages;
         lock (_syncLock)
         {
@@ -182,10 +193,14 @@ public class ForkedChatHistoryProvider : ChatHistoryProvider
             ContentsJson = JsonSerializer.Serialize(m.Contents, ChatMessageSerializerOptions.Instance)
         }).ToList();
 
-        await agentHost.AddThreadMessagesAsync(threadId, storedMessages);
-
+        await agentHost.ReplaceThreadMessagesAsync(threadId, storedMessages);
         _logger?.LogDebug("Persisted {Count} new messages to thread {ThreadId}", storedMessages.Count, threadId);
+        }
+        finally { _persistenceGate.Release(); }
     }
+    private static List<ChatMessage> Snapshot(IEnumerable<ChatMessage> messages) => messages.Select(m => new ChatMessage(m.Role,
+        JsonSerializer.Deserialize<List<AIContent>>(JsonSerializer.Serialize(m.Contents, ChatMessageSerializerOptions.Instance), ChatMessageSerializerOptions.Instance) ?? [])
+        { AuthorName = m.AuthorName }).ToList();
 }
 
 // Keep old name as alias for backward compatibility during migration

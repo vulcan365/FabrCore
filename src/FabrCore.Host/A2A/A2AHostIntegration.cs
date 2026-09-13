@@ -1,4 +1,4 @@
-﻿using FabrCore.Host.A2A.Protocol;
+using FabrCore.Host.A2A.Protocol;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
@@ -77,6 +77,20 @@ public static class A2AExtensions
             return builder;
         }
 
+        foreach (var agent in options.Agents.Where(a => !string.IsNullOrWhiteSpace(a.Binding)))
+        {
+            var binding = ChannelAgentBinding.Read(builder.Configuration, agent.Binding!);
+            if (!string.IsNullOrWhiteSpace(agent.AgentHandle) || agent.AgentPerContext == true)
+                throw new InvalidOperationException("A2A: a shared binding requires per-principal routing without AgentHandle or AgentPerContext.");
+            agent.Handle = binding.Handle;
+            agent.AgentType = binding.AgentType;
+            agent.Models = binding.Models;
+            agent.SystemPrompt = binding.SystemPrompt;
+            agent.Plugins = binding.Plugins;
+            agent.Tools = binding.Tools;
+            agent.Args = binding.Args;
+            agent.AgentPerContext = false;
+        }
         Validate(options);
 
         // IOptionsMonitor is what the authentication handler reads, so bind the section as well
@@ -189,14 +203,14 @@ public static class A2AExtensions
             }
         }
 
-        MapCard(agentRoot + "/v1/card");
+        MapCard(agentRoot + "/card");
 
         // Last-resort probe: a bare GET on the configured endpoint. The message endpoints are
         // POST-only for real traffic, so answering GET with the card costs nothing and is the
         // only thing a client has left to try once the well-known paths have missed.
         MapCard(agentRoot);
-        MapCard(agentRoot + "/v1/message:stream");
-        MapCard(agentRoot + "/v1/message:send");
+        MapCard(agentRoot + "/message:stream");
+        MapCard(agentRoot + "/message:send");
 
         void MapCard(string pattern)
         {
@@ -221,31 +235,19 @@ public static class A2AExtensions
             (HttpContext context, A2ARequestHandler handler, string agent)
                 => handler.HandleJsonRpcAsync(context, agent)));
 
-        // HTTP+JSON binding.
-        Secure(app.MapPost(
-            agentRoot + "/v1/message:send",
-            (HttpContext context, A2ARequestHandler handler, string agent)
-                => handler.HandleHttpMessageAsync(context, agent, streamingRoute: false)));
-
-        Secure(app.MapPost(
-            agentRoot + "/v1/message:stream",
-            (HttpContext context, A2ARequestHandler handler, string agent)
-                => handler.HandleHttpMessageAsync(context, agent, streamingRoute: true)));
-
-        Secure(app.MapGet(
-            agentRoot + "/v1/tasks/{taskId}",
-            (HttpContext context, A2ARequestHandler handler, string agent, string taskId)
-                => handler.HandleHttpGetTaskAsync(context, agent, taskId)));
-
-        Secure(app.MapPost(
-            agentRoot + "/v1/tasks/{taskId}:cancel",
-            (HttpContext context, A2ARequestHandler handler, string agent, string taskId)
-                => handler.HandleHttpCancelTaskAsync(context, agent, taskId)));
-
-        Secure(app.MapPost(
-            agentRoot + "/v1/tasks/{taskId}:subscribe",
-            (HttpContext context, A2ARequestHandler handler, string agent, string taskId)
-                => handler.HandleHttpSubscribeAsync(context, agent, taskId)));
+        // A2A 1.0 HTTP+JSON routes.
+        Secure(app.MapPost(agentRoot + "/message:send",
+            (HttpContext context, A2ARequestHandler handler, string agent) => handler.HandleHttpMessageAsync(context, agent, false)));
+        Secure(app.MapPost(agentRoot + "/message:stream",
+            (HttpContext context, A2ARequestHandler handler, string agent) => handler.HandleHttpMessageAsync(context, agent, true)));
+        Secure(app.MapGet(agentRoot + "/tasks/{taskId}",
+            (HttpContext context, A2ARequestHandler handler, string agent, string taskId) => handler.HandleHttpGetTaskAsync(context, agent, taskId)));
+        Secure(app.MapGet(agentRoot + "/tasks",
+            (HttpContext context, A2ARequestHandler handler, string agent) => handler.HandleHttpListTasksAsync(context, agent)));
+        Secure(app.MapPost(agentRoot + "/tasks/{taskId}:cancel",
+            (HttpContext context, A2ARequestHandler handler, string agent, string taskId) => handler.HandleHttpCancelTaskAsync(context, agent, taskId)));
+        Secure(app.MapGet(agentRoot + "/tasks/{taskId}:subscribe",
+            (HttpContext context, A2ARequestHandler handler, string agent, string taskId) => handler.HandleHttpSubscribeAsync(context, agent, taskId)));
 
         void Secure(RouteHandlerBuilder route)
         {
@@ -329,6 +331,7 @@ public static class A2AExtensions
                     .AddJwtBearer(A2ADefaults.JwtBearerScheme, bearer =>
                     {
                         bearer.Authority = jwt.Authority;
+                        bearer.MapInboundClaims = false;
                         bearer.Audience = jwt.Audience;
                         bearer.RequireHttpsMetadata = jwt.RequireHttpsMetadata;
                         bearer.TokenValidationParameters = new TokenValidationParameters
@@ -357,6 +360,14 @@ public static class A2AExtensions
 
     private static void Validate(A2AOptions options)
     {
+        if (options.Tasks.MaxConcurrentTasks <= 0 || options.Tasks.MaxRetainedTasks <= 0 || options.Tasks.Retention <= TimeSpan.Zero
+            || options.Tasks.ExecutionTimeout <= TimeSpan.Zero || options.Tasks.StreamHeartbeatInterval <= TimeSpan.Zero)
+            throw new InvalidOperationException("A2A: task capacities and timeouts must be positive.");
+        if (options.Principal.Strategy == A2APrincipalStrategy.CanonicalEntra
+            && (options.Authentication.Mode != A2AAuthenticationMode.JwtBearer
+                || (string.IsNullOrWhiteSpace(options.Authentication.JwtBearer.Audience)
+                    && options.Authentication.JwtBearer.ValidAudiences.Count == 0)))
+            throw new InvalidOperationException("A2A: CanonicalEntra requires JwtBearer authentication and an audience.");
         // Every agent is served under {RoutePrefix}/{agent}. An empty prefix would turn that into
         // a top-level "/{agent}" catch-all that shadows the rest of the application.
         if (A2AAgentCatalog.NormalizeRoutePrefix(options.RoutePrefix).Length == 0)

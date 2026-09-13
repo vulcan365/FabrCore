@@ -22,10 +22,12 @@ internal sealed record A2AExecutionRequest(
 internal interface IA2ATaskExecutor
 {
     /// <summary>Starts a turn. The returned execution is already running.</summary>
-    A2ATaskExecution Start(A2AExecutionRequest request);
+    ValueTask<A2ATaskExecution> StartAsync(A2AExecutionRequest request, CancellationToken ct);
 
     /// <summary>Returns the still-live execution for a task, or null once it has been released.</summary>
     A2ATaskExecution? Find(string taskId);
+
+    ValueTask<IReadOnlyList<A2ATask>> ListAsync(CancellationToken cancellationToken);
 
     /// <summary>Reads a task back, from the live execution when there is one and the store otherwise.</summary>
     ValueTask<A2ATask?> GetTaskAsync(string taskId, int? historyLength, CancellationToken cancellationToken);
@@ -47,6 +49,7 @@ internal readonly record struct A2ACancelResult(A2ACancelOutcome Outcome, A2ATas
 
 internal sealed class A2ATaskExecutor : IA2ATaskExecutor
 {
+    private readonly SemaphoreSlim _executionSlots;
     private readonly IFabrCoreAgentService _agentService;
     private readonly IA2AAgentProvisioner _provisioner;
     private readonly IA2ATaskStore _taskStore;
@@ -67,14 +70,34 @@ internal sealed class A2ATaskExecutor : IA2ATaskExecutor
         _provisioner = provisioner;
         _taskStore = taskStore;
         _options = options.Value;
+        _executionSlots = new SemaphoreSlim(_options.Tasks.MaxConcurrentTasks, _options.Tasks.MaxConcurrentTasks);
         _timeProvider = timeProvider;
         _logger = logger;
     }
 
-    public A2ATaskExecution Start(A2AExecutionRequest request)
+    public async ValueTask<A2ATaskExecution> StartAsync(A2AExecutionRequest request, CancellationToken ct)
     {
+        if (!_executionSlots.Wait(0)) throw new A2ATaskCapacityException();
         var execution = new A2ATaskExecution(request, _timeProvider);
-        _live[request.TaskId] = execution;
+        execution.DeferTerminalNotification = _taskStore is IDurableA2ATaskStore;
+        if (!_live.TryAdd(request.TaskId, execution))
+        {
+            execution.Dispose();
+            _executionSlots.Release();
+            throw new InvalidOperationException("The task already exists.");
+        }
+        try
+        {
+            if (_taskStore is IDurableA2ATaskStore)
+                await _taskStore.SaveAsync(execution.Snapshot(), ct);
+        }
+        catch
+        {
+            _live.TryRemove(request.TaskId, out _);
+            execution.Dispose();
+            _executionSlots.Release();
+            throw;
+        }
         TrimFinishedExecutions();
         execution.Run(RunAsync);
         return execution;
@@ -107,10 +130,19 @@ internal sealed class A2ATaskExecutor : IA2ATaskExecutor
     public A2ATaskExecution? Find(string taskId)
         => _live.TryGetValue(taskId, out var execution) ? execution : null;
 
+    public async ValueTask<IReadOnlyList<A2ATask>> ListAsync(CancellationToken cancellationToken)
+    {
+        var stored = await _taskStore.ListAsync(cancellationToken);
+        if (_taskStore is IDurableA2ATaskStore) return stored;
+        return _live.Values.Select(e => e.Snapshot()).Concat(stored).DistinctBy(t => t.Id).ToList();
+    }
+
     public async ValueTask<A2ATask?> GetTaskAsync(
         string taskId, int? historyLength, CancellationToken cancellationToken)
     {
-        var task = Find(taskId)?.Snapshot() ?? await _taskStore.GetAsync(taskId, cancellationToken);
+        var task = _taskStore is IDurableA2ATaskStore
+            ? await _taskStore.GetAsync(taskId, cancellationToken)
+            : Find(taskId)?.Snapshot() ?? await _taskStore.GetAsync(taskId, cancellationToken);
         return task is null ? null : TrimHistory(task, historyLength ?? _options.Tasks.DefaultHistoryLength);
     }
 
@@ -120,6 +152,8 @@ internal sealed class A2ATaskExecutor : IA2ATaskExecutor
         if (execution is null)
         {
             var stored = await _taskStore.GetAsync(taskId, cancellationToken);
+            if (stored is not null && _taskStore is IDurableA2ATaskStore durable && await durable.RequestCancellationAsync(taskId, cancellationToken))
+                return new A2ACancelResult(A2ACancelOutcome.Canceled, stored);
             return stored is null
                 ? new A2ACancelResult(A2ACancelOutcome.NotFound, null)
                 : new A2ACancelResult(A2ACancelOutcome.NotCancelable, stored);
@@ -130,6 +164,8 @@ internal sealed class A2ATaskExecutor : IA2ATaskExecutor
             return new A2ACancelResult(A2ACancelOutcome.NotCancelable, execution.Snapshot());
         }
 
+        if (_taskStore is IDurableA2ATaskStore durableStore && !await durableStore.RequestCancellationAsync(taskId, cancellationToken))
+            return new A2ACancelResult(A2ACancelOutcome.NotCancelable, await _taskStore.GetAsync(taskId, cancellationToken));
         execution.RequestCancellation();
 
         // Give the run loop a moment to settle into the canceled state so the caller sees the
@@ -154,6 +190,9 @@ internal sealed class A2ATaskExecutor : IA2ATaskExecutor
     {
         var request = execution.Request;
         var cancellationToken = execution.CancellationToken;
+        using var heartbeatStop = new CancellationTokenSource();
+        Task heartbeat = Task.CompletedTask;
+        Exception? persistenceFailure = null;
 
         try
         {
@@ -161,6 +200,14 @@ internal sealed class A2ATaskExecutor : IA2ATaskExecutor
             timeout.CancelAfter(_options.Tasks.ExecutionTimeout);
 
             execution.SetStatus(A2ATaskStates.Working);
+            // Persist identity and working state before invoking an agent or performing external effects.
+            await _taskStore.SaveAsync(execution.Snapshot(), timeout.Token);
+            if (_taskStore is IDurableA2ATaskStore durable)
+                heartbeat = HeartbeatAsync(execution, durable, heartbeatStop.Token, ex =>
+                {
+                    persistenceFailure = ex;
+                    execution.RequestCancellation();
+                });
 
             var handle = await _provisioner.EnsureAgentAsync(
                 request.Agent, request.PrincipalHandle, request.ContextId, timeout.Token);
@@ -195,11 +242,13 @@ internal sealed class A2ATaskExecutor : IA2ATaskExecutor
             }
 
             execution.AddArtifact(A2AMessageTranslator.ToArtifact(reply, request.Agent));
+            cancellationToken.ThrowIfCancellationRequested();
             execution.Complete(reply?.Message ?? string.Empty);
         }
         catch (OperationCanceledException) when (execution.CancellationRequested)
         {
-            execution.Cancel();
+            if (persistenceFailure is not null) execution.Fail("The task lost durable storage or execution ownership. Inspect external effects before retrying.");
+            else execution.Cancel();
         }
         catch (OperationCanceledException)
         {
@@ -213,17 +262,55 @@ internal sealed class A2ATaskExecutor : IA2ATaskExecutor
             _logger.LogError(
                 ex,
                 "A2A task {TaskId} for agent {Agent} failed.", request.TaskId, request.Agent.Name);
-            execution.Fail(ex.Message);
+            execution.Fail("The agent could not complete the request.");
         }
         finally
         {
-            await _taskStore.SaveAsync(execution.Snapshot(), CancellationToken.None);
-            execution.CloseSubscribers();
+            heartbeatStop.Cancel();
+            await heartbeat;
+            if (persistenceFailure is not null)
+                execution.Fail("The task lost durable storage or execution ownership. Inspect external effects before retrying.");
+            try
+            {
+                await _taskStore.SaveAsync(execution.Snapshot(), CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Could not persist A2A task {TaskId}.", request.TaskId);
+                execution.Fail("The task result could not be persisted. Inspect task status and external effects before retrying.");
+            }
+            finally
+            {
+                execution.PublishDeferredTerminal();
+                execution.CloseSubscribers();
+                _executionSlots.Release();
+            }
 
             // Keep the finished execution addressable for a short window so an in-flight
             // tasks/resubscribe still finds its recorded events, then fall back to the store.
             _ = ReleaseLaterAsync(execution);
         }
+    }
+
+    private async Task HeartbeatAsync(A2ATaskExecution execution, IDurableA2ATaskStore durable, CancellationToken ct, Action<Exception> failed)
+    {
+        try
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                await Task.Delay(durable.HeartbeatInterval, _timeProvider, ct);
+                if (await durable.IsCancellationRequestedAsync(execution.Request.TaskId, ct))
+                {
+                    execution.RequestCancellation();
+                    return;
+                }
+                var snapshot = execution.Snapshot();
+                if (A2ATaskStates.IsTerminal(snapshot.Status.State)) return;
+                await _taskStore.SaveAsync(snapshot, ct);
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+        catch (Exception ex) { failed(ex); }
     }
 
     private async Task ReleaseLaterAsync(A2ATaskExecution execution)
@@ -260,12 +347,20 @@ internal sealed class A2ATaskExecutor : IA2ATaskExecutor
     }
 }
 
+internal sealed class A2ATaskCapacityException : Exception;
+
 /// <summary>
 /// A single running A2A task: its current snapshot, the events it has emitted, and the
 /// subscribers streaming them.
 /// </summary>
 internal sealed class A2ATaskExecution : IDisposable
 {
+    internal bool DeferTerminalNotification { get; set; }
+    internal void PublishDeferredTerminal()
+    {
+        if (!DeferTerminalNotification) return;
+        Publish(new A2ATaskStatusUpdateEvent { TaskId = _task.Id, ContextId = _task.ContextId, Status = Snapshot().Status, Final = true });
+    }
     private readonly Lock _gate = new();
     private readonly List<object> _events = new();
     private readonly List<Channel<object>> _subscribers = new();
@@ -293,6 +388,8 @@ internal sealed class A2ATaskExecution : IDisposable
             Status = new A2ATaskStatus { State = A2ATaskStates.Submitted, Timestamp = Now(timeProvider) },
             History = new List<A2AMessage> { userTurn },
             Artifacts = new List<A2AArtifact>(),
+            Metadata = new() { [A2ATaskOwnership.Key] = System.Text.Json.JsonSerializer.SerializeToElement(
+                A2ATaskOwnership.Fingerprint(request.Agent.Name, request.PrincipalHandle, request.Caller)) },
         };
 
         // The first event of an A2A stream is the task itself, so a client that subscribes late
@@ -377,6 +474,7 @@ internal sealed class A2ATaskExecution : IDisposable
             }
         }
 
+        if (final && DeferTerminalNotification) return;
         Publish(new A2ATaskStatusUpdateEvent
         {
             TaskId = _task.Id,
@@ -425,9 +523,10 @@ internal sealed class A2ATaskExecution : IDisposable
     /// Subscribes to this task's events. Everything already emitted is replayed first, so a
     /// subscriber never misses the terminal event because it arrived a moment too late.
     /// </summary>
-    public IAsyncEnumerable<object> SubscribeAsync(CancellationToken cancellationToken)
+    public async IAsyncEnumerable<object> SubscribeAsync(
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var channel = Channel.CreateUnbounded<object>(new UnboundedChannelOptions
+        var channel = Channel.CreateBounded<object>(new BoundedChannelOptions(32)
         {
             SingleReader = true,
             SingleWriter = false,
@@ -450,7 +549,16 @@ internal sealed class A2ATaskExecution : IDisposable
             }
         }
 
-        return channel.Reader.ReadAllAsync(cancellationToken);
+        try
+        {
+            await foreach (var evt in channel.Reader.ReadAllAsync(cancellationToken))
+                yield return evt;
+        }
+        finally
+        {
+            lock (_gate) _subscribers.Remove(channel);
+            channel.Writer.TryComplete();
+        }
     }
 
     public void CloseSubscribers()

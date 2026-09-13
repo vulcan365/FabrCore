@@ -1,24 +1,37 @@
 ---
 name: fabrcore-testing
-description: >
-  Test and evaluate FabrCore agents with the in-memory test host, mock/live LLM modes,
-  MSTest patterns, Host lifecycle checks, and Microsoft.Extensions.AI.Evaluation metrics.
-  Use for: "test FabrCore", "FabrCoreTestHarness", "TestFabrCoreAgentHost", "FakeChatClient",
-  "mock LLM", "agent test", "integration test agent", "test harness", "WithTextResponse",
-  "CreateMockAgent", "CreateLiveAgent", "Blueprint test", "agent blueprint", "MSTest FabrCore",
-  "LLM eval", "evaluation", "evaluator", "RelevanceEvaluator", "GroundednessEvaluator",
-  "EvaluationResult", "ReportingConfiguration", "quality eval", "safety eval", "BLEU",
-  "typed storage", "storage test", "TryGetStateAsync", "custom state test", or "malformed state".
-  Also use for: "gateway discovery", "provider-neutral Orleans client",
-  "AddFabrCoreOrleansClientAsync", "IGatewayListProvider", "IClusterClient integration",
-  "Orleans observer", or "Orleans mTLS".
-  Do NOT use for: agent development — use fabrcore-agent.
-  Do NOT use for: server setup — use fabrcore-server.
-  Do NOT use for: the agent harness feature (FabrCoreHarnessAgent, todo lists, loop, background delegation) — use fabrcore-harness. "Test harness" here means FabrCoreTestHarness, an unrelated test fixture.
+description: "Test FabrCore 2.0 agents and integrations with in-memory agent/A2A hosts, fake or live LLMs, MSTest, evaluation APIs and storage compatibility checks. Use for unit/integration tests and model quality evaluations; separate deterministic results from SQL migration and live-model validation."
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
+metadata:
+  version: 2.0.0
 ---
 
 # FabrCore Testing Skill
+
+## Cloud management acceptance coverage
+
+The 2.0 administration contract needs host/grain integration tests in addition to
+the in-memory helpers below. Exercise concurrent user/admin turns, overlapping admin
+409s, reserved-channel spoofing, actor ownership, timeout cleanup, lifecycle conflicts,
+deep-copy history isolation, repeat fork persistence and duplicate/incomplete receipts.
+Verify diagnostic tools cannot mutate state/history or execute business/MCP tools.
+
+Cover conditional ACL/blueprint writes, inactive principal discovery, extension JSON
+round trips, effect-free previews, ensure/update semantics and selected-item retries.
+Use multiple silos for deployment coordination and shared/local-store coverage.
+For monitoring/evidence, test stable cursors under writes, gaps, offline hosts, bounded
+payloads, SQL outages/saturation/retention and unchanged signatures across exports.
+Run consumer flows through both Insights and an independent server with older-host
+fallbacks. Measure throughput and p95 with and without cloud reads; a short local
+benchmark does not establish the less-than-5% production target. Real-model diagnosis
+quality and model cost need separate evaluation. See the
+[release validation report](https://github.com/vulcan365/FabrCore/tree/main/docs/cloud-validation)
+for measured results and remaining release gates.
+
+
+## FabrCore 2.0 baseline
+
+Use matching FabrCore 2.0.0 references. Test standalone and SQL behavior separately: in-memory agent/A2A helpers do not validate SQL ACL, restart durability, migrations or Orleans wire compatibility. For upgrades, restore a copy of existing state including application-specific persisted types and test affected clients. Deterministic tests do not establish live model quality.
 
 Test FabrCore agents and libraries using MSTest with a lightweight in-memory test host — no Orleans silo required.
 
@@ -77,8 +90,8 @@ Test FabrCore agents and libraries using MSTest with a lightweight in-memory tes
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="MSTest" Version="3.*" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
+    <PackageReference Include="MSTest" Version="4.4.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.0" />
     <PackageReference Include="NSubstitute" Version="5.*" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.*" />
   </ItemGroup>
@@ -504,7 +517,7 @@ Storage Hosts when those services are available; the client test project must re
 
 Inspect the resolved package graph or packed `.nuspec` and fail if `FabrCore.Client.Orleans`
 depends on `Microsoft.Orleans.Clustering.AdoNet`, `Microsoft.Orleans.Clustering.AzureStorage`,
-`FabrCore.Host.SqlServer`, or `FabrCore.Host.AzureStorage`. Only the corresponding Host provider
+`FabrCore.Host`, or `FabrCore.Host.AzureStorage`. Only the corresponding Host provider
 projects should reference those provider packages.
 
 ## Running Tests

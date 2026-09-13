@@ -18,6 +18,8 @@ internal static class TestEnvironment
         var password = Environment.GetEnvironmentVariable("FABRCORE_MEMORY_TEST_PASSWORD");
         if (string.IsNullOrWhiteSpace(password))
         {
+            var local = ReadEvalSetting("ConnectionStrings", "MemoryEvalDb");
+            if (!string.IsNullOrWhiteSpace(local)) return local;
             Assert.Inconclusive(
                 "Set FABRCORE_MEMORY_TEST_CONNECTION_STRING or FABRCORE_MEMORY_TEST_PASSWORD to run SQL integration tests.");
         }
@@ -36,7 +38,9 @@ internal static class TestEnvironment
 
     public static FabrCoreConfiguration RequireLiveModelConfiguration()
     {
-        var path = Path.Combine(AppContext.BaseDirectory, "fabrcore.json");
+        var path = Environment.GetEnvironmentVariable("FABRCORE_MEMORY_TEST_MODELS")
+            ?? ReadEvalSetting("Eval", "ModelConfigurationPath")
+            ?? Path.Combine(AppContext.BaseDirectory, "fabrcore.json");
         if (!File.Exists(path))
             Assert.Inconclusive("fabrcore.json was not copied to the test output directory.");
 
@@ -58,4 +62,16 @@ internal static class TestEnvironment
     }
 
     public static string NewScope(string prefix) => $"tests:{prefix}:{Guid.NewGuid():N}";
+
+    private static string? ReadEvalSetting(string section, string key)
+    {
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+        {
+            var path = Path.Combine(directory.FullName, "src", "FabrCore.Services.Memory.EvalConsole", "appsettings.local.json");
+            if (!File.Exists(path)) continue;
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            return doc.RootElement.TryGetProperty(section, out var value) && value.TryGetProperty(key, out var setting) ? setting.GetString() : null;
+        }
+        return null;
+    }
 }

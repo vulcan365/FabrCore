@@ -13,7 +13,7 @@
 
 ## Available Adapters
 
-The service package includes adapters in the `FabrCore.Services.GraphRag`
+FabrCore.Host includes adapters in the `FabrCore.Services.GraphRag`
 namespace:
 
 - `GraphRagSearchPlugin`
@@ -30,9 +30,8 @@ These adapters are useful for agent and tool-call scenarios. They are not UI.
 Register GraphRAG services before initializing plugins or agents:
 
 ```csharp
-builder.Services.AddGraphRagServices(
-    connectionStringName: "GraphRagDb",
-    extractionModelName: "graph-extraction");
+// Configure ConnectionStrings:FabrCore and models first.
+builder.AddFabrCoreServer();
 ```
 
 Plugins resolve service interfaces from DI, especially:
@@ -43,11 +42,15 @@ Plugins resolve service interfaces from DI, especially:
 
 ## Configuration Keys
 
+Some plugin adapters read their own `ConnectionStringName` argument. Point it at the integrated
+feature connection (or the GraphRAG override); do not leave an old database name when consolidating.
+The injected ingestion/search services use the Host-selected database.
+
 Common plugin/agent args:
 
 ```json
 {
-  "ConnectionStringName": "GraphRagDb",
+  "ConnectionStringName": "FabrCore",
   "AllowedScopes": "customer-a,customer-b"
 }
 ```
@@ -56,7 +59,7 @@ Plugin-specific setting style is also supported:
 
 ```json
 {
-  "graph-rag-search:ConnectionStringName": "GraphRagDb",
+  "graph-rag-search:ConnectionStringName": "FabrCore",
   "graph-rag-search:AllowedScopes": "customer-a,customer-b"
 }
 ```
@@ -65,7 +68,7 @@ For ingestion:
 
 ```json
 {
-  "graph-rag-ingest:ConnectionStringName": "GraphRagDb"
+  "graph-rag-ingest:ConnectionStringName": "FabrCore"
 }
 ```
 
@@ -110,7 +113,7 @@ scope.
 
 ## Best Practices
 
-- Register `AddGraphRagServices` once in the host.
+- Call `AddFabrCoreServer` once with the feature database configured.
 - Configure `AllowedScopes` per agent/plugin instance.
 - Keep ingestion tools separate from general query tools when possible.
 - Add audit context where app workflows know actor/user IDs.

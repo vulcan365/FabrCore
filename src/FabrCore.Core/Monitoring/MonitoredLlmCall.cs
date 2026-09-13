@@ -30,6 +30,8 @@ namespace FabrCore.Core.Monitoring
         /// <c>Compaction</c>, <c>Background</c>.
         /// </summary>
         public string OriginContext { get; set; } = "";
+        public string? AdministrationActor { get; set; }
+        public string? AdministrationSessionId { get; set; }
 
         // ── Metadata (always captured) ──
 

@@ -164,7 +164,7 @@ public sealed class A2ARegistryDiscoveryTests
 
         var response = await host.PostJsonAsync(
             "/a2a/botanical-agent",
-            """{"jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":{"kind":"message","role":"user","messageId":"m-1","parts":[{"kind":"text","text":"hi"}]}}}""");
+            """{"jsonrpc":"2.0","id":1,"method":"SendMessage","params":{"message":{"kind":"message","role":"user","messageId":"m-1","parts":[{"kind":"text","text":"hi"}]}}}""");
         response.EnsureSuccessStatusCode();
 
         var config0 = host.AgentService.Ensured.Single().Configs.Single();
@@ -198,7 +198,7 @@ public sealed class A2ARegistryDiscoveryTests
 
         await host.PostJsonAsync(
             "/a2a/botanical-agent",
-            """{"jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":{"kind":"message","role":"user","messageId":"m-1","parts":[{"kind":"text","text":"hi"}]}}}""");
+            """{"jsonrpc":"2.0","id":1,"method":"SendMessage","params":{"message":{"kind":"message","role":"user","messageId":"m-1","parts":[{"kind":"text","text":"hi"}]}}}""");
         Assert.AreEqual("special-model", host.AgentService.Ensured.Single().Configs.Single().Models);
     }
 
@@ -223,7 +223,7 @@ public sealed class A2ARegistryDiscoveryTests
 
         await host.PostJsonAsync(
             "/a2a/assistant",
-            """{"jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":{"kind":"message","role":"user","messageId":"m-1","parts":[{"kind":"text","text":"hi"}]}}}""");
+            """{"jsonrpc":"2.0","id":1,"method":"SendMessage","params":{"message":{"kind":"message","role":"user","messageId":"m-1","parts":[{"kind":"text","text":"hi"}]}}}""");
 
         Assert.AreEqual(0, host.AgentService.Ensured.Count, "An existing agent must not be reprovisioned.");
         Assert.AreEqual("system:assistant", host.AgentService.Sends.Single().Handle);

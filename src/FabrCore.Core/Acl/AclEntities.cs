@@ -40,6 +40,10 @@ namespace FabrCore.Core.Acl
         /// <summary>True for the built-in unrestricted System principal. Set by bootstrap; not editable.</summary>
         [Id(3)]
         public bool IsSystem { get; set; }
+
+        /// <summary>Operator description; does not affect identity or permissions.</summary>
+        [Id(4)]
+        public string? Description { get; set; }
     }
 
     /// <summary>

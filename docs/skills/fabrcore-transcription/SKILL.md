@@ -9,10 +9,14 @@ description: >
 allowed-tools: "Bash(dotnet:*)"
 metadata:
   author: Synod
-  version: 1.0.0
+  version: 2.0.0
 ---
 
 # Audio Transcription with Azure OpenAI
+
+## FabrCore 2.0 baseline
+
+This skill targets FabrCore 2.0 GA on .NET 10. Transcription remains independent of SQL mode. Keep FabrCore package references aligned at 2.0.0; persisted transcripts stored through Orleans follow the selected storage provider and are lost on restart with default standalone storage.
 
 Transcribe audio files using Azure OpenAI's gpt-4o-mini-transcribe model via the `Azure.AI.OpenAI` and `OpenAI` .NET SDKs.
 

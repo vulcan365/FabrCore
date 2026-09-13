@@ -50,10 +50,18 @@ namespace FabrCore.Host.Services
 
         public Task<List<AuditEvent>> GetEventsAsync(AuditQuery? query = null)
         {
-            IEnumerable<AuditEvent> result = _events.ToArray().Reverse();
+            IEnumerable<AuditEvent> result = _events.ToArray().OrderByDescending(e => e.Timestamp).ThenByDescending(e => e.Id, StringComparer.Ordinal);
 
             if (query is not null)
             {
+                if ((query.Before is null) != (query.BeforeId is null))
+                    throw new ArgumentException("Before and BeforeId must be supplied together.");
+                if (query.ResourcePrincipal is not null)
+                    result = result.Where(e => string.Equals(e.ResourcePrincipal, query.ResourcePrincipal, StringComparison.OrdinalIgnoreCase));
+                if (query.TraceId is not null)
+                    result = result.Where(e => e.TraceId == query.TraceId);
+                if (query.Before is { } before)
+                    result = result.Where(e => e.Timestamp < before || (e.Timestamp == before && string.CompareOrdinal(e.Id, query.BeforeId) < 0));
                 if (query.Category.HasValue)
                     result = result.Where(e => e.Category == query.Category.Value);
 

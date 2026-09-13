@@ -1,0 +1,1322 @@
+#nullable enable
+FabrCore.Surface.Abstractions.ISurfaceDefinitionProvider
+FabrCore.Surface.Abstractions.ISurfaceDefinitionProvider.GetAllAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<FabrCore.Surface.Configuration.SurfaceDefinition!>!>!
+FabrCore.Surface.Abstractions.ISurfaceDefinitionProvider.GetByNameAsync(string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.Configuration.SurfaceDefinition?>!
+FabrCore.Surface.Abstractions.ISurfaceProvider
+FabrCore.Surface.Abstractions.ISurfaceProvider.GetSurfaceServiceAsync(FabrCore.Sdk.IFabrCoreAgentHost! agentHost, string! agentHandle, string? configName, Microsoft.Agents.AI.AIAgent? planningAgent = null, FabrCore.Surface.Abstractions.SurfaceAgentFactory? agentFactory = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.Abstractions.ISurfaceService!>!
+FabrCore.Surface.Abstractions.ISurfaceService
+FabrCore.Surface.Abstractions.ISurfaceService.AgentHandle.get -> string!
+FabrCore.Surface.Abstractions.ISurfaceService.Definition.get -> FabrCore.Surface.Configuration.SurfaceDefinition!
+FabrCore.Surface.Abstractions.ISurfaceService.PlanAndRenderAsync(string! prompt, FabrCore.Core.AgentMessage! sourceMessage, string? targetHandle = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.AgentMessage!>!
+FabrCore.Surface.Abstractions.ISurfaceService.PlanAsync(string! prompt, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.Contracts.AdaptiveCardSurfaceEnvelope!>!
+FabrCore.Surface.Abstractions.ISurfaceService.RenderAsync(FabrCore.Surface.Contracts.AdaptiveCardSurfaceEnvelope! envelope, FabrCore.Core.AgentMessage! sourceMessage, string? targetHandle = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.AgentMessage!>!
+FabrCore.Surface.Abstractions.SurfaceAgentFactory
+FabrCore.Surface.Actions.EmptySurfaceActionRegistry
+FabrCore.Surface.Actions.EmptySurfaceActionRegistry.EmptySurfaceActionRegistry() -> void
+FabrCore.Surface.Actions.EmptySurfaceActionRegistry.ExecuteAsync(FabrCore.Surface.Actions.SurfaceActionRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.Actions.SurfaceActionResult!>!
+FabrCore.Surface.Actions.ISurfaceActionDispatcher
+FabrCore.Surface.Actions.ISurfaceActionDispatcher.DispatchAsync(FabrCore.Surface.Actions.SurfaceActionContext! context, FabrCore.Surface.Contracts.AdaptiveCardSurfaceAction! action, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Surface.Actions.ISurfaceActionRegistry
+FabrCore.Surface.Actions.ISurfaceActionRegistry.ExecuteAsync(FabrCore.Surface.Actions.SurfaceActionRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.Actions.SurfaceActionResult!>!
+FabrCore.Surface.Actions.SurfaceActionContext
+FabrCore.Surface.Actions.SurfaceActionContext.Envelope.get -> FabrCore.Surface.Contracts.AdaptiveCardSurfaceEnvelope!
+FabrCore.Surface.Actions.SurfaceActionContext.Envelope.init -> void
+FabrCore.Surface.Actions.SurfaceActionContext.PrincipalContext.get -> FabrCore.Surface.ISurfacePrincipalContext!
+FabrCore.Surface.Actions.SurfaceActionContext.PrincipalContext.init -> void
+FabrCore.Surface.Actions.SurfaceActionContext.SourceMessage.get -> FabrCore.Core.AgentMessage?
+FabrCore.Surface.Actions.SurfaceActionContext.SourceMessage.init -> void
+FabrCore.Surface.Actions.SurfaceActionContext.SurfaceActionContext() -> void
+FabrCore.Surface.Actions.SurfaceActionDispatcher
+FabrCore.Surface.Actions.SurfaceActionDispatcher.DispatchAsync(FabrCore.Surface.Actions.SurfaceActionContext! context, FabrCore.Surface.Contracts.AdaptiveCardSurfaceAction! action, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Surface.Actions.SurfaceActionDispatcher.SurfaceActionDispatcher(FabrCore.Surface.Actions.ISurfaceActionRegistry! actionRegistry, Microsoft.Extensions.Options.IOptions<FabrCore.Surface.Services.SurfaceOptions!>! options) -> void
+FabrCore.Surface.Actions.SurfaceActionRequest
+FabrCore.Surface.Actions.SurfaceActionRequest.ActionId.get -> string!
+FabrCore.Surface.Actions.SurfaceActionRequest.ActionId.init -> void
+FabrCore.Surface.Actions.SurfaceActionRequest.ActionType.get -> string!
+FabrCore.Surface.Actions.SurfaceActionRequest.ActionType.init -> void
+FabrCore.Surface.Actions.SurfaceActionRequest.Envelope.get -> FabrCore.Surface.Contracts.AdaptiveCardSurfaceEnvelope!
+FabrCore.Surface.Actions.SurfaceActionRequest.Envelope.init -> void
+FabrCore.Surface.Actions.SurfaceActionRequest.Payload.get -> System.Collections.Generic.Dictionary<string!, object?>!
+FabrCore.Surface.Actions.SurfaceActionRequest.Payload.init -> void
+FabrCore.Surface.Actions.SurfaceActionRequest.SourceMessage.get -> FabrCore.Core.AgentMessage?
+FabrCore.Surface.Actions.SurfaceActionRequest.SourceMessage.init -> void
+FabrCore.Surface.Actions.SurfaceActionRequest.SurfaceActionRequest() -> void
+FabrCore.Surface.Actions.SurfaceActionRequest.Verb.get -> string?
+FabrCore.Surface.Actions.SurfaceActionRequest.Verb.init -> void
+FabrCore.Surface.Actions.SurfaceActionResult
+FabrCore.Surface.Actions.SurfaceActionResult.Data.get -> System.Collections.Generic.Dictionary<string!, object?>!
+FabrCore.Surface.Actions.SurfaceActionResult.Data.init -> void
+FabrCore.Surface.Actions.SurfaceActionResult.Message.get -> string?
+FabrCore.Surface.Actions.SurfaceActionResult.Message.init -> void
+FabrCore.Surface.Actions.SurfaceActionResult.Success.get -> bool
+FabrCore.Surface.Actions.SurfaceActionResult.Success.init -> void
+FabrCore.Surface.Actions.SurfaceActionResult.SurfaceActionResult() -> void
+FabrCore.Surface.Agents.SurfaceAgent
+FabrCore.Surface.Agents.SurfaceAgent.SurfaceAgent(FabrCore.Core.AgentConfiguration! config, System.IServiceProvider! serviceProvider, FabrCore.Sdk.IFabrCoreAgentHost! fabrcoreAgentHost) -> void
+FabrCore.Surface.Ai.Orchestration.SurfaceOrchestrationAgentTypes
+FabrCore.Surface.Ai.Orchestration.SurfaceSquadAgentCapability
+FabrCore.Surface.Ai.Orchestration.SurfaceSquadAgentCapability.AgentType.get -> string!
+FabrCore.Surface.Ai.Orchestration.SurfaceSquadAgentCapability.AgentType.set -> void
+FabrCore.Surface.Ai.Orchestration.SurfaceSquadAgentCapability.Description.get -> string!
+FabrCore.Surface.Ai.Orchestration.SurfaceSquadAgentCapability.Description.set -> void
+FabrCore.Surface.Ai.Orchestration.SurfaceSquadAgentCapability.Handle.get -> string!
+FabrCore.Surface.Ai.Orchestration.SurfaceSquadAgentCapability.Handle.set -> void
+FabrCore.Surface.Ai.Orchestration.SurfaceSquadAgentCapability.IsConfigured.get -> bool
+FabrCore.Surface.Ai.Orchestration.SurfaceSquadAgentCapability.IsConfigured.set -> void
+FabrCore.Surface.Ai.Orchestration.SurfaceSquadAgentCapability.Name.get -> string!
+FabrCore.Surface.Ai.Orchestration.SurfaceSquadAgentCapability.Name.set -> void
+FabrCore.Surface.Ai.Orchestration.SurfaceSquadAgentCapability.Notes.get -> string?
+FabrCore.Surface.Ai.Orchestration.SurfaceSquadAgentCapability.Notes.set -> void
+FabrCore.Surface.Ai.Orchestration.SurfaceSquadAgentCapability.Plugins.get -> System.Collections.Generic.List<string!>!
+FabrCore.Surface.Ai.Orchestration.SurfaceSquadAgentCapability.Plugins.set -> void
+FabrCore.Surface.Ai.Orchestration.SurfaceSquadAgentCapability.SurfaceSquadAgentCapability() -> void
+FabrCore.Surface.Ai.Orchestration.SurfaceSquadAgentCapability.Tools.get -> System.Collections.Generic.List<string!>!
+FabrCore.Surface.Ai.Orchestration.SurfaceSquadAgentCapability.Tools.set -> void
+FabrCore.Surface.Ai.Orchestration.SurfaceSquadAgentCapability.UnavailableReason.get -> string?
+FabrCore.Surface.Ai.Orchestration.SurfaceSquadAgentCapability.UnavailableReason.set -> void
+FabrCore.Surface.Ai.Orchestration.SurfaceSquadAgentCapabilityProjection
+FabrCore.Surface.Ai.Orchestration.SurfaceSquadOrchestratorAgent
+FabrCore.Surface.Ai.Orchestration.SurfaceSquadOrchestratorAgent.SurfaceSquadOrchestratorAgent(FabrCore.Core.AgentConfiguration! config, System.IServiceProvider! serviceProvider, FabrCore.Sdk.IFabrCoreAgentHost! fabrcoreAgentHost) -> void
+FabrCore.Surface.Ai.Squads.ISurfaceSquadService
+FabrCore.Surface.Ai.Squads.ISurfaceSquadService.AddExistingAgentAsync(FabrCore.Surface.ISurfacePrincipalContext! context, FabrCore.Surface.Ai.Squads.SurfaceSquad! squad, FabrCore.Surface.Ai.Squads.SurfaceSquadAgent! agent, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.Ai.Squads.SurfaceSquad!>!
+FabrCore.Surface.Ai.Squads.ISurfaceSquadService.CreateSquadAgentAsync(FabrCore.Surface.ISurfacePrincipalContext! context, FabrCore.Surface.Ai.Squads.SurfaceSquad! squad, FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition! agentDefinition, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.Ai.Squads.SurfaceSquadCreateResult!>!
+FabrCore.Surface.Ai.Squads.ISurfaceSquadService.CreateSquadAsync(FabrCore.Surface.ISurfacePrincipalContext! context, string! principalHandle, FabrCore.Surface.Ai.Squads.SurfaceSquadDefinition! definition, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.Ai.Squads.SurfaceSquadCreateResult!>!
+FabrCore.Surface.Ai.Squads.ISurfaceSquadService.EnsureSquadConfiguredAsync(FabrCore.Surface.ISurfacePrincipalContext! context, FabrCore.Surface.Ai.Squads.SurfaceSquad! squad, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.Ai.Squads.SurfaceSquadCreateResult!>!
+FabrCore.Surface.Ai.Squads.ISurfaceSquadService.RemoveAgentAsync(FabrCore.Surface.ISurfacePrincipalContext! context, FabrCore.Surface.Ai.Squads.SurfaceSquad! squad, string! agentHandle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.Ai.Squads.SurfaceSquad!>!
+FabrCore.Surface.Ai.Squads.SurfaceSquad
+FabrCore.Surface.Ai.Squads.SurfaceSquad.Agents.get -> System.Collections.Generic.List<FabrCore.Surface.Ai.Squads.SurfaceSquadAgent!>!
+FabrCore.Surface.Ai.Squads.SurfaceSquad.Agents.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquad.Description.get -> string?
+FabrCore.Surface.Ai.Squads.SurfaceSquad.Description.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquad.Name.get -> string!
+FabrCore.Surface.Ai.Squads.SurfaceSquad.Name.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquad.OrchestratorHandle.get -> string!
+FabrCore.Surface.Ai.Squads.SurfaceSquad.OrchestratorHandle.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquad.PrincipalHandle.get -> string!
+FabrCore.Surface.Ai.Squads.SurfaceSquad.PrincipalHandle.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquad.Slug.get -> string!
+FabrCore.Surface.Ai.Squads.SurfaceSquad.Slug.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquad.SquadType.get -> FabrCore.Surface.Ai.Squads.SurfaceSquadType
+FabrCore.Surface.Ai.Squads.SurfaceSquad.SquadType.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquad.SurfaceSquad() -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquad.TaskOptions.get -> FabrCore.Surface.Ai.Squads.SurfaceTaskSquadOptions!
+FabrCore.Surface.Ai.Squads.SurfaceSquad.TaskOptions.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgent
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgent.AgentType.get -> string!
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgent.AgentType.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgent.Description.get -> string?
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgent.Description.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgent.Handle.get -> string!
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgent.Handle.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgent.Name.get -> string!
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgent.Name.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgent.Role.get -> FabrCore.Surface.Ai.Squads.SurfaceSquadMemberRole
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgent.Role.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgent.SurfaceSquadAgent() -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition.AgentType.get -> string!
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition.AgentType.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition.Args.get -> System.Collections.Generic.Dictionary<string!, string!>!
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition.Args.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition.Description.get -> string?
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition.Description.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition.Handle.get -> string?
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition.Handle.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition.McpServers.get -> System.Collections.Generic.List<FabrCore.Core.McpServerConfig!>!
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition.McpServers.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition.Models.get -> string!
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition.Models.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition.Name.get -> string!
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition.Name.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition.Plugins.get -> System.Collections.Generic.List<string!>!
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition.Plugins.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition.Role.get -> FabrCore.Surface.Ai.Squads.SurfaceSquadMemberRole
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition.Role.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition.Streams.get -> System.Collections.Generic.List<string!>!
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition.Streams.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition.SurfaceSquadAgentDefinition() -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition.SystemPrompt.get -> string?
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition.SystemPrompt.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition.Tools.get -> System.Collections.Generic.List<string!>!
+FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition.Tools.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadArgs
+FabrCore.Surface.Ai.Squads.SurfaceSquadBlueprintExpander
+FabrCore.Surface.Ai.Squads.SurfaceSquadBlueprintExpander.ExpandAsync(FabrCore.Core.Blueprints.BlueprintExpansionContext! context, System.Text.Json.JsonElement extension, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<FabrCore.Core.Blueprints.BlueprintExpansion!>
+FabrCore.Surface.Ai.Squads.SurfaceSquadBlueprintExpander.ExtensionKey.get -> string!
+FabrCore.Surface.Ai.Squads.SurfaceSquadBlueprintExpander.SurfaceSquadBlueprintExpander() -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadCapabilityLoader
+FabrCore.Surface.Ai.Squads.SurfaceSquadConversationBus
+FabrCore.Surface.Ai.Squads.SurfaceSquadConversationBus.MirrorAsync(FabrCore.Core.AgentMessage! message, string? messageType = null) -> System.Threading.Tasks.Task!
+FabrCore.Surface.Ai.Squads.SurfaceSquadConversationBus.SendAndReceiveAsync(FabrCore.Core.AgentMessage! request) -> System.Threading.Tasks.Task<FabrCore.Core.AgentMessage!>!
+FabrCore.Surface.Ai.Squads.SurfaceSquadConversationBus.SendAsync(FabrCore.Core.AgentMessage! request) -> System.Threading.Tasks.Task!
+FabrCore.Surface.Ai.Squads.SurfaceSquadConversationBus.Stamp(FabrCore.Core.AgentMessage! message) -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadConversationBus.SurfaceSquadConversationBus(FabrCore.Sdk.IFabrCoreAgentHost! agentHost, FabrCore.Surface.Ai.Squads.SurfaceSquadRuntime! runtime) -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadCreateResult
+FabrCore.Surface.Ai.Squads.SurfaceSquadCreateResult.AgentHealth.get -> System.Collections.Generic.List<FabrCore.Core.AgentHealthStatus!>!
+FabrCore.Surface.Ai.Squads.SurfaceSquadCreateResult.AgentHealth.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadCreateResult.Squad.get -> FabrCore.Surface.Ai.Squads.SurfaceSquad!
+FabrCore.Surface.Ai.Squads.SurfaceSquadCreateResult.Squad.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadCreateResult.SurfaceSquadCreateResult() -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadDefinition
+FabrCore.Surface.Ai.Squads.SurfaceSquadDefinition.Agents.get -> System.Collections.Generic.List<FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition!>!
+FabrCore.Surface.Ai.Squads.SurfaceSquadDefinition.Agents.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadDefinition.Description.get -> string?
+FabrCore.Surface.Ai.Squads.SurfaceSquadDefinition.Description.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadDefinition.ForceReconfigure.get -> bool
+FabrCore.Surface.Ai.Squads.SurfaceSquadDefinition.ForceReconfigure.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadDefinition.Name.get -> string!
+FabrCore.Surface.Ai.Squads.SurfaceSquadDefinition.Name.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadDefinition.OrchestratorModel.get -> string!
+FabrCore.Surface.Ai.Squads.SurfaceSquadDefinition.OrchestratorModel.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadDefinition.OrchestratorSystemPrompt.get -> string?
+FabrCore.Surface.Ai.Squads.SurfaceSquadDefinition.OrchestratorSystemPrompt.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadDefinition.SquadType.get -> FabrCore.Surface.Ai.Squads.SurfaceSquadType
+FabrCore.Surface.Ai.Squads.SurfaceSquadDefinition.SquadType.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadDefinition.SurfaceSquadDefinition() -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadDefinition.TaskOptions.get -> FabrCore.Surface.Ai.Squads.SurfaceTaskSquadOptions!
+FabrCore.Surface.Ai.Squads.SurfaceSquadDefinition.TaskOptions.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadHandleBuilder
+FabrCore.Surface.Ai.Squads.SurfaceSquadMemberRole
+FabrCore.Surface.Ai.Squads.SurfaceSquadMemberRole.Executor = 0 -> FabrCore.Surface.Ai.Squads.SurfaceSquadMemberRole
+FabrCore.Surface.Ai.Squads.SurfaceSquadMemberRole.Helper = 2 -> FabrCore.Surface.Ai.Squads.SurfaceSquadMemberRole
+FabrCore.Surface.Ai.Squads.SurfaceSquadMemberRole.SubjectMatterExpert = 1 -> FabrCore.Surface.Ai.Squads.SurfaceSquadMemberRole
+FabrCore.Surface.Ai.Squads.SurfaceSquadMessageTypes
+FabrCore.Surface.Ai.Squads.SurfaceSquadRouteParser
+FabrCore.Surface.Ai.Squads.SurfaceSquadRouteResult
+FabrCore.Surface.Ai.Squads.SurfaceSquadRouteResult.<Clone>$() -> FabrCore.Surface.Ai.Squads.SurfaceSquadRouteResult!
+FabrCore.Surface.Ai.Squads.SurfaceSquadRouteResult.Deconstruct(out bool Success, out string! TargetHandle, out string! Message, out string? Mention, out string? Error) -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadRouteResult.Equals(FabrCore.Surface.Ai.Squads.SurfaceSquadRouteResult? other) -> bool
+FabrCore.Surface.Ai.Squads.SurfaceSquadRouteResult.Error.get -> string?
+FabrCore.Surface.Ai.Squads.SurfaceSquadRouteResult.Error.init -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadRouteResult.Mention.get -> string?
+FabrCore.Surface.Ai.Squads.SurfaceSquadRouteResult.Mention.init -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadRouteResult.Message.get -> string!
+FabrCore.Surface.Ai.Squads.SurfaceSquadRouteResult.Message.init -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadRouteResult.Success.get -> bool
+FabrCore.Surface.Ai.Squads.SurfaceSquadRouteResult.Success.init -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadRouteResult.SurfaceSquadRouteResult(bool Success, string! TargetHandle, string! Message, string? Mention, string? Error) -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadRouteResult.TargetHandle.get -> string!
+FabrCore.Surface.Ai.Squads.SurfaceSquadRouteResult.TargetHandle.init -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadRuntime
+FabrCore.Surface.Ai.Squads.SurfaceSquadRuntime.FindAgent(string! name) -> FabrCore.Surface.Ai.Squads.SurfaceSquadAgent?
+FabrCore.Surface.Ai.Squads.SurfaceSquadRuntime.Squad.get -> FabrCore.Surface.Ai.Squads.SurfaceSquad!
+FabrCore.Surface.Ai.Squads.SurfaceSquadRuntime.Squad.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadRuntime.SurfaceSquadRuntime() -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadService
+FabrCore.Surface.Ai.Squads.SurfaceSquadService.AddExistingAgentAsync(FabrCore.Surface.ISurfacePrincipalContext! context, FabrCore.Surface.Ai.Squads.SurfaceSquad! squad, FabrCore.Surface.Ai.Squads.SurfaceSquadAgent! agent, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.Ai.Squads.SurfaceSquad!>!
+FabrCore.Surface.Ai.Squads.SurfaceSquadService.CreateSquadAgentAsync(FabrCore.Surface.ISurfacePrincipalContext! context, FabrCore.Surface.Ai.Squads.SurfaceSquad! squad, FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition! agentDefinition, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.Ai.Squads.SurfaceSquadCreateResult!>!
+FabrCore.Surface.Ai.Squads.SurfaceSquadService.CreateSquadAsync(FabrCore.Surface.ISurfacePrincipalContext! context, string! principalHandle, FabrCore.Surface.Ai.Squads.SurfaceSquadDefinition! definition, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.Ai.Squads.SurfaceSquadCreateResult!>!
+FabrCore.Surface.Ai.Squads.SurfaceSquadService.EnsureSquadConfiguredAsync(FabrCore.Surface.ISurfacePrincipalContext! context, FabrCore.Surface.Ai.Squads.SurfaceSquad! squad, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.Ai.Squads.SurfaceSquadCreateResult!>!
+FabrCore.Surface.Ai.Squads.SurfaceSquadService.RemoveAgentAsync(FabrCore.Surface.ISurfacePrincipalContext! context, FabrCore.Surface.Ai.Squads.SurfaceSquad! squad, string! agentHandle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.Ai.Squads.SurfaceSquad!>!
+FabrCore.Surface.Ai.Squads.SurfaceSquadService.SurfaceSquadService() -> void
+FabrCore.Surface.Ai.Squads.SurfaceSquadType
+FabrCore.Surface.Ai.Squads.SurfaceSquadType.Orchestrator = 1 -> FabrCore.Surface.Ai.Squads.SurfaceSquadType
+FabrCore.Surface.Ai.Squads.SurfaceSquadType.Task = 2 -> FabrCore.Surface.Ai.Squads.SurfaceSquadType
+FabrCore.Surface.Ai.Squads.SurfaceTaskSquadOptions
+FabrCore.Surface.Ai.Squads.SurfaceTaskSquadOptions.ClientAgentOverlay.get -> string?
+FabrCore.Surface.Ai.Squads.SurfaceTaskSquadOptions.ClientAgentOverlay.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceTaskSquadOptions.DelegationTimeoutSeconds.get -> int
+FabrCore.Surface.Ai.Squads.SurfaceTaskSquadOptions.DelegationTimeoutSeconds.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceTaskSquadOptions.MaxLoopIterations.get -> int
+FabrCore.Surface.Ai.Squads.SurfaceTaskSquadOptions.MaxLoopIterations.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceTaskSquadOptions.PersonaPrompt.get -> string?
+FabrCore.Surface.Ai.Squads.SurfaceTaskSquadOptions.PersonaPrompt.set -> void
+FabrCore.Surface.Ai.Squads.SurfaceTaskSquadOptions.SurfaceTaskSquadOptions() -> void
+FabrCore.Surface.Ai.Squads.SurfaceTaskSquadOptions.WorkerModelName.get -> string!
+FabrCore.Surface.Ai.Squads.SurfaceTaskSquadOptions.WorkerModelName.set -> void
+FabrCore.Surface.Ai.Tasks.SurfaceTaskAgentTypes
+FabrCore.Surface.Ai.Tasks.SurfaceTaskHarnessAgent
+FabrCore.Surface.Ai.Tasks.SurfaceTaskHarnessAgent.SurfaceTaskHarnessAgent(FabrCore.Core.AgentConfiguration! config, System.IServiceProvider! serviceProvider, FabrCore.Sdk.IFabrCoreAgentHost! fabrcoreAgentHost) -> void
+FabrCore.Surface.Api.SurfaceRemoteAdminController
+FabrCore.Surface.Api.SurfaceRemoteAdminController.GetCapabilities() -> Microsoft.AspNetCore.Mvc.IActionResult!
+FabrCore.Surface.Api.SurfaceRemoteAdminController.GetPreferences(string! principalId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Surface.Api.SurfaceRemoteAdminController.GetSquads(string! principalId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Surface.Api.SurfaceRemoteAdminController.ResetPreferences(string! principalId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Surface.Api.SurfaceRemoteAdminController.ResetSquads(string! principalId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Surface.Api.SurfaceRemoteAdminController.SavePreferences(string! principalId, FabrCore.Surface.CommandCenter.SurfacePreferences! preferences, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Surface.Api.SurfaceRemoteAdminController.SaveSquads(string! principalId, System.Collections.Generic.IReadOnlyList<FabrCore.Surface.Ai.Squads.SurfaceSquad!>! squads, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Surface.Api.SurfaceRemoteAdminController.SurfaceRemoteAdminController(FabrCore.Sdk.IPrincipalScopedFabrCoreStorageProvider! storage, Microsoft.Extensions.Options.IOptions<FabrCore.Surface.Services.SurfaceOptions!>! options, System.Collections.Generic.IEnumerable<FabrCore.Core.Blueprints.IBlueprintExpander!>! blueprintExpanders, FabrCore.Core.Auditing.IAuditProvider? audit = null) -> void
+FabrCore.Surface.Api.SurfaceRemoteAdminController.ValidateBlueprint(string! principalId, FabrCore.Core.Blueprints.FabrCoreBlueprint! blueprint, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Surface.Api.SurfaceSquadAdminState
+FabrCore.Surface.Api.SurfaceSquadAdminState.Squads.get -> System.Collections.Generic.List<FabrCore.Surface.Ai.Squads.SurfaceSquad!>!
+FabrCore.Surface.Api.SurfaceSquadAdminState.Squads.set -> void
+FabrCore.Surface.Api.SurfaceSquadAdminState.SurfaceSquadAdminState() -> void
+FabrCore.Surface.Api.SurfaceSquadAdminState.Version.get -> int
+FabrCore.Surface.Api.SurfaceSquadAdminState.Version.set -> void
+FabrCore.Surface.Brain.SurfaceEnvelope
+FabrCore.Surface.Builders.SurfaceActions
+FabrCore.Surface.CommandCenter.ISurfaceBlueprintClient
+FabrCore.Surface.CommandCenter.ISurfaceBlueprintClient.ApplyAsync(string! principalId, FabrCore.Surface.CommandCenter.SurfaceBlueprintDocument! blueprint, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.CommandCenter.SurfaceBlueprintApplyResult!>!
+FabrCore.Surface.CommandCenter.ISurfaceBlueprintClient.GetAsync(string! principalId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.CommandCenter.SurfaceBlueprintDocument?>!
+FabrCore.Surface.CommandCenter.ISurfaceBlueprintClient.SaveAsync(string! principalId, FabrCore.Surface.CommandCenter.SurfaceBlueprintDocument! blueprint, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Surface.CommandCenter.ISurfaceDiscoveryClient
+FabrCore.Surface.CommandCenter.ISurfaceDiscoveryClient.GetDiscoveryAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.CommandCenter.SurfaceDiscoveryResponse!>!
+FabrCore.Surface.CommandCenter.ISurfaceFileUploadClient
+FabrCore.Surface.CommandCenter.ISurfaceFileUploadClient.DeleteAsync(string! fileId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Surface.CommandCenter.ISurfaceFileUploadClient.UploadAsync(System.IO.Stream! stream, string! fileName, string? contentType, System.TimeSpan ttl, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.CommandCenter.SurfaceUploadedFile!>!
+FabrCore.Surface.CommandCenter.ISurfaceMonitorClient
+FabrCore.Surface.CommandCenter.ISurfaceMonitorClient.GetConfigAsync(string! principalId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.CommandCenter.SurfaceMonitorConfigResponse!>!
+FabrCore.Surface.CommandCenter.ISurfaceMonitorClient.GetErrorsAsync(string! principalId, string? agentHandle = null, int limit = 25, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.CommandCenter.SurfaceMonitorErrorsResponse!>!
+FabrCore.Surface.CommandCenter.ISurfaceMonitorClient.GetEventsAsync(string! principalId, string? agentHandle = null, int limit = 25, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.CommandCenter.SurfaceMonitorEventsResponse!>!
+FabrCore.Surface.CommandCenter.ISurfaceMonitorClient.GetLlmCallsAsync(string! principalId, string? agentHandle = null, int limit = 25, bool failedOnly = false, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.CommandCenter.SurfaceMonitorLlmCallsResponse!>!
+FabrCore.Surface.CommandCenter.ISurfaceMonitorClient.GetMessagesAsync(string! principalId, string? agentHandle = null, int limit = 25, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.CommandCenter.SurfaceMonitorMessagesResponse!>!
+FabrCore.Surface.CommandCenter.ISurfaceMonitorClient.GetTokenSummariesAsync(string! principalId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.CommandCenter.SurfaceMonitorTokenResponse!>!
+FabrCore.Surface.CommandCenter.ISurfaceMonitorClient.UpdateConfigAsync(string! principalId, FabrCore.Surface.CommandCenter.SurfaceMonitorConfigUpdate! update, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.CommandCenter.SurfaceMonitorConfigResponse!>!
+FabrCore.Surface.CommandCenter.ISurfacePreferencesClient
+FabrCore.Surface.CommandCenter.ISurfacePreferencesClient.GetAsync(string! principalId, FabrCore.Surface.Services.SurfaceOptions! defaults, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.CommandCenter.SurfacePreferences!>!
+FabrCore.Surface.CommandCenter.ISurfacePreferencesClient.SaveAsync(string! principalId, FabrCore.Surface.CommandCenter.SurfacePreferences! preferences, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Surface.CommandCenter.ISurfaceSquadConfigClient
+FabrCore.Surface.CommandCenter.ISurfaceSquadConfigClient.GetAsync(string! principalId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<FabrCore.Surface.Ai.Squads.SurfaceSquad!>!>!
+FabrCore.Surface.CommandCenter.ISurfaceSquadConfigClient.SaveAsync(string! principalId, System.Collections.Generic.IReadOnlyList<FabrCore.Surface.Ai.Squads.SurfaceSquad!>! squads, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Surface.CommandCenter.SurfaceAgentBlueprintRequest
+FabrCore.Surface.CommandCenter.SurfaceAgentBlueprintRequest.Agents.get -> System.Collections.Generic.List<FabrCore.Core.AgentConfiguration!>!
+FabrCore.Surface.CommandCenter.SurfaceAgentBlueprintRequest.Agents.set -> void
+FabrCore.Surface.CommandCenter.SurfaceAgentBlueprintRequest.Name.get -> string?
+FabrCore.Surface.CommandCenter.SurfaceAgentBlueprintRequest.Name.set -> void
+FabrCore.Surface.CommandCenter.SurfaceAgentBlueprintRequest.SurfaceAgentBlueprintRequest() -> void
+FabrCore.Surface.CommandCenter.SurfaceAgentBlueprintRequest.Version.get -> string?
+FabrCore.Surface.CommandCenter.SurfaceAgentBlueprintRequest.Version.set -> void
+FabrCore.Surface.CommandCenter.SurfaceAgentConfigurationDraft
+FabrCore.Surface.CommandCenter.SurfaceAgentConfigurationDraft.AgentType.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceAgentConfigurationDraft.AgentType.set -> void
+FabrCore.Surface.CommandCenter.SurfaceAgentConfigurationDraft.Args.get -> System.Collections.Generic.List<FabrCore.Surface.CommandCenter.SurfaceKeyValueDraftRow!>!
+FabrCore.Surface.CommandCenter.SurfaceAgentConfigurationDraft.Build() -> FabrCore.Core.AgentConfiguration!
+FabrCore.Surface.CommandCenter.SurfaceAgentConfigurationDraft.Description.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceAgentConfigurationDraft.Description.set -> void
+FabrCore.Surface.CommandCenter.SurfaceAgentConfigurationDraft.ForceReconfigure.get -> bool
+FabrCore.Surface.CommandCenter.SurfaceAgentConfigurationDraft.ForceReconfigure.set -> void
+FabrCore.Surface.CommandCenter.SurfaceAgentConfigurationDraft.Handle.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceAgentConfigurationDraft.Handle.set -> void
+FabrCore.Surface.CommandCenter.SurfaceAgentConfigurationDraft.HasPluginAlias(string! alias) -> bool
+FabrCore.Surface.CommandCenter.SurfaceAgentConfigurationDraft.HasToolAlias(string! alias) -> bool
+FabrCore.Surface.CommandCenter.SurfaceAgentConfigurationDraft.McpServers.get -> System.Collections.Generic.List<FabrCore.Surface.CommandCenter.SurfaceMcpServerDraft!>!
+FabrCore.Surface.CommandCenter.SurfaceAgentConfigurationDraft.Models.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceAgentConfigurationDraft.Models.set -> void
+FabrCore.Surface.CommandCenter.SurfaceAgentConfigurationDraft.PluginAliases.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceAgentConfigurationDraft.PluginAliases.set -> void
+FabrCore.Surface.CommandCenter.SurfaceAgentConfigurationDraft.Streams.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceAgentConfigurationDraft.Streams.set -> void
+FabrCore.Surface.CommandCenter.SurfaceAgentConfigurationDraft.SurfaceAgentConfigurationDraft() -> void
+FabrCore.Surface.CommandCenter.SurfaceAgentConfigurationDraft.SystemPrompt.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceAgentConfigurationDraft.SystemPrompt.set -> void
+FabrCore.Surface.CommandCenter.SurfaceAgentConfigurationDraft.TogglePluginAlias(string! alias) -> void
+FabrCore.Surface.CommandCenter.SurfaceAgentConfigurationDraft.ToggleToolAlias(string! alias) -> void
+FabrCore.Surface.CommandCenter.SurfaceAgentConfigurationDraft.ToolAliases.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceAgentConfigurationDraft.ToolAliases.set -> void
+FabrCore.Surface.CommandCenter.SurfaceAgentList
+FabrCore.Surface.CommandCenter.SurfaceAgentSummary
+FabrCore.Surface.CommandCenter.SurfaceAgentSummary.AgentType.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceAgentSummary.AgentType.set -> void
+FabrCore.Surface.CommandCenter.SurfaceAgentSummary.DisplayName.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceAgentSummary.DisplayName.set -> void
+FabrCore.Surface.CommandCenter.SurfaceAgentSummary.Handle.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceAgentSummary.Handle.set -> void
+FabrCore.Surface.CommandCenter.SurfaceAgentSummary.HasUnread.get -> bool
+FabrCore.Surface.CommandCenter.SurfaceAgentSummary.Health.get -> FabrCore.Core.AgentHealthStatus?
+FabrCore.Surface.CommandCenter.SurfaceAgentSummary.Health.set -> void
+FabrCore.Surface.CommandCenter.SurfaceAgentSummary.IsHidden.get -> bool
+FabrCore.Surface.CommandCenter.SurfaceAgentSummary.IsHidden.set -> void
+FabrCore.Surface.CommandCenter.SurfaceAgentSummary.IsShared.get -> bool
+FabrCore.Surface.CommandCenter.SurfaceAgentSummary.IsShared.set -> void
+FabrCore.Surface.CommandCenter.SurfaceAgentSummary.IsSurfaceAgent.get -> bool
+FabrCore.Surface.CommandCenter.SurfaceAgentSummary.IsSurfaceAgent.set -> void
+FabrCore.Surface.CommandCenter.SurfaceAgentSummary.IsWorking.get -> bool
+FabrCore.Surface.CommandCenter.SurfaceAgentSummary.IsWorking.set -> void
+FabrCore.Surface.CommandCenter.SurfaceAgentSummary.LastActivityUtc.get -> System.DateTime
+FabrCore.Surface.CommandCenter.SurfaceAgentSummary.LastActivityUtc.set -> void
+FabrCore.Surface.CommandCenter.SurfaceAgentSummary.State.get -> FabrCore.Core.HealthState
+FabrCore.Surface.CommandCenter.SurfaceAgentSummary.StatusText.get -> string?
+FabrCore.Surface.CommandCenter.SurfaceAgentSummary.StatusText.set -> void
+FabrCore.Surface.CommandCenter.SurfaceAgentSummary.SurfaceAgentSummary() -> void
+FabrCore.Surface.CommandCenter.SurfaceAgentSummary.UnreadCount.get -> int
+FabrCore.Surface.CommandCenter.SurfaceAgentSummary.UnreadCount.set -> void
+FabrCore.Surface.CommandCenter.SurfaceBlueprintApplyResult
+FabrCore.Surface.CommandCenter.SurfaceBlueprintApplyResult.AgentConfigurationsRequested.get -> int
+FabrCore.Surface.CommandCenter.SurfaceBlueprintApplyResult.AgentConfigurationsRequested.set -> void
+FabrCore.Surface.CommandCenter.SurfaceBlueprintApplyResult.FailureCount.get -> int
+FabrCore.Surface.CommandCenter.SurfaceBlueprintApplyResult.FailureCount.set -> void
+FabrCore.Surface.CommandCenter.SurfaceBlueprintApplyResult.Name.get -> string?
+FabrCore.Surface.CommandCenter.SurfaceBlueprintApplyResult.Name.set -> void
+FabrCore.Surface.CommandCenter.SurfaceBlueprintApplyResult.Results.get -> System.Collections.Generic.List<FabrCore.Core.AgentHealthStatus!>!
+FabrCore.Surface.CommandCenter.SurfaceBlueprintApplyResult.Results.set -> void
+FabrCore.Surface.CommandCenter.SurfaceBlueprintApplyResult.SquadsCreated.get -> int
+FabrCore.Surface.CommandCenter.SurfaceBlueprintApplyResult.SquadsCreated.set -> void
+FabrCore.Surface.CommandCenter.SurfaceBlueprintApplyResult.SquadsSkipped.get -> int
+FabrCore.Surface.CommandCenter.SurfaceBlueprintApplyResult.SquadsSkipped.set -> void
+FabrCore.Surface.CommandCenter.SurfaceBlueprintApplyResult.SuccessCount.get -> int
+FabrCore.Surface.CommandCenter.SurfaceBlueprintApplyResult.SuccessCount.set -> void
+FabrCore.Surface.CommandCenter.SurfaceBlueprintApplyResult.SurfaceBlueprintApplyResult() -> void
+FabrCore.Surface.CommandCenter.SurfaceBlueprintApplyResult.TotalRequested.get -> int
+FabrCore.Surface.CommandCenter.SurfaceBlueprintApplyResult.TotalRequested.set -> void
+FabrCore.Surface.CommandCenter.SurfaceBlueprintApplyResult.Version.get -> string?
+FabrCore.Surface.CommandCenter.SurfaceBlueprintApplyResult.Version.set -> void
+FabrCore.Surface.CommandCenter.SurfaceBlueprintClient
+FabrCore.Surface.CommandCenter.SurfaceBlueprintClient.ApplyAsync(string! principalId, FabrCore.Surface.CommandCenter.SurfaceBlueprintDocument! blueprint, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.CommandCenter.SurfaceBlueprintApplyResult!>!
+FabrCore.Surface.CommandCenter.SurfaceBlueprintClient.GetAsync(string! principalId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.CommandCenter.SurfaceBlueprintDocument?>!
+FabrCore.Surface.CommandCenter.SurfaceBlueprintClient.SaveAsync(string! principalId, FabrCore.Surface.CommandCenter.SurfaceBlueprintDocument! blueprint, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Surface.CommandCenter.SurfaceBlueprintClient.SurfaceBlueprintClient(System.Net.Http.HttpClient! httpClient, Microsoft.Extensions.Options.IOptions<FabrCore.Surface.Services.SurfaceOptions!>! options, Microsoft.Extensions.Logging.ILogger<FabrCore.Surface.CommandCenter.SurfaceBlueprintClient!>! logger) -> void
+FabrCore.Surface.CommandCenter.SurfaceBlueprintDocument
+FabrCore.Surface.CommandCenter.SurfaceBlueprintDocument.Squads.get -> System.Collections.Generic.List<FabrCore.Surface.Ai.Squads.SurfaceSquadDefinition!>!
+FabrCore.Surface.CommandCenter.SurfaceBlueprintDocument.Squads.set -> void
+FabrCore.Surface.CommandCenter.SurfaceBlueprintDocument.SurfaceBlueprintDocument() -> void
+FabrCore.Surface.CommandCenter.SurfaceBlueprintProvisioner
+FabrCore.Surface.CommandCenter.SurfaceBlueprintProvisioner.ApplyAsync(string! principalId, FabrCore.Surface.CommandCenter.SurfaceBlueprintDocument! blueprint, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.CommandCenter.SurfaceBlueprintApplyResult!>!
+FabrCore.Surface.CommandCenter.SurfaceBlueprintProvisioner.ApplyStoredAsync(string! principalId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.CommandCenter.SurfaceBlueprintApplyResult?>!
+FabrCore.Surface.CommandCenter.SurfaceBlueprintProvisioner.SurfaceBlueprintProvisioner(FabrCore.Surface.CommandCenter.ISurfaceBlueprintClient! blueprintClient, Microsoft.Extensions.Logging.ILogger<FabrCore.Surface.CommandCenter.SurfaceBlueprintProvisioner!>! logger, FabrCore.Surface.CommandCenter.ISurfaceSquadConfigClient? squadConfigClient = null) -> void
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryClient
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryClient.GetDiscoveryAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.CommandCenter.SurfaceDiscoveryResponse!>!
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryClient.SurfaceDiscoveryClient(System.Net.Http.HttpClient! httpClient, Microsoft.Extensions.Options.IOptions<FabrCore.Surface.Services.SurfaceOptions!>! options, Microsoft.Extensions.Logging.ILogger<FabrCore.Surface.CommandCenter.SurfaceDiscoveryClient!>! logger) -> void
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryCollision
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryCollision.Alias.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryCollision.Alias.set -> void
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryCollision.Category.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryCollision.Category.set -> void
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryCollision.SurfaceDiscoveryRegistryCollision() -> void
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryCollision.Types.get -> System.Collections.Generic.List<string!>!
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryCollision.Types.set -> void
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryEntry
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryEntry.Aliases.get -> System.Collections.Generic.List<string!>!
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryEntry.Aliases.set -> void
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryEntry.Capabilities.get -> string?
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryEntry.Capabilities.set -> void
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryEntry.Description.get -> string?
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryEntry.Description.set -> void
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryEntry.Methods.get -> System.Collections.Generic.List<FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryMethod!>!
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryEntry.Methods.set -> void
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryEntry.Notes.get -> System.Collections.Generic.List<string!>!
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryEntry.Notes.set -> void
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryEntry.SurfaceDiscoveryRegistryEntry() -> void
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryEntry.TypeName.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryEntry.TypeName.set -> void
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryMethod
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryMethod.Description.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryMethod.Description.set -> void
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryMethod.Name.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryMethod.Name.set -> void
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryMethod.SurfaceDiscoveryRegistryMethod() -> void
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryResponse
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryResponse.Agents.get -> System.Collections.Generic.List<FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryEntry!>!
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryResponse.Agents.set -> void
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryResponse.Collisions.get -> System.Collections.Generic.List<FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryCollision!>?
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryResponse.Collisions.set -> void
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryResponse.Models.get -> System.Collections.Generic.List<FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryEntry!>!
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryResponse.Models.set -> void
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryResponse.Plugins.get -> System.Collections.Generic.List<FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryEntry!>!
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryResponse.Plugins.set -> void
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryResponse.SurfaceDiscoveryResponse() -> void
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryResponse.Tools.get -> System.Collections.Generic.List<FabrCore.Surface.CommandCenter.SurfaceDiscoveryRegistryEntry!>!
+FabrCore.Surface.CommandCenter.SurfaceDiscoveryResponse.Tools.set -> void
+FabrCore.Surface.CommandCenter.SurfaceFileUploadClient
+FabrCore.Surface.CommandCenter.SurfaceFileUploadClient.DeleteAsync(string! fileId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Surface.CommandCenter.SurfaceFileUploadClient.SurfaceFileUploadClient(FabrCore.Sdk.IFabrCoreHostApiClient! hostApiClient, Microsoft.Extensions.Logging.ILogger<FabrCore.Surface.CommandCenter.SurfaceFileUploadClient!>! logger) -> void
+FabrCore.Surface.CommandCenter.SurfaceFileUploadClient.UploadAsync(System.IO.Stream! stream, string! fileName, string? contentType, System.TimeSpan ttl, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.CommandCenter.SurfaceUploadedFile!>!
+FabrCore.Surface.CommandCenter.SurfaceKeyValueDraftRow
+FabrCore.Surface.CommandCenter.SurfaceKeyValueDraftRow.Key.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceKeyValueDraftRow.Key.set -> void
+FabrCore.Surface.CommandCenter.SurfaceKeyValueDraftRow.SurfaceKeyValueDraftRow() -> void
+FabrCore.Surface.CommandCenter.SurfaceKeyValueDraftRow.Value.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceKeyValueDraftRow.Value.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMarkdownRenderer
+FabrCore.Surface.CommandCenter.SurfaceMcpServerDraft
+FabrCore.Surface.CommandCenter.SurfaceMcpServerDraft.Arguments.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceMcpServerDraft.Arguments.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMcpServerDraft.Build() -> FabrCore.Core.McpServerConfig!
+FabrCore.Surface.CommandCenter.SurfaceMcpServerDraft.Command.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceMcpServerDraft.Command.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMcpServerDraft.Env.get -> System.Collections.Generic.List<FabrCore.Surface.CommandCenter.SurfaceKeyValueDraftRow!>!
+FabrCore.Surface.CommandCenter.SurfaceMcpServerDraft.Headers.get -> System.Collections.Generic.List<FabrCore.Surface.CommandCenter.SurfaceKeyValueDraftRow!>!
+FabrCore.Surface.CommandCenter.SurfaceMcpServerDraft.Name.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceMcpServerDraft.Name.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMcpServerDraft.SurfaceMcpServerDraft() -> void
+FabrCore.Surface.CommandCenter.SurfaceMcpServerDraft.TransportType.get -> FabrCore.Core.McpTransportType
+FabrCore.Surface.CommandCenter.SurfaceMcpServerDraft.TransportType.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMcpServerDraft.Url.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceMcpServerDraft.Url.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMessageClassifier
+FabrCore.Surface.CommandCenter.SurfaceMonitorClient
+FabrCore.Surface.CommandCenter.SurfaceMonitorClient.GetConfigAsync(string! principalId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.CommandCenter.SurfaceMonitorConfigResponse!>!
+FabrCore.Surface.CommandCenter.SurfaceMonitorClient.GetErrorsAsync(string! principalId, string? agentHandle = null, int limit = 25, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.CommandCenter.SurfaceMonitorErrorsResponse!>!
+FabrCore.Surface.CommandCenter.SurfaceMonitorClient.GetEventsAsync(string! principalId, string? agentHandle = null, int limit = 25, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.CommandCenter.SurfaceMonitorEventsResponse!>!
+FabrCore.Surface.CommandCenter.SurfaceMonitorClient.GetLlmCallsAsync(string! principalId, string? agentHandle = null, int limit = 25, bool failedOnly = false, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.CommandCenter.SurfaceMonitorLlmCallsResponse!>!
+FabrCore.Surface.CommandCenter.SurfaceMonitorClient.GetMessagesAsync(string! principalId, string? agentHandle = null, int limit = 25, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.CommandCenter.SurfaceMonitorMessagesResponse!>!
+FabrCore.Surface.CommandCenter.SurfaceMonitorClient.GetTokenSummariesAsync(string! principalId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.CommandCenter.SurfaceMonitorTokenResponse!>!
+FabrCore.Surface.CommandCenter.SurfaceMonitorClient.SurfaceMonitorClient(System.Net.Http.HttpClient! httpClient, Microsoft.Extensions.Options.IOptions<FabrCore.Surface.Services.SurfaceOptions!>! options, Microsoft.Extensions.Logging.ILogger<FabrCore.Surface.CommandCenter.SurfaceMonitorClient!>! logger) -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorClient.UpdateConfigAsync(string! principalId, FabrCore.Surface.CommandCenter.SurfaceMonitorConfigUpdate! update, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.CommandCenter.SurfaceMonitorConfigResponse!>!
+FabrCore.Surface.CommandCenter.SurfaceMonitorConfigResponse
+FabrCore.Surface.CommandCenter.SurfaceMonitorConfigResponse.CapturePayloads.get -> bool
+FabrCore.Surface.CommandCenter.SurfaceMonitorConfigResponse.CapturePayloads.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorConfigResponse.Enabled.get -> bool
+FabrCore.Surface.CommandCenter.SurfaceMonitorConfigResponse.Enabled.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorConfigResponse.MaxBufferedCalls.get -> int
+FabrCore.Surface.CommandCenter.SurfaceMonitorConfigResponse.MaxBufferedCalls.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorConfigResponse.MaxPayloadChars.get -> int
+FabrCore.Surface.CommandCenter.SurfaceMonitorConfigResponse.MaxPayloadChars.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorConfigResponse.MaxToolArgsChars.get -> int
+FabrCore.Surface.CommandCenter.SurfaceMonitorConfigResponse.MaxToolArgsChars.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorConfigResponse.MonitorProvider.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceMonitorConfigResponse.MonitorProvider.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorConfigResponse.RecordingAvailable.get -> bool
+FabrCore.Surface.CommandCenter.SurfaceMonitorConfigResponse.RecordingAvailable.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorConfigResponse.SurfaceMonitorConfigResponse() -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorConfigUpdate
+FabrCore.Surface.CommandCenter.SurfaceMonitorConfigUpdate.CapturePayloads.get -> bool?
+FabrCore.Surface.CommandCenter.SurfaceMonitorConfigUpdate.CapturePayloads.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorConfigUpdate.Enabled.get -> bool?
+FabrCore.Surface.CommandCenter.SurfaceMonitorConfigUpdate.Enabled.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorConfigUpdate.MaxBufferedCalls.get -> int?
+FabrCore.Surface.CommandCenter.SurfaceMonitorConfigUpdate.MaxBufferedCalls.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorConfigUpdate.MaxPayloadChars.get -> int?
+FabrCore.Surface.CommandCenter.SurfaceMonitorConfigUpdate.MaxPayloadChars.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorConfigUpdate.MaxToolArgsChars.get -> int?
+FabrCore.Surface.CommandCenter.SurfaceMonitorConfigUpdate.MaxToolArgsChars.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorConfigUpdate.SurfaceMonitorConfigUpdate() -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorErrorEntry
+FabrCore.Surface.CommandCenter.SurfaceMonitorErrorEntry.AgentHandle.get -> string?
+FabrCore.Surface.CommandCenter.SurfaceMonitorErrorEntry.AgentHandle.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorErrorEntry.DurationMs.get -> long
+FabrCore.Surface.CommandCenter.SurfaceMonitorErrorEntry.DurationMs.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorErrorEntry.ErrorMessage.get -> string?
+FabrCore.Surface.CommandCenter.SurfaceMonitorErrorEntry.ErrorMessage.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorErrorEntry.Model.get -> string?
+FabrCore.Surface.CommandCenter.SurfaceMonitorErrorEntry.Model.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorErrorEntry.OriginContext.get -> string?
+FabrCore.Surface.CommandCenter.SurfaceMonitorErrorEntry.OriginContext.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorErrorEntry.ParentMessageId.get -> string?
+FabrCore.Surface.CommandCenter.SurfaceMonitorErrorEntry.ParentMessageId.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorErrorEntry.SurfaceMonitorErrorEntry() -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorErrorEntry.Timestamp.get -> System.DateTimeOffset
+FabrCore.Surface.CommandCenter.SurfaceMonitorErrorEntry.Timestamp.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorErrorsResponse
+FabrCore.Surface.CommandCenter.SurfaceMonitorErrorsResponse.ByAgent.get -> System.Collections.Generic.Dictionary<string!, int>!
+FabrCore.Surface.CommandCenter.SurfaceMonitorErrorsResponse.ByAgent.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorErrorsResponse.ByModel.get -> System.Collections.Generic.Dictionary<string!, int>!
+FabrCore.Surface.CommandCenter.SurfaceMonitorErrorsResponse.ByModel.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorErrorsResponse.Recent.get -> System.Collections.Generic.List<FabrCore.Surface.CommandCenter.SurfaceMonitorErrorEntry!>!
+FabrCore.Surface.CommandCenter.SurfaceMonitorErrorsResponse.Recent.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorErrorsResponse.Since.get -> System.DateTimeOffset?
+FabrCore.Surface.CommandCenter.SurfaceMonitorErrorsResponse.Since.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorErrorsResponse.SurfaceMonitorErrorsResponse() -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorErrorsResponse.TotalErrors.get -> int
+FabrCore.Surface.CommandCenter.SurfaceMonitorErrorsResponse.TotalErrors.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorEventsResponse
+FabrCore.Surface.CommandCenter.SurfaceMonitorEventsResponse.Count.get -> int
+FabrCore.Surface.CommandCenter.SurfaceMonitorEventsResponse.Count.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorEventsResponse.Events.get -> System.Collections.Generic.List<FabrCore.Core.Monitoring.MonitoredEvent!>!
+FabrCore.Surface.CommandCenter.SurfaceMonitorEventsResponse.Events.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorEventsResponse.Limit.get -> int
+FabrCore.Surface.CommandCenter.SurfaceMonitorEventsResponse.Limit.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorEventsResponse.SurfaceMonitorEventsResponse() -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorLlmCallsResponse
+FabrCore.Surface.CommandCenter.SurfaceMonitorLlmCallsResponse.Calls.get -> System.Collections.Generic.List<FabrCore.Core.Monitoring.MonitoredLlmCall!>!
+FabrCore.Surface.CommandCenter.SurfaceMonitorLlmCallsResponse.Calls.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorLlmCallsResponse.Count.get -> int
+FabrCore.Surface.CommandCenter.SurfaceMonitorLlmCallsResponse.Count.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorLlmCallsResponse.Limit.get -> int
+FabrCore.Surface.CommandCenter.SurfaceMonitorLlmCallsResponse.Limit.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorLlmCallsResponse.PayloadsCaptured.get -> bool
+FabrCore.Surface.CommandCenter.SurfaceMonitorLlmCallsResponse.PayloadsCaptured.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorLlmCallsResponse.SurfaceMonitorLlmCallsResponse() -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorMessagesResponse
+FabrCore.Surface.CommandCenter.SurfaceMonitorMessagesResponse.Count.get -> int
+FabrCore.Surface.CommandCenter.SurfaceMonitorMessagesResponse.Count.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorMessagesResponse.Limit.get -> int
+FabrCore.Surface.CommandCenter.SurfaceMonitorMessagesResponse.Limit.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorMessagesResponse.Messages.get -> System.Collections.Generic.List<FabrCore.Core.Monitoring.MonitoredMessage!>!
+FabrCore.Surface.CommandCenter.SurfaceMonitorMessagesResponse.Messages.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorMessagesResponse.SurfaceMonitorMessagesResponse() -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorTokenResponse
+FabrCore.Surface.CommandCenter.SurfaceMonitorTokenResponse.AgentCount.get -> int
+FabrCore.Surface.CommandCenter.SurfaceMonitorTokenResponse.AgentCount.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorTokenResponse.Agents.get -> System.Collections.Generic.List<FabrCore.Core.Monitoring.AgentTokenSummary!>!
+FabrCore.Surface.CommandCenter.SurfaceMonitorTokenResponse.Agents.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorTokenResponse.SurfaceMonitorTokenResponse() -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorTokenResponse.Totals.get -> FabrCore.Surface.CommandCenter.SurfaceMonitorTokenTotals!
+FabrCore.Surface.CommandCenter.SurfaceMonitorTokenResponse.Totals.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorTokenTotals
+FabrCore.Surface.CommandCenter.SurfaceMonitorTokenTotals.CachedInputTokens.get -> long
+FabrCore.Surface.CommandCenter.SurfaceMonitorTokenTotals.CachedInputTokens.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorTokenTotals.InputTokens.get -> long
+FabrCore.Surface.CommandCenter.SurfaceMonitorTokenTotals.InputTokens.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorTokenTotals.LlmCalls.get -> long
+FabrCore.Surface.CommandCenter.SurfaceMonitorTokenTotals.LlmCalls.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorTokenTotals.Messages.get -> long
+FabrCore.Surface.CommandCenter.SurfaceMonitorTokenTotals.Messages.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorTokenTotals.OutputTokens.get -> long
+FabrCore.Surface.CommandCenter.SurfaceMonitorTokenTotals.OutputTokens.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorTokenTotals.ReasoningTokens.get -> long
+FabrCore.Surface.CommandCenter.SurfaceMonitorTokenTotals.ReasoningTokens.set -> void
+FabrCore.Surface.CommandCenter.SurfaceMonitorTokenTotals.SurfaceMonitorTokenTotals() -> void
+FabrCore.Surface.CommandCenter.SurfacePendingAttachment
+FabrCore.Surface.CommandCenter.SurfacePendingAttachment.ContentType.get -> string?
+FabrCore.Surface.CommandCenter.SurfacePendingAttachment.DeleteWhenUploaded.get -> bool
+FabrCore.Surface.CommandCenter.SurfacePendingAttachment.DeleteWhenUploaded.set -> void
+FabrCore.Surface.CommandCenter.SurfacePendingAttachment.Error.get -> string?
+FabrCore.Surface.CommandCenter.SurfacePendingAttachment.Error.set -> void
+FabrCore.Surface.CommandCenter.SurfacePendingAttachment.FileId.get -> string?
+FabrCore.Surface.CommandCenter.SurfacePendingAttachment.FileId.set -> void
+FabrCore.Surface.CommandCenter.SurfacePendingAttachment.Id.get -> string!
+FabrCore.Surface.CommandCenter.SurfacePendingAttachment.IsReady.get -> bool
+FabrCore.Surface.CommandCenter.SurfacePendingAttachment.IsUploading.get -> bool
+FabrCore.Surface.CommandCenter.SurfacePendingAttachment.IsUploading.set -> void
+FabrCore.Surface.CommandCenter.SurfacePendingAttachment.Name.get -> string!
+FabrCore.Surface.CommandCenter.SurfacePendingAttachment.Size.get -> long
+FabrCore.Surface.CommandCenter.SurfacePendingAttachment.SurfacePendingAttachment(string! name, long size, string? contentType) -> void
+FabrCore.Surface.CommandCenter.SurfacePreferences
+FabrCore.Surface.CommandCenter.SurfacePreferences.ShowHiddenAgents.get -> bool
+FabrCore.Surface.CommandCenter.SurfacePreferences.ShowHiddenAgents.set -> void
+FabrCore.Surface.CommandCenter.SurfacePreferences.ShowRunningAgents.get -> bool
+FabrCore.Surface.CommandCenter.SurfacePreferences.ShowRunningAgents.set -> void
+FabrCore.Surface.CommandCenter.SurfacePreferences.SurfaceAgentHandles.get -> System.Collections.Generic.HashSet<string!>!
+FabrCore.Surface.CommandCenter.SurfacePreferences.SurfaceAgentHandles.set -> void
+FabrCore.Surface.CommandCenter.SurfacePreferences.SurfacePreferences() -> void
+FabrCore.Surface.CommandCenter.SurfacePreferences.Version.get -> int
+FabrCore.Surface.CommandCenter.SurfacePreferences.Version.set -> void
+FabrCore.Surface.CommandCenter.SurfacePreferencesClient
+FabrCore.Surface.CommandCenter.SurfacePreferencesClient.GetAsync(string! principalId, FabrCore.Surface.Services.SurfaceOptions! defaults, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.CommandCenter.SurfacePreferences!>!
+FabrCore.Surface.CommandCenter.SurfacePreferencesClient.SaveAsync(string! principalId, FabrCore.Surface.CommandCenter.SurfacePreferences! preferences, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Surface.CommandCenter.SurfacePreferencesClient.SurfacePreferencesClient(System.Net.Http.HttpClient! httpClient, Microsoft.Extensions.Options.IOptions<FabrCore.Surface.Services.SurfaceOptions!>! options, Microsoft.Extensions.Logging.ILogger<FabrCore.Surface.CommandCenter.SurfacePreferencesClient!>! logger) -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.AddPendingPlugin() -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.AddPendingTool() -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.AddPlugin(string! alias) -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.AddTool(string! alias) -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.AgentType.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.AgentType.set -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.AgentTypeSearch.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.AgentTypeSearch.set -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.Build() -> FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition!
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.Description.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.Description.set -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.Handle.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.Handle.set -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.Models.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.Models.set -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.Name.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.Name.set -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.PendingPluginAlias.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.PendingPluginAlias.set -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.PendingToolAlias.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.PendingToolAlias.set -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.PluginAliases.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.PluginAliases.set -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.PluginList.get -> System.Collections.Generic.IReadOnlyList<string!>!
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.RemovePlugin(string! alias) -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.RemoveTool(string! alias) -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.Role.get -> FabrCore.Surface.Ai.Squads.SurfaceSquadMemberRole
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.Role.set -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.SelectAgentType(string! alias) -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.SurfaceSquadAgentDraft() -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.SystemPrompt.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.SystemPrompt.set -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.ToolAliases.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.ToolAliases.set -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft.ToolList.get -> System.Collections.Generic.IReadOnlyList<string!>!
+FabrCore.Surface.CommandCenter.SurfaceSquadConfigClient
+FabrCore.Surface.CommandCenter.SurfaceSquadConfigClient.GetAsync(string! principalId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<FabrCore.Surface.Ai.Squads.SurfaceSquad!>!>!
+FabrCore.Surface.CommandCenter.SurfaceSquadConfigClient.SaveAsync(string! principalId, System.Collections.Generic.IReadOnlyList<FabrCore.Surface.Ai.Squads.SurfaceSquad!>! squads, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Surface.CommandCenter.SurfaceSquadConfigClient.SurfaceSquadConfigClient(System.Net.Http.HttpClient! httpClient, Microsoft.Extensions.Options.IOptions<FabrCore.Surface.Services.SurfaceOptions!>! options, Microsoft.Extensions.Logging.ILogger<FabrCore.Surface.CommandCenter.SurfaceSquadConfigClient!>! logger) -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadDraft
+FabrCore.Surface.CommandCenter.SurfaceSquadDraft.Agents.get -> System.Collections.Generic.List<FabrCore.Surface.CommandCenter.SurfaceSquadAgentDraft!>!
+FabrCore.Surface.CommandCenter.SurfaceSquadDraft.Build() -> FabrCore.Surface.Ai.Squads.SurfaceSquadDefinition!
+FabrCore.Surface.CommandCenter.SurfaceSquadDraft.ClientAgentOverlay.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceSquadDraft.ClientAgentOverlay.set -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadDraft.DelegationTimeoutSeconds.get -> int
+FabrCore.Surface.CommandCenter.SurfaceSquadDraft.DelegationTimeoutSeconds.set -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadDraft.Description.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceSquadDraft.Description.set -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadDraft.ForceReconfigure.get -> bool
+FabrCore.Surface.CommandCenter.SurfaceSquadDraft.ForceReconfigure.set -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadDraft.MaxLoopIterations.get -> int
+FabrCore.Surface.CommandCenter.SurfaceSquadDraft.MaxLoopIterations.set -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadDraft.Name.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceSquadDraft.Name.set -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadDraft.OrchestratorModel.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceSquadDraft.OrchestratorModel.set -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadDraft.OrchestratorSystemPrompt.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceSquadDraft.OrchestratorSystemPrompt.set -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadDraft.PendingExistingAgentHandle.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceSquadDraft.PendingExistingAgentHandle.set -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadDraft.PendingExistingMemberKey.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceSquadDraft.PendingExistingMemberKey.set -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadDraft.SquadType.get -> FabrCore.Surface.Ai.Squads.SurfaceSquadType
+FabrCore.Surface.CommandCenter.SurfaceSquadDraft.SquadType.set -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadDraft.SurfaceSquadDraft() -> void
+FabrCore.Surface.CommandCenter.SurfaceSquadDraft.TaskPersonaPrompt.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceSquadDraft.TaskPersonaPrompt.set -> void
+FabrCore.Surface.CommandCenter.SurfaceTimelineItem
+FabrCore.Surface.CommandCenter.SurfaceTimelineItem.AgentHandle.get -> string?
+FabrCore.Surface.CommandCenter.SurfaceTimelineItem.AgentHandle.set -> void
+FabrCore.Surface.CommandCenter.SurfaceTimelineItem.Author.get -> string?
+FabrCore.Surface.CommandCenter.SurfaceTimelineItem.Author.set -> void
+FabrCore.Surface.CommandCenter.SurfaceTimelineItem.DisplayInChat.get -> bool
+FabrCore.Surface.CommandCenter.SurfaceTimelineItem.DisplayInChat.set -> void
+FabrCore.Surface.CommandCenter.SurfaceTimelineItem.Envelope.get -> FabrCore.Surface.Contracts.AdaptiveCardSurfaceEnvelope?
+FabrCore.Surface.CommandCenter.SurfaceTimelineItem.Envelope.set -> void
+FabrCore.Surface.CommandCenter.SurfaceTimelineItem.Id.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceTimelineItem.Id.set -> void
+FabrCore.Surface.CommandCenter.SurfaceTimelineItem.IsSystemMessage.get -> bool
+FabrCore.Surface.CommandCenter.SurfaceTimelineItem.IsSystemMessage.set -> void
+FabrCore.Surface.CommandCenter.SurfaceTimelineItem.Kind.get -> FabrCore.Surface.CommandCenter.SurfaceTimelineItemKind
+FabrCore.Surface.CommandCenter.SurfaceTimelineItem.Kind.set -> void
+FabrCore.Surface.CommandCenter.SurfaceTimelineItem.MessageType.get -> string?
+FabrCore.Surface.CommandCenter.SurfaceTimelineItem.MessageType.set -> void
+FabrCore.Surface.CommandCenter.SurfaceTimelineItem.SourceMessage.get -> FabrCore.Core.AgentMessage?
+FabrCore.Surface.CommandCenter.SurfaceTimelineItem.SourceMessage.set -> void
+FabrCore.Surface.CommandCenter.SurfaceTimelineItem.SurfaceTimelineItem() -> void
+FabrCore.Surface.CommandCenter.SurfaceTimelineItem.Text.get -> string?
+FabrCore.Surface.CommandCenter.SurfaceTimelineItem.Text.set -> void
+FabrCore.Surface.CommandCenter.SurfaceTimelineItem.TimestampUtc.get -> System.DateTime
+FabrCore.Surface.CommandCenter.SurfaceTimelineItem.TimestampUtc.set -> void
+FabrCore.Surface.CommandCenter.SurfaceTimelineItemKind
+FabrCore.Surface.CommandCenter.SurfaceTimelineItemKind.AdaptiveCard = 4 -> FabrCore.Surface.CommandCenter.SurfaceTimelineItemKind
+FabrCore.Surface.CommandCenter.SurfaceTimelineItemKind.Agent = 1 -> FabrCore.Surface.CommandCenter.SurfaceTimelineItemKind
+FabrCore.Surface.CommandCenter.SurfaceTimelineItemKind.Error = 3 -> FabrCore.Surface.CommandCenter.SurfaceTimelineItemKind
+FabrCore.Surface.CommandCenter.SurfaceTimelineItemKind.Principal = 0 -> FabrCore.Surface.CommandCenter.SurfaceTimelineItemKind
+FabrCore.Surface.CommandCenter.SurfaceTimelineItemKind.Status = 2 -> FabrCore.Surface.CommandCenter.SurfaceTimelineItemKind
+FabrCore.Surface.CommandCenter.SurfaceUnreadSummary
+FabrCore.Surface.CommandCenter.SurfaceUnreadSummary.<Clone>$() -> FabrCore.Surface.CommandCenter.SurfaceUnreadSummary!
+FabrCore.Surface.CommandCenter.SurfaceUnreadSummary.Deconstruct(out string! Handle, out string! DisplayName, out int UnreadCount, out bool IsSquad) -> void
+FabrCore.Surface.CommandCenter.SurfaceUnreadSummary.DisplayName.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceUnreadSummary.DisplayName.init -> void
+FabrCore.Surface.CommandCenter.SurfaceUnreadSummary.Equals(FabrCore.Surface.CommandCenter.SurfaceUnreadSummary? other) -> bool
+FabrCore.Surface.CommandCenter.SurfaceUnreadSummary.Handle.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceUnreadSummary.Handle.init -> void
+FabrCore.Surface.CommandCenter.SurfaceUnreadSummary.IsSquad.get -> bool
+FabrCore.Surface.CommandCenter.SurfaceUnreadSummary.IsSquad.init -> void
+FabrCore.Surface.CommandCenter.SurfaceUnreadSummary.SurfaceUnreadSummary(string! Handle, string! DisplayName, int UnreadCount, bool IsSquad) -> void
+FabrCore.Surface.CommandCenter.SurfaceUnreadSummary.UnreadCount.get -> int
+FabrCore.Surface.CommandCenter.SurfaceUnreadSummary.UnreadCount.init -> void
+FabrCore.Surface.CommandCenter.SurfaceUploadedFile
+FabrCore.Surface.CommandCenter.SurfaceUploadedFile.<Clone>$() -> FabrCore.Surface.CommandCenter.SurfaceUploadedFile!
+FabrCore.Surface.CommandCenter.SurfaceUploadedFile.ContentType.get -> string?
+FabrCore.Surface.CommandCenter.SurfaceUploadedFile.ContentType.init -> void
+FabrCore.Surface.CommandCenter.SurfaceUploadedFile.Deconstruct(out string! FileId, out string! FileName, out string? ContentType) -> void
+FabrCore.Surface.CommandCenter.SurfaceUploadedFile.Equals(FabrCore.Surface.CommandCenter.SurfaceUploadedFile? other) -> bool
+FabrCore.Surface.CommandCenter.SurfaceUploadedFile.FileId.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceUploadedFile.FileId.init -> void
+FabrCore.Surface.CommandCenter.SurfaceUploadedFile.FileName.get -> string!
+FabrCore.Surface.CommandCenter.SurfaceUploadedFile.FileName.init -> void
+FabrCore.Surface.CommandCenter.SurfaceUploadedFile.SurfaceUploadedFile(string! FileId, string! FileName, string? ContentType) -> void
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.ActivateSelectedTargetView() -> System.IDisposable!
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.AddExistingAgentToSelectedSquadAsync(string! agentHandle, string? agentName = null, FabrCore.Surface.Ai.Squads.SurfaceSquadMemberRole role = FabrCore.Surface.Ai.Squads.SurfaceSquadMemberRole.Executor, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.Ai.Squads.SurfaceSquad!>!
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.Agents.get -> System.Collections.Generic.IReadOnlyList<FabrCore.Surface.CommandCenter.SurfaceAgentSummary!>!
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.AllAgents.get -> System.Collections.Generic.IReadOnlyList<FabrCore.Surface.CommandCenter.SurfaceAgentSummary!>!
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.Changed -> System.Action?
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.CreateAgentAsync(FabrCore.Core.AgentConfiguration! agentConfiguration, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.AgentHealthStatus!>!
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.CreateAgentForSelectedSquadAsync(FabrCore.Surface.Ai.Squads.SurfaceSquadAgentDefinition! agentDefinition, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.Ai.Squads.SurfaceSquadCreateResult!>!
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.CreateSquadAsync(FabrCore.Surface.Ai.Squads.SurfaceSquadDefinition! definition, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.Ai.Squads.SurfaceSquadCreateResult!>!
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.Discovery.get -> FabrCore.Surface.CommandCenter.SurfaceDiscoveryResponse?
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.DiscoveryError.get -> string?
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.DisposeAsync() -> System.Threading.Tasks.ValueTask
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.GetTimelineForAgent(string? handle) -> System.Collections.Generic.IEnumerable<FabrCore.Surface.CommandCenter.SurfaceTimelineItem!>!
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.GetUnreadSummaries() -> System.Collections.Generic.IReadOnlyList<FabrCore.Surface.CommandCenter.SurfaceUnreadSummary!>!
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.GetVisibleTimelineForAgent(string? handle) -> System.Collections.Generic.IEnumerable<FabrCore.Surface.CommandCenter.SurfaceTimelineItem!>!
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.InitializeAsync(FabrCore.Surface.Identity.SurfacePrincipalContext! principal, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.IsInitialized.get -> bool
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.LoadDiscoveryAsync(bool forceRefresh = false, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.CommandCenter.SurfaceDiscoveryResponse?>!
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.MarkAgentSeen(string? handle) -> void
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.MarkAllSeen() -> void
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.Principal.get -> FabrCore.Surface.Identity.SurfacePrincipalContext?
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.PrincipalContext.get -> FabrCore.Surface.ISurfacePrincipalContext?
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.RefreshAgentsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.RefreshFromStorageAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.RefreshSelectedHealthAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.RemoveAgentFromSelectedSquadAsync(string! agentHandle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.Ai.Squads.SurfaceSquad!>!
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.SelectAgent(string! handle) -> void
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.SelectSquad(string! orchestratorHandle) -> void
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.SelectedAgent.get -> FabrCore.Surface.CommandCenter.SurfaceAgentSummary?
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.SelectedSquad.get -> FabrCore.Surface.Ai.Squads.SurfaceSquad?
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.SendChatAsync(string! message, System.Collections.Generic.IReadOnlyCollection<string!>? fileIds, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.SendChatAsync(string! message, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.SendChatAsync(string! message, string? targetAgentHandle, System.Collections.Generic.IReadOnlyCollection<string!>? fileIds, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.SendChatAsync(string! message, string? targetAgentHandle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.SetShowHiddenAgentsAsync(bool showHiddenAgents, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.SetShowRunningAgentsAsync(bool showRunningAgents, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.SetSurfaceAgentAsync(string! handle, bool isSurfaceAgent, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.ShowHiddenAgents.get -> bool
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.ShowRunningAgents.get -> bool
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.Squads.get -> System.Collections.Generic.IReadOnlyList<FabrCore.Surface.Ai.Squads.SurfaceSquad!>!
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.SurfaceWorkspaceService(Microsoft.Extensions.Options.IOptions<FabrCore.Surface.Services.SurfaceOptions!>! options, Microsoft.Extensions.Logging.ILogger<FabrCore.Surface.CommandCenter.SurfaceWorkspaceService!>! logger, FabrCore.Surface.ISurfacePrincipalContextFactory? contextFactory = null, System.IServiceProvider? serviceProvider = null, FabrCore.Surface.CommandCenter.ISurfaceDiscoveryClient? discoveryClient = null, FabrCore.Surface.Ai.Squads.ISurfaceSquadService? squadService = null, FabrCore.Surface.CommandCenter.ISurfacePreferencesClient? preferencesClient = null, FabrCore.Surface.CommandCenter.ISurfaceSquadConfigClient? squadConfigClient = null, FabrCore.Surface.CommandCenter.SurfaceBlueprintProvisioner? blueprintProvisioner = null) -> void
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.Timeline.get -> System.Collections.Generic.IReadOnlyList<FabrCore.Surface.CommandCenter.SurfaceTimelineItem!>!
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.TotalUnreadCount.get -> int
+FabrCore.Surface.Components.DynamicAgentSurface
+FabrCore.Surface.Components.DynamicAgentSurface.ChildContent.get -> Microsoft.AspNetCore.Components.RenderFragment?
+FabrCore.Surface.Components.DynamicAgentSurface.ChildContent.set -> void
+FabrCore.Surface.Components.DynamicAgentSurface.DisposeAsync() -> System.Threading.Tasks.ValueTask
+FabrCore.Surface.Components.DynamicAgentSurface.DynamicAgentSurface() -> void
+FabrCore.Surface.Components.DynamicAgentSurface.MaxItems.get -> int
+FabrCore.Surface.Components.DynamicAgentSurface.MaxItems.set -> void
+FabrCore.Surface.Components.DynamicAgentSurface.OnAdaptiveCardActionAsync(string! envelopeId, System.Text.Json.JsonElement action, System.Text.Json.JsonElement inputs) -> System.Threading.Tasks.Task!
+FabrCore.Surface.Components.DynamicAgentSurface.OnAdaptiveCardRenderedAsync(string! envelopeId, int renderedActionCount) -> System.Threading.Tasks.Task!
+FabrCore.Surface.Components.DynamicAgentSurface.PrincipalHandle.get -> string!
+FabrCore.Surface.Components.DynamicAgentSurface.PrincipalHandle.set -> void
+FabrCore.Surface.Components.SurfaceAdaptiveCardHost
+FabrCore.Surface.Components.SurfaceAdaptiveCardHost.DisposeAsync() -> System.Threading.Tasks.ValueTask
+FabrCore.Surface.Components.SurfaceAdaptiveCardHost.Envelope.get -> FabrCore.Surface.Contracts.AdaptiveCardSurfaceEnvelope!
+FabrCore.Surface.Components.SurfaceAdaptiveCardHost.Envelope.set -> void
+FabrCore.Surface.Components.SurfaceAdaptiveCardHost.InlineMaxHeight.get -> int
+FabrCore.Surface.Components.SurfaceAdaptiveCardHost.InlineMaxHeight.set -> void
+FabrCore.Surface.Components.SurfaceAdaptiveCardHost.OnAdaptiveCardActionAsync(string! envelopeId, System.Text.Json.JsonElement action, System.Text.Json.JsonElement inputs) -> System.Threading.Tasks.Task!
+FabrCore.Surface.Components.SurfaceAdaptiveCardHost.OnAdaptiveCardRenderedAsync(string! envelopeId, int renderedActionCount) -> System.Threading.Tasks.Task!
+FabrCore.Surface.Components.SurfaceAdaptiveCardHost.PrincipalContext.get -> FabrCore.Surface.ISurfacePrincipalContext?
+FabrCore.Surface.Components.SurfaceAdaptiveCardHost.PrincipalContext.set -> void
+FabrCore.Surface.Components.SurfaceAdaptiveCardHost.SourceMessage.get -> FabrCore.Core.AgentMessage?
+FabrCore.Surface.Components.SurfaceAdaptiveCardHost.SourceMessage.set -> void
+FabrCore.Surface.Components.SurfaceAdaptiveCardHost.SurfaceAdaptiveCardHost() -> void
+FabrCore.Surface.Components.SurfaceChatLink
+FabrCore.Surface.Components.SurfaceChatLink.AgentHandle.get -> string?
+FabrCore.Surface.Components.SurfaceChatLink.AgentHandle.set -> void
+FabrCore.Surface.Components.SurfaceChatLink.AllowExternalAgent.get -> bool
+FabrCore.Surface.Components.SurfaceChatLink.AllowExternalAgent.set -> void
+FabrCore.Surface.Components.SurfaceChatLink.AllowReset.get -> bool
+FabrCore.Surface.Components.SurfaceChatLink.AllowReset.set -> void
+FabrCore.Surface.Components.SurfaceChatLink.CreateAgent.get -> System.Func<FabrCore.Surface.Components.SurfaceChatLinkCreateAgentContext!, System.Threading.Tasks.Task<FabrCore.Core.AgentHealthStatus!>!>?
+FabrCore.Surface.Components.SurfaceChatLink.CreateAgent.set -> void
+FabrCore.Surface.Components.SurfaceChatLink.CreateButtonText.get -> string!
+FabrCore.Surface.Components.SurfaceChatLink.CreateButtonText.set -> void
+FabrCore.Surface.Components.SurfaceChatLink.DisposeAsync() -> System.Threading.Tasks.ValueTask
+FabrCore.Surface.Components.SurfaceChatLink.HandleComposerMentionKeyAsync(string! key) -> System.Threading.Tasks.Task!
+FabrCore.Surface.Components.SurfaceChatLink.Icon.get -> string!
+FabrCore.Surface.Components.SurfaceChatLink.Icon.set -> void
+FabrCore.Surface.Components.SurfaceChatLink.InitialSize.get -> FabrCore.Surface.Components.SurfaceChatLinkSize
+FabrCore.Surface.Components.SurfaceChatLink.InitialSize.set -> void
+FabrCore.Surface.Components.SurfaceChatLink.LoadingMessage.get -> string!
+FabrCore.Surface.Components.SurfaceChatLink.LoadingMessage.set -> void
+FabrCore.Surface.Components.SurfaceChatLink.NoAgentMessage.get -> string!
+FabrCore.Surface.Components.SurfaceChatLink.NoAgentMessage.set -> void
+FabrCore.Surface.Components.SurfaceChatLink.NotCreatedMessage.get -> string!
+FabrCore.Surface.Components.SurfaceChatLink.NotCreatedMessage.set -> void
+FabrCore.Surface.Components.SurfaceChatLink.NotReadyMessage.get -> string!
+FabrCore.Surface.Components.SurfaceChatLink.NotReadyMessage.set -> void
+FabrCore.Surface.Components.SurfaceChatLink.OnMessageReceived.get -> System.Func<FabrCore.Core.AgentMessage!, System.Threading.Tasks.Task<bool>!>?
+FabrCore.Surface.Components.SurfaceChatLink.OnMessageReceived.set -> void
+FabrCore.Surface.Components.SurfaceChatLink.OnMessageSent.get -> Microsoft.AspNetCore.Components.EventCallback<string!>
+FabrCore.Surface.Components.SurfaceChatLink.OnMessageSent.set -> void
+FabrCore.Surface.Components.SurfaceChatLink.Placeholder.get -> string!
+FabrCore.Surface.Components.SurfaceChatLink.Placeholder.set -> void
+FabrCore.Surface.Components.SurfaceChatLink.Position.get -> FabrCore.Surface.Components.SurfaceChatLinkPosition
+FabrCore.Surface.Components.SurfaceChatLink.Position.set -> void
+FabrCore.Surface.Components.SurfaceChatLink.ReadyMessage.get -> string!
+FabrCore.Surface.Components.SurfaceChatLink.ReadyMessage.set -> void
+FabrCore.Surface.Components.SurfaceChatLink.ResetButtonText.get -> string!
+FabrCore.Surface.Components.SurfaceChatLink.ResetButtonText.set -> void
+FabrCore.Surface.Components.SurfaceChatLink.SendComposerMessageAsync() -> System.Threading.Tasks.Task!
+FabrCore.Surface.Components.SurfaceChatLink.SurfaceChatLink() -> void
+FabrCore.Surface.Components.SurfaceChatLink.Title.get -> string?
+FabrCore.Surface.Components.SurfaceChatLink.Title.set -> void
+FabrCore.Surface.Components.SurfaceChatLink.Tooltip.get -> string!
+FabrCore.Surface.Components.SurfaceChatLink.Tooltip.set -> void
+FabrCore.Surface.Components.SurfaceChatLink.WelcomeMessage.get -> string!
+FabrCore.Surface.Components.SurfaceChatLink.WelcomeMessage.set -> void
+FabrCore.Surface.Components.SurfaceChatLinkCreateAgentContext
+FabrCore.Surface.Components.SurfaceChatLinkCreateAgentContext.AgentAlias.get -> string!
+FabrCore.Surface.Components.SurfaceChatLinkCreateAgentContext.AgentAlias.init -> void
+FabrCore.Surface.Components.SurfaceChatLinkCreateAgentContext.AgentHandle.get -> string!
+FabrCore.Surface.Components.SurfaceChatLinkCreateAgentContext.AgentHandle.init -> void
+FabrCore.Surface.Components.SurfaceChatLinkCreateAgentContext.Principal.get -> FabrCore.Surface.Identity.SurfacePrincipalContext!
+FabrCore.Surface.Components.SurfaceChatLinkCreateAgentContext.Principal.init -> void
+FabrCore.Surface.Components.SurfaceChatLinkCreateAgentContext.PrincipalContext.get -> FabrCore.Surface.ISurfacePrincipalContext!
+FabrCore.Surface.Components.SurfaceChatLinkCreateAgentContext.PrincipalContext.init -> void
+FabrCore.Surface.Components.SurfaceChatLinkCreateAgentContext.SurfaceChatLinkCreateAgentContext() -> void
+FabrCore.Surface.Components.SurfaceChatLinkCreateAgentContext.Workspace.get -> FabrCore.Surface.CommandCenter.SurfaceWorkspaceService!
+FabrCore.Surface.Components.SurfaceChatLinkCreateAgentContext.Workspace.init -> void
+FabrCore.Surface.Components.SurfaceChatLinkPosition
+FabrCore.Surface.Components.SurfaceChatLinkPosition.BottomLeft = 1 -> FabrCore.Surface.Components.SurfaceChatLinkPosition
+FabrCore.Surface.Components.SurfaceChatLinkPosition.BottomRight = 0 -> FabrCore.Surface.Components.SurfaceChatLinkPosition
+FabrCore.Surface.Components.SurfaceChatLinkPosition.Left = 3 -> FabrCore.Surface.Components.SurfaceChatLinkPosition
+FabrCore.Surface.Components.SurfaceChatLinkPosition.Right = 2 -> FabrCore.Surface.Components.SurfaceChatLinkPosition
+FabrCore.Surface.Components.SurfaceChatLinkSize
+FabrCore.Surface.Components.SurfaceChatLinkSize.Large = 2 -> FabrCore.Surface.Components.SurfaceChatLinkSize
+FabrCore.Surface.Components.SurfaceChatLinkSize.Medium = 1 -> FabrCore.Surface.Components.SurfaceChatLinkSize
+FabrCore.Surface.Components.SurfaceChatLinkSize.Small = 0 -> FabrCore.Surface.Components.SurfaceChatLinkSize
+FabrCore.Surface.Components.SurfaceCommandCenter
+FabrCore.Surface.Components.SurfaceCommandCenter.AgentQueryHandle.get -> string?
+FabrCore.Surface.Components.SurfaceCommandCenter.AgentQueryHandle.set -> void
+FabrCore.Surface.Components.SurfaceCommandCenter.DisposeAsync() -> System.Threading.Tasks.ValueTask
+FabrCore.Surface.Components.SurfaceCommandCenter.HandleComposerMentionKeyAsync(string! key) -> System.Threading.Tasks.Task!
+FabrCore.Surface.Components.SurfaceCommandCenter.LayoutMode.get -> FabrCore.Surface.Services.SurfaceCommandCenterLayoutMode?
+FabrCore.Surface.Components.SurfaceCommandCenter.LayoutMode.set -> void
+FabrCore.Surface.Components.SurfaceCommandCenter.SendComposerMessageAsync() -> System.Threading.Tasks.Task!
+FabrCore.Surface.Components.SurfaceCommandCenter.SquadQueryHandle.get -> string?
+FabrCore.Surface.Components.SurfaceCommandCenter.SquadQueryHandle.set -> void
+FabrCore.Surface.Components.SurfaceCommandCenter.SurfaceCommandCenter() -> void
+FabrCore.Surface.Components.SurfaceCommandRail
+FabrCore.Surface.Components.SurfaceCommandRail.SurfaceCommandRail() -> void
+FabrCore.Surface.Components.SurfaceNavigationOptions
+FabrCore.Surface.Components.SurfaceNavigationOptions.AdminLoaded.get -> bool
+FabrCore.Surface.Components.SurfaceNavigationOptions.AdminLoaded.set -> void
+FabrCore.Surface.Components.SurfaceNavigationOptions.SurfaceLoaded.get -> bool
+FabrCore.Surface.Components.SurfaceNavigationOptions.SurfaceLoaded.set -> void
+FabrCore.Surface.Components.SurfaceNavigationOptions.SurfaceNavigationOptions() -> void
+FabrCore.Surface.Components.SurfaceNotify
+FabrCore.Surface.Components.SurfaceNotify.CssClass.get -> string?
+FabrCore.Surface.Components.SurfaceNotify.CssClass.set -> void
+FabrCore.Surface.Components.SurfaceNotify.Dispose() -> void
+FabrCore.Surface.Components.SurfaceNotify.Icon.get -> string!
+FabrCore.Surface.Components.SurfaceNotify.Icon.set -> void
+FabrCore.Surface.Components.SurfaceNotify.MaxVisibleItems.get -> int
+FabrCore.Surface.Components.SurfaceNotify.MaxVisibleItems.set -> void
+FabrCore.Surface.Components.SurfaceNotify.SurfaceNotify() -> void
+FabrCore.Surface.Components.SurfaceNotify.SurfacePath.get -> string!
+FabrCore.Surface.Components.SurfaceNotify.SurfacePath.set -> void
+FabrCore.Surface.Components.SurfaceNotify.Tooltip.get -> string!
+FabrCore.Surface.Components.SurfaceNotify.Tooltip.set -> void
+FabrCore.Surface.Components.SurfaceTopbarNav
+FabrCore.Surface.Components.SurfaceTopbarNav.SurfaceTopbarNav() -> void
+FabrCore.Surface.Components._Imports
+FabrCore.Surface.Components._Imports.Execute() -> void
+FabrCore.Surface.Components._Imports._Imports() -> void
+FabrCore.Surface.Configuration.ClusteringMode
+FabrCore.Surface.Configuration.ClusteringMode.AzureStorage = 2 -> FabrCore.Surface.Configuration.ClusteringMode
+FabrCore.Surface.Configuration.ClusteringMode.Localhost = 0 -> FabrCore.Surface.Configuration.ClusteringMode
+FabrCore.Surface.Configuration.ClusteringMode.SqlServer = 1 -> FabrCore.Surface.Configuration.ClusteringMode
+FabrCore.Surface.Configuration.FileSurfaceDefinitionProvider
+FabrCore.Surface.Configuration.FileSurfaceDefinitionProvider.FileSurfaceDefinitionProvider(FabrCore.Surface.Configuration.SurfaceAiOptions! options, Microsoft.Extensions.Logging.ILogger<FabrCore.Surface.Configuration.FileSurfaceDefinitionProvider!>! logger) -> void
+FabrCore.Surface.Configuration.FileSurfaceDefinitionProvider.GetAllAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<FabrCore.Surface.Configuration.SurfaceDefinition!>!>!
+FabrCore.Surface.Configuration.FileSurfaceDefinitionProvider.GetByNameAsync(string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.Configuration.SurfaceDefinition?>!
+FabrCore.Surface.Configuration.OrleansClusterOptions
+FabrCore.Surface.Configuration.OrleansClusterOptions.ClusterId.get -> string!
+FabrCore.Surface.Configuration.OrleansClusterOptions.ClusterId.set -> void
+FabrCore.Surface.Configuration.OrleansClusterOptions.ClusteringMode.get -> FabrCore.Surface.Configuration.ClusteringMode
+FabrCore.Surface.Configuration.OrleansClusterOptions.ClusteringMode.set -> void
+FabrCore.Surface.Configuration.OrleansClusterOptions.ConnectionRetryCount.get -> int
+FabrCore.Surface.Configuration.OrleansClusterOptions.ConnectionRetryCount.set -> void
+FabrCore.Surface.Configuration.OrleansClusterOptions.ConnectionRetryDelay.get -> System.TimeSpan
+FabrCore.Surface.Configuration.OrleansClusterOptions.ConnectionRetryDelay.set -> void
+FabrCore.Surface.Configuration.OrleansClusterOptions.ConnectionString.get -> string?
+FabrCore.Surface.Configuration.OrleansClusterOptions.ConnectionString.set -> void
+FabrCore.Surface.Configuration.OrleansClusterOptions.GatewayListRefreshPeriod.get -> System.TimeSpan
+FabrCore.Surface.Configuration.OrleansClusterOptions.GatewayListRefreshPeriod.set -> void
+FabrCore.Surface.Configuration.OrleansClusterOptions.OrleansClusterOptions() -> void
+FabrCore.Surface.Configuration.OrleansClusterOptions.ServiceId.get -> string!
+FabrCore.Surface.Configuration.OrleansClusterOptions.ServiceId.set -> void
+FabrCore.Surface.Configuration.SurfaceAiOptions
+FabrCore.Surface.Configuration.SurfaceAiOptions.DefaultPlanningModelName.get -> string?
+FabrCore.Surface.Configuration.SurfaceAiOptions.DefaultPlanningModelName.set -> void
+FabrCore.Surface.Configuration.SurfaceAiOptions.DefaultSurfaceDefinitionName.get -> string!
+FabrCore.Surface.Configuration.SurfaceAiOptions.DefaultSurfaceDefinitionName.set -> void
+FabrCore.Surface.Configuration.SurfaceAiOptions.DefinitionFilePath.get -> string!
+FabrCore.Surface.Configuration.SurfaceAiOptions.DefinitionFilePath.set -> void
+FabrCore.Surface.Configuration.SurfaceAiOptions.MaxPromptCharacters.get -> int
+FabrCore.Surface.Configuration.SurfaceAiOptions.MaxPromptCharacters.set -> void
+FabrCore.Surface.Configuration.SurfaceAiOptions.SendRenderMessages.get -> bool
+FabrCore.Surface.Configuration.SurfaceAiOptions.SendRenderMessages.set -> void
+FabrCore.Surface.Configuration.SurfaceAiOptions.SurfaceAiOptions() -> void
+FabrCore.Surface.Configuration.SurfaceDefinition
+FabrCore.Surface.Configuration.SurfaceDefinition.AllowHttpUrls.get -> bool?
+FabrCore.Surface.Configuration.SurfaceDefinition.AllowHttpUrls.set -> void
+FabrCore.Surface.Configuration.SurfaceDefinition.AllowUnknownTargetAgents.get -> bool?
+FabrCore.Surface.Configuration.SurfaceDefinition.AllowUnknownTargetAgents.set -> void
+FabrCore.Surface.Configuration.SurfaceDefinition.AllowedActionTypes.get -> System.Collections.Generic.List<string!>!
+FabrCore.Surface.Configuration.SurfaceDefinition.AllowedActionTypes.set -> void
+FabrCore.Surface.Configuration.SurfaceDefinition.AllowedTargetAgents.get -> System.Collections.Generic.List<string!>!
+FabrCore.Surface.Configuration.SurfaceDefinition.AllowedTargetAgents.set -> void
+FabrCore.Surface.Configuration.SurfaceDefinition.Description.get -> string!
+FabrCore.Surface.Configuration.SurfaceDefinition.Description.set -> void
+FabrCore.Surface.Configuration.SurfaceDefinition.EnableDiagnostics.get -> bool?
+FabrCore.Surface.Configuration.SurfaceDefinition.EnableDiagnostics.set -> void
+FabrCore.Surface.Configuration.SurfaceDefinition.MaxAdaptiveCardVersion.get -> string!
+FabrCore.Surface.Configuration.SurfaceDefinition.MaxAdaptiveCardVersion.set -> void
+FabrCore.Surface.Configuration.SurfaceDefinition.MaxDepth.get -> int?
+FabrCore.Surface.Configuration.SurfaceDefinition.MaxDepth.set -> void
+FabrCore.Surface.Configuration.SurfaceDefinition.MaxPayloadBytes.get -> int?
+FabrCore.Surface.Configuration.SurfaceDefinition.MaxPayloadBytes.set -> void
+FabrCore.Surface.Configuration.SurfaceDefinition.Name.get -> string!
+FabrCore.Surface.Configuration.SurfaceDefinition.Name.set -> void
+FabrCore.Surface.Configuration.SurfaceDefinition.PlanningModelName.get -> string?
+FabrCore.Surface.Configuration.SurfaceDefinition.PlanningModelName.set -> void
+FabrCore.Surface.Configuration.SurfaceDefinition.SurfaceDefinition() -> void
+FabrCore.Surface.Configuration.SurfaceDefinition.SystemPrompt.get -> string?
+FabrCore.Surface.Configuration.SurfaceDefinition.SystemPrompt.set -> void
+FabrCore.Surface.Configuration.SurfaceDefinitionFile
+FabrCore.Surface.Configuration.SurfaceDefinitionFile.Definitions.get -> System.Collections.Generic.List<FabrCore.Surface.Configuration.SurfaceDefinition!>!
+FabrCore.Surface.Configuration.SurfaceDefinitionFile.Definitions.set -> void
+FabrCore.Surface.Configuration.SurfaceDefinitionFile.GetDefinitions() -> System.Collections.Generic.IEnumerable<FabrCore.Surface.Configuration.SurfaceDefinition!>!
+FabrCore.Surface.Configuration.SurfaceDefinitionFile.SurfaceDefinitionFile() -> void
+FabrCore.Surface.Configuration.SurfaceDefinitionFile.Surfaces.get -> System.Collections.Generic.List<FabrCore.Surface.Configuration.SurfaceDefinition!>!
+FabrCore.Surface.Configuration.SurfaceDefinitionFile.Surfaces.set -> void
+FabrCore.Surface.Configuration.SurfaceDefinitionPolicyMapper
+FabrCore.Surface.Configuration.SurfaceServiceExtensions
+FabrCore.Surface.Contracts.AdaptiveCardActionEvent
+FabrCore.Surface.Contracts.AdaptiveCardActionEvent.ActionId.get -> string!
+FabrCore.Surface.Contracts.AdaptiveCardActionEvent.ActionId.set -> void
+FabrCore.Surface.Contracts.AdaptiveCardActionEvent.ActionType.get -> string!
+FabrCore.Surface.Contracts.AdaptiveCardActionEvent.ActionType.set -> void
+FabrCore.Surface.Contracts.AdaptiveCardActionEvent.AdaptiveCardActionEvent() -> void
+FabrCore.Surface.Contracts.AdaptiveCardActionEvent.EnvelopeId.get -> string?
+FabrCore.Surface.Contracts.AdaptiveCardActionEvent.EnvelopeId.set -> void
+FabrCore.Surface.Contracts.AdaptiveCardActionEvent.Kind.get -> string!
+FabrCore.Surface.Contracts.AdaptiveCardActionEvent.Kind.set -> void
+FabrCore.Surface.Contracts.AdaptiveCardActionEvent.Message.get -> string?
+FabrCore.Surface.Contracts.AdaptiveCardActionEvent.Message.set -> void
+FabrCore.Surface.Contracts.AdaptiveCardActionEvent.Payload.get -> System.Collections.Generic.Dictionary<string!, object?>!
+FabrCore.Surface.Contracts.AdaptiveCardActionEvent.Payload.set -> void
+FabrCore.Surface.Contracts.AdaptiveCardActionEvent.Result.get -> FabrCore.Surface.Actions.SurfaceActionResult?
+FabrCore.Surface.Contracts.AdaptiveCardActionEvent.Result.set -> void
+FabrCore.Surface.Contracts.AdaptiveCardActionEvent.RouteTo.get -> string!
+FabrCore.Surface.Contracts.AdaptiveCardActionEvent.RouteTo.set -> void
+FabrCore.Surface.Contracts.AdaptiveCardActionEvent.TargetAgent.get -> string?
+FabrCore.Surface.Contracts.AdaptiveCardActionEvent.TargetAgent.set -> void
+FabrCore.Surface.Contracts.AdaptiveCardActionEvent.Title.get -> string?
+FabrCore.Surface.Contracts.AdaptiveCardActionEvent.Title.set -> void
+FabrCore.Surface.Contracts.AdaptiveCardActionEvent.Url.get -> string?
+FabrCore.Surface.Contracts.AdaptiveCardActionEvent.Url.set -> void
+FabrCore.Surface.Contracts.AdaptiveCardActionEvent.Verb.get -> string?
+FabrCore.Surface.Contracts.AdaptiveCardActionEvent.Verb.set -> void
+FabrCore.Surface.Contracts.AdaptiveCardActionEvent.Version.get -> string!
+FabrCore.Surface.Contracts.AdaptiveCardActionEvent.Version.set -> void
+FabrCore.Surface.Contracts.AdaptiveCardActionTypes
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceAction
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceAction.AdaptiveCardSurfaceAction() -> void
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceAction.Data.get -> System.Text.Json.JsonElement?
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceAction.Data.set -> void
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceAction.Inputs.get -> System.Collections.Generic.Dictionary<string!, object?>!
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceAction.Inputs.set -> void
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceAction.Title.get -> string?
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceAction.Title.set -> void
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceAction.Type.get -> string!
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceAction.Type.set -> void
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceAction.Url.get -> string?
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceAction.Url.set -> void
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceAction.Verb.get -> string?
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceAction.Verb.set -> void
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceEnvelope
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceEnvelope.AdaptiveCardSurfaceEnvelope() -> void
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceEnvelope.Card.get -> System.Text.Json.JsonElement
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceEnvelope.Card.set -> void
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceEnvelope.Data.get -> System.Text.Json.JsonElement?
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceEnvelope.Data.set -> void
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceEnvelope.Id.get -> string!
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceEnvelope.Id.set -> void
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceEnvelope.Metadata.get -> FabrCore.Surface.Contracts.AdaptiveCardSurfaceMetadata?
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceEnvelope.Metadata.set -> void
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceEnvelope.Version.get -> string!
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceEnvelope.Version.set -> void
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceMetadata
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceMetadata.AdaptiveCardSurfaceMetadata() -> void
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceMetadata.ExtensionData.get -> System.Collections.Generic.Dictionary<string!, System.Text.Json.JsonElement>!
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceMetadata.ExtensionData.set -> void
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceMetadata.MessageTemplate.get -> string?
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceMetadata.MessageTemplate.set -> void
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceMetadata.RouteTo.get -> string?
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceMetadata.RouteTo.set -> void
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceMetadata.TargetAgent.get -> string?
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceMetadata.TargetAgent.set -> void
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceMetadata.TargetHandle.get -> string?
+FabrCore.Surface.Contracts.AdaptiveCardSurfaceMetadata.TargetHandle.set -> void
+FabrCore.Surface.Contracts.SurfaceActionDataKeys
+FabrCore.Surface.Contracts.SurfaceActionRoute
+FabrCore.Surface.Contracts.SurfaceDiagnosticArgs
+FabrCore.Surface.Contracts.SurfaceMessageArgs
+FabrCore.Surface.Contracts.SurfaceMessageTypes
+FabrCore.Surface.FabrCoreSurfaceExtensions
+FabrCore.Surface.ISurfaceDirectMessageSender
+FabrCore.Surface.ISurfaceDirectMessageSender.SendEventAsync(FabrCore.Core.EventMessage! message) -> System.Threading.Tasks.Task!
+FabrCore.Surface.ISurfaceDirectMessageSender.SendMessageAsync(FabrCore.Core.AgentMessage! message) -> System.Threading.Tasks.Task!
+FabrCore.Surface.ISurfacePrincipalContext
+FabrCore.Surface.ISurfacePrincipalContext.AgentMessageReceived -> System.EventHandler<FabrCore.Core.AgentMessage!>?
+FabrCore.Surface.ISurfacePrincipalContext.CreateAgent(FabrCore.Core.AgentConfiguration! agentConfiguration) -> System.Threading.Tasks.Task<FabrCore.Core.AgentHealthStatus!>!
+FabrCore.Surface.ISurfacePrincipalContext.GetAccessibleSharedAgents() -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.AgentInfo!>!>!
+FabrCore.Surface.ISurfacePrincipalContext.GetAgentHealth(string! handle, FabrCore.Core.HealthDetailLevel detailLevel = FabrCore.Core.HealthDetailLevel.Basic) -> System.Threading.Tasks.Task<FabrCore.Core.AgentHealthStatus!>!
+FabrCore.Surface.ISurfacePrincipalContext.GetTrackedAgents(bool activate = false) -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.TrackedAgentInfo!>!>!
+FabrCore.Surface.ISurfacePrincipalContext.Handle.get -> string!
+FabrCore.Surface.ISurfacePrincipalContext.IsAgentTracked(string! handle) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Surface.ISurfacePrincipalContext.IsDisposed.get -> bool
+FabrCore.Surface.ISurfacePrincipalContext.ResetAgent(string! handle) -> System.Threading.Tasks.Task<FabrCore.Core.AgentHealthStatus!>!
+FabrCore.Surface.ISurfacePrincipalContext.SendAndReceiveMessage(FabrCore.Core.AgentMessage! request) -> System.Threading.Tasks.Task<FabrCore.Core.AgentMessage!>!
+FabrCore.Surface.ISurfacePrincipalContext.SendEvent(FabrCore.Core.EventMessage! request) -> System.Threading.Tasks.Task!
+FabrCore.Surface.ISurfacePrincipalContext.SendMessage(FabrCore.Core.AgentMessage! request) -> System.Threading.Tasks.Task!
+FabrCore.Surface.ISurfacePrincipalContextFactory
+FabrCore.Surface.ISurfacePrincipalContextFactory.CreateAsync(string! handle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.ISurfacePrincipalContext!>!
+FabrCore.Surface.ISurfacePrincipalContextFactory.GetOrCreateAsync(string! handle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.ISurfacePrincipalContext!>!
+FabrCore.Surface.ISurfacePrincipalContextFactory.HasContext(string! handle) -> bool
+FabrCore.Surface.ISurfacePrincipalContextFactory.ReleaseAsync(string! handle) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Surface.Identity.DefaultSurfacePrincipalContextProvider
+FabrCore.Surface.Identity.DefaultSurfacePrincipalContextProvider.DefaultSurfacePrincipalContextProvider(Microsoft.AspNetCore.Http.IHttpContextAccessor! httpContextAccessor, Microsoft.Extensions.Options.IOptions<FabrCore.Surface.Services.SurfaceOptions!>! options, FabrCore.Surface.Identity.SurfacePrincipalAccessor! principalAccessor, System.IServiceProvider? serviceProvider = null) -> void
+FabrCore.Surface.Identity.DefaultSurfacePrincipalContextProvider.Dispose() -> void
+FabrCore.Surface.Identity.DefaultSurfacePrincipalContextProvider.GetCurrentAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.Identity.SurfacePrincipalContext!>!
+FabrCore.Surface.Identity.ISurfacePrincipalContextProvider
+FabrCore.Surface.Identity.ISurfacePrincipalContextProvider.GetCurrentAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.Identity.SurfacePrincipalContext!>!
+FabrCore.Surface.Identity.SurfacePrincipalAccessor
+FabrCore.Surface.Identity.SurfacePrincipalAccessor.Principal.get -> FabrCore.Surface.Identity.SurfacePrincipalContext?
+FabrCore.Surface.Identity.SurfacePrincipalAccessor.Principal.set -> void
+FabrCore.Surface.Identity.SurfacePrincipalAccessor.SurfacePrincipalAccessor() -> void
+FabrCore.Surface.Identity.SurfacePrincipalContext
+FabrCore.Surface.Identity.SurfacePrincipalContext.<Clone>$() -> FabrCore.Surface.Identity.SurfacePrincipalContext!
+FabrCore.Surface.Identity.SurfacePrincipalContext.Deconstruct(out string? PrincipalId, out string? DisplayName, out bool IsAuthenticated, out string? Source) -> void
+FabrCore.Surface.Identity.SurfacePrincipalContext.DisplayName.get -> string?
+FabrCore.Surface.Identity.SurfacePrincipalContext.DisplayName.init -> void
+FabrCore.Surface.Identity.SurfacePrincipalContext.Equals(FabrCore.Surface.Identity.SurfacePrincipalContext? other) -> bool
+FabrCore.Surface.Identity.SurfacePrincipalContext.IsAuthenticated.get -> bool
+FabrCore.Surface.Identity.SurfacePrincipalContext.IsAuthenticated.init -> void
+FabrCore.Surface.Identity.SurfacePrincipalContext.IsResolved.get -> bool
+FabrCore.Surface.Identity.SurfacePrincipalContext.PrincipalId.get -> string?
+FabrCore.Surface.Identity.SurfacePrincipalContext.PrincipalId.init -> void
+FabrCore.Surface.Identity.SurfacePrincipalContext.Source.get -> string?
+FabrCore.Surface.Identity.SurfacePrincipalContext.Source.init -> void
+FabrCore.Surface.Identity.SurfacePrincipalContext.SurfacePrincipalContext(string? PrincipalId, string? DisplayName, bool IsAuthenticated, string? Source) -> void
+FabrCore.Surface.Identity.SurfacePrincipalId
+FabrCore.Surface.Plugins.SurfacePlugin
+FabrCore.Surface.Plugins.SurfacePlugin.InitializeAsync(FabrCore.Core.AgentConfiguration! config, System.IServiceProvider! serviceProvider) -> System.Threading.Tasks.Task!
+FabrCore.Surface.Plugins.SurfacePlugin.RenderSurfaceAsync(string! adaptiveCardEnvelopeJsonOrPrompt, string? targetHandle = null, string? surfaceConfigName = null) -> System.Threading.Tasks.Task<string!>!
+FabrCore.Surface.Plugins.SurfacePlugin.SurfacePlugin() -> void
+FabrCore.Surface.Services.SurfaceChatDeliveryMode
+FabrCore.Surface.Services.SurfaceChatDeliveryMode.FireAndForget = 0 -> FabrCore.Surface.Services.SurfaceChatDeliveryMode
+FabrCore.Surface.Services.SurfaceChatDeliveryMode.RequestResponse = 1 -> FabrCore.Surface.Services.SurfaceChatDeliveryMode
+FabrCore.Surface.Services.SurfaceChatMessageKind
+FabrCore.Surface.Services.SurfaceChatMessageKind.OneWay = 1 -> FabrCore.Surface.Services.SurfaceChatMessageKind
+FabrCore.Surface.Services.SurfaceChatMessageKind.Request = 0 -> FabrCore.Surface.Services.SurfaceChatMessageKind
+FabrCore.Surface.Services.SurfaceCommandCenterLayoutMode
+FabrCore.Surface.Services.SurfaceCommandCenterLayoutMode.Embedded = 1 -> FabrCore.Surface.Services.SurfaceCommandCenterLayoutMode
+FabrCore.Surface.Services.SurfaceCommandCenterLayoutMode.Standalone = 0 -> FabrCore.Surface.Services.SurfaceCommandCenterLayoutMode
+FabrCore.Surface.Services.SurfaceMessageFactory
+FabrCore.Surface.Services.SurfaceOptions
+FabrCore.Surface.Services.SurfaceOptions.AllowHttpUrls.get -> bool
+FabrCore.Surface.Services.SurfaceOptions.AllowHttpUrls.set -> void
+FabrCore.Surface.Services.SurfaceOptions.AllowUnknownTargetAgents.get -> bool
+FabrCore.Surface.Services.SurfaceOptions.AllowUnknownTargetAgents.set -> void
+FabrCore.Surface.Services.SurfaceOptions.AllowedActionTypes.get -> System.Collections.Generic.HashSet<string!>!
+FabrCore.Surface.Services.SurfaceOptions.AllowedTargetAgents.get -> System.Collections.Generic.HashSet<string!>!
+FabrCore.Surface.Services.SurfaceOptions.ChatFileUploadTtl.get -> System.TimeSpan
+FabrCore.Surface.Services.SurfaceOptions.ChatFileUploadTtl.set -> void
+FabrCore.Surface.Services.SurfaceOptions.CommandCenterChatDeliveryMode.get -> FabrCore.Surface.Services.SurfaceChatDeliveryMode
+FabrCore.Surface.Services.SurfaceOptions.CommandCenterChatDeliveryMode.set -> void
+FabrCore.Surface.Services.SurfaceOptions.CommandCenterChatMessageKind.get -> FabrCore.Surface.Services.SurfaceChatMessageKind
+FabrCore.Surface.Services.SurfaceOptions.CommandCenterChatMessageKind.set -> void
+FabrCore.Surface.Services.SurfaceOptions.CommandCenterLayoutMode.get -> FabrCore.Surface.Services.SurfaceCommandCenterLayoutMode
+FabrCore.Surface.Services.SurfaceOptions.CommandCenterLayoutMode.set -> void
+FabrCore.Surface.Services.SurfaceOptions.DefaultPlanningModelName.get -> string?
+FabrCore.Surface.Services.SurfaceOptions.DefaultPlanningModelName.set -> void
+FabrCore.Surface.Services.SurfaceOptions.DefaultSurfaceAgentHandles.get -> System.Collections.Generic.HashSet<string!>!
+FabrCore.Surface.Services.SurfaceOptions.DefaultSurfaceDefinitionName.get -> string?
+FabrCore.Surface.Services.SurfaceOptions.DefaultSurfaceDefinitionName.set -> void
+FabrCore.Surface.Services.SurfaceOptions.DefinitionFilePath.get -> string?
+FabrCore.Surface.Services.SurfaceOptions.DefinitionFilePath.set -> void
+FabrCore.Surface.Services.SurfaceOptions.DevelopmentFallbackPrincipalId.get -> string?
+FabrCore.Surface.Services.SurfaceOptions.DevelopmentFallbackPrincipalId.set -> void
+FabrCore.Surface.Services.SurfaceOptions.EnableAdaptiveCards.get -> bool
+FabrCore.Surface.Services.SurfaceOptions.EnableAdaptiveCards.set -> void
+FabrCore.Surface.Services.SurfaceOptions.EnableAgentChat.get -> bool
+FabrCore.Surface.Services.SurfaceOptions.EnableAgentChat.set -> void
+FabrCore.Surface.Services.SurfaceOptions.EnableAgentCreate.get -> bool
+FabrCore.Surface.Services.SurfaceOptions.EnableAgentCreate.set -> void
+FabrCore.Surface.Services.SurfaceOptions.EnableAgentDirectory.get -> bool
+FabrCore.Surface.Services.SurfaceOptions.EnableAgentDirectory.set -> void
+FabrCore.Surface.Services.SurfaceOptions.EnableDiagnostics.get -> bool
+FabrCore.Surface.Services.SurfaceOptions.EnableDiagnostics.set -> void
+FabrCore.Surface.Services.SurfaceOptions.EnableDiagnosticsPanel.get -> bool
+FabrCore.Surface.Services.SurfaceOptions.EnableDiagnosticsPanel.set -> void
+FabrCore.Surface.Services.SurfaceOptions.EnableLiveStatus.get -> bool
+FabrCore.Surface.Services.SurfaceOptions.EnableLiveStatus.set -> void
+FabrCore.Surface.Services.SurfaceOptions.EnableSharedAgents.get -> bool
+FabrCore.Surface.Services.SurfaceOptions.EnableSharedAgents.set -> void
+FabrCore.Surface.Services.SurfaceOptions.FabrCoreHostUrl.get -> string?
+FabrCore.Surface.Services.SurfaceOptions.FabrCoreHostUrl.set -> void
+FabrCore.Surface.Services.SurfaceOptions.HiddenAgentHandles.get -> System.Collections.Generic.HashSet<string!>!
+FabrCore.Surface.Services.SurfaceOptions.HiddenAgentTypes.get -> System.Collections.Generic.HashSet<string!>!
+FabrCore.Surface.Services.SurfaceOptions.MaxAdaptiveCardVersion.get -> string!
+FabrCore.Surface.Services.SurfaceOptions.MaxAdaptiveCardVersion.set -> void
+FabrCore.Surface.Services.SurfaceOptions.MaxChatAttachmentBytes.get -> long
+FabrCore.Surface.Services.SurfaceOptions.MaxChatAttachmentBytes.set -> void
+FabrCore.Surface.Services.SurfaceOptions.MaxDepth.get -> int
+FabrCore.Surface.Services.SurfaceOptions.MaxDepth.set -> void
+FabrCore.Surface.Services.SurfaceOptions.MaxPayloadBytes.get -> int
+FabrCore.Surface.Services.SurfaceOptions.MaxPayloadBytes.set -> void
+FabrCore.Surface.Services.SurfaceOptions.NormalizePrincipalIds.get -> bool
+FabrCore.Surface.Services.SurfaceOptions.NormalizePrincipalIds.set -> void
+FabrCore.Surface.Services.SurfaceOptions.PrincipalClaimTypes.get -> System.Collections.Generic.List<string!>!
+FabrCore.Surface.Services.SurfaceOptions.PrincipalClaimTypes.set -> void
+FabrCore.Surface.Services.SurfaceOptions.PrincipalDisplayNameHeaderNames.get -> System.Collections.Generic.List<string!>!
+FabrCore.Surface.Services.SurfaceOptions.PrincipalDisplayNameHeaderNames.set -> void
+FabrCore.Surface.Services.SurfaceOptions.PrincipalHeaderNames.get -> System.Collections.Generic.List<string!>!
+FabrCore.Surface.Services.SurfaceOptions.PrincipalHeaderNames.set -> void
+FabrCore.Surface.Services.SurfaceOptions.PrincipalResolver.get -> System.Func<System.IServiceProvider!, System.Threading.CancellationToken, System.Threading.Tasks.Task<FabrCore.Surface.Identity.SurfacePrincipalContext?>!>?
+FabrCore.Surface.Services.SurfaceOptions.PrincipalResolver.set -> void
+FabrCore.Surface.Services.SurfaceOptions.ShowHiddenAgentsByDefault.get -> bool
+FabrCore.Surface.Services.SurfaceOptions.ShowHiddenAgentsByDefault.set -> void
+FabrCore.Surface.Services.SurfaceOptions.ShowRunningAgentsByDefault.get -> bool
+FabrCore.Surface.Services.SurfaceOptions.ShowRunningAgentsByDefault.set -> void
+FabrCore.Surface.Services.SurfaceOptions.SurfaceOptions() -> void
+FabrCore.Surface.SurfaceClientConnectionRetryFilter
+FabrCore.Surface.SurfaceClientConnectionRetryFilter.ShouldRetryConnectionAttempt(System.Exception! exception, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Surface.SurfaceClientConnectionRetryFilter.SurfaceClientConnectionRetryFilter(Microsoft.Extensions.Configuration.IConfiguration! configuration, Microsoft.Extensions.Logging.ILogger<FabrCore.Surface.SurfaceClientConnectionRetryFilter!>! logger) -> void
+FabrCore.Surface.SurfaceDirectMessageSender
+FabrCore.Surface.SurfaceDirectMessageSender.SendEventAsync(FabrCore.Core.EventMessage! message) -> System.Threading.Tasks.Task!
+FabrCore.Surface.SurfaceDirectMessageSender.SendMessageAsync(FabrCore.Core.AgentMessage! message) -> System.Threading.Tasks.Task!
+FabrCore.Surface.SurfaceDirectMessageSender.SurfaceDirectMessageSender(Orleans.IClusterClient! clusterClient, Microsoft.Extensions.Logging.ILogger<FabrCore.Surface.SurfaceDirectMessageSender!>! logger) -> void
+FabrCore.Surface.SurfaceEventStreamSubscriptions
+FabrCore.Surface.SurfaceJson
+FabrCore.Surface.SurfacePrincipalContext
+FabrCore.Surface.SurfacePrincipalContext.AgentMessageReceived -> System.EventHandler<FabrCore.Core.AgentMessage!>?
+FabrCore.Surface.SurfacePrincipalContext.CreateAgent(FabrCore.Core.AgentConfiguration! agentConfiguration) -> System.Threading.Tasks.Task<FabrCore.Core.AgentHealthStatus!>!
+FabrCore.Surface.SurfacePrincipalContext.DisposeAsync() -> System.Threading.Tasks.ValueTask
+FabrCore.Surface.SurfacePrincipalContext.GetAccessibleSharedAgents() -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.AgentInfo!>!>!
+FabrCore.Surface.SurfacePrincipalContext.GetAgentHealth(string! handle, FabrCore.Core.HealthDetailLevel detailLevel = FabrCore.Core.HealthDetailLevel.Basic) -> System.Threading.Tasks.Task<FabrCore.Core.AgentHealthStatus!>!
+FabrCore.Surface.SurfacePrincipalContext.GetTrackedAgents(bool activate = false) -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.TrackedAgentInfo!>!>!
+FabrCore.Surface.SurfacePrincipalContext.Handle.get -> string!
+FabrCore.Surface.SurfacePrincipalContext.IsAgentTracked(string! handle) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Surface.SurfacePrincipalContext.IsDisposed.get -> bool
+FabrCore.Surface.SurfacePrincipalContext.ResetAgent(string! handle) -> System.Threading.Tasks.Task<FabrCore.Core.AgentHealthStatus!>!
+FabrCore.Surface.SurfacePrincipalContext.SendAndReceiveMessage(FabrCore.Core.AgentMessage! request) -> System.Threading.Tasks.Task<FabrCore.Core.AgentMessage!>!
+FabrCore.Surface.SurfacePrincipalContext.SendEvent(FabrCore.Core.EventMessage! request) -> System.Threading.Tasks.Task!
+FabrCore.Surface.SurfacePrincipalContext.SendMessage(FabrCore.Core.AgentMessage! request) -> System.Threading.Tasks.Task!
+FabrCore.Surface.SurfacePrincipalContextFactory
+FabrCore.Surface.SurfacePrincipalContextFactory.CreateAsync(string! handle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.ISurfacePrincipalContext!>!
+FabrCore.Surface.SurfacePrincipalContextFactory.DisposeAsync() -> System.Threading.Tasks.ValueTask
+FabrCore.Surface.SurfacePrincipalContextFactory.GetOrCreateAsync(string! handle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.ISurfacePrincipalContext!>!
+FabrCore.Surface.SurfacePrincipalContextFactory.HasContext(string! handle) -> bool
+FabrCore.Surface.SurfacePrincipalContextFactory.ReleaseAsync(string! handle) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Surface.SurfacePrincipalContextFactory.SurfacePrincipalContextFactory(Orleans.IClusterClient! clusterClient, Microsoft.Extensions.Logging.ILoggerFactory! loggerFactory) -> void
+FabrCore.Surface.Templating.AdaptiveCardTemplateExpander
+FabrCore.Surface.Validation.AdaptiveCardSurfaceValidationResult
+FabrCore.Surface.Validation.AdaptiveCardSurfaceValidationResult.AdaptiveCardSurfaceValidationResult(bool isValid, System.Collections.Generic.IReadOnlyList<string!>! errors, int plannedActionCount = 0, int validatedActionCount = 0, System.Collections.Generic.IReadOnlyList<string!>? rejectedActionReasons = null) -> void
+FabrCore.Surface.Validation.AdaptiveCardSurfaceValidationResult.Errors.get -> System.Collections.Generic.IReadOnlyList<string!>!
+FabrCore.Surface.Validation.AdaptiveCardSurfaceValidationResult.IsValid.get -> bool
+FabrCore.Surface.Validation.AdaptiveCardSurfaceValidationResult.PlannedActionCount.get -> int
+FabrCore.Surface.Validation.AdaptiveCardSurfaceValidationResult.RejectedActionCount.get -> int
+FabrCore.Surface.Validation.AdaptiveCardSurfaceValidationResult.RejectedActionReasons.get -> System.Collections.Generic.IReadOnlyList<string!>!
+FabrCore.Surface.Validation.AdaptiveCardSurfaceValidationResult.ValidatedActionCount.get -> int
+FabrCore.Surface.Validation.AdaptiveCardSurfaceValidator
+FabrCore.Surface.Validation.AdaptiveCardSurfaceValidator.AdaptiveCardSurfaceValidator(FabrCore.Surface.Services.SurfaceOptions! options, FabrCore.Surface.Configuration.SurfaceDefinition? definition = null) -> void
+FabrCore.Surface.Validation.AdaptiveCardSurfaceValidator.AdaptiveCardSurfaceValidator(Microsoft.Extensions.Options.IOptions<FabrCore.Surface.Services.SurfaceOptions!>! options) -> void
+FabrCore.Surface.Validation.AdaptiveCardSurfaceValidator.Validate(FabrCore.Surface.Contracts.AdaptiveCardSurfaceEnvelope? envelope) -> FabrCore.Surface.Validation.AdaptiveCardSurfaceValidationResult!
+FabrCore.Surface.Validation.AdaptiveCardSurfaceValidator.ValidateExpandedCard(System.Text.Json.JsonElement expandedCard) -> FabrCore.Surface.Validation.AdaptiveCardSurfaceValidationResult!
+const FabrCore.Surface.Ai.Orchestration.SurfaceOrchestrationAgentTypes.SquadOrchestrator = "surface-squad-orchestrator" -> string!
+const FabrCore.Surface.Ai.Squads.SurfaceSquadArgs.AgentName = "SurfaceSquad:AgentName" -> string!
+const FabrCore.Surface.Ai.Squads.SurfaceSquadArgs.AgentRole = "SurfaceSquad:AgentRole" -> string!
+const FabrCore.Surface.Ai.Squads.SurfaceSquadArgs.Mirror = "SurfaceSquad:Mirror" -> string!
+const FabrCore.Surface.Ai.Squads.SurfaceSquadArgs.OriginalFromHandle = "SurfaceSquad:OriginalFromHandle" -> string!
+const FabrCore.Surface.Ai.Squads.SurfaceSquadArgs.OriginalToHandle = "SurfaceSquad:OriginalToHandle" -> string!
+const FabrCore.Surface.Ai.Squads.SurfaceSquadArgs.RoutedMention = "SurfaceSquad:RoutedMention" -> string!
+const FabrCore.Surface.Ai.Squads.SurfaceSquadArgs.SquadDefinition = "SurfaceSquad:SquadDefinition" -> string!
+const FabrCore.Surface.Ai.Squads.SurfaceSquadArgs.SquadHandle = "SurfaceSquad:SquadHandle" -> string!
+const FabrCore.Surface.Ai.Squads.SurfaceSquadArgs.SquadName = "SurfaceSquad:SquadName" -> string!
+const FabrCore.Surface.Ai.Squads.SurfaceSquadArgs.SquadSlug = "SurfaceSquad:SquadSlug" -> string!
+const FabrCore.Surface.Ai.Squads.SurfaceSquadMessageTypes.AgentRequest = "squad.agent.request" -> string!
+const FabrCore.Surface.Ai.Squads.SurfaceSquadMessageTypes.AgentResponse = "squad.agent.response" -> string!
+const FabrCore.Surface.Ai.Squads.SurfaceSquadMessageTypes.Chat = "squad.chat" -> string!
+const FabrCore.Surface.Ai.Squads.SurfaceSquadMessageTypes.SmeConsultation = "squad-sme-consultation" -> string!
+const FabrCore.Surface.Ai.Squads.SurfaceSquadMessageTypes.TaskDelegation = "task-delegation" -> string!
+const FabrCore.Surface.Ai.Squads.SurfaceSquadMessageTypes.TaskTick = "surface.task.tick" -> string!
+const FabrCore.Surface.Ai.Tasks.SurfaceTaskAgentTypes.TaskRunner = "surface-task-runner" -> string!
+const FabrCore.Surface.Brain.SurfaceEnvelope.FenceName = "fabrcore-adaptive-card-surface" -> string!
+const FabrCore.Surface.Configuration.OrleansClusterOptions.SectionName = "FabrCore:Orleans" -> string!
+const FabrCore.Surface.Contracts.AdaptiveCardActionTypes.Execute = "Action.Execute" -> string!
+const FabrCore.Surface.Contracts.AdaptiveCardActionTypes.OpenUrl = "Action.OpenUrl" -> string!
+const FabrCore.Surface.Contracts.AdaptiveCardActionTypes.ShowCard = "Action.ShowCard" -> string!
+const FabrCore.Surface.Contracts.AdaptiveCardActionTypes.Submit = "Action.Submit" -> string!
+const FabrCore.Surface.Contracts.AdaptiveCardActionTypes.ToggleVisibility = "Action.ToggleVisibility" -> string!
+const FabrCore.Surface.Contracts.SurfaceActionDataKeys.ActionId = "actionId" -> string!
+const FabrCore.Surface.Contracts.SurfaceActionDataKeys.MessageTemplate = "messageTemplate" -> string!
+const FabrCore.Surface.Contracts.SurfaceActionDataKeys.RouteTo = "routeTo" -> string!
+const FabrCore.Surface.Contracts.SurfaceActionDataKeys.TargetAgent = "targetAgent" -> string!
+const FabrCore.Surface.Contracts.SurfaceActionRoute.Agent = "agent" -> string!
+const FabrCore.Surface.Contracts.SurfaceActionRoute.App = "app" -> string!
+const FabrCore.Surface.Contracts.SurfaceActionRoute.Both = "both" -> string!
+const FabrCore.Surface.Contracts.SurfaceDiagnosticArgs.PlannedActionCount = "_surface_planned_action_count" -> string!
+const FabrCore.Surface.Contracts.SurfaceDiagnosticArgs.RejectedActionCount = "_surface_rejected_action_count" -> string!
+const FabrCore.Surface.Contracts.SurfaceDiagnosticArgs.RenderedActionCount = "_surface_rendered_action_count" -> string!
+const FabrCore.Surface.Contracts.SurfaceDiagnosticArgs.TargetHandle = "_surface_target_handle" -> string!
+const FabrCore.Surface.Contracts.SurfaceDiagnosticArgs.ValidatedActionCount = "_surface_validated_action_count" -> string!
+const FabrCore.Surface.Contracts.SurfaceMessageArgs.SurfaceConfig = "surface:Config" -> string!
+const FabrCore.Surface.Contracts.SurfaceMessageArgs.SurfaceSourceHandle = "surface:SourceHandle" -> string!
+const FabrCore.Surface.Contracts.SurfaceMessageArgs.SurfaceTargetHandle = "surface:TargetHandle" -> string!
+const FabrCore.Surface.Contracts.SurfaceMessageArgs.TargetHandle = "targetHandle" -> string!
+const FabrCore.Surface.Contracts.SurfaceMessageTypes.DataType = "application/vnd.fabrcore.surface.adaptive-card+json" -> string!
+const FabrCore.Surface.Contracts.SurfaceMessageTypes.UiAction = "ui.action" -> string!
+const FabrCore.Surface.Contracts.SurfaceMessageTypes.UiRender = "ui.render" -> string!
+const FabrCore.Surface.Identity.DefaultSurfacePrincipalContextProvider.PersistenceKey = "FabrCore.Surface.PrincipalContext" -> string!
+override FabrCore.Surface.Agents.SurfaceAgent.OnInitialize() -> System.Threading.Tasks.Task!
+override FabrCore.Surface.Agents.SurfaceAgent.OnMessage(FabrCore.Core.AgentMessage! message) -> System.Threading.Tasks.Task<FabrCore.Core.AgentMessage!>!
+override FabrCore.Surface.Ai.Orchestration.SurfaceSquadOrchestratorAgent.OnInitialize() -> System.Threading.Tasks.Task!
+override FabrCore.Surface.Ai.Orchestration.SurfaceSquadOrchestratorAgent.OnMessage(FabrCore.Core.AgentMessage! message) -> System.Threading.Tasks.Task<FabrCore.Core.AgentMessage!>!
+override FabrCore.Surface.Ai.Squads.SurfaceSquadRouteResult.Equals(object? obj) -> bool
+override FabrCore.Surface.Ai.Squads.SurfaceSquadRouteResult.GetHashCode() -> int
+override FabrCore.Surface.Ai.Squads.SurfaceSquadRouteResult.ToString() -> string!
+override FabrCore.Surface.Ai.Tasks.SurfaceTaskHarnessAgent.OnInitialize() -> System.Threading.Tasks.Task!
+override FabrCore.Surface.Ai.Tasks.SurfaceTaskHarnessAgent.OnMessage(FabrCore.Core.AgentMessage! message) -> System.Threading.Tasks.Task<FabrCore.Core.AgentMessage!>!
+override FabrCore.Surface.CommandCenter.SurfaceUnreadSummary.Equals(object? obj) -> bool
+override FabrCore.Surface.CommandCenter.SurfaceUnreadSummary.GetHashCode() -> int
+override FabrCore.Surface.CommandCenter.SurfaceUnreadSummary.ToString() -> string!
+override FabrCore.Surface.CommandCenter.SurfaceUploadedFile.Equals(object? obj) -> bool
+override FabrCore.Surface.CommandCenter.SurfaceUploadedFile.GetHashCode() -> int
+override FabrCore.Surface.CommandCenter.SurfaceUploadedFile.ToString() -> string!
+override FabrCore.Surface.Components.DynamicAgentSurface.OnAfterRenderAsync(bool firstRender) -> System.Threading.Tasks.Task!
+override FabrCore.Surface.Components.DynamicAgentSurface.OnInitializedAsync() -> System.Threading.Tasks.Task!
+override FabrCore.Surface.Components.SurfaceAdaptiveCardHost.OnAfterRenderAsync(bool firstRender) -> System.Threading.Tasks.Task!
+override FabrCore.Surface.Components.SurfaceAdaptiveCardHost.OnParametersSet() -> void
+override FabrCore.Surface.Components.SurfaceChatLink.OnAfterRenderAsync(bool firstRender) -> System.Threading.Tasks.Task!
+override FabrCore.Surface.Components.SurfaceChatLink.OnInitializedAsync() -> System.Threading.Tasks.Task!
+override FabrCore.Surface.Components.SurfaceCommandCenter.OnAfterRenderAsync(bool firstRender) -> System.Threading.Tasks.Task!
+override FabrCore.Surface.Components.SurfaceCommandCenter.OnInitializedAsync() -> System.Threading.Tasks.Task!
+override FabrCore.Surface.Components.SurfaceCommandCenter.OnParametersSetAsync() -> System.Threading.Tasks.Task!
+override FabrCore.Surface.Components.SurfaceNotify.OnInitializedAsync() -> System.Threading.Tasks.Task!
+override FabrCore.Surface.Identity.SurfacePrincipalContext.Equals(object? obj) -> bool
+override FabrCore.Surface.Identity.SurfacePrincipalContext.GetHashCode() -> int
+override FabrCore.Surface.Identity.SurfacePrincipalContext.ToString() -> string!
+static FabrCore.Surface.Ai.Orchestration.SurfaceSquadAgentCapabilityProjection.Build(FabrCore.Surface.Ai.Squads.SurfaceSquadAgent! squadAgent, FabrCore.Sdk.RegistryEntry? registryEntry, FabrCore.Core.AgentHealthStatus? health, string? unavailableReason = null) -> FabrCore.Surface.Ai.Orchestration.SurfaceSquadAgentCapability!
+static FabrCore.Surface.Ai.Squads.SurfaceSquadCapabilityLoader.BuildAsync(FabrCore.Surface.Ai.Squads.SurfaceSquad! squad, FabrCore.Sdk.IFabrCoreAgentHost! agentHost, FabrCore.Sdk.IFabrCoreRegistry? registry, bool includeRoleNote = false, Microsoft.Extensions.Logging.ILogger? logger = null) -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Surface.Ai.Orchestration.SurfaceSquadAgentCapability!>!>!
+static FabrCore.Surface.Ai.Squads.SurfaceSquadCapabilityLoader.ShortHandle(string! handle) -> string!
+static FabrCore.Surface.Ai.Squads.SurfaceSquadHandleBuilder.BuildMemberAlias(string! squadSlug, string! agentName) -> string!
+static FabrCore.Surface.Ai.Squads.SurfaceSquadHandleBuilder.BuildOrchestratorAlias(string! squadSlug) -> string!
+static FabrCore.Surface.Ai.Squads.SurfaceSquadHandleBuilder.DisplayNameFromHandle(string! handle) -> string!
+static FabrCore.Surface.Ai.Squads.SurfaceSquadHandleBuilder.Qualify(string! principalHandle, string! alias) -> string!
+static FabrCore.Surface.Ai.Squads.SurfaceSquadHandleBuilder.ToSlug(string! value) -> string!
+static FabrCore.Surface.Ai.Squads.SurfaceSquadRouteParser.Resolve(FabrCore.Surface.Ai.Squads.SurfaceSquad! squad, string! text) -> FabrCore.Surface.Ai.Squads.SurfaceSquadRouteResult!
+static FabrCore.Surface.Ai.Squads.SurfaceSquadRouteResult.operator !=(FabrCore.Surface.Ai.Squads.SurfaceSquadRouteResult? left, FabrCore.Surface.Ai.Squads.SurfaceSquadRouteResult? right) -> bool
+static FabrCore.Surface.Ai.Squads.SurfaceSquadRouteResult.operator ==(FabrCore.Surface.Ai.Squads.SurfaceSquadRouteResult? left, FabrCore.Surface.Ai.Squads.SurfaceSquadRouteResult? right) -> bool
+static FabrCore.Surface.Ai.Squads.SurfaceSquadRuntime.FromConfiguration(FabrCore.Core.AgentConfiguration! config, string! fallbackHandle) -> FabrCore.Surface.Ai.Squads.SurfaceSquadRuntime!
+static FabrCore.Surface.Ai.Squads.SurfaceSquadRuntime.Serialize(FabrCore.Surface.Ai.Squads.SurfaceSquadRuntime! runtime) -> string!
+static FabrCore.Surface.Ai.Squads.SurfaceSquadService.BuildAgentConfigurations(FabrCore.Surface.Ai.Squads.SurfaceSquadDefinition! definition, FabrCore.Surface.Ai.Squads.SurfaceSquad! squad, string! runtimeJson) -> System.Collections.Generic.IEnumerable<FabrCore.Core.AgentConfiguration!>!
+static FabrCore.Surface.Ai.Squads.SurfaceSquadService.BuildSquad(string! principalHandle, FabrCore.Surface.Ai.Squads.SurfaceSquadDefinition! definition) -> FabrCore.Surface.Ai.Squads.SurfaceSquad!
+static FabrCore.Surface.Ai.Squads.SurfaceSquadService.TryReadSquad(FabrCore.Core.AgentConfiguration? config) -> FabrCore.Surface.Ai.Squads.SurfaceSquad?
+static FabrCore.Surface.Brain.SurfaceEnvelope.StripEnvelopeBlocks(string? text) -> string!
+static FabrCore.Surface.Brain.SurfaceEnvelope.TryExtract(string? responseText) -> System.Text.Json.JsonElement?
+static FabrCore.Surface.Brain.SurfaceEnvelope.TryExtractEnvelope(string? responseText) -> FabrCore.Surface.Contracts.AdaptiveCardSurfaceEnvelope?
+static FabrCore.Surface.Builders.SurfaceActions.OpenUrl(string! title, string! url) -> object!
+static FabrCore.Surface.Builders.SurfaceActions.RoutedActionData(string! verb, string! routeTo, string? targetAgent = null, object? payload = null, string? messageTemplate = null) -> System.Collections.Generic.Dictionary<string!, object?>!
+static FabrCore.Surface.Builders.SurfaceActions.ToAgent(string! title, string! verb, string! targetAgent, object? payload = null, string? messageTemplate = null) -> object!
+static FabrCore.Surface.Builders.SurfaceActions.ToApp(string! title, string! verb, object? payload = null, string? messageTemplate = null) -> object!
+static FabrCore.Surface.Builders.SurfaceActions.ToBoth(string! title, string! verb, string! targetAgent, object? payload = null, string? messageTemplate = null) -> object!
+static FabrCore.Surface.CommandCenter.SurfaceAgentList.Merge(string! principalId, System.Collections.Generic.IEnumerable<FabrCore.Core.TrackedAgentInfo!>! trackedAgents, System.Collections.Generic.IEnumerable<FabrCore.Core.AgentInfo!>! sharedAgents, System.Collections.Generic.IEnumerable<string!>? hiddenAgentTypes = null, System.Collections.Generic.IEnumerable<string!>? hiddenAgentHandles = null, System.Collections.Generic.IEnumerable<string!>? surfaceAgentHandles = null, bool includeHidden = false) -> System.Collections.Generic.IReadOnlyList<FabrCore.Surface.CommandCenter.SurfaceAgentSummary!>!
+static FabrCore.Surface.CommandCenter.SurfaceAgentList.ToDisplayName(string! handle, string! principalId) -> string!
+static FabrCore.Surface.CommandCenter.SurfaceMarkdownRenderer.Render(string? markdown) -> string!
+static FabrCore.Surface.CommandCenter.SurfaceMessageClassifier.Classify(FabrCore.Core.AgentMessage! message) -> FabrCore.Surface.CommandCenter.SurfaceTimelineItem!
+static FabrCore.Surface.CommandCenter.SurfaceMessageClassifier.IsAdaptiveCardRender(FabrCore.Core.AgentMessage! message, out FabrCore.Surface.Contracts.AdaptiveCardSurfaceEnvelope? envelope) -> bool
+static FabrCore.Surface.CommandCenter.SurfaceMessageClassifier.ShouldHideFromChat(FabrCore.Core.AgentMessage! message) -> bool
+static FabrCore.Surface.CommandCenter.SurfacePreferences.FromDefaults(FabrCore.Surface.Services.SurfaceOptions! defaults) -> FabrCore.Surface.CommandCenter.SurfacePreferences!
+static FabrCore.Surface.CommandCenter.SurfaceUnreadSummary.operator !=(FabrCore.Surface.CommandCenter.SurfaceUnreadSummary? left, FabrCore.Surface.CommandCenter.SurfaceUnreadSummary? right) -> bool
+static FabrCore.Surface.CommandCenter.SurfaceUnreadSummary.operator ==(FabrCore.Surface.CommandCenter.SurfaceUnreadSummary? left, FabrCore.Surface.CommandCenter.SurfaceUnreadSummary? right) -> bool
+static FabrCore.Surface.CommandCenter.SurfaceUploadedFile.operator !=(FabrCore.Surface.CommandCenter.SurfaceUploadedFile? left, FabrCore.Surface.CommandCenter.SurfaceUploadedFile? right) -> bool
+static FabrCore.Surface.CommandCenter.SurfaceUploadedFile.operator ==(FabrCore.Surface.CommandCenter.SurfaceUploadedFile? left, FabrCore.Surface.CommandCenter.SurfaceUploadedFile? right) -> bool
+static FabrCore.Surface.Configuration.SurfaceDefinitionPolicyMapper.ApplyTo(FabrCore.Surface.Configuration.SurfaceDefinition! definition, FabrCore.Surface.Services.SurfaceOptions! options) -> void
+static FabrCore.Surface.Configuration.SurfaceDefinitionPolicyMapper.ToOptions(FabrCore.Surface.Configuration.SurfaceDefinition! definition) -> FabrCore.Surface.Services.SurfaceOptions!
+static FabrCore.Surface.Configuration.SurfaceServiceExtensions.AddFabrCoreSurfaceServices(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<FabrCore.Surface.Configuration.SurfaceAiOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static FabrCore.Surface.FabrCoreSurfaceExtensions.AddFabrCoreSurface(this Microsoft.Extensions.Hosting.IHostApplicationBuilder! builder, System.Action<FabrCore.Surface.Services.SurfaceOptions!>? configure = null) -> Microsoft.Extensions.Hosting.IHostApplicationBuilder!
+static FabrCore.Surface.FabrCoreSurfaceExtensions.AddFabrCoreSurfaceAsync(this Microsoft.Extensions.Hosting.IHostApplicationBuilder! builder, System.Net.Http.HttpClient! discoveryHttpClient, System.Action<FabrCore.Surface.Services.SurfaceOptions!>? configure = null, System.Action<FabrCore.Client.Orleans.FabrCoreOrleansClientOptions!>? configureClient = null, System.Action<Orleans.Hosting.IClientBuilder!>? configureOrleans = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Hosting.IHostApplicationBuilder!>!
+static FabrCore.Surface.FabrCoreSurfaceExtensions.AddFabrCoreSurfaceComponents(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static FabrCore.Surface.FabrCoreSurfaceExtensions.AddFabrCoreSurfaceFromConfig(this Microsoft.Extensions.Hosting.IHostApplicationBuilder! builder, string! definitionFilePath = "fabrcore-surface.json", string? definitionName = null) -> Microsoft.Extensions.Hosting.IHostApplicationBuilder!
+static FabrCore.Surface.FabrCoreSurfaceExtensions.AddFabrCoreSurfaceFromConfigAsync(this Microsoft.Extensions.Hosting.IHostApplicationBuilder! builder, System.Net.Http.HttpClient! discoveryHttpClient, string! definitionFilePath = "fabrcore-surface.json", string? definitionName = null, System.Action<FabrCore.Client.Orleans.FabrCoreOrleansClientOptions!>? configureClient = null, System.Action<Orleans.Hosting.IClientBuilder!>? configureOrleans = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Hosting.IHostApplicationBuilder!>!
+static FabrCore.Surface.FabrCoreSurfaceExtensions.AddFabrCoreSurfaceRouteAssemblies(this Microsoft.AspNetCore.Builder.RazorComponentsEndpointConventionBuilder! builder, params System.Reflection.Assembly![]! assemblies) -> Microsoft.AspNetCore.Builder.RazorComponentsEndpointConventionBuilder!
+static FabrCore.Surface.FabrCoreSurfaceExtensions.AddFabrCoreSurfaceRoutes(this Microsoft.AspNetCore.Builder.RazorComponentsEndpointConventionBuilder! builder) -> Microsoft.AspNetCore.Builder.RazorComponentsEndpointConventionBuilder!
+static FabrCore.Surface.Identity.SurfacePrincipalContext.Unresolved.get -> FabrCore.Surface.Identity.SurfacePrincipalContext!
+static FabrCore.Surface.Identity.SurfacePrincipalContext.operator !=(FabrCore.Surface.Identity.SurfacePrincipalContext? left, FabrCore.Surface.Identity.SurfacePrincipalContext? right) -> bool
+static FabrCore.Surface.Identity.SurfacePrincipalContext.operator ==(FabrCore.Surface.Identity.SurfacePrincipalContext? left, FabrCore.Surface.Identity.SurfacePrincipalContext? right) -> bool
+static FabrCore.Surface.Identity.SurfacePrincipalId.Normalize(string? value) -> string?
+static FabrCore.Surface.Services.SurfaceMessageFactory.CreateRenderMessage(FabrCore.Surface.Contracts.AdaptiveCardSurfaceEnvelope! envelope, FabrCore.Core.AgentMessage! sourceMessage, string? targetHandle = null) -> FabrCore.Core.AgentMessage!
+static FabrCore.Surface.SurfaceEventStreamSubscriptions.Format(System.Collections.Generic.IEnumerable<FabrCore.Core.EventStreamSubscription!>! subscriptions) -> string!
+static FabrCore.Surface.SurfaceEventStreamSubscriptions.Parse(string! value) -> FabrCore.Core.EventStreamSubscription!
+static FabrCore.Surface.SurfaceEventStreamSubscriptions.Split(string! value) -> System.Collections.Generic.List<FabrCore.Core.EventStreamSubscription!>!
+static FabrCore.Surface.Templating.AdaptiveCardTemplateExpander.Expand(System.Text.Json.JsonElement cardTemplate, System.Text.Json.JsonElement? data) -> System.Text.Json.JsonElement
+static FabrCore.Surface.Validation.AdaptiveCardSurfaceValidationResult.Valid.get -> FabrCore.Surface.Validation.AdaptiveCardSurfaceValidationResult!
+static readonly FabrCore.Surface.Contracts.AdaptiveCardActionTypes.Defaults -> string![]!
+static readonly FabrCore.Surface.SurfaceJson.Options -> System.Text.Json.JsonSerializerOptions!
+virtual FabrCore.Surface.Abstractions.SurfaceAgentFactory.Invoke(string! modelName, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Microsoft.Agents.AI.AIAgent!>!
+~override FabrCore.Surface.Components.DynamicAgentSurface.BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder __builder) -> void
+~override FabrCore.Surface.Components.SurfaceAdaptiveCardHost.BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder __builder) -> void
+~override FabrCore.Surface.Components.SurfaceChatLink.BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder __builder) -> void
+~override FabrCore.Surface.Components.SurfaceCommandCenter.BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder __builder) -> void
+~override FabrCore.Surface.Components.SurfaceCommandRail.BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder __builder) -> void
+~override FabrCore.Surface.Components.SurfaceNotify.BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder __builder) -> void
+~override FabrCore.Surface.Components.SurfaceTopbarNav.BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder __builder) -> void

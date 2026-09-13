@@ -31,7 +31,7 @@ public sealed class CopilotAppPackageBuilderTests
         Assert.AreEqual("11111111-2222-3333-4444-555555555555", cea.GetProperty("id").GetString());
         Assert.AreEqual("bot", cea.GetProperty("type").GetString());
 
-        Assert.AreEqual("1.22", manifest.GetProperty("manifestVersion").GetString());
+        Assert.AreEqual("1.25", manifest.GetProperty("manifestVersion").GetString());
         Assert.AreEqual("Test Agent", manifest.GetProperty("name").GetProperty("short").GetString());
         Assert.AreEqual("agents.contoso.com", manifest.GetProperty("validDomains")[0].GetString());
 

@@ -2,26 +2,10 @@ using System.Text;
 
 namespace FabrCore.Sdk;
 
-/// <summary>
-/// The resolved compaction ladder for one agent + model configuration.
-/// </summary>
+/// <summary>Resolved thresholds for request compaction, durable summarization and safety checks.</summary>
 /// <remarks>
-/// <para>
-/// FabrCore bounds context with five ordered rungs, cheapest and most reversible first:
-/// </para>
-/// <list type="number">
-/// <item><description><b>evict</b> — layer 1, old tool results collapse to one-line summaries. Free, reversible.</description></item>
-/// <item><description><b>truncate</b> — layer 1, oldest groups drop out of the request. Free, reversible.</description></item>
-/// <item><description><b>history</b> — layer 2, thread is summarized and rewritten. One LLM call, permanent.</description></item>
-/// <item><description><b>fuse</b> — read-side projection. Blunt clip, insurance only.</description></item>
-/// <item><description><b>stop</b> — run safety. <see cref="FabrCoreRunStoppedException"/>, nothing survives.</description></item>
-/// </list>
-/// <para>
-/// Rungs 1–2 are <see cref="ContextCompaction"/>, rung 3 is <see cref="CompactionService"/>, rung 4 is
-/// <see cref="FabrCoreChatHistoryProvider.ActiveProjection"/>, rung 5 is <see cref="ChatRunSafetyScope"/>.
-/// Everything is anchored to one setting — <c>ModelConfiguration.ContextWindowTokens</c> — so the rungs
-/// stay in order without anyone tuning them individually.
-/// </para>
+/// Tool excerpt thresholds are soft targets applied inside a run. History summarization runs between
+/// turns and may trigger earlier. Projection and request guards stop when protected context cannot fit.
 /// </remarks>
 public sealed record CompactionLadder
 {
@@ -43,21 +27,21 @@ public sealed record CompactionLadder
             ? (int)(History.MaxContextTokens * History.Threshold)
             : 0;
 
-    /// <summary>The token count at which the projection fuse clips, or 0 when disabled.</summary>
+    /// <summary>The token count at which projection must fit or stop, or 0 when disabled.</summary>
     public int FuseAtTokens =>
         Projection.Enabled && Projection.MaxContextTokens > 0
             ? (int)(Projection.MaxContextTokens * Projection.Threshold)
             : 0;
 
     /// <summary>
-    /// True when the ladder is out of order — a later rung would fire before an earlier one, making the
-    /// earlier rung decorative. Worth logging: it is nearly always a misconfiguration.
+    /// True when projection or run safety would stop below the configured durable history threshold.
+    /// History may legitimately summarize before either soft tool-excerpt threshold.
     /// </summary>
     public bool IsOutOfOrder
     {
         get
         {
-            var rungs = new[] { Context.TruncateAtTokens, HistoryAtTokens, FuseAtTokens }
+            var rungs = new[] { HistoryAtTokens, FuseAtTokens, RunSafety.MaxPromptInputTokens }
                 .Where(t => t > 0)
                 .ToArray();
 
@@ -72,9 +56,8 @@ public sealed record CompactionLadder
     }
 
     /// <summary>
-    /// Renders the ladder as one readable line, e.g.
-    /// <c>evict@92000 → truncate@147200 → history@174000 → fuse@180000 → stop@200000</c>.
-    /// Disabled rungs render as <c>name:off</c> so a missing bound is visible rather than implied.
+    /// Renders the configured thresholds. This is not an execution sequence: history runs between turns.
+    /// Disabled layers are shown explicitly.
     /// </summary>
     public string Describe()
     {
@@ -82,8 +65,8 @@ public sealed record CompactionLadder
 
         if (Context.IsUsable)
         {
-            parts.Add($"evict@{Context.EvictAtTokens}");
-            parts.Add($"truncate@{Context.TruncateAtTokens}");
+            parts.Add($"tool-excerpt@{Context.EvictAtTokens}");
+            parts.Add($"tool-excerpt-tight@{Context.TruncateAtTokens}");
         }
         else
         {

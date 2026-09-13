@@ -1,0 +1,277 @@
+#nullable enable
+FabrCore.Core.McpServerConfig.Connection.get -> string?
+FabrCore.Core.McpServerConfig.Connection.set -> void
+FabrCore.Core.McpServerConfig.Resource.get -> string?
+FabrCore.Core.McpServerConfig.Resource.set -> void
+const FabrCore.Core.CloudServer.FabrCoreAdminChannels.Admin = "_admin" -> string!
+FabrCore.Core.Blueprints.IBlueprintPreviewExpander
+FabrCore.Core.Blueprints.IBlueprintPreviewExpander.ConfigurationSchema.get -> System.Text.Json.JsonElement?
+FabrCore.Core.CloudServer.AdminApiResult
+FabrCore.Core.CloudServer.AdminApiResult.AdminApiResult() -> void
+FabrCore.Core.CloudServer.AdminApiResult.Body.get -> System.Text.Json.JsonElement
+FabrCore.Core.CloudServer.AdminApiResult.Body.set -> void
+FabrCore.Core.CloudServer.AdminApiResult.StatusCode.get -> int
+FabrCore.Core.CloudServer.AdminApiResult.StatusCode.set -> void
+FabrCore.Core.CloudServer.AdminConversationSession
+FabrCore.Core.CloudServer.AdminConversationSession.Actor.get -> string!
+FabrCore.Core.CloudServer.AdminConversationSession.Actor.set -> void
+FabrCore.Core.CloudServer.AdminConversationSession.AdminConversationSession() -> void
+FabrCore.Core.CloudServer.AdminConversationSession.AgentHandle.get -> string!
+FabrCore.Core.CloudServer.AdminConversationSession.AgentHandle.set -> void
+FabrCore.Core.CloudServer.AdminConversationSession.CreatedAt.get -> System.DateTimeOffset
+FabrCore.Core.CloudServer.AdminConversationSession.CreatedAt.set -> void
+FabrCore.Core.CloudServer.AdminConversationSession.Id.get -> string!
+FabrCore.Core.CloudServer.AdminConversationSession.Id.set -> void
+FabrCore.Core.CloudServer.AdminConversationSession.SourceSnapshot.get -> System.Collections.Generic.List<FabrCore.Core.StoredChatMessage!>!
+FabrCore.Core.CloudServer.AdminConversationSession.SourceSnapshot.set -> void
+FabrCore.Core.CloudServer.AdminConversationSession.SourceThreadId.get -> string?
+FabrCore.Core.CloudServer.AdminConversationSession.SourceThreadId.set -> void
+FabrCore.Core.CloudServer.AdminConversationSession.Turns.get -> System.Collections.Generic.List<FabrCore.Core.CloudServer.AdminConversationTurn!>!
+FabrCore.Core.CloudServer.AdminConversationSession.Turns.set -> void
+FabrCore.Core.CloudServer.AdminConversationTurn
+FabrCore.Core.CloudServer.AdminConversationTurn.AdminConversationTurn() -> void
+FabrCore.Core.CloudServer.AdminConversationTurn.CompletedAt.get -> System.DateTimeOffset?
+FabrCore.Core.CloudServer.AdminConversationTurn.CompletedAt.set -> void
+FabrCore.Core.CloudServer.AdminConversationTurn.Error.get -> string?
+FabrCore.Core.CloudServer.AdminConversationTurn.Error.set -> void
+FabrCore.Core.CloudServer.AdminConversationTurn.Id.get -> string!
+FabrCore.Core.CloudServer.AdminConversationTurn.Id.set -> void
+FabrCore.Core.CloudServer.AdminConversationTurn.Message.get -> string!
+FabrCore.Core.CloudServer.AdminConversationTurn.Message.set -> void
+FabrCore.Core.CloudServer.AdminConversationTurn.Response.get -> string?
+FabrCore.Core.CloudServer.AdminConversationTurn.Response.set -> void
+FabrCore.Core.CloudServer.AdminConversationTurn.StartedAt.get -> System.DateTimeOffset
+FabrCore.Core.CloudServer.AdminConversationTurn.StartedAt.set -> void
+FabrCore.Core.CloudServer.AdminConversationTurn.Status.get -> string!
+FabrCore.Core.CloudServer.AdminConversationTurn.Status.set -> void
+FabrCore.Core.CloudServer.AdminConversationTurn.TraceId.get -> string?
+FabrCore.Core.CloudServer.AdminConversationTurn.TraceId.set -> void
+FabrCore.Core.CloudServer.AdminConversationTurn.Transcript.get -> System.Collections.Generic.List<FabrCore.Core.StoredChatMessage!>!
+FabrCore.Core.CloudServer.AdminConversationTurn.Transcript.set -> void
+FabrCore.Core.CloudServer.AdministrationOperation
+FabrCore.Core.CloudServer.AdministrationOperation.AdministrationOperation() -> void
+FabrCore.Core.CloudServer.AdministrationOperation.CompletedAt.get -> System.DateTimeOffset?
+FabrCore.Core.CloudServer.AdministrationOperation.CompletedAt.set -> void
+FabrCore.Core.CloudServer.AdministrationOperation.Error.get -> string?
+FabrCore.Core.CloudServer.AdministrationOperation.Error.set -> void
+FabrCore.Core.CloudServer.AdministrationOperation.Id.get -> string!
+FabrCore.Core.CloudServer.AdministrationOperation.Id.set -> void
+FabrCore.Core.CloudServer.AdministrationOperation.RequestDigest.get -> string!
+FabrCore.Core.CloudServer.AdministrationOperation.RequestDigest.set -> void
+FabrCore.Core.CloudServer.AdministrationOperation.ResultJson.get -> string?
+FabrCore.Core.CloudServer.AdministrationOperation.ResultJson.set -> void
+FabrCore.Core.CloudServer.AdministrationOperation.StartedAt.get -> System.DateTimeOffset
+FabrCore.Core.CloudServer.AdministrationOperation.StartedAt.set -> void
+FabrCore.Core.CloudServer.AdministrationOperation.Status.get -> string!
+FabrCore.Core.CloudServer.AdministrationOperation.Status.set -> void
+FabrCore.Core.CloudServer.AdministrationOperationRequest
+FabrCore.Core.CloudServer.AdministrationOperationRequest.AdministrationOperationRequest() -> void
+FabrCore.Core.CloudServer.AdministrationOperationRequest.AgentHandle.get -> string?
+FabrCore.Core.CloudServer.AdministrationOperationRequest.AgentHandle.set -> void
+FabrCore.Core.CloudServer.AdministrationOperationRequest.BlueprintName.get -> string?
+FabrCore.Core.CloudServer.AdministrationOperationRequest.BlueprintName.set -> void
+FabrCore.Core.CloudServer.AdministrationOperationRequest.Configurations.get -> System.Collections.Generic.List<FabrCore.Core.AgentConfiguration!>!
+FabrCore.Core.CloudServer.AdministrationOperationRequest.Configurations.set -> void
+FabrCore.Core.CloudServer.AdministrationOperationRequest.Deployment.get -> FabrCore.Core.CloudServer.BlueprintDeploymentRequest?
+FabrCore.Core.CloudServer.AdministrationOperationRequest.Deployment.set -> void
+FabrCore.Core.CloudServer.AdministrationOperationRequest.Event.get -> FabrCore.Core.EventMessage?
+FabrCore.Core.CloudServer.AdministrationOperationRequest.Event.set -> void
+FabrCore.Core.CloudServer.AdministrationOperationRequest.Kind.get -> string!
+FabrCore.Core.CloudServer.AdministrationOperationRequest.Kind.set -> void
+FabrCore.Core.CloudServer.AdministrationOperationRequest.Management.get -> FabrCore.Core.CloudServer.AgentManagementRequest?
+FabrCore.Core.CloudServer.AdministrationOperationRequest.Management.set -> void
+FabrCore.Core.CloudServer.AdministrationOperationRequest.Message.get -> FabrCore.Core.AgentMessage?
+FabrCore.Core.CloudServer.AdministrationOperationRequest.Message.set -> void
+FabrCore.Core.CloudServer.AdministrationPage<T>
+FabrCore.Core.CloudServer.AdministrationPage<T>.AdministrationPage() -> void
+FabrCore.Core.CloudServer.AdministrationPage<T>.Complete.get -> bool
+FabrCore.Core.CloudServer.AdministrationPage<T>.Complete.set -> void
+FabrCore.Core.CloudServer.AdministrationPage<T>.DataScope.get -> string!
+FabrCore.Core.CloudServer.AdministrationPage<T>.DataScope.set -> void
+FabrCore.Core.CloudServer.AdministrationPage<T>.Items.get -> System.Collections.Generic.List<T>!
+FabrCore.Core.CloudServer.AdministrationPage<T>.Items.set -> void
+FabrCore.Core.CloudServer.AdministrationPage<T>.NextCursor.get -> string?
+FabrCore.Core.CloudServer.AdministrationPage<T>.NextCursor.set -> void
+FabrCore.Core.CloudServer.AdministrationPage<T>.Revision.get -> string?
+FabrCore.Core.CloudServer.AdministrationPage<T>.Revision.set -> void
+FabrCore.Core.CloudServer.AdministrationPage<T>.SourceId.get -> string?
+FabrCore.Core.CloudServer.AdministrationPage<T>.SourceId.set -> void
+FabrCore.Core.CloudServer.AdminSessionRequest
+FabrCore.Core.CloudServer.AdminSessionRequest.AdminSessionRequest() -> void
+FabrCore.Core.CloudServer.AdminSessionRequest.SourceThreadId.get -> string?
+FabrCore.Core.CloudServer.AdminSessionRequest.SourceThreadId.set -> void
+FabrCore.Core.CloudServer.AdminTurnRequest
+FabrCore.Core.CloudServer.AdminTurnRequest.AdminTurnRequest() -> void
+FabrCore.Core.CloudServer.AdminTurnRequest.Message.get -> string!
+FabrCore.Core.CloudServer.AdminTurnRequest.Message.set -> void
+FabrCore.Core.CloudServer.AdminTurnRequest.TurnId.get -> string!
+FabrCore.Core.CloudServer.AdminTurnRequest.TurnId.set -> void
+FabrCore.Core.CloudServer.AgentManagementRequest
+FabrCore.Core.CloudServer.AgentManagementRequest.AgentManagementRequest() -> void
+FabrCore.Core.CloudServer.AgentManagementRequest.Changes.get -> System.Collections.Generic.Dictionary<string!, System.Text.Json.JsonElement>!
+FabrCore.Core.CloudServer.AgentManagementRequest.Changes.set -> void
+FabrCore.Core.CloudServer.AgentManagementRequest.Configuration.get -> FabrCore.Core.AgentConfiguration?
+FabrCore.Core.CloudServer.AgentManagementRequest.Configuration.set -> void
+FabrCore.Core.CloudServer.AgentManagementRequest.Deletes.get -> System.Collections.Generic.List<string!>!
+FabrCore.Core.CloudServer.AgentManagementRequest.Deletes.set -> void
+FabrCore.Core.CloudServer.AgentManagementRequest.Limit.get -> int
+FabrCore.Core.CloudServer.AgentManagementRequest.Limit.set -> void
+FabrCore.Core.CloudServer.AgentManagementRequest.Messages.get -> System.Collections.Generic.List<FabrCore.Core.StoredChatMessage!>!
+FabrCore.Core.CloudServer.AgentManagementRequest.Messages.set -> void
+FabrCore.Core.CloudServer.AgentManagementRequest.Offset.get -> int
+FabrCore.Core.CloudServer.AgentManagementRequest.Offset.set -> void
+FabrCore.Core.CloudServer.AgentManagementRequest.Revision.get -> string?
+FabrCore.Core.CloudServer.AgentManagementRequest.Revision.set -> void
+FabrCore.Core.CloudServer.AgentManagementRequest.ThreadId.get -> string?
+FabrCore.Core.CloudServer.AgentManagementRequest.ThreadId.set -> void
+FabrCore.Core.CloudServer.AgentManagementSnapshot
+FabrCore.Core.CloudServer.AgentManagementSnapshot.AdminProcessing.get -> bool
+FabrCore.Core.CloudServer.AgentManagementSnapshot.AdminProcessing.set -> void
+FabrCore.Core.CloudServer.AgentManagementSnapshot.AgentHandle.get -> string!
+FabrCore.Core.CloudServer.AgentManagementSnapshot.AgentHandle.set -> void
+FabrCore.Core.CloudServer.AgentManagementSnapshot.AgentManagementSnapshot() -> void
+FabrCore.Core.CloudServer.AgentManagementSnapshot.Configuration.get -> FabrCore.Core.AgentConfiguration?
+FabrCore.Core.CloudServer.AgentManagementSnapshot.Configuration.set -> void
+FabrCore.Core.CloudServer.AgentManagementSnapshot.Processing.get -> bool
+FabrCore.Core.CloudServer.AgentManagementSnapshot.Processing.set -> void
+FabrCore.Core.CloudServer.AgentManagementSnapshot.Revision.get -> string!
+FabrCore.Core.CloudServer.AgentManagementSnapshot.Revision.set -> void
+FabrCore.Core.CloudServer.AgentManagementSnapshot.State.get -> System.Collections.Generic.Dictionary<string!, System.Text.Json.JsonElement>!
+FabrCore.Core.CloudServer.AgentManagementSnapshot.State.set -> void
+FabrCore.Core.CloudServer.AgentManagementSnapshot.Threads.get -> System.Collections.Generic.List<string!>!
+FabrCore.Core.CloudServer.AgentManagementSnapshot.Threads.set -> void
+FabrCore.Core.CloudServer.BlueprintDeploymentRequest
+FabrCore.Core.CloudServer.BlueprintDeploymentRequest.AgentHandles.get -> System.Collections.Generic.List<string!>!
+FabrCore.Core.CloudServer.BlueprintDeploymentRequest.AgentHandles.set -> void
+FabrCore.Core.CloudServer.BlueprintDeploymentRequest.BlueprintDeploymentRequest() -> void
+FabrCore.Core.CloudServer.BlueprintDeploymentRequest.ExpansionDigest.get -> string!
+FabrCore.Core.CloudServer.BlueprintDeploymentRequest.ExpansionDigest.set -> void
+FabrCore.Core.CloudServer.BlueprintDeploymentRequest.Mode.get -> string!
+FabrCore.Core.CloudServer.BlueprintDeploymentRequest.Mode.set -> void
+FabrCore.Core.CloudServer.BlueprintDeploymentRequest.OperationId.get -> string!
+FabrCore.Core.CloudServer.BlueprintDeploymentRequest.OperationId.set -> void
+FabrCore.Core.CloudServer.BlueprintDeploymentRequest.Revision.get -> string!
+FabrCore.Core.CloudServer.BlueprintDeploymentRequest.Revision.set -> void
+FabrCore.Core.CloudServer.BlueprintPreview
+FabrCore.Core.CloudServer.BlueprintPreview.Agents.get -> System.Collections.Generic.List<FabrCore.Core.AgentConfiguration!>!
+FabrCore.Core.CloudServer.BlueprintPreview.Agents.set -> void
+FabrCore.Core.CloudServer.BlueprintPreview.BlueprintPreview() -> void
+FabrCore.Core.CloudServer.BlueprintPreview.ExpansionDigest.get -> string!
+FabrCore.Core.CloudServer.BlueprintPreview.ExpansionDigest.set -> void
+FabrCore.Core.CloudServer.BlueprintPreview.Revision.get -> string!
+FabrCore.Core.CloudServer.BlueprintPreview.Revision.set -> void
+FabrCore.Core.CloudServer.BlueprintSummary
+FabrCore.Core.CloudServer.BlueprintSummary.BlueprintSummary() -> void
+FabrCore.Core.CloudServer.BlueprintSummary.DefinitionDrift.get -> bool?
+FabrCore.Core.CloudServer.BlueprintSummary.DefinitionDrift.set -> void
+FabrCore.Core.CloudServer.BlueprintSummary.DeployedRevision.get -> string?
+FabrCore.Core.CloudServer.BlueprintSummary.DeployedRevision.set -> void
+FabrCore.Core.CloudServer.BlueprintSummary.DeploymentStatus.get -> string?
+FabrCore.Core.CloudServer.BlueprintSummary.DeploymentStatus.set -> void
+FabrCore.Core.CloudServer.BlueprintSummary.Description.get -> string?
+FabrCore.Core.CloudServer.BlueprintSummary.Description.set -> void
+FabrCore.Core.CloudServer.BlueprintSummary.LastDeploymentId.get -> string?
+FabrCore.Core.CloudServer.BlueprintSummary.LastDeploymentId.set -> void
+FabrCore.Core.CloudServer.BlueprintSummary.Name.get -> string!
+FabrCore.Core.CloudServer.BlueprintSummary.Name.set -> void
+FabrCore.Core.CloudServer.BlueprintSummary.Revision.get -> string!
+FabrCore.Core.CloudServer.BlueprintSummary.Revision.set -> void
+FabrCore.Core.CloudServer.BlueprintSummary.Version.get -> string?
+FabrCore.Core.CloudServer.BlueprintSummary.Version.set -> void
+FabrCore.Core.CloudServer.CloudBlueprintDeployment.ApplyMode.get -> string!
+FabrCore.Core.CloudServer.CloudBlueprintDeployment.ApplyMode.set -> void
+FabrCore.Core.CloudServer.CloudBlueprintDeployment.DeploymentId.get -> string?
+FabrCore.Core.CloudServer.CloudBlueprintDeployment.DeploymentId.set -> void
+FabrCore.Core.CloudServer.FabrCoreAdminChannels
+FabrCore.Core.CloudServer.PrincipalSummary
+FabrCore.Core.CloudServer.PrincipalSummary.Description.get -> string?
+FabrCore.Core.CloudServer.PrincipalSummary.Description.set -> void
+FabrCore.Core.CloudServer.PrincipalSummary.DisplayName.get -> string?
+FabrCore.Core.CloudServer.PrincipalSummary.DisplayName.set -> void
+FabrCore.Core.CloudServer.PrincipalSummary.Handle.get -> string!
+FabrCore.Core.CloudServer.PrincipalSummary.Handle.set -> void
+FabrCore.Core.CloudServer.PrincipalSummary.IsSystem.get -> bool
+FabrCore.Core.CloudServer.PrincipalSummary.IsSystem.set -> void
+FabrCore.Core.CloudServer.PrincipalSummary.PrincipalSummary() -> void
+FabrCore.Core.CloudServer.PrincipalSummary.Registered.get -> bool
+FabrCore.Core.CloudServer.PrincipalSummary.Registered.set -> void
+FabrCore.Core.CloudServer.PrincipalSummary.RuntimeDiscovered.get -> bool
+FabrCore.Core.CloudServer.PrincipalSummary.RuntimeDiscovered.set -> void
+FabrCore.Core.CloudServer.PrincipalSummary.RuntimeStatus.get -> FabrCore.Core.AgentStatus?
+FabrCore.Core.CloudServer.PrincipalSummary.RuntimeStatus.set -> void
+FabrCore.Core.Interfaces.IAclRegistryGrain.ConditionalMutationAsync(string! kind, string! id, string? json, long expectedVersion) -> System.Threading.Tasks.Task<string!>!
+FabrCore.Core.Monitoring.IAgentMonitorPayloadProvider
+FabrCore.Core.Monitoring.IAgentMonitorPayloadProvider.ReadPayloadAsync(long sequence, int offset, int count, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string?>!
+FabrCore.Core.Monitoring.IAgentMonitorQueryProvider
+FabrCore.Core.Monitoring.IAgentMonitorQueryProvider.GetHealthAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Text.Json.JsonElement>!
+FabrCore.Core.Monitoring.IAgentMonitorQueryProvider.QueryAsync(FabrCore.Core.Monitoring.MonitorQuery! query, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.Monitoring.MonitorPage!>!
+FabrCore.Core.Monitoring.MonitoredLlmCall.AdministrationActor.get -> string?
+FabrCore.Core.Monitoring.MonitoredLlmCall.AdministrationActor.set -> void
+FabrCore.Core.Monitoring.MonitoredLlmCall.AdministrationSessionId.get -> string?
+FabrCore.Core.Monitoring.MonitoredLlmCall.AdministrationSessionId.set -> void
+FabrCore.Core.Monitoring.MonitorPage
+FabrCore.Core.Monitoring.MonitorPage.DataScope.get -> string!
+FabrCore.Core.Monitoring.MonitorPage.DataScope.set -> void
+FabrCore.Core.Monitoring.MonitorPage.Gap.get -> bool
+FabrCore.Core.Monitoring.MonitorPage.Gap.set -> void
+FabrCore.Core.Monitoring.MonitorPage.HasMore.get -> bool
+FabrCore.Core.Monitoring.MonitorPage.HasMore.set -> void
+FabrCore.Core.Monitoring.MonitorPage.Items.get -> System.Collections.Generic.List<FabrCore.Core.Monitoring.MonitorRecord!>!
+FabrCore.Core.Monitoring.MonitorPage.Items.set -> void
+FabrCore.Core.Monitoring.MonitorPage.MonitorPage() -> void
+FabrCore.Core.Monitoring.MonitorPage.NextCursor.get -> string?
+FabrCore.Core.Monitoring.MonitorPage.NextCursor.set -> void
+FabrCore.Core.Monitoring.MonitorPage.Notice.get -> string?
+FabrCore.Core.Monitoring.MonitorPage.Notice.set -> void
+FabrCore.Core.Monitoring.MonitorPage.SourceId.get -> string!
+FabrCore.Core.Monitoring.MonitorPage.SourceId.set -> void
+FabrCore.Core.Monitoring.MonitorQuery
+FabrCore.Core.Monitoring.MonitorQuery.AgentHandle.get -> string?
+FabrCore.Core.Monitoring.MonitorQuery.AgentHandle.set -> void
+FabrCore.Core.Monitoring.MonitorQuery.Channel.get -> string?
+FabrCore.Core.Monitoring.MonitorQuery.Channel.set -> void
+FabrCore.Core.Monitoring.MonitorQuery.Cursor.get -> string?
+FabrCore.Core.Monitoring.MonitorQuery.Cursor.set -> void
+FabrCore.Core.Monitoring.MonitorQuery.ExecutionCategory.get -> string?
+FabrCore.Core.Monitoring.MonitorQuery.ExecutionCategory.set -> void
+FabrCore.Core.Monitoring.MonitorQuery.From.get -> System.DateTimeOffset?
+FabrCore.Core.Monitoring.MonitorQuery.From.set -> void
+FabrCore.Core.Monitoring.MonitorQuery.IncludePayload.get -> bool
+FabrCore.Core.Monitoring.MonitorQuery.IncludePayload.set -> void
+FabrCore.Core.Monitoring.MonitorQuery.Kind.get -> string?
+FabrCore.Core.Monitoring.MonitorQuery.Kind.set -> void
+FabrCore.Core.Monitoring.MonitorQuery.Limit.get -> int
+FabrCore.Core.Monitoring.MonitorQuery.Limit.set -> void
+FabrCore.Core.Monitoring.MonitorQuery.MaxBytes.get -> int
+FabrCore.Core.Monitoring.MonitorQuery.MaxBytes.set -> void
+FabrCore.Core.Monitoring.MonitorQuery.MonitorQuery() -> void
+FabrCore.Core.Monitoring.MonitorQuery.Principal.get -> string?
+FabrCore.Core.Monitoring.MonitorQuery.Principal.set -> void
+FabrCore.Core.Monitoring.MonitorQuery.To.get -> System.DateTimeOffset?
+FabrCore.Core.Monitoring.MonitorQuery.To.set -> void
+FabrCore.Core.Monitoring.MonitorQuery.TraceId.get -> string?
+FabrCore.Core.Monitoring.MonitorQuery.TraceId.set -> void
+FabrCore.Core.Monitoring.MonitorRecord
+FabrCore.Core.Monitoring.MonitorRecord.AgentHandle.get -> string?
+FabrCore.Core.Monitoring.MonitorRecord.AgentHandle.set -> void
+FabrCore.Core.Monitoring.MonitorRecord.Channel.get -> string?
+FabrCore.Core.Monitoring.MonitorRecord.Channel.set -> void
+FabrCore.Core.Monitoring.MonitorRecord.ExecutionCategory.get -> string!
+FabrCore.Core.Monitoring.MonitorRecord.ExecutionCategory.set -> void
+FabrCore.Core.Monitoring.MonitorRecord.Id.get -> string!
+FabrCore.Core.Monitoring.MonitorRecord.Id.set -> void
+FabrCore.Core.Monitoring.MonitorRecord.Kind.get -> string!
+FabrCore.Core.Monitoring.MonitorRecord.Kind.set -> void
+FabrCore.Core.Monitoring.MonitorRecord.MonitorRecord() -> void
+FabrCore.Core.Monitoring.MonitorRecord.Payload.get -> System.Text.Json.JsonElement?
+FabrCore.Core.Monitoring.MonitorRecord.Payload.set -> void
+FabrCore.Core.Monitoring.MonitorRecord.Sequence.get -> long
+FabrCore.Core.Monitoring.MonitorRecord.Sequence.set -> void
+FabrCore.Core.Monitoring.MonitorRecord.Timestamp.get -> System.DateTimeOffset
+FabrCore.Core.Monitoring.MonitorRecord.Timestamp.set -> void
+FabrCore.Core.Monitoring.MonitorRecord.TraceId.get -> string?
+FabrCore.Core.Monitoring.MonitorRecord.TraceId.set -> void
+FabrCore.Core.VerifiableExecution.IVerifiableExecutionQueryProvider
+FabrCore.Core.VerifiableExecution.IVerifiableExecutionQueryProvider.ListTracesAsync(string? agentHandle = null, string? after = null, int limit = 100, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.CloudServer.AdministrationPage<string!>!>!
+static FabrCore.Core.CloudServer.FabrCoreAdminChannels.IsReserved(string? channel) -> bool
+static FabrCore.Core.CloudServer.FabrCoreAdminChannels.RejectOrdinary(string? channel) -> void

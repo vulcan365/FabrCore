@@ -6,7 +6,7 @@ namespace FabrCore.Host
 {
     /// <summary>
     /// Built-in Localhost mode: in-memory clustering, grain storage, reminders, and streams.
-    /// For development only — all state is lost when the process exits.
+    /// For standalone workloads accepting ephemeral runtime state; state is lost when the process exits.
     /// </summary>
     public sealed class LocalhostOrleansProvider : IFabrCoreOrleansProvider
     {

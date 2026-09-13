@@ -1,9 +1,10 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<TargetFramework>net10.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
+		<EnableOrleansContractsAnalyzer>true</EnableOrleansContractsAnalyzer>
 	</PropertyGroup>
 
 	<PropertyGroup>
@@ -14,11 +15,11 @@
 	<ItemGroup>
 		<FrameworkReference Include="Microsoft.AspNetCore.App" />
 		<PackageReference Include="OpenTelemetry.Api" Version="1.18.0" />
-		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.11" />
+		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.12" />
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Microsoft.Extensions.DependencyModel" Version="10.0.11" />
+		<PackageReference Include="Microsoft.Extensions.DependencyModel" Version="10.0.12" />
 		<PackageReference Include="Microsoft.Orleans.Core.Abstractions" Version="10.3.1" />
 		<PackageReference Include="Microsoft.Orleans.Runtime" Version="10.3.1" />
 		<PackageReference Include="Microsoft.Orleans.Streaming" Version="10.3.1" />
@@ -30,7 +31,6 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\FabrCore.Core\FabrCore.Core.csproj" />
-		<ProjectReference Include="..\FabrCore.Services.Contracts\FabrCore.Services.Contracts.csproj" />
 		<ProjectReference Include="..\FabrCore.Sdk\FabrCore.Sdk.csproj" />
 	</ItemGroup>
 
@@ -38,4 +38,15 @@
 		<InternalsVisibleTo Include="FabrCore.Host.Tests" />
 	</ItemGroup>
 
+<ItemGroup>
+    <PackageReference Include="Microsoft.Orleans.Clustering.AdoNet" Version="10.3.1" />
+    <PackageReference Include="Microsoft.Orleans.Persistence.AdoNet" Version="10.3.1" />
+    <PackageReference Include="Microsoft.Orleans.Reminders.AdoNet" Version="10.3.1" />
+    <PackageReference Include="Microsoft.Orleans.Streaming.AdoNet" Version="10.3.1-alpha.1" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.2" />
+    <EmbeddedResource Include="SqlServer/SqlScripts/*.sql" />
+    <InternalsVisibleTo Include="FabrCore.Services.Memory.Tests" />
+    <InternalsVisibleTo Include="FabrCore.Services.GraphRag.Tests" />
+    <InternalsVisibleTo Include="FabrCore.Services.GraphRag.EvalConsole" />
+  </ItemGroup>
 </Project>

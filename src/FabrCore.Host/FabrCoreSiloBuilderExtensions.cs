@@ -1,5 +1,6 @@
 using FabrCore.Host.Configuration;
 using Microsoft.Extensions.Logging;
+using Orleans.Serialization;
 using OpenTelemetry.Trace;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
@@ -42,6 +43,14 @@ namespace FabrCore.Host
         /// <returns>The silo builder for chaining.</returns>
         public static ISiloBuilder AddFabrCore(this ISiloBuilder siloBuilder, List<Assembly> additionalAssemblies)
         {
+            siloBuilder.AddActivityPropagation();
+            siloBuilder.Configure<OrleansJsonSerializerOptions>(options =>
+            {
+                // Keep date-looking custom JSON strings intact. Typed DateTime properties
+                // are still parsed according to their declared type by Newtonsoft.Json.
+                options.JsonSerializerSettings.DateParseHandling = Newtonsoft.Json.DateParseHandling.None;
+                options.JsonSerializerSettings.Converters.Add(new Services.OrleansJsonElementConverter());
+            });
             using var activity = ActivitySource.StartActivity("AddFabrCore", ActivityKind.Internal);
 
             var applicationAssemblies = FabrCoreHostExtensions.LoadApplicationAssemblies(

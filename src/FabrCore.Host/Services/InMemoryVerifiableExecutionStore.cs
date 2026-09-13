@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 
 namespace FabrCore.Host.Services;
 
-public sealed class InMemoryVerifiableExecutionStore : IVerifiableExecutionStore
+public sealed class InMemoryVerifiableExecutionStore : IVerifiableExecutionStore, IVerifiableExecutionQueryProvider
 {
     private readonly ConcurrentDictionary<string, List<VerifiableExecutionRecord>> _records = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, List<VerifiableExecutionSignature>> _signatures = new(StringComparer.Ordinal);
@@ -11,6 +11,21 @@ public sealed class InMemoryVerifiableExecutionStore : IVerifiableExecutionStore
     private readonly ConcurrentDictionary<string, List<VerifiableExecutionAttestation>> _attestations = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, long> _sequences = new(StringComparer.Ordinal);
     private readonly object _gate = new();
+    private readonly string querySource = Guid.NewGuid().ToString("N");
+
+    public Task<FabrCore.Core.CloudServer.AdministrationPage<string>> ListTracesAsync(string? agentHandle = null, string? after = null, int limit = 100, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_gate)
+        {
+            var ids = _records.Where(pair => agentHandle is null || pair.Value.Any(r => r.AgentHandle == agentHandle))
+                .Select(pair => pair.Key).Where(id => after is null || string.CompareOrdinal(id, after) > 0).Order(StringComparer.Ordinal)
+                .Take(Math.Clamp(limit, 1, 1000) + 1).ToList();
+            var items = ids.Take(Math.Clamp(limit, 1, 1000)).ToList();
+            return Task.FromResult(new FabrCore.Core.CloudServer.AdministrationPage<string> { Items = items,
+                NextCursor = ids.Count > items.Count ? items[^1] : null, DataScope = "silo", SourceId = querySource });
+        }
+    }
 
     public Task AppendRecordAsync(
         VerifiableExecutionRecord record,

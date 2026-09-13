@@ -36,7 +36,8 @@ public sealed class GraphRagAdminControllerTests
         var serviceAssembly = typeof(GraphRagServiceExtensions).Assembly;
         var contractAssembly = typeof(IGraphRagAdminService).Assembly;
 
-        Assert.AreEqual("FabrCore.Services.Contracts", contractAssembly.GetName().Name);
+        Assert.AreEqual("FabrCore.Core", contractAssembly.GetName().Name);
+        Assert.AreEqual("FabrCore.Host", serviceAssembly.GetName().Name);
         Assert.AreNotSame(serviceAssembly, contractAssembly);
         Assert.AreSame(contractAssembly, typeof(AdminDashboardStats).Assembly);
         Assert.AreSame(contractAssembly, typeof(SourceDocumentDto).Assembly);

@@ -71,7 +71,7 @@ public sealed class RegistryRegistrationTests
         Assert.IsTrue(assemblies.Any(assembly =>
             string.Equals(
                 assembly.GetName().Name,
-                "FabrCore.Host.SqlServer",
+                "FabrCore.Host.AzureStorage",
                 StringComparison.OrdinalIgnoreCase)));
     }
 

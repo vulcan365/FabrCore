@@ -1,17 +1,34 @@
 ---
 name: fabrcore-oss-aug2026
 description: >
-  Maintain the FabrCore OSS and Forge repository split introduced in August 2026. Use when
+  Maintain the FabrCore OSS and Insights repository split introduced in August 2026. Use when
   moving or changing projects across C:\repos\FabrCore and C:\repos\fabrcore-v365, deciding
-  whether code belongs in OSS or Forge, updating canonical blueprints or squads, changing the
+  whether code belongs in OSS or Insights, updating canonical blueprints or squads, changing the
   Cloud Server/connect protocol, consuming OSS packages from the commercial solution, updating
   migration-era build/release files, or preventing old V365 architecture from being reintroduced.
+metadata:
+  version: 2.0.0
 ---
 
 # FabrCore OSS August 2026
 
+## Cloud ownership in the 2.0 release
+
+Keep administration contracts, SDK, cluster services, OpenAPI, diagnostic execution
+and the reference cloud server in OSS. Insights owns its operator UI and broker.
+Public contracts must not depend on Insights identity or storage. Historical Forge
+names in source projects and `/forgeapi` routes are compatibility identifiers, not
+requirements for third-party servers. The current protocol includes conditional ACL,
+blueprint/agent management and bounded monitoring/evidence queries over HTTP polling.
+Audit enhancements and cloud WebSockets are outside this release's implemented scope.
+
+
+## FabrCore 2.0 baseline
+
+This skill retains its historical name but describes the FabrCore 2.0 GA ownership boundary. Memory/GraphRAG implementations and SQL hosting now live in Host, contracts in Core, and remote Memory clients/harness integration in SDK. Do not recreate retired service/provider projects or forwarding packages. Insights remains optional; SQL mode provides OSS ACL, Memory and GraphRAG.
+
 Preserve a credible standalone OSS platform while keeping hosted administration, fleet
-operations, and commercial adapters in Forge.
+operations, and commercial adapters in Insights.
 
 ## Start here
 
@@ -25,7 +42,7 @@ operations, and commercial adapters in Forge.
 
 - Put open runtime, protocol, developer tooling, and self-hosting features in
   `C:\repos\FabrCore`.
-- Keep Forge, hosted admin UX, fleet workflows, commercial adapters, and commercial-only
+- Keep Insights, hosted admin UX, fleet workflows, commercial adapters, and commercial-only
   services in `C:\repos\fabrcore-v365`.
 - Never restore migrated project copies to the commercial solution.
 - Make open protocol changes in OSS first, pack them, then validate the commercial consumer
@@ -41,7 +58,7 @@ operations, and commercial adapters in Forge.
 - Do not reintroduce the removed Swarm runtime (`SurfaceSquadType.Swarm`, the `"swarm"`
   extension, `swarm.*` messages), and do not add `SwarmV2`, `swarm2.*`, `squad2-*`,
   `surface.squads`, or parallel old/new shapes.
-- Keep Memory and GraphRAG contracts in `FabrCore.Services.Contracts`.
+- Keep Memory and GraphRAG contracts in `FabrCore.Core`.
 - Do not link-compile contracts or add type forwarders to the OSS service packages.
 - Keep the OSS GraphRAG markdown converter vendor-neutral. Put Vulcan365 conversion in
   `FabrCore.Services.GraphRag.Vulcan365` in the commercial repo.
@@ -56,7 +73,7 @@ operations, and commercial adapters in Forge.
 Do not weaken OSS to manufacture commercial value. OSS must remain usable with local
 configuration, blueprint provisioning, ACL enforcement, Memory, GraphRAG, and Surface squads.
 
-Forge owns the monetizable operating experience:
+Insights owns the monetizable operating experience:
 
 - interactive management and admin pages;
 - hosted identity and a configured free single-cluster target;
@@ -66,7 +83,7 @@ Forge owns the monetizable operating experience:
 - commercial conversion adapters and support.
 
 `FabrCore.Surface.Admin` remains commercial. Base `FabrCore.Surface` remains OSS and must not
-gain interactive create/manage routes that duplicate Forge.
+gain interactive create/manage routes that duplicate Insights.
 
 ## Change workflow
 
@@ -76,22 +93,16 @@ gain interactive create/manage routes that duplicate Forge.
 4. Pack the OSS version line to `C:\repos\nuget`.
 5. Point the commercial build at that package version with
    `UseLocalFabrCoreSource=false`.
-6. Change Forge, Surface.Admin, or commercial adapters.
-7. Update both repositories' `docs/skills` and matching `.agents/skills` copies.
+6. Change Insights, Surface.Admin, or commercial adapters.
+7. Update maintained `docs/skills` in affected repositories; refresh installed copies only if present.
 8. Scan for stale names, deleted project references, caches, and credentials.
 
 ## Validation
 
 ```powershell
-dotnet build C:\repos\FabrCore\src\FabrCore.sln -c Release
-& C:\repos\FabrCore\scripts\Pack-Local.ps1
-
-# Do not run dotnet test on the mixed OSS solution. Run the VSTest projects
-# listed in .github/workflows/publish-nuget.yml individually, then run:
-dotnet run --project C:\repos\FabrCore\src\FabrCore.Services.Memory.Tests\FabrCore.Services.Memory.Tests.csproj `
-  -c Release --no-build --no-restore
-dotnet run --project C:\repos\FabrCore\src\FabrCore.Services.GraphRag.Tests\FabrCore.Services.GraphRag.Tests.csproj `
-  -c Release --no-build --no-restore
+# Uses builds/Projects.psd1 for the supported packages and both test-runner families.
+& C:\repos\FabrCore\scripts\Build.ps1 -Version 2.0.0
+# This validates and packs locally; it does not publish to NuGet.
 
 $ossVersion = "<local-version>"
 dotnet restore C:\repos\fabrcore-v365\src\FabrCore-V365.slnx `
@@ -102,9 +113,9 @@ dotnet build C:\repos\fabrcore-v365\src\FabrCore-V365.slnx -c Release --no-resto
   /p:UseLocalFabrCoreSource=false `
   /p:FabrCoreOssVersion=$ossVersion
 
-# Forge uses Microsoft.Testing.Platform and must run from the src directory.
+# Insights uses Microsoft.Testing.Platform and must run from the src directory.
 Push-Location C:\repos\fabrcore-v365\src
-dotnet test FabrCore.Forge.Tests\FabrCore.Forge.Tests.csproj -c Release --no-build `
+dotnet test FabrCore.Insights.Tests\FabrCore.Insights.Tests.csproj -c Release --no-build `
   /p:UseLocalFabrCoreSource=false /p:FabrCoreOssVersion=$ossVersion
 Pop-Location
 
@@ -115,16 +126,16 @@ dotnet test C:\repos\fabrcore-v365\src\FabrCore.Surface.Admin.Tests\FabrCore.Sur
 
 dotnet publish C:\repos\FabrCore\samples\FabrCore.SampleApp\FabrCore.SampleApp.csproj `
   -c Release -o C:\repos\FabrCore\artifacts\publish\FabrCore.SampleApp
-dotnet publish C:\repos\fabrcore-v365\src\FabrCore.Forge.App\FabrCore.Forge.App.csproj `
-  -c Release -o C:\repos\fabrcore-v365\artifacts\publish\FabrCore.Forge.App `
+dotnet publish C:\repos\fabrcore-v365\src\FabrCore.Insights.App\FabrCore.Insights.App.csproj `
+  -c Release -o C:\repos\fabrcore-v365\artifacts\publish\FabrCore.Insights.App `
   --no-restore /p:UseAppHost=false `
   /p:UseLocalFabrCoreSource=false /p:FabrCoreOssVersion=$ossVersion
 ```
 
-The OSS tag workflow publishes only the eleven supported OSS libraries; never pack the whole
+The OSS tag workflow publishes only the nine supported OSS libraries from `builds/Projects.psd1`; never pack the whole
 solution because it also contains samples. The commercial local pack script publishes only
-DataIntelligence and the Vulcan365 GraphRAG adapter. Forge and Surface.Admin ship together as
-the Forge application image.
+DataIntelligence and the Vulcan365 GraphRAG adapter. Insights and Surface.Admin ship together as
+the Insights application image.
 
 Run Memory and GraphRAG MSTest executable projects with `dotnet run`; their .NET 10 test
 runner mode is not covered by an ordinary solution-level `dotnet test`. Report SQL/live skips
@@ -136,7 +147,7 @@ Before handoff, run `git diff --check` in both repos and verify:
 - no OSS service type forwarders;
 - no commercial project references to removed source directories in package mode;
 - no tracked cloud cache;
-- no real Forge keys, Entra client secrets, or model credentials.
+- no real Insights keys, Entra client secrets, or model credentials.
 
 ## Security and release
 
@@ -144,5 +155,5 @@ Before handoff, run `git diff --check` in both repos and verify:
 - Copy code without importing private repository history.
 - Replace exposed values in files, but also require external credential rotation because Git
   history retains committed secrets.
-- Coordinate the OSS package release before a Forge build that consumes the new version.
+- Coordinate the OSS package release before a Insights build that consumes the new version.
 - Do not publish or deploy unless the user explicitly requests it.

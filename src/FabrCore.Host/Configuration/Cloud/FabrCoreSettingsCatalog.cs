@@ -131,8 +131,14 @@ public sealed class FabrCoreSettingsCatalog
         new("FabrCore:Orleans", "section", null,
             "Orleans clustering: ClusterId, ServiceId, ClusteringMode, connection strings. Read before the silo is built.",
             SettingsApplyMode.RestartRequired, IsSection: true),
+        new("FabrCore:Database", "section", null,
+            "Integrated SQL mode: connection name, optional per-feature connections, and AutoInitialize. Enables Memory, GraphRAG, and ACL.",
+            SettingsApplyMode.RestartRequired, IsSection: true),
         new("ConnectionStrings", "section", null,
-            "Backing store connection strings (MemoryDb, GraphRagDb). Read at service registration.",
+            "FabrCore SQL connection and optional feature connection overrides. Read at service registration.",
+            SettingsApplyMode.RestartRequired, IsSection: true),
+        new("FabrCore:DataProtection", "section", null,
+            "Credential protection: Mode (Auto, Ephemeral, SqlServer, Custom), stable ApplicationName, CertificatePath/CertificatePassword, and PreviousCertificates. Auto uses ephemeral keys for memory storage or encrypted SQL keys for SQL persistence. Secrets remain host-managed.",
             SettingsApplyMode.RestartRequired, IsSection: true),
 
         // --- Behavioural, but consumed through IOptions<T> and frozen at startup. ---

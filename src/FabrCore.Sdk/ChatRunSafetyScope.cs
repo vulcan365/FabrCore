@@ -140,12 +140,17 @@ public sealed class ChatRunSafetyScope : IDisposable
     /// </summary>
     public IDisposable BeginHistoryCompaction() => new HistoryCompactionScope(this);
 
+    public Task<ChatRunSafetyCallInfo> PrepareCallAsync(
+        IReadOnlyList<ChatMessage> requestMessages, bool streaming, CancellationToken cancellationToken)
+        => PrepareCallAsync(requestMessages, streaming, cancellationToken, null);
+
     public async Task<ChatRunSafetyCallInfo> PrepareCallAsync(
         IReadOnlyList<ChatMessage> requestMessages,
         bool streaming,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ChatOptions? options)
     {
-        var actualPromptTokens = EstimateTokens(requestMessages);
+        var actualPromptTokens = EstimateTokens(requestMessages, options);
         Interlocked.Exchange(ref _actualPromptInputTokens, actualPromptTokens);
         UpdateMax(ref _maxPromptInputTokensPerCall, actualPromptTokens);
 
@@ -153,6 +158,7 @@ public sealed class ChatRunSafetyScope : IDisposable
         {
             ["streaming"] = streaming.ToString(),
             ["actual_prompt_input_tokens"] = actualPromptTokens.ToString(),
+            ["prompt_token_count_kind"] = "estimate",
             ["turn_cumulative_input_tokens"] = TurnCumulativeInputTokens.ToString(),
             ["max_prompt_input_tokens"] = Config.MaxPromptInputTokens.ToString(),
             ["per_turn_max_input_tokens"] = Config.PerTurnMaxInputTokens.ToString()
@@ -249,13 +255,26 @@ public sealed class ChatRunSafetyScope : IDisposable
         CurrentScope.Value = null;
     }
 
-    public static long EstimateTokens(IEnumerable<ChatMessage> messages)
+    public static long EstimateTokens(IEnumerable<ChatMessage> messages) => EstimateTokens(messages, null);
+
+    /// <summary>Approximate request tokens, including instructions, function schemas and structured results.
+    /// Provider usage is authoritative; this estimate does not model image/audio encoding or tokenizer differences.</summary>
+    public static long EstimateTokens(IEnumerable<ChatMessage> messages, ChatOptions? options)
     {
-        long chars = 0;
+        long chars = Utf8Length(options?.Instructions);
+        if (options?.Tools is { } tools)
+        {
+            foreach (var tool in tools)
+            {
+                chars += Utf8Length(tool.Name) + Utf8Length(tool.Description);
+                if (tool is AIFunctionDeclaration function)
+                    chars += Utf8Length(function.JsonSchema.GetRawText());
+            }
+        }
         foreach (var message in messages)
         {
-            chars += message.Role.Value?.Length ?? 0;
-            chars += message.AuthorName?.Length ?? 0;
+            chars += 32 + Utf8Length(message.Role.Value);
+            chars += Utf8Length(message.AuthorName);
 
             foreach (var content in message.Contents)
                 chars += EstimateContentChars(content);
@@ -268,13 +287,15 @@ public sealed class ChatRunSafetyScope : IDisposable
     {
         return content switch
         {
-            TextContent text => text.Text?.Length ?? 0,
-            FunctionCallContent call => (call.Name?.Length ?? 0) + SafeSerializedLength(call.Arguments),
-            FunctionResultContent result => result.Result?.ToString()?.Length ?? 0,
+            TextContent text => Utf8Length(text.Text),
+            FunctionCallContent call => Utf8Length(call.CallId) + Utf8Length(call.Name) + SafeSerializedLength(call.Arguments),
+            FunctionResultContent result => Utf8Length(result.CallId) + (result.Result is string text ? Utf8Length(text) : SafeSerializedLength(result.Result)),
             UsageContent => 0,
             _ => SafeSerializedLength(content)
         };
     }
+
+    private static int Utf8Length(string? value) => value is null ? 0 : System.Text.Encoding.UTF8.GetByteCount(value);
 
     private static int SafeSerializedLength(object? value)
     {
@@ -283,11 +304,11 @@ public sealed class ChatRunSafetyScope : IDisposable
 
         try
         {
-            return JsonSerializer.Serialize(value).Length;
+            return Utf8Length(JsonSerializer.Serialize(value, ChatMessageSerializerOptions.Instance));
         }
         catch
         {
-            return value.ToString()?.Length ?? 0;
+            throw new InvalidOperationException("Cannot estimate an unserializable request payload.");
         }
     }
 

@@ -1,0 +1,2 @@
+#nullable enable
+FabrCore.Surface.Ai.Squads.SurfaceSquadBlueprintExpander.ConfigurationSchema.get -> System.Text.Json.JsonElement?

@@ -1,0 +1,5 @@
+<Project>
+  <Target Name="RequirePublicApiBaselines" BeforeTargets="CoreCompile" Condition="'$(FabrCorePublicApi)' == 'true'">
+    <Error Condition="!Exists('$(MSBuildProjectDirectory)/PublicAPI.Shipped.txt') Or !Exists('$(MSBuildProjectDirectory)/PublicAPI.Unshipped.txt')" Text="Public API baselines are required for $(MSBuildProjectName). Restore the files; review compatibility before updating shipped API." />
+  </Target>
+</Project>

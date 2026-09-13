@@ -13,6 +13,93 @@ namespace FabrCore.Sdk.Tests;
 public sealed class InternalAgentHardeningTests
 {
     [TestMethod]
+    public async Task AdminTurnHasIndependentBusyStateAndDoesNotInvokeNormalFlow()
+    {
+        var client = new ObservingChatClient(TimeSpan.FromMilliseconds(150));
+        var proxy = CreateProxy(new FakeChatClientService(client));
+        var internalProxy = (IFabrCoreAgentProxy)proxy;
+        var context = new AdminDiagnosticContext
+        {
+            Session = new() { Id = "session", AgentHandle = "owner:review", Actor = "operator" },
+            Turn = new() { Id = "turn", Message = "Which errors are captured?" },
+            ReadAsync = (_, _) => Task.FromResult("{}")
+        };
+        var running = internalProxy.InternalOnAdminMessage(context, CancellationToken.None);
+        Assert.IsTrue(internalProxy.InternalIsProcessingAdmin);
+        Assert.IsFalse(internalProxy.InternalIsProcessingMessage);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => internalProxy.InternalOnAdminMessage(context, CancellationToken.None));
+        await running;
+        Assert.IsFalse(internalProxy.InternalIsProcessingAdmin);
+        Assert.IsFalse(internalProxy.InternalIsProcessingMessage);
+        Assert.AreEqual("done", context.Turn.Response);
+        Assert.IsTrue(context.Turn.Transcript.Count > 0);
+        Assert.AreEqual(0, context.Session.SourceSnapshot.Count);
+        await proxy.DisposeAsync();
+    }
+
+    [TestMethod]
+    public async Task AdminCancellationReleasesItsOwnGuard()
+    {
+        var proxy = CreateProxy(new FakeChatClientService(new ObservingChatClient(TimeSpan.FromSeconds(10))));
+        using var cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+        var p = (IFabrCoreAgentProxy)proxy;
+        await Assert.ThrowsAsync<OperationCanceledException>(() => p.InternalOnAdminMessage(new()
+        {
+            Session = new() { Id = "session" }, Turn = new() { Id = "turn", Message = "inspect" }, ReadAsync = (_, _) => Task.FromResult("{}")
+        }, cancel.Token));
+        Assert.IsFalse(p.InternalIsProcessingAdmin);
+        Assert.IsFalse(p.InternalIsProcessingMessage);
+        await proxy.DisposeAsync();
+    }
+
+    [TestMethod]
+    public async Task ForkSnapshotIsIndependentAndPersistenceDoesNotDuplicate()
+    {
+        var original = new ChatMessage(ChatRole.User, "original");
+        var source = new List<ChatMessage> { original };
+        var fork = new ForkedChatHistoryProvider(source, "source");
+        original.Contents.Clear(); source.Clear();
+        var host = new FakeAgentHost("owner:review");
+        await fork.PersistAsync(host, "admin");
+        await fork.PersistAsync(host, "admin");
+        var messages = await host.GetThreadMessagesAsync("admin");
+        Assert.AreEqual(1, messages.Count);
+        StringAssert.Contains(messages[0].ContentsJson!, "original");
+        await Assert.ThrowsAsync<ArgumentException>(() => fork.PersistAsync(host, "source"));
+    }
+    [TestMethod]
+    public async Task MemoryWritesRequireBothScopedToolAndExplicitPolicy()
+    {
+        var proxy = CreateProxy(new FakeChatClientService(FakeChatClient.WithTextResponse("ok")));
+        var memoryTool = new TestMemoryFunction();
+        var risks = new Dictionary<string, InternalAgentToolRisk> { [memoryTool.Name] = InternalAgentToolRisk.MemoryWrite };
+        var options = Options("memory-child") with { Tools = [memoryTool], ToolRisks = risks };
+        await Assert.ThrowsAsync<InvalidOperationException>(() => proxy.CreateAsync(options));
+        var result = await proxy.CreateAsync(options with { ExecutionPolicy = InternalAgentExecutionPolicy.ConcurrentWithMemory });
+        Assert.IsNotNull(result.AsBackgroundAgent());
+
+        var unbound = AIFunctionFactory.Create(() => "external effect", new AIFunctionFactoryOptions { Name = "unbound" });
+        await Assert.ThrowsAsync<InvalidOperationException>(() => proxy.CreateAsync(Options("unbound") with {
+            Tools = [unbound], ExecutionPolicy = InternalAgentExecutionPolicy.ConcurrentWithMemory,
+            ToolRisks = new Dictionary<string, InternalAgentToolRisk> { ["unbound"] = InternalAgentToolRisk.MemoryWrite }
+        }));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => proxy.CreateAsync(Options("external") with {
+            Tools = [unbound], ExecutionPolicy = InternalAgentExecutionPolicy.ConcurrentWithMemory,
+            ToolRisks = new Dictionary<string, InternalAgentToolRisk> { ["unbound"] = InternalAgentToolRisk.ApprovalRequired }
+        }));
+        await proxy.DisposeAsync();
+    }
+
+    private sealed class TestMemoryFunction : AIFunction, IScopedAgentMemoryTool
+    {
+        public string WriteScope => "internal:owner:research";
+        public override string Name => "save_note";
+        public override System.Text.Json.JsonElement JsonSchema => System.Text.Json.JsonSerializer.SerializeToElement(new { type = "object" });
+        protected override ValueTask<object?> InvokeCoreAsync(AIFunctionArguments arguments, CancellationToken cancellationToken)
+            => ValueTask.FromResult<object?>("saved");
+    }
+
+    [TestMethod]
     public async Task FactoryUsesSeparateTrackedClientsAndRejectsDuplicateNames()
     {
         var service = new FakeChatClientService(FakeChatClient.WithTextResponse("ok"));

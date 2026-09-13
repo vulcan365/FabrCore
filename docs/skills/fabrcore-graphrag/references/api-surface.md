@@ -57,14 +57,36 @@ records.
 
 Methods:
 
-- `IngestDocumentAsync(fileName, scopeKey, markdownContent, ct)`
+- `IngestDocumentAsync(KnowledgeIngestionRequest request, ct)`
 - `ListDocumentsAsync(scopeFilter, page, pageSize, ct)`
 - `CountDocumentsAsync(scopeFilter, ct)`
 - `GetDocumentAsync(documentId, ct)`
 - `DeleteDocumentAsync(documentId, ct)`
 - `GetContributionsAsync(documentId, ct)`
 
-`IngestDocumentAsync` returns `SourceDocumentDto`.
+`IngestDocumentAsync` returns `SourceDocumentDto`. The current request is:
+
+```csharp
+var request = new KnowledgeIngestionRequest(
+    FileName: fileName,
+    ScopeKey: trustedScope,
+    MarkdownContent: markdown,
+    ExtractionInstructions: instructions)
+{
+    ForceReingestion = false
+};
+var result = await ingestion.IngestDocumentAsync(request, ct);
+```
+
+Instructions guide graph/taxonomy extraction but are not added to stored/searchable
+source content. Source identity is scope/kind/key. Unchanged content and instruction
+hashes can return `Reused=true`. Use `ForceReingestion=true` deliberately to apply new
+model/prompt/processing settings to otherwise unchanged content. Normal reuse is
+separate from optional extraction-result and embedding caches.
+
+The old four-argument positional service call is not on the current interface.
+Adapt the ingestion calls in bundled legacy endpoint/worker `.cs` samples to the
+request-based example above; leave consumer authorization and queue handling intact.
 
 Important `SourceDocumentDto` fields:
 

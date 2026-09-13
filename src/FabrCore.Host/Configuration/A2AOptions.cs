@@ -1,4 +1,4 @@
-﻿using FabrCore.Host.A2A;
+using FabrCore.Host.A2A;
 namespace FabrCore.Host.Configuration;
 
 /// <summary>
@@ -123,6 +123,8 @@ public sealed class A2AOptions
 /// <summary>One agent published over A2A.</summary>
 public sealed class A2AAgentOptions
 {
+    /// <summary>Name in the shared AgentBindings section. Owns provisioning settings when set.</summary>
+    public string? Binding { get; set; }
     /// <summary>
     /// Route segment and card identity, for example <c>support</c> gives <c>/a2a/support</c>.
     /// Defaults to a slug of <see cref="AgentType"/> or <see cref="AgentHandle"/>.
@@ -293,6 +295,10 @@ public sealed class A2AApiKeyEntry
 /// <summary>OAuth 2.0 / OIDC bearer token settings.</summary>
 public sealed class A2AJwtBearerOptions
 {
+    /// <summary>All these delegated scopes must be present in scp.</summary>
+    public List<string> RequiredScopes { get; set; } = new();
+    /// <summary>When nonempty, at least one of these application roles must be present.</summary>
+    public List<string> RequiredRoles { get; set; } = new();
     /// <summary>Token issuer / OIDC authority, for example <c>https://login.microsoftonline.com/{tenant}/v2.0</c>.</summary>
     public string? Authority { get; set; }
 
@@ -327,8 +333,10 @@ public sealed class A2AJwtBearerOptions
 /// <summary>Strategy for deriving the FabrCore principal handle of an A2A caller.</summary>
 public enum A2APrincipalStrategy
 {
+    /// <summary>Shared tenant/object identity. Delegated users map to entra-, applications to app-.</summary>
+    CanonicalEntra = 4,
     /// <summary>Every A2A caller shares one principal (<see cref="A2APrincipalOptions.Handle"/>). Default.</summary>
-    Fixed,
+    Fixed = 0,
 
     /// <summary>One principal per A2A <c>contextId</c>, isolating conversations from each other.</summary>
     ContextId,
@@ -356,7 +364,9 @@ public sealed class A2APrincipalOptions
 /// <summary>Task store and execution limits.</summary>
 public sealed class A2ATaskOptions
 {
-    /// <summary>How long a terminal task stays queryable through <c>tasks/get</c>. Default 1 hour.</summary>
+    /// <summary>Maximum concurrently executing tasks per host process.</summary>
+    public int MaxConcurrentTasks { get; set; } = 100;
+    /// <summary>How long a terminal task stays queryable through <c>GetTask</c>. Default 1 hour.</summary>
     public TimeSpan Retention { get; set; } = TimeSpan.FromHours(1);
 
     /// <summary>Maximum tasks held in the in-memory store. Oldest terminal tasks evict first. Default 1000.</summary>
@@ -378,16 +388,9 @@ public sealed class A2AInteropOptions
     /// <summary>
     /// Accept a JSON-RPC envelope posted to the HTTP+JSON routes and answer with a matching
     /// JSON-RPC envelope. Microsoft Copilot Studio does exactly this: it is configured with the
-    /// REST-style <c>/v1/message:stream</c> URL but sends JSON-RPC bodies. Default true.
+    /// REST-style <c>/message:stream</c> URL but sends JSON-RPC bodies. Default true.
     /// </summary>
     public bool AcceptJsonRpcOnHttpRoutes { get; set; } = true;
-
-    /// <summary>
-    /// When a JSON-RPC envelope arrives on a streaming route, answer with one buffered JSON-RPC
-    /// response holding the completed task instead of an SSE stream. Copilot Studio's connector
-    /// reads a single JSON body, so streaming to it loses the result. Default true.
-    /// </summary>
-    public bool CollapseStreamForJsonRpcOnHttpRoutes { get; set; } = true;
 
     /// <summary>
     /// Shape of a non-streaming result on the standard A2A routes. <c>Task</c> is the richer
@@ -395,14 +398,6 @@ public sealed class A2AInteropOptions
     /// message, and an id the client can follow up on. Default <c>Task</c>.
     /// </summary>
     public A2AResultShape ResultShape { get; set; } = A2AResultShape.Task;
-
-    /// <summary>
-    /// Shape of the result returned to a JSON-RPC envelope posted to an HTTP+JSON route — the
-    /// Copilot Studio shape. Defaults to <c>Message</c>, which puts the reply text at the top
-    /// level where a connector that expects a single flat answer will find it. Set to
-    /// <c>Task</c> if your client understands the full task object.
-    /// </summary>
-    public A2AResultShape CompatibilityResultShape { get; set; } = A2AResultShape.Message;
 
     /// <summary>
     /// Copy the inbound message's <c>metadata</c> onto the FabrCore message as

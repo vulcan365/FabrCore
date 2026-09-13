@@ -1,0 +1,128 @@
+[
+  {
+    "FileName": "rfc8259-json.txt",
+    "Url": "https://www.rfc-editor.org/rfc/rfc8259.txt",
+    "Query": "Which data interchange format has objects with name and value pairs and arrays of values?",
+    "ExpectedEntities": [
+      "JSON"
+    ],
+    "EvidenceTerms": [
+      "name/value",
+      "array"
+    ],
+    "ExpectedEdges": [
+      {
+        "Id": "json-utf8",
+        "Fact": "Interoperable JSON exchanges use UTF-8.",
+        "SourceSection": "RFC 8259 section 8.1",
+        "EvidenceText": "MUST be encoded using UTF-8",
+        "FromPattern": "^(?:JSON(?: \\(JavaScript Object Notation\\))?|JavaScript Object Notation|JSON text)$",
+        "Types": [
+          "USES",
+          "DEPENDS_ON"
+        ],
+        "ToPattern": "^UTF.?8$",
+        "EvidencePattern": "(?s)(?=.*JSON)(?=.*UTF.?8)"
+      },
+      {
+        "Id": "ecma404-publisher",
+        "Fact": "ECMA-404 is published by Ecma International, not inferred to be authored by it.",
+        "SourceSection": "RFC 8259 section 14.1",
+        "EvidenceText": "[ECMA-404] Ecma International",
+        "FromPattern": "ECMA.?404",
+        "Types": [
+          "PUBLISHED_BY"
+        ],
+        "ToPattern": "^Ecma International$"
+      }
+    ]
+  },
+  {
+    "FileName": "rfc4180-csv.txt",
+    "Url": "https://www.rfc-editor.org/rfc/rfc4180.txt",
+    "Query": "How should fields containing commas or double quotes be escaped in CSV files?",
+    "ExpectedEntities": [
+      "CSV"
+    ],
+    "EvidenceTerms": [
+      "double quote",
+      "comma"
+    ],
+    "ExpectedEdges": [
+      {
+        "Id": "iana-csv",
+        "Fact": "IANA registered the text/csv MIME type.",
+        "SourceSection": "RFC 4180 section 4",
+        "EvidenceText": "The IANA has registered the MIME type",
+        "FromPattern": "^(?:IANA|Internet Assigned Numbers Authority(?: \\(IANA\\))?)$",
+        "Types": [
+          "ESTABLISHES"
+        ],
+        "ToPattern": "text/csv"
+      },
+      {
+        "Id": "abnf-rfc2234",
+        "Fact": "RFC 4180 cites RFC 2234 for ABNF notation.",
+        "SourceSection": "RFC 4180 sections 2 and 7.1",
+        "EvidenceText": "RFC 2234, November 1997",
+        "FromPattern": "^RFC\\s*4180$",
+        "Types": [
+          "REFERENCES"
+        ],
+        "ToPattern": "^RFC\\s*2234$"
+      }
+    ]
+  },
+  {
+    "FileName": "rfc9562-uuid.txt",
+    "Url": "https://www.rfc-editor.org/rfc/rfc9562.txt",
+    "Query": "How many bits does a Universally Unique Identifier use?",
+    "ExpectedEntities": [
+      "UUID"
+    ],
+    "EvidenceTerms": [
+      "128"
+    ],
+    "ExpectedEdges": [
+      {
+        "Id": "uuid-guid",
+        "Fact": "UUID and GUID are alternative names for the same identifier.",
+        "SourceSection": "RFC 9562 section 1",
+        "EvidenceText": "also known as Globally Unique",
+        "FromPattern": "^(?:UUIDs?|Universally Unique IDentifiers(?: \\(UUIDs?\\))?)$",
+        "Types": [
+          "ALIAS_OF",
+          "RELATED_TO"
+        ],
+        "ToPattern": "^(?:GUIDs?|Globally Unique IDentifiers(?: \\(GUIDs?\\))?)$",
+        "Symmetric": true,
+        "DescriptionPattern": "also known|equivalent|same|synonym|alternative name|another name|alternate name|alias",
+        "EvidencePattern": "(?s)(?=.*UUID)(?=.*GUID)"
+      },
+      {
+        "Id": "uuid-urn",
+        "Fact": "UUIDs can be used with Uniform Resource Names.",
+        "SourceSection": "RFC 9562 section 1",
+        "EvidenceText": "using UUIDs either in combination with URNs",
+        "FromPattern": "^(?:UUIDs?|Universally Unique IDentifiers(?: \\(UUIDs?\\))?)$",
+        "Types": [
+          "USES"
+        ],
+        "ToPattern": "^(?:URNs?|Uniform Resource Names?(?: \\(URNs?\\))?)$",
+        "EvidencePattern": "(?s)(?=.*UUID)(?=.*URN|.*Uniform Resource Name)"
+      },
+      {
+        "Id": "uuid-no-central-registration",
+        "Fact": "UUIDs do not require central registration.",
+        "SourceSection": "RFC 9562 section 1",
+        "EvidenceText": "requires no central registration process",
+        "FromPattern": "^(?:UUIDs?|Universally Unique IDentifiers(?: \\(UUIDs?\\))?)$",
+        "Types": [
+          "DEPENDS_ON"
+        ],
+        "ToPattern": "central.*registra",
+        "Forbidden": true
+      }
+    ]
+  }
+]

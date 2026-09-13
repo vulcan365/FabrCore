@@ -1,0 +1,249 @@
+#nullable enable
+FabrCore.Connections.BeginConnectionRequest
+FabrCore.Connections.BeginConnectionRequest.<Clone>$() -> FabrCore.Connections.BeginConnectionRequest!
+FabrCore.Connections.BeginConnectionRequest.BeginConnectionRequest(string! Connection, string! RedirectUri) -> void
+FabrCore.Connections.BeginConnectionRequest.Connection.get -> string!
+FabrCore.Connections.BeginConnectionRequest.Connection.init -> void
+FabrCore.Connections.BeginConnectionRequest.Deconstruct(out string! Connection, out string! RedirectUri) -> void
+FabrCore.Connections.BeginConnectionRequest.Equals(FabrCore.Connections.BeginConnectionRequest? other) -> bool
+FabrCore.Connections.BeginConnectionRequest.RedirectUri.get -> string!
+FabrCore.Connections.BeginConnectionRequest.RedirectUri.init -> void
+FabrCore.Connections.CompleteConnectionRequest
+FabrCore.Connections.CompleteConnectionRequest.<Clone>$() -> FabrCore.Connections.CompleteConnectionRequest!
+FabrCore.Connections.CompleteConnectionRequest.AuthorizationCode.get -> string?
+FabrCore.Connections.CompleteConnectionRequest.AuthorizationCode.init -> void
+FabrCore.Connections.CompleteConnectionRequest.CompleteConnectionRequest(string! Connection, string! State, string? AuthorizationCode, string? ProviderError = null) -> void
+FabrCore.Connections.CompleteConnectionRequest.Connection.get -> string!
+FabrCore.Connections.CompleteConnectionRequest.Connection.init -> void
+FabrCore.Connections.CompleteConnectionRequest.Deconstruct(out string! Connection, out string! State, out string? AuthorizationCode, out string? ProviderError) -> void
+FabrCore.Connections.CompleteConnectionRequest.Equals(FabrCore.Connections.CompleteConnectionRequest? other) -> bool
+FabrCore.Connections.CompleteConnectionRequest.ProviderError.get -> string?
+FabrCore.Connections.CompleteConnectionRequest.ProviderError.init -> void
+FabrCore.Connections.CompleteConnectionRequest.State.get -> string!
+FabrCore.Connections.CompleteConnectionRequest.State.init -> void
+FabrCore.Connections.ConnectionAccessToken
+FabrCore.Connections.ConnectionAccessToken.AccessToken.get -> string!
+FabrCore.Connections.ConnectionAccessToken.ConnectionAccessToken(string! accessToken, System.DateTimeOffset expiresAt) -> void
+FabrCore.Connections.ConnectionAccessToken.ExpiresAt.get -> System.DateTimeOffset
+FabrCore.Connections.ConnectionAssertionRequest
+FabrCore.Connections.ConnectionAssertionRequest.<Clone>$() -> FabrCore.Connections.ConnectionAssertionRequest!
+FabrCore.Connections.ConnectionAssertionRequest.Assertion.get -> string!
+FabrCore.Connections.ConnectionAssertionRequest.Assertion.init -> void
+FabrCore.Connections.ConnectionAssertionRequest.Connection.get -> string!
+FabrCore.Connections.ConnectionAssertionRequest.Connection.init -> void
+FabrCore.Connections.ConnectionAssertionRequest.ConnectionAssertionRequest(string! Connection, string! Assertion) -> void
+FabrCore.Connections.ConnectionAssertionRequest.Deconstruct(out string! Connection, out string! Assertion) -> void
+FabrCore.Connections.ConnectionAssertionRequest.Equals(FabrCore.Connections.ConnectionAssertionRequest? other) -> bool
+FabrCore.Connections.ConnectionAuthentication
+FabrCore.Connections.ConnectionAuthentication.AgentIdApplication = 3 -> FabrCore.Connections.ConnectionAuthentication
+FabrCore.Connections.ConnectionAuthentication.AgentIdOnBehalfOf = 2 -> FabrCore.Connections.ConnectionAuthentication
+FabrCore.Connections.ConnectionAuthentication.AuthorizationCode = 0 -> FabrCore.Connections.ConnectionAuthentication
+FabrCore.Connections.ConnectionAuthentication.ClientCredentials = 1 -> FabrCore.Connections.ConnectionAuthentication
+FabrCore.Connections.ConnectionAuthentication.OnBehalfOf = 4 -> FabrCore.Connections.ConnectionAuthentication
+FabrCore.Connections.ConnectionBinding
+FabrCore.Connections.ConnectionBinding.<Clone>$() -> FabrCore.Connections.ConnectionBinding!
+FabrCore.Connections.ConnectionBinding.ConnectionBinding(string! OwnerPrincipal, string! Name) -> void
+FabrCore.Connections.ConnectionBinding.Deconstruct(out string! OwnerPrincipal, out string! Name) -> void
+FabrCore.Connections.ConnectionBinding.Equals(FabrCore.Connections.ConnectionBinding? other) -> bool
+FabrCore.Connections.ConnectionBinding.Name.get -> string!
+FabrCore.Connections.ConnectionBinding.Name.init -> void
+FabrCore.Connections.ConnectionBinding.OwnerPrincipal.get -> string!
+FabrCore.Connections.ConnectionBinding.OwnerPrincipal.init -> void
+FabrCore.Connections.ConnectionCapabilities
+FabrCore.Connections.ConnectionCapabilities.<Clone>$() -> FabrCore.Connections.ConnectionCapabilities!
+FabrCore.Connections.ConnectionCapabilities.ClientHandoffEnabled.get -> bool
+FabrCore.Connections.ConnectionCapabilities.ClientHandoffEnabled.init -> void
+FabrCore.Connections.ConnectionCapabilities.ConnectionCapabilities(bool EntraAgentIdEnabled, bool ClientHandoffEnabled) -> void
+FabrCore.Connections.ConnectionCapabilities.Deconstruct(out bool EntraAgentIdEnabled, out bool ClientHandoffEnabled) -> void
+FabrCore.Connections.ConnectionCapabilities.EntraAgentIdEnabled.get -> bool
+FabrCore.Connections.ConnectionCapabilities.EntraAgentIdEnabled.init -> void
+FabrCore.Connections.ConnectionCapabilities.Equals(FabrCore.Connections.ConnectionCapabilities? other) -> bool
+FabrCore.Connections.ConnectionException
+FabrCore.Connections.ConnectionException.Code.get -> string!
+FabrCore.Connections.ConnectionException.ConnectionException(string! code, string! message) -> void
+FabrCore.Connections.ConnectionHandoff
+FabrCore.Connections.ConnectionHandoffChallenge
+FabrCore.Connections.ConnectionHandoffChallenge.<Clone>$() -> FabrCore.Connections.ConnectionHandoffChallenge!
+FabrCore.Connections.ConnectionHandoffChallenge.ConnectionHandoffChallenge(string! Id, string! PublicKey, System.DateTimeOffset ExpiresAt) -> void
+FabrCore.Connections.ConnectionHandoffChallenge.Deconstruct(out string! Id, out string! PublicKey, out System.DateTimeOffset ExpiresAt) -> void
+FabrCore.Connections.ConnectionHandoffChallenge.Equals(FabrCore.Connections.ConnectionHandoffChallenge? other) -> bool
+FabrCore.Connections.ConnectionHandoffChallenge.ExpiresAt.get -> System.DateTimeOffset
+FabrCore.Connections.ConnectionHandoffChallenge.ExpiresAt.init -> void
+FabrCore.Connections.ConnectionHandoffChallenge.Id.get -> string!
+FabrCore.Connections.ConnectionHandoffChallenge.Id.init -> void
+FabrCore.Connections.ConnectionHandoffChallenge.PublicKey.get -> string!
+FabrCore.Connections.ConnectionHandoffChallenge.PublicKey.init -> void
+FabrCore.Connections.ConnectionHandoffEnvelope
+FabrCore.Connections.ConnectionHandoffEnvelope.<Clone>$() -> FabrCore.Connections.ConnectionHandoffEnvelope!
+FabrCore.Connections.ConnectionHandoffEnvelope.Ciphertext.get -> string!
+FabrCore.Connections.ConnectionHandoffEnvelope.Ciphertext.init -> void
+FabrCore.Connections.ConnectionHandoffEnvelope.ConnectionHandoffEnvelope(string! Id, string! WrappedKey, string! Nonce, string! Ciphertext, string! Tag) -> void
+FabrCore.Connections.ConnectionHandoffEnvelope.Deconstruct(out string! Id, out string! WrappedKey, out string! Nonce, out string! Ciphertext, out string! Tag) -> void
+FabrCore.Connections.ConnectionHandoffEnvelope.Equals(FabrCore.Connections.ConnectionHandoffEnvelope? other) -> bool
+FabrCore.Connections.ConnectionHandoffEnvelope.Id.get -> string!
+FabrCore.Connections.ConnectionHandoffEnvelope.Id.init -> void
+FabrCore.Connections.ConnectionHandoffEnvelope.Nonce.get -> string!
+FabrCore.Connections.ConnectionHandoffEnvelope.Nonce.init -> void
+FabrCore.Connections.ConnectionHandoffEnvelope.Tag.get -> string!
+FabrCore.Connections.ConnectionHandoffEnvelope.Tag.init -> void
+FabrCore.Connections.ConnectionHandoffEnvelope.WrappedKey.get -> string!
+FabrCore.Connections.ConnectionHandoffEnvelope.WrappedKey.init -> void
+FabrCore.Connections.ConnectionHandoffPayload
+FabrCore.Connections.ConnectionHandoffPayload.Assertion.get -> string?
+FabrCore.Connections.ConnectionHandoffPayload.Assertion.set -> void
+FabrCore.Connections.ConnectionHandoffPayload.AuthorizationCode.get -> string?
+FabrCore.Connections.ConnectionHandoffPayload.AuthorizationCode.set -> void
+FabrCore.Connections.ConnectionHandoffPayload.ConnectionHandoffPayload() -> void
+FabrCore.Connections.ConnectionHandoffPayload.Operation.get -> string!
+FabrCore.Connections.ConnectionHandoffPayload.Operation.set -> void
+FabrCore.Connections.ConnectionHandoffPayload.RedirectUri.get -> string?
+FabrCore.Connections.ConnectionHandoffPayload.RedirectUri.set -> void
+FabrCore.Connections.ConnectionHandoffPayload.State.get -> string?
+FabrCore.Connections.ConnectionHandoffPayload.State.set -> void
+FabrCore.Connections.ConnectionHandoffPayload.UserProof.get -> string!
+FabrCore.Connections.ConnectionHandoffPayload.UserProof.set -> void
+FabrCore.Connections.ConnectionProfile
+FabrCore.Connections.ConnectionProfile.AgentIdentityClientId.get -> string?
+FabrCore.Connections.ConnectionProfile.AgentIdentityClientId.set -> void
+FabrCore.Connections.ConnectionProfile.AllowedAgents.get -> System.Collections.Generic.List<string!>!
+FabrCore.Connections.ConnectionProfile.AllowedAgents.set -> void
+FabrCore.Connections.ConnectionProfile.Authentication.get -> FabrCore.Connections.ConnectionAuthentication
+FabrCore.Connections.ConnectionProfile.Authentication.set -> void
+FabrCore.Connections.ConnectionProfile.Authority.get -> string!
+FabrCore.Connections.ConnectionProfile.Authority.set -> void
+FabrCore.Connections.ConnectionProfile.BlueprintAudience.get -> string?
+FabrCore.Connections.ConnectionProfile.BlueprintAudience.set -> void
+FabrCore.Connections.ConnectionProfile.ClientId.get -> string!
+FabrCore.Connections.ConnectionProfile.ClientId.set -> void
+FabrCore.Connections.ConnectionProfile.ConnectionProfile() -> void
+FabrCore.Connections.ConnectionProfile.CredentialReference.get -> string?
+FabrCore.Connections.ConnectionProfile.CredentialReference.set -> void
+FabrCore.Connections.ConnectionProfile.Enabled.get -> bool
+FabrCore.Connections.ConnectionProfile.Enabled.set -> void
+FabrCore.Connections.ConnectionProfile.Name.get -> string!
+FabrCore.Connections.ConnectionProfile.Name.set -> void
+FabrCore.Connections.ConnectionProfile.Provider.get -> string!
+FabrCore.Connections.ConnectionProfile.Provider.set -> void
+FabrCore.Connections.ConnectionProfile.RedirectUris.get -> System.Collections.Generic.List<string!>!
+FabrCore.Connections.ConnectionProfile.RedirectUris.set -> void
+FabrCore.Connections.ConnectionProfile.Resources.get -> System.Collections.Generic.Dictionary<string!, FabrCore.Connections.ConnectionResource!>!
+FabrCore.Connections.ConnectionProfile.Resources.set -> void
+FabrCore.Connections.ConnectionProfile.SignInScopes.get -> System.Collections.Generic.List<string!>!
+FabrCore.Connections.ConnectionProfile.SignInScopes.set -> void
+FabrCore.Connections.ConnectionProfileSnapshot
+FabrCore.Connections.ConnectionProfileSnapshot.<Clone>$() -> FabrCore.Connections.ConnectionProfileSnapshot!
+FabrCore.Connections.ConnectionProfileSnapshot.ConnectionProfileSnapshot(FabrCore.Connections.ConnectionProfile! Profile, string! Revision) -> void
+FabrCore.Connections.ConnectionProfileSnapshot.Deconstruct(out FabrCore.Connections.ConnectionProfile! Profile, out string! Revision) -> void
+FabrCore.Connections.ConnectionProfileSnapshot.Equals(FabrCore.Connections.ConnectionProfileSnapshot? other) -> bool
+FabrCore.Connections.ConnectionProfileSnapshot.Profile.get -> FabrCore.Connections.ConnectionProfile!
+FabrCore.Connections.ConnectionProfileSnapshot.Profile.init -> void
+FabrCore.Connections.ConnectionProfileSnapshot.Revision.get -> string!
+FabrCore.Connections.ConnectionProfileSnapshot.Revision.init -> void
+FabrCore.Connections.ConnectionResource
+FabrCore.Connections.ConnectionResource.BaseUrl.get -> string!
+FabrCore.Connections.ConnectionResource.BaseUrl.set -> void
+FabrCore.Connections.ConnectionResource.ConnectionResource() -> void
+FabrCore.Connections.ConnectionResource.Scopes.get -> System.Collections.Generic.List<string!>!
+FabrCore.Connections.ConnectionResource.Scopes.set -> void
+FabrCore.Connections.ConnectionStatus
+FabrCore.Connections.ConnectionStatus.<Clone>$() -> FabrCore.Connections.ConnectionStatus!
+FabrCore.Connections.ConnectionStatus.ConnectionStatus(string! Name, bool Enabled, string! State, string! Revision, string? ExternalSubject = null) -> void
+FabrCore.Connections.ConnectionStatus.Deconstruct(out string! Name, out bool Enabled, out string! State, out string! Revision, out string? ExternalSubject) -> void
+FabrCore.Connections.ConnectionStatus.Enabled.get -> bool
+FabrCore.Connections.ConnectionStatus.Enabled.init -> void
+FabrCore.Connections.ConnectionStatus.Equals(FabrCore.Connections.ConnectionStatus? other) -> bool
+FabrCore.Connections.ConnectionStatus.ExternalSubject.get -> string?
+FabrCore.Connections.ConnectionStatus.ExternalSubject.init -> void
+FabrCore.Connections.ConnectionStatus.Name.get -> string!
+FabrCore.Connections.ConnectionStatus.Name.init -> void
+FabrCore.Connections.ConnectionStatus.Revision.get -> string!
+FabrCore.Connections.ConnectionStatus.Revision.init -> void
+FabrCore.Connections.ConnectionStatus.State.get -> string!
+FabrCore.Connections.ConnectionStatus.State.init -> void
+FabrCore.Connections.ConnectionTransaction
+FabrCore.Connections.ConnectionTransaction.<Clone>$() -> FabrCore.Connections.ConnectionTransaction!
+FabrCore.Connections.ConnectionTransaction.AuthorizationUrl.get -> string!
+FabrCore.Connections.ConnectionTransaction.AuthorizationUrl.init -> void
+FabrCore.Connections.ConnectionTransaction.ConnectionTransaction(string! State, string! AuthorizationUrl, System.DateTimeOffset ExpiresAt) -> void
+FabrCore.Connections.ConnectionTransaction.Deconstruct(out string! State, out string! AuthorizationUrl, out System.DateTimeOffset ExpiresAt) -> void
+FabrCore.Connections.ConnectionTransaction.Equals(FabrCore.Connections.ConnectionTransaction? other) -> bool
+FabrCore.Connections.ConnectionTransaction.ExpiresAt.get -> System.DateTimeOffset
+FabrCore.Connections.ConnectionTransaction.ExpiresAt.init -> void
+FabrCore.Connections.ConnectionTransaction.State.get -> string!
+FabrCore.Connections.ConnectionTransaction.State.init -> void
+FabrCore.Connections.FabrCoreConnectionAdministrationClient
+FabrCore.Connections.FabrCoreConnectionAdministrationClient.CompleteHandoffAsync(string! principal, string! name, FabrCore.Connections.ConnectionHandoffEnvelope! envelope, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Text.Json.JsonElement>!
+FabrCore.Connections.FabrCoreConnectionAdministrationClient.CreateHandoffAsync(string! principal, string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Connections.ConnectionHandoffChallenge!>!
+FabrCore.Connections.FabrCoreConnectionAdministrationClient.DisconnectAsync(string! principal, string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Connections.ConnectionStatus!>!
+FabrCore.Connections.FabrCoreConnectionAdministrationClient.FabrCoreConnectionAdministrationClient(System.Net.Http.HttpClient! http) -> void
+FabrCore.Connections.FabrCoreConnectionAdministrationClient.GetAsync(string! principal, string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Connections.ConnectionProfileSnapshot!>!
+FabrCore.Connections.FabrCoreConnectionAdministrationClient.ListAsync(string! principal, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Connections.ConnectionStatus![]!>!
+FabrCore.Connections.FabrCoreConnectionAdministrationClient.SaveAsync(string! principal, FabrCore.Connections.ConnectionProfile! profile, string! revision, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Connections.ConnectionStatus!>!
+FabrCore.Connections.FabrCoreConnectionsClient
+FabrCore.Connections.FabrCoreConnectionsClient.BeginAsync(FabrCore.Connections.BeginConnectionRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Connections.ConnectionTransaction!>!
+FabrCore.Connections.FabrCoreConnectionsClient.CompleteAsync(FabrCore.Connections.CompleteConnectionRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Connections.ConnectionStatus!>!
+FabrCore.Connections.FabrCoreConnectionsClient.ConnectAssertionAsync(FabrCore.Connections.ConnectionAssertionRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Connections.ConnectionStatus!>!
+FabrCore.Connections.FabrCoreConnectionsClient.DisconnectAsync(string! connection, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Connections.ConnectionStatus!>!
+FabrCore.Connections.FabrCoreConnectionsClient.FabrCoreConnectionsClient(System.Net.Http.HttpClient! http) -> void
+FabrCore.Connections.FabrCoreConnectionsClient.ListAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Connections.ConnectionStatus![]!>!
+FabrCore.Connections.IAgentConnections
+FabrCore.Connections.IAgentConnections.GetAccessTokenAsync(string! connection, string! resource, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Connections.ConnectionAccessToken!>!
+FabrCore.Connections.IAgentConnections.GetHttpClientAsync(string! connection, string! resource, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Net.Http.HttpClient!>!
+FabrCore.Connections.IAgentConnections.GetSessionVersionAsync(string! connection, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
+FabrCore.Connections.IConnectionService
+FabrCore.Connections.IConnectionService.GetAccessTokenAsync(string! principal, string! agent, FabrCore.Connections.ConnectionBinding! binding, string! resource, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Connections.ConnectionAccessToken!>!
+FabrCore.Connections.IConnectionService.GetHttpClientAsync(string! principal, string! agent, FabrCore.Connections.ConnectionBinding! binding, string! resource, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Net.Http.HttpClient!>!
+FabrCore.Connections.IConnectionService.GetSessionVersionAsync(string! principal, string! agent, FabrCore.Connections.ConnectionBinding! binding, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
+override FabrCore.Connections.BeginConnectionRequest.Equals(object? obj) -> bool
+override FabrCore.Connections.BeginConnectionRequest.GetHashCode() -> int
+override FabrCore.Connections.BeginConnectionRequest.ToString() -> string!
+override FabrCore.Connections.CompleteConnectionRequest.Equals(object? obj) -> bool
+override FabrCore.Connections.CompleteConnectionRequest.GetHashCode() -> int
+override FabrCore.Connections.CompleteConnectionRequest.ToString() -> string!
+override FabrCore.Connections.ConnectionAccessToken.ToString() -> string!
+override FabrCore.Connections.ConnectionAssertionRequest.Equals(object? obj) -> bool
+override FabrCore.Connections.ConnectionAssertionRequest.GetHashCode() -> int
+override FabrCore.Connections.ConnectionAssertionRequest.ToString() -> string!
+override FabrCore.Connections.ConnectionBinding.Equals(object? obj) -> bool
+override FabrCore.Connections.ConnectionBinding.GetHashCode() -> int
+override FabrCore.Connections.ConnectionBinding.ToString() -> string!
+override FabrCore.Connections.ConnectionCapabilities.Equals(object? obj) -> bool
+override FabrCore.Connections.ConnectionCapabilities.GetHashCode() -> int
+override FabrCore.Connections.ConnectionCapabilities.ToString() -> string!
+override FabrCore.Connections.ConnectionHandoffChallenge.Equals(object? obj) -> bool
+override FabrCore.Connections.ConnectionHandoffChallenge.GetHashCode() -> int
+override FabrCore.Connections.ConnectionHandoffChallenge.ToString() -> string!
+override FabrCore.Connections.ConnectionHandoffEnvelope.Equals(object? obj) -> bool
+override FabrCore.Connections.ConnectionHandoffEnvelope.GetHashCode() -> int
+override FabrCore.Connections.ConnectionHandoffEnvelope.ToString() -> string!
+override FabrCore.Connections.ConnectionHandoffPayload.ToString() -> string!
+override FabrCore.Connections.ConnectionProfileSnapshot.Equals(object? obj) -> bool
+override FabrCore.Connections.ConnectionProfileSnapshot.GetHashCode() -> int
+override FabrCore.Connections.ConnectionProfileSnapshot.ToString() -> string!
+override FabrCore.Connections.ConnectionStatus.Equals(object? obj) -> bool
+override FabrCore.Connections.ConnectionStatus.GetHashCode() -> int
+override FabrCore.Connections.ConnectionStatus.ToString() -> string!
+override FabrCore.Connections.ConnectionTransaction.Equals(object? obj) -> bool
+override FabrCore.Connections.ConnectionTransaction.GetHashCode() -> int
+override FabrCore.Connections.ConnectionTransaction.ToString() -> string!
+static FabrCore.Connections.BeginConnectionRequest.operator !=(FabrCore.Connections.BeginConnectionRequest? left, FabrCore.Connections.BeginConnectionRequest? right) -> bool
+static FabrCore.Connections.BeginConnectionRequest.operator ==(FabrCore.Connections.BeginConnectionRequest? left, FabrCore.Connections.BeginConnectionRequest? right) -> bool
+static FabrCore.Connections.CompleteConnectionRequest.operator !=(FabrCore.Connections.CompleteConnectionRequest? left, FabrCore.Connections.CompleteConnectionRequest? right) -> bool
+static FabrCore.Connections.CompleteConnectionRequest.operator ==(FabrCore.Connections.CompleteConnectionRequest? left, FabrCore.Connections.CompleteConnectionRequest? right) -> bool
+static FabrCore.Connections.ConnectionAssertionRequest.operator !=(FabrCore.Connections.ConnectionAssertionRequest? left, FabrCore.Connections.ConnectionAssertionRequest? right) -> bool
+static FabrCore.Connections.ConnectionAssertionRequest.operator ==(FabrCore.Connections.ConnectionAssertionRequest? left, FabrCore.Connections.ConnectionAssertionRequest? right) -> bool
+static FabrCore.Connections.ConnectionBinding.operator !=(FabrCore.Connections.ConnectionBinding? left, FabrCore.Connections.ConnectionBinding? right) -> bool
+static FabrCore.Connections.ConnectionBinding.operator ==(FabrCore.Connections.ConnectionBinding? left, FabrCore.Connections.ConnectionBinding? right) -> bool
+static FabrCore.Connections.ConnectionCapabilities.operator !=(FabrCore.Connections.ConnectionCapabilities? left, FabrCore.Connections.ConnectionCapabilities? right) -> bool
+static FabrCore.Connections.ConnectionCapabilities.operator ==(FabrCore.Connections.ConnectionCapabilities? left, FabrCore.Connections.ConnectionCapabilities? right) -> bool
+static FabrCore.Connections.ConnectionHandoff.Encrypt(FabrCore.Connections.ConnectionHandoffChallenge! challenge, FabrCore.Connections.ConnectionHandoffPayload! payload) -> FabrCore.Connections.ConnectionHandoffEnvelope!
+static FabrCore.Connections.ConnectionHandoffChallenge.operator !=(FabrCore.Connections.ConnectionHandoffChallenge? left, FabrCore.Connections.ConnectionHandoffChallenge? right) -> bool
+static FabrCore.Connections.ConnectionHandoffChallenge.operator ==(FabrCore.Connections.ConnectionHandoffChallenge? left, FabrCore.Connections.ConnectionHandoffChallenge? right) -> bool
+static FabrCore.Connections.ConnectionHandoffEnvelope.operator !=(FabrCore.Connections.ConnectionHandoffEnvelope? left, FabrCore.Connections.ConnectionHandoffEnvelope? right) -> bool
+static FabrCore.Connections.ConnectionHandoffEnvelope.operator ==(FabrCore.Connections.ConnectionHandoffEnvelope? left, FabrCore.Connections.ConnectionHandoffEnvelope? right) -> bool
+static FabrCore.Connections.ConnectionProfileSnapshot.operator !=(FabrCore.Connections.ConnectionProfileSnapshot? left, FabrCore.Connections.ConnectionProfileSnapshot? right) -> bool
+static FabrCore.Connections.ConnectionProfileSnapshot.operator ==(FabrCore.Connections.ConnectionProfileSnapshot? left, FabrCore.Connections.ConnectionProfileSnapshot? right) -> bool
+static FabrCore.Connections.ConnectionStatus.operator !=(FabrCore.Connections.ConnectionStatus? left, FabrCore.Connections.ConnectionStatus? right) -> bool
+static FabrCore.Connections.ConnectionStatus.operator ==(FabrCore.Connections.ConnectionStatus? left, FabrCore.Connections.ConnectionStatus? right) -> bool
+static FabrCore.Connections.ConnectionTransaction.operator !=(FabrCore.Connections.ConnectionTransaction? left, FabrCore.Connections.ConnectionTransaction? right) -> bool
+static FabrCore.Connections.ConnectionTransaction.operator ==(FabrCore.Connections.ConnectionTransaction? left, FabrCore.Connections.ConnectionTransaction? right) -> bool

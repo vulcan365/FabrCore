@@ -1,0 +1,25 @@
+#nullable enable
+FabrCore.Host.AzureStorage.AzureGrainStorageMode
+FabrCore.Host.AzureStorage.AzureGrainStorageMode.Blob = 0 -> FabrCore.Host.AzureStorage.AzureGrainStorageMode
+FabrCore.Host.AzureStorage.AzureGrainStorageMode.Table = 1 -> FabrCore.Host.AzureStorage.AzureGrainStorageMode
+FabrCore.Host.AzureStorage.AzureStorageHostOptions
+FabrCore.Host.AzureStorage.AzureStorageHostOptions.AzureStorageHostOptions() -> void
+FabrCore.Host.AzureStorage.AzureStorageHostOptions.ContainerName.get -> string!
+FabrCore.Host.AzureStorage.AzureStorageHostOptions.ContainerName.set -> void
+FabrCore.Host.AzureStorage.AzureStorageHostOptions.GrainStorage.get -> FabrCore.Host.AzureStorage.AzureGrainStorageMode
+FabrCore.Host.AzureStorage.AzureStorageHostOptions.GrainStorage.set -> void
+FabrCore.Host.AzureStorage.AzureStorageHostOptions.StreamQueueCount.get -> int
+FabrCore.Host.AzureStorage.AzureStorageHostOptions.StreamQueueCount.set -> void
+FabrCore.Host.AzureStorage.AzureStorageHostOptions.Streams.get -> FabrCore.Host.AzureStorage.AzureStreamMode
+FabrCore.Host.AzureStorage.AzureStorageHostOptions.Streams.set -> void
+FabrCore.Host.AzureStorage.AzureStorageOrleansProvider
+FabrCore.Host.AzureStorage.AzureStorageOrleansProvider.AzureStorageOrleansProvider() -> void
+FabrCore.Host.AzureStorage.AzureStorageOrleansProvider.ConfigureSilo(Orleans.Hosting.ISiloBuilder! siloBuilder, FabrCore.Host.Configuration.OrleansClusterOptions! options, Microsoft.Extensions.Configuration.IConfiguration! configuration, Microsoft.Extensions.Logging.ILogger! logger) -> void
+FabrCore.Host.AzureStorage.AzureStorageOrleansProvider.Initialize(FabrCore.Host.Configuration.OrleansClusterOptions! options, Microsoft.Extensions.Configuration.IConfiguration! configuration, Microsoft.Extensions.Logging.ILogger! logger) -> void
+FabrCore.Host.AzureStorage.AzureStorageOrleansProvider.Mode.get -> FabrCore.Host.Configuration.ClusteringMode
+FabrCore.Host.AzureStorage.AzureStreamMode
+FabrCore.Host.AzureStorage.AzureStreamMode.AzureQueue = 0 -> FabrCore.Host.AzureStorage.AzureStreamMode
+FabrCore.Host.AzureStorage.AzureStreamMode.Memory = 1 -> FabrCore.Host.AzureStorage.AzureStreamMode
+FabrCore.Host.AzureStorage.FabrCoreAzureStorageExtensions
+const FabrCore.Host.AzureStorage.AzureStorageHostOptions.SectionName = "FabrCore:Orleans:AzureStorage" -> string!
+static FabrCore.Host.AzureStorage.FabrCoreAzureStorageExtensions.UseAzureStorage(this FabrCore.Host.FabrCoreServerOptions! options) -> FabrCore.Host.FabrCoreServerOptions!

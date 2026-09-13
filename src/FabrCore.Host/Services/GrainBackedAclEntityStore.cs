@@ -21,7 +21,7 @@ namespace FabrCore.Host.Services
     /// As a hosted service it also drives ACL bootstrap once the cluster is ready.
     /// </para>
     /// </summary>
-    public sealed class GrainBackedAclEntityStore : IAclEntityStore, IAclSnapshotProvider, IHostedService
+    public sealed class GrainBackedAclEntityStore : IAclEntityStore, IAclSnapshotProvider, IHostedLifecycleService
     {
         private readonly IClusterClient _clusterClient;
         private readonly FabrCoreAclOptions _options;
@@ -54,11 +54,18 @@ namespace FabrCore.Host.Services
 
         // ── IHostedService ──
 
-        public Task StartAsync(CancellationToken cancellationToken)
+        public bool IsReady { get; private set; }
+        public Task StartingAsync(CancellationToken ct) => Task.CompletedTask;
+        public Task StartAsync(CancellationToken ct) => Task.CompletedTask;
+        public Task StoppingAsync(CancellationToken ct) => Task.CompletedTask;
+        public Task StoppedAsync(CancellationToken ct) => Task.CompletedTask;
+        public async Task StartedAsync(CancellationToken ct)
         {
+            await Registry.EnsureBootstrappedAsync().WaitAsync(ct);
+            await RefreshAsync(ct);
+            IsReady = true;
             _stopping = new CancellationTokenSource();
             _refreshLoop = Task.Run(() => RunAsync(_stopping.Token), CancellationToken.None);
-            return Task.CompletedTask;
         }
 
         public async Task StopAsync(CancellationToken cancellationToken)
@@ -93,38 +100,7 @@ namespace FabrCore.Host.Services
 
         private async Task RunAsync(CancellationToken stopping)
         {
-            // The silo may still be forming a cluster when hosted services start — retry until
-            // the registry grain is reachable, then bootstrap and load the first snapshot.
-            var attempt = 0;
-            while (!stopping.IsCancellationRequested)
-            {
-                try
-                {
-                    await Registry.EnsureBootstrappedAsync();
-                    await RefreshAsync(stopping);
-                    _logger.LogInformation("ACL snapshot loaded (version {Version})", Current.Version);
-                    break;
-                }
-                catch (Exception ex) when (!stopping.IsCancellationRequested)
-                {
-                    attempt++;
-                    var delay = TimeSpan.FromSeconds(Math.Min(30, Math.Pow(2, Math.Min(attempt, 5))));
-                    _logger.LogWarning(ex,
-                        "ACL bootstrap attempt {Attempt} failed — retrying in {Delay}s", attempt, delay.TotalSeconds);
-                    try
-                    {
-                        await Task.Delay(delay, stopping);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        return;
-                    }
-                }
-            }
-
-            if (stopping.IsCancellationRequested)
-                return;
-
+            // StartedAsync already loaded the initial snapshot after Orleans startup.
             await TrySubscribeAsync();
 
             // TTL fallback: poll the version and refresh when it moved.
@@ -138,6 +114,7 @@ namespace FabrCore.Host.Services
                         return;
 
                     var version = await Registry.GetVersionAsync();
+                    IsReady = true;
                     if (version != Current.Version)
                         await RefreshAsync(stopping);
                 }
@@ -147,6 +124,7 @@ namespace FabrCore.Host.Services
                 }
                 catch (Exception ex)
                 {
+                    IsReady = false;
                     _logger.LogWarning(ex, "ACL snapshot TTL refresh failed — retaining version {Version}", Current.Version);
                 }
             }
@@ -173,6 +151,8 @@ namespace FabrCore.Host.Services
                     _options.CacheTtlSeconds);
             }
         }
+
+        internal Task RefreshNowAsync(CancellationToken cancellationToken) => RefreshAsync(cancellationToken);
 
         private async Task RefreshAsync(CancellationToken cancellationToken)
         {

@@ -51,6 +51,7 @@ public abstract partial class FabrCoreAgentProxy
 
             var chatClient = await GetChatClient(options.Model);
             var providers = new List<AIContextProvider>();
+            if (options.AIContextProviders is not null) providers.AddRange(options.AIContextProviders);
             if (options.EnableContextCompaction)
             {
                 var compaction = await TryCreateContextCompactionProviderAsync(options.Model);
@@ -217,8 +218,12 @@ public abstract partial class FabrCoreAgentProxy
                 throw new InvalidOperationException($"Internal-agent tool '{name}' has no explicit risk classification.");
             if (risk == InternalAgentToolRisk.SystemOnly)
                 throw new InvalidOperationException($"System-only tool '{name}' cannot be exposed to an internal agent.");
+            if (risk == InternalAgentToolRisk.MemoryWrite
+                && (tool is not IScopedAgentMemoryTool memoryTool || string.IsNullOrWhiteSpace(memoryTool.WriteScope)))
+                throw new InvalidOperationException($"Memory write tool '{name}' must be bound to a fixed memory scope.");
             if (policy != InternalAgentExecutionPolicy.OrchestratorOnly
-                && risk is not (InternalAgentToolRisk.Read or InternalAgentToolRisk.Compute))
+                && risk is not (InternalAgentToolRisk.Read or InternalAgentToolRisk.Compute)
+                && !(policy == InternalAgentExecutionPolicy.ConcurrentWithMemory && risk == InternalAgentToolRisk.MemoryWrite))
             {
                 throw new InvalidOperationException(
                     $"Background policy '{policy}' cannot expose '{name}' classified as '{risk}'. " +

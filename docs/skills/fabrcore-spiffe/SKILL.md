@@ -9,9 +9,26 @@ description: >
   "UseVerifiableExecution", "LocalCertificateVerifiableExecutionSigner", "ExternalDbEffect",
   "ExternalLibraryCall", "RecordDbEffectAsync", "RecordHttpCallAsync", "RecordStorageEffectAsync",
   "RecordLibraryCallAsync", "attested side effect", "tamper evidence", "execution provenance".
+metadata:
+  version: 2.0.0
 ---
 
 # FabrCore Verifiable Execution and SPIFFE
+
+## Cloud evidence discovery and exports in 2.0
+
+Read [cloud export](references/cloud-export.md) for authenticated trace discovery,
+stable chunked exports and shared-store coverage. Custom stores opt into discovery
+through `IVerifiableExecutionQueryProvider`. Keep all evidence records, signatures,
+certificates and attestations unchanged when aggregating or exporting them.
+Diagnostic `_admin` evidence identifies actor, session, target and execution category;
+transcripts remain administration-only. An unsigned or incomplete result must not
+be described as verified, and verification never proves full cluster coverage.
+
+
+## FabrCore 2.0 baseline
+
+FabrCore 2.0 GA selects SqlVerifiableExecutionStore in SQL mode and an in-memory store in standalone mode. Evidence capture and signing still require explicit configuration; SQL alone does not sign records. SQL stores records/signatures/public chains atomically in fabrOps, coordinates writers, and never stores private keys. Custom stores/signers remain supported.
 
 Use this skill when working on the verifiable execution feature in FabrCore. The feature is **verifiable agent execution**; SPIFFE is only one optional production identity/signing backend.
 
@@ -28,7 +45,7 @@ Use this skill when working on the verifiable execution feature in FabrCore. The
 Use this ladder when explaining setup, designing docs, or implementing configuration:
 
 1. **Default: off** — existing monitoring only. No verifiable execution records, no signer, no trust bundles.
-2. **Easy: local signed execution** — enable verifiable execution with `UseLocalCertificateVerifiableExecutionSigner()` and the default in-memory/development store. Good for demos, local development, and proving tamper-evident chains.
+2. **Easy: local signed execution** — enable verifiable execution with `UseLocalCertificateVerifiableExecutionSigner()` and the mode-selected store (in-memory for standalone, SQL for database mode). Good for demos, local development, and proving tamper-evident chains.
 3. **Production: cert/KMS signed execution** — use a durable `IVerifiableExecutionStore` plus a customer-managed certificate, KMS, HSM, or enterprise PKI signer. This is the normal customer production path.
 4. **Enterprise/cross-cluster: SPIFFE trust** — use SPIFFE/SVID signer and trust bundles when independent workload identity, cross-cluster verification, service mesh, Dapr-style interoperability, or zero-trust infrastructure matters.
 
