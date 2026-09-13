@@ -1,10 +1,23 @@
 ---
 name: fabrcore-agentmonitor
-description: "Implement FabrCore 2.0 message and LLM monitoring, lifecycle events, token and cost capture, REST/SSE viewers and custom providers. Use for observability and diagnostics; use fabrcore-acl for security audit and fabrcore-spiffe for signed evidence."
+description: "Implement FabrCore 2.0 message and LLM monitoring, lifecycle events, token and cost capture, bounded cloud queries, opt-in SQL retention, local REST/SSE viewers and custom providers. Use for observability and diagnostics; use fabrcore-acl for security audit and fabrcore-spiffe for signed evidence."
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
+metadata:
+  version: 2.0.0
 ---
 
 # FabrCore Agent Message Monitor
+
+## Retained cloud queries and SQL monitoring
+
+FabrCore 2.0 adds `IAgentMonitorQueryProvider` and `IAgentMonitorPayloadProvider`
+alongside recording interfaces. Read [cloud queries](references/cloud-queries.md)
+for filters, cursors, source coverage, SQL buffering and diagnostic attribution.
+Cloud viewers use bounded authenticated HTTP queries, manual refresh by default,
+and optional ten-second visible-view polling. Existing local notifications/SSE
+examples below do not prescribe a continuous cloud stream. SQL monitoring is opt-in;
+it is separate from audit and execution evidence.
+
 
 ## FabrCore 2.0 baseline
 
@@ -79,7 +92,7 @@ builder.AddFabrCoreServer(options =>
 // Or use a custom implementation
 builder.AddFabrCoreServer(options =>
 {
-    options.UseAgentMessageMonitor<SqlAgentMessageMonitor>();
+    options.UseAgentMessageMonitor<MyAgentMessageMonitor>();
 });
 ```
 
@@ -507,7 +520,7 @@ public class ReportingAgent : FabrCoreAgentProxy
 Implement `IAgentMessageMonitor` and register it via `FabrCoreServerOptions`:
 
 ```csharp
-public class SqlAgentMessageMonitor : IAgentMessageMonitor
+public class MyAgentMessageMonitor : IAgentMessageMonitor
 {
     private readonly IDbConnection _db;
 
@@ -517,7 +530,7 @@ public class SqlAgentMessageMonitor : IAgentMessageMonitor
 
     public LlmCaptureOptions LlmCaptureOptions { get; }
 
-    public SqlAgentMessageMonitor(IDbConnection db, LlmCaptureOptions? llmCaptureOptions = null)
+    public MyAgentMessageMonitor(IDbConnection db, LlmCaptureOptions? llmCaptureOptions = null)
     {
         _db = db;
         LlmCaptureOptions = llmCaptureOptions ?? new LlmCaptureOptions();
@@ -607,7 +620,7 @@ public class SqlAgentMessageMonitor : IAgentMessageMonitor
 ```csharp
 builder.AddFabrCoreServer(options =>
 {
-    options.UseAgentMessageMonitor<SqlAgentMessageMonitor>();
+    options.UseAgentMessageMonitor<MyAgentMessageMonitor>();
 });
 ```
 

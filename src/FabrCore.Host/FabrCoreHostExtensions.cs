@@ -609,6 +609,7 @@ namespace FabrCore.Host
 
                 var database = Database.FabrCoreDatabaseOptions.Resolve(builder.Configuration);
                 builder.Services.AddSingleton(database);
+                Security.FabrCoreDataProtectionExtensions.AddFabrCoreDataProtection(builder.Services);
                 builder.Services.AddSingleton(new FabrCore.Core.FabrCoreFeatureState(database.Enabled));
                 builder.Services.Configure<FabrCoreAclOptions>(builder.Configuration.GetSection(FabrCoreAclOptions.SectionName));
                 Database.FabrCoreDatabaseRegistration.AddServices(builder.Services, builder.Configuration, database, options.AclEvaluatorType);
@@ -719,7 +720,14 @@ namespace FabrCore.Host
                 builder.Services.AddSingleton(options.LlmCaptureOptions);
                 builder.Services.AddSingleton(Microsoft.Extensions.Options.Options.Create(options.VerifiableExecutionOptions));
 
-                if (options.AgentMessageMonitorType is not null)
+                if (string.Equals(builder.Configuration["FabrCore:Monitoring:Provider"], "sql", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!database.Enabled) throw new InvalidOperationException("SQL monitoring requires the FabrCore operational database to be configured.");
+                    builder.Services.AddSingleton<Database.SqlAgentMessageMonitor>();
+                    builder.Services.AddSingleton<IAgentMessageMonitor>(sp => sp.GetRequiredService<Database.SqlAgentMessageMonitor>());
+                    builder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<Database.SqlAgentMessageMonitor>());
+                }
+                else if (options.AgentMessageMonitorType is not null)
                 {
                     builder.Services.AddSingleton(typeof(IAgentMessageMonitor), options.AgentMessageMonitorType);
                     logger.LogInformation("AgentMessageMonitor enabled: {MonitorType}", options.AgentMessageMonitorType.Name);

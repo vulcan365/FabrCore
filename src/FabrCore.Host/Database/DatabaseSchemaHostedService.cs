@@ -27,6 +27,13 @@ internal sealed class DatabaseSchemaHostedService(
     public async Task StartAsync(CancellationToken ct)
     {
         await operations.InitializeAsync(options.AutoInitialize, ct);
+        if (string.Equals(configuration["FabrCore:Monitoring:Provider"], "sql", StringComparison.OrdinalIgnoreCase))
+        {
+            await using var monitorConnection = await operations.OpenAsync(ct);
+            await using var monitorSchema = new SqlCommand("SELECT COUNT(*) FROM sys.tables WHERE schema_id = SCHEMA_ID('fabrOps') AND name IN ('MonitorStore','MonitorRecord');", monitorConnection);
+            if (Convert.ToInt32(await monitorSchema.ExecuteScalarAsync(ct)) != 2)
+                throw new InvalidOperationException("SQL monitoring schema is missing. Apply docs/migrations/monitoring.sql before enabling SQL monitoring.");
+        }
         // Resolve configuration and credentials without issuing a paid model request.
         var modelNames = new[] { "embeddings", memory.Models.RelevanceModelName, memory.Models.CompactionModelName,
             memory.Models.ImaginingModelName, memory.Models.PlannerModelName, memory.Models.SmallModelName, memory.Models.LargeModelName };
@@ -50,12 +57,12 @@ internal sealed class DatabaseSchemaHostedService(
         if (options.AutoInitialize)
         {
             await InitializeAcl(acl.ConnectionString, ct);
-            await MemorySchemaInitializer.EnsureSchemaAsync(memoryConnection, memory.EmbeddingDimensions, logger);
-            await GraphRagSchemaInitializer.EnsureSchemaAsync(graphConnection, logger);
+            await MemorySchemaInitializer.EnsureSchemaAsync(memoryConnection, memory.EmbeddingDimensions, logger, ct);
+            await GraphRagSchemaInitializer.EnsureSchemaAsync(graphConnection, logger, ct);
         }
-        await ValidateTables(acl.ConnectionString, ["acl.Configuration", "acl.Principal", "acl.Role", "acl.Group", "acl.PrincipalRole", "acl.GroupRole", "acl.GroupMember", "acl.PermissionGrant"], ct);
-        await ValidateTables(memoryConnection, ["mem.MemoryEntity", "mem.MemoryChunk", "mem.MemoryRelationship", "mem.MemorySummaryNode", "mem.MemoryScope", "mem.MemoryAuditLog", "mem.MemoryExtractionReceipt"], ct);
-        await ValidateTables(graphConnection, ["grag.SchemaVersion", "grag.KnowledgeEntity", "grag.KnowledgeRelationship", "grag.KnowledgeScope"], ct);
+        await DatabaseSchemaContract.ValidateAsync(acl.ConnectionString, "acl", ct);
+        await DatabaseSchemaContract.ValidateAsync(memoryConnection, "mem", ct);
+        await DatabaseSchemaContract.ValidateAsync(graphConnection, "grag", ct);
         await using var connection = new SqlConnection(graphConnection);
         await connection.OpenAsync(ct);
         await using var cmd = new SqlCommand("SELECT Version FROM grag.SchemaVersion", connection);
@@ -85,21 +92,6 @@ internal sealed class DatabaseSchemaHostedService(
             """ + SqlAclRepository.SchemaSql, connection, tx) { CommandTimeout = 90 };
         await cmd.ExecuteNonQueryAsync(ct);
         await tx.CommitAsync(ct);
-    }
-
-    private static async Task ValidateTables(string connectionString, string[] tables, CancellationToken ct)
-    {
-        await using var connection = new SqlConnection(connectionString);
-        await connection.OpenAsync(ct);
-        // Verify vector support even for an already provisioned database.
-        await using (var vector = new SqlCommand("DECLARE @v VECTOR(1536);", connection)) await vector.ExecuteNonQueryAsync(ct);
-        foreach (var table in tables)
-        {
-            await using var cmd = new SqlCommand("SELECT OBJECT_ID(@table, 'U')", connection);
-            cmd.Parameters.AddWithValue("@table", table);
-            if (await cmd.ExecuteScalarAsync(ct) is null or DBNull)
-                throw new InvalidOperationException($"Required table '{table}' is missing. Provision the database or enable FabrCore:Database:AutoInitialize.");
-        }
     }
 
     public Task StopAsync(CancellationToken ct) => Task.CompletedTask;

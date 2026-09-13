@@ -2,6 +2,8 @@
 name: fabrcore-agentframework
 description: "Integrate Microsoft Agent Framework 1.20.0 with FabrCore.Sdk 2.0: AIAgent, AgentSession, chat clients, tools, middleware, streaming, context providers and compaction. Use for framework API integration; use fabrcore-harness for FabrCore managed execution loops."
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
+metadata:
+  version: 2.0.0
 ---
 
 # Microsoft Agent Framework in FabrCore

@@ -2,9 +2,32 @@
 name: fabrcore-testing
 description: "Test FabrCore 2.0 agents and integrations with in-memory agent/A2A hosts, fake or live LLMs, MSTest, evaluation APIs and storage compatibility checks. Use for unit/integration tests and model quality evaluations; separate deterministic results from SQL migration and live-model validation."
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
+metadata:
+  version: 2.0.0
 ---
 
 # FabrCore Testing Skill
+
+## Cloud management acceptance coverage
+
+The 2.0 administration contract needs host/grain integration tests in addition to
+the in-memory helpers below. Exercise concurrent user/admin turns, overlapping admin
+409s, reserved-channel spoofing, actor ownership, timeout cleanup, lifecycle conflicts,
+deep-copy history isolation, repeat fork persistence and duplicate/incomplete receipts.
+Verify diagnostic tools cannot mutate state/history or execute business/MCP tools.
+
+Cover conditional ACL/blueprint writes, inactive principal discovery, extension JSON
+round trips, effect-free previews, ensure/update semantics and selected-item retries.
+Use multiple silos for deployment coordination and shared/local-store coverage.
+For monitoring/evidence, test stable cursors under writes, gaps, offline hosts, bounded
+payloads, SQL outages/saturation/retention and unchanged signatures across exports.
+Run consumer flows through both Insights and an independent server with older-host
+fallbacks. Measure throughput and p95 with and without cloud reads; a short local
+benchmark does not establish the less-than-5% production target. Real-model diagnosis
+quality and model cost need separate evaluation. See the
+[release validation report](https://github.com/vulcan365/FabrCore/tree/main/docs/cloud-validation)
+for measured results and remaining release gates.
+
 
 ## FabrCore 2.0 baseline
 

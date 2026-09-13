@@ -22,7 +22,7 @@ using System.Text.Json;
 
 namespace FabrCore.Host.Grains
 {
-    internal class AgentGrain : Grain, IAgentGrain, IFabrCoreAgentHost, IRemindable
+    internal partial class AgentGrain : Grain, IAgentGrain, IFabrCoreAgentHost, IRemindable
     {
         private static readonly ActivitySource ActivitySource = new("FabrCore.Host.AgentGrain");
         private static readonly Meter Meter = new("FabrCore.Host.AgentGrain");
@@ -279,6 +279,7 @@ namespace FabrCore.Host.Grains
             bool forceReconfigure = false,
             HealthDetailLevel detailLevel = HealthDetailLevel.Basic)
         {
+            RejectAdminBusy();
             if (_isEvicting)
                 throw new InvalidOperationException("Agent is being evicted and cannot be configured.");
 
@@ -300,6 +301,9 @@ namespace FabrCore.Host.Grains
             logger.LogInformation("Configuring agent: {AgentType} {Handle}", config.AgentType, config.Handle);
             logger.LogDebug("Agent configuration details - Streams: {StreamCount}", config.Streams?.Count ?? 0);
 
+            if (fabrcoreAgentProxy?.InternalIsProcessingMessage == true)
+                throw new InvalidOperationException("Agent is actively processing.");
+            lifecycleDepth++;
             try
             {
                 ValidateEventStreamSubscriptions(config.Streams ?? new List<EventStreamSubscription>());
@@ -354,6 +358,7 @@ namespace FabrCore.Host.Grains
                     new KeyValuePair<string, object?>("agent.type", config.AgentType));
                 throw;
             }
+            finally { lifecycleDepth--; }
         }
 
         public async Task<AgentHealthStatus> GetHealth(HealthDetailLevel detailLevel = HealthDetailLevel.Basic)
@@ -504,6 +509,8 @@ namespace FabrCore.Host.Grains
 
         public async Task<AgentHealthStatus> ResetAgent()
         {
+            RejectAdminBusy();
+            if (fabrcoreAgentProxy?.InternalIsProcessingMessage == true) throw new InvalidOperationException("Agent is actively processing.");
             using var activity = ActivitySource.StartActivity("ResetAgent", ActivityKind.Internal);
             var handle = this.GetPrimaryKeyString();
             activity?.SetTag("agent.handle", handle);
@@ -518,6 +525,7 @@ namespace FabrCore.Host.Grains
 
             try
             {
+                lifecycleDepth++;
                 // Step 1: Call OnReset on proxy for custom cleanup (before state is cleared)
                 if (fabrcoreAgentProxy != null)
                 {
@@ -551,10 +559,12 @@ namespace FabrCore.Host.Grains
                     new KeyValuePair<string, object?>("error.type", "reset_failed"));
                 throw;
             }
+            finally { lifecycleDepth--; }
         }
 
         public async Task<AgentEvictionResult> EvictAgent()
         {
+            RejectAdminBusy();
             using var activity = ActivitySource.StartActivity("EvictAgent", ActivityKind.Internal);
             var handle = this.GetPrimaryKeyString();
             activity?.SetTag("agent.handle", handle);
@@ -770,6 +780,8 @@ namespace FabrCore.Host.Grains
 
         public async Task<AgentMessage> OnMessage(AgentMessage request)
         {
+            if (managementBusy || lifecycleDepth != 0) throw new InvalidOperationException("Agent lifecycle management is in progress.");
+            FabrCore.Core.CloudServer.FabrCoreAdminChannels.RejectOrdinary(request.Channel);
             if (_isEvicting)
                 throw new InvalidOperationException("Agent is being evicted.");
 
@@ -2170,6 +2182,8 @@ namespace FabrCore.Host.Grains
 
         private async Task ReceivedEventMessage(EventMessage request, StreamSequenceToken? token = null)
         {
+            if (managementBusy || lifecycleDepth != 0) throw new InvalidOperationException("Agent lifecycle management is in progress.");
+            FabrCore.Core.CloudServer.FabrCoreAdminChannels.RejectOrdinary(request.Channel);
             if (_isEvicting)
             {
                 logger.LogDebug("Ignoring event stream message during eviction: Type={EventType}, Source={Source}",

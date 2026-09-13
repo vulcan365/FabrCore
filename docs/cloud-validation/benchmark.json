@@ -1,0 +1,12 @@
+{
+  "timestamp": "2026-09-12T15:09:04.6152374+00:00",
+  "load": "One local silo; 16 echo agents; one sequential caller each; 10,000-record monitor; one authenticated 100-record HTTP query/second; no LLM. Baseline/read/baseline after warmup.",
+  "baselineMessagesPerSecond": 15536.821716235594,
+  "withReadsMessagesPerSecond": 21453.732408072276,
+  "baselineP95Milliseconds": 3.2887500000000003,
+  "withReadsP95Milliseconds": 2.6489,
+  "throughputRegressionPercent": -38.083147247893415,
+  "p95RegressionPercent": -19.455720258456875,
+  "queries": 6,
+  "limitation": "Synthetic single-host measurement. It does not certify SQL, model workloads, or multi-silo production performance."
+}

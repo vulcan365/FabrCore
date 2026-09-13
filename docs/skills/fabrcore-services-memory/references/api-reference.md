@@ -88,5 +88,5 @@ RecallMemories, SearchArchive, GetMemoryIndex with readOnly: true. See
 [harness integration](harness-and-internal-agents.md).
 
 Use [registration](../assets/server-registration.cs) for model names and SQL configuration.
-Treat [frozen defaults](../../../memory-release-defaults.md) as the release policy;
+Treat [frozen defaults](https://github.com/vulcan365/FabrCore/blob/main/docs/memory-release-defaults.md) as the release policy;
 change opt-in retrieval and imagining settings only after representative evaluations.

@@ -354,8 +354,9 @@ public static class GraphRagSchemaInitializer
     /// "create everything" body is <see cref="Migrations.M001_BaselineSchema"/>.
     /// </para>
     /// </summary>
-    public static async Task EnsureSchemaAsync(string connectionString, ILogger? logger = null)
-    {
-        await Migrations.GraphRagMigrationRunner.RunMigrationsAsync(connectionString, logger);
-    }
+    public static Task EnsureSchemaAsync(string connectionString, ILogger? logger = null)
+        => EnsureSchemaAsync(connectionString, logger, CancellationToken.None);
+
+    public static Task EnsureSchemaAsync(string connectionString, ILogger? logger, CancellationToken cancellationToken)
+        => Migrations.GraphRagMigrationRunner.RunMigrationsAsync(connectionString, logger, cancellationToken);
 }

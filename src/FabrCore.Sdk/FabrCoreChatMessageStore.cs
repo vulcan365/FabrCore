@@ -98,6 +98,12 @@ namespace FabrCore.Sdk
         /// Gets the thread identifier for this history provider.
         /// </summary>
         public string ThreadId => _threadId;
+        // Called during a grain turn; no persistence, compaction, or provider cache mutation.
+        internal List<StoredChatMessage>? CaptureDiagnosticSnapshot()
+        {
+            lock (_syncLock)
+                return _cachedMessages is null ? null : JsonSerializer.Deserialize<List<StoredChatMessage>>(JsonSerializer.Serialize(_cachedMessages));
+        }
 
 
         protected override ValueTask StoreChatHistoryAsync(ChatHistoryProvider.InvokedContext context, CancellationToken cancellationToken = default)

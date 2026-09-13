@@ -203,55 +203,59 @@ internal static class MemorySchemaInitializer
             CREATE INDEX IX_MemoryAuditLog_Scope_Time ON {SchemaName}.MemoryAuditLog (ScopeKey, OccurredAt DESC);
         """;
 
-    public static async Task EnsureSchemaAsync(string connectionString, int embeddingDimensions, ILogger? logger = null)
+    public static Task EnsureSchemaAsync(string connectionString, int embeddingDimensions, ILogger? logger = null)
+        => EnsureSchemaAsync(connectionString, embeddingDimensions, logger, CancellationToken.None);
+
+    public static async Task EnsureSchemaAsync(string connectionString, int embeddingDimensions, ILogger? logger, CancellationToken cancellationToken)
     {
         if (embeddingDimensions <= 0)
             throw new ArgumentOutOfRangeException(nameof(embeddingDimensions),
                 "EmbeddingDimensions must be a positive integer.");
 
         await using var connection = new SqlConnection(connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(cancellationToken);
 
         // Multiple silos or application instances can start against the same empty
         // database concurrently. Serialize the existence-check/create sequence so two
         // initializers cannot both observe a missing index or table and race to create it.
         const string lockResource = "FabrCore.Services.Memory.SchemaInitialization";
-        await using (var lockCommand = new SqlCommand("""
-            DECLARE @result int;
-            EXEC @result = sys.sp_getapplock
-                @Resource = @resource,
-                @LockMode = 'Exclusive',
-                @LockOwner = 'Session',
-                @LockTimeout = 60000;
-            IF @result < 0
-                THROW 51000, 'Timed out acquiring the FabrCore memory schema initialization lock.', 1;
-            """, connection))
-        {
-            lockCommand.Parameters.AddWithValue("@resource", lockResource);
-            await lockCommand.ExecuteNonQueryAsync();
-        }
-
-        var ddlStatements = new[]
-        {
-            ("Schema", GetSchemaDdl()),
-            ("MemoryEntity node table", GetMemoryEntityDdl()),
-            ("MemoryRelationship edge table", GetMemoryRelationshipDdl()),
-            ("MemoryChunk table", GetMemoryChunkDdl(embeddingDimensions)),
-            ("MemorySummaryNode table", GetMemorySummaryNodeDdl(embeddingDimensions)),
-            ("MemoryScope table", GetMemoryScopeDdl()),
-            ("MemoryAuditLog table", GetMemoryAuditLogDdl()),
-            ("MemoryExtractionReceipt table", GetExtractionReceiptDdl()),
-            ("Indexes", GetIndexesDdl())
-        };
-
         try
         {
+            await using (var lockCommand = new SqlCommand("""
+                DECLARE @result int;
+                EXEC @result = sys.sp_getapplock
+                    @Resource = @resource,
+                    @LockMode = 'Exclusive',
+                    @LockOwner = 'Session',
+                    @LockTimeout = 60000;
+                IF @result < 0
+                    THROW 51000, 'Timed out acquiring the FabrCore memory schema initialization lock.', 1;
+                """, connection))
+            {
+                lockCommand.CommandTimeout = 90;
+                lockCommand.Parameters.AddWithValue("@resource", lockResource);
+                await lockCommand.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            var ddlStatements = new[]
+            {
+                ("Schema", GetSchemaDdl()),
+                ("MemoryEntity node table", GetMemoryEntityDdl()),
+                ("MemoryRelationship edge table", GetMemoryRelationshipDdl()),
+                ("MemoryChunk table", GetMemoryChunkDdl(embeddingDimensions)),
+                ("MemorySummaryNode table", GetMemorySummaryNodeDdl(embeddingDimensions)),
+                ("MemoryScope table", GetMemoryScopeDdl()),
+                ("MemoryAuditLog table", GetMemoryAuditLogDdl()),
+                ("MemoryExtractionReceipt table", GetExtractionReceiptDdl()),
+                ("Indexes", GetIndexesDdl())
+            };
+
             foreach (var (name, ddl) in ddlStatements)
             {
                 try
                 {
                     await using var command = new SqlCommand(ddl, connection);
-                    await command.ExecuteNonQueryAsync();
+                    await command.ExecuteNonQueryAsync(cancellationToken);
                     logger?.LogDebug("Memory schema: {Name} ensured", name);
                 }
                 catch (SqlException ex)
@@ -261,13 +265,26 @@ internal static class MemorySchemaInitializer
                 }
             }
         }
+        catch (SqlException ex) when (cancellationToken.IsCancellationRequested)
+        {
+            throw new OperationCanceledException("Memory schema initialization was canceled.", ex, cancellationToken);
+        }
         finally
         {
-            await using var releaseCommand = new SqlCommand(
-                "EXEC sys.sp_releaseapplock @Resource = @resource, @LockOwner = 'Session';",
-                connection);
-            releaseCommand.Parameters.AddWithValue("@resource", lockResource);
-            await releaseCommand.ExecuteNonQueryAsync();
+            try
+            {
+                await using var releaseCommand = new SqlCommand(
+                    "IF APPLOCK_MODE('public', @resource, 'Session') <> 'NoLock' EXEC sys.sp_releaseapplock @Resource = @resource, @LockOwner = 'Session';",
+                    connection);
+                releaseCommand.Parameters.AddWithValue("@resource", lockResource);
+                await releaseCommand.ExecuteNonQueryAsync(CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                // Do not return a session with an uncertain lock state to the pool.
+                SqlConnection.ClearPool(connection);
+                logger?.LogWarning(ex, "Memory schema lock cleanup failed; discarding the SQL session.");
+            }
         }
 
         logger?.LogInformation("Memory schema initialization complete (schema: {Schema}, vector dims: {Dims})",

@@ -9,6 +9,8 @@ description: >
   messaging", "out-of-turn message", "send to user later", "background agent notification",
   "principal delivery", "durable outbox", "delivery relay", SMS/email/mobile push/web push/Slack/
   webhook provider packages, relay queue saturation, endpoint refresh, or M365 proactive sends.
+metadata:
+  version: 2.0.0
 ---
 
 # FabrCore Principal Delivery

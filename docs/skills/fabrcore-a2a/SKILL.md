@@ -3,6 +3,7 @@ name: fabrcore-a2a
 description: "Configure and test the Agent2Agent (A2A) protocol built into FabrCore.Host 2.0, including agent cards, discovery, authentication, principal mapping, task persistence, streaming and Copilot Studio interoperability. Use fabrcore-messaging for internal agent-to-agent messages."
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*) Bash(curl:*) Bash(devtunnel:*)"
 metadata:
+  version: 2.0.0
   author: FabrCore
   # The FabrCore.Host line this skill describes. A copy whose value is older than the package you
   # reference is stale: the skill is what an agent acts on, so check this before following it.
@@ -10,6 +11,11 @@ metadata:
 ---
 
 # FabrCore ⇄ Agent2Agent (A2A)
+
+This skill covers **inbound** A2A exposure. For FabrCore calling Microsoft agents
+by handle, use [fabrcore-connections](../fabrcore-connections/SKILL.md): Work IQ
+uses outbound A2A 1.0 and Copilot Studio uses its Client SDK/direct-connect URL.
+Keep their delegated authentication separate from this host's inbound credentials.
 
 ## FabrCore 2.0 baseline
 

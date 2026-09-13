@@ -10,6 +10,29 @@ metadata:
 
 # FabrCore Access Control (ACL) & Security Audit
 
+## Conditional remote management in 2.0
+
+Use the authenticated `/fabrcoreapi/admin/v1` administration surface. GET `/principals`
+returns a paged union of ACL-registered and runtime-discovered principals, including
+inactive registrations; runtime discovery alone is not a full ACL directory.
+Use `offset`, `limit` (100 default, 1,000 maximum) and the first page's `revision`.
+The directory hash is not the numeric ACL registry version.
+
+GET `/access/entities/{principals|roles|groups|grants}` supports `offset`, `limit`,
+`version`; append `/{id}` for individual reads, PUT and DELETE. Read the numeric
+version from `/access/metadata` and send it as quoted `If-Match`. Missing conditions
+return 428; stale versions return 412, checked inside the serialized mutation.
+Membership/role assignments are fields of principals and groups. Preserve built-in
+entity protections. Effective grants include origins; cached authorization stays
+local to the cluster. SQL mode is required for relational ACL administration.
+
+PUT `/access/entities/enforcement/mode` with `{ "mode": null }` and `If-Match`
+restores the host default; explicit mode values use the same conditional path.
+Use the [cloud administration skill](../fabrcore-cloud-administration/SKILL.md) for
+broker authentication, leases and older-host fallbacks. Existing audit behavior and
+APIs remain unchanged; monitor queries do not replace security audit.
+
+
 ## FabrCore 2.0 baseline
 
 FabrCore 2.0 GA enables relational ACL with ConnectionStrings:FabrCore. Without the feature database, standalone trusts cross-principal messaging and ACL administration is unavailable; authentication and storage/session ownership checks still apply. SQL mode persists ACL in the acl schema and security audit in fabrOps. JSON seeds/rules are migration input only and are rejected at normal startup.

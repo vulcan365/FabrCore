@@ -16,6 +16,8 @@ namespace FabrCore.Sdk
 
     public interface IFabrCoreAgentProxy
     {
+        internal bool InternalIsProcessingAdmin { get; }
+        internal Task InternalOnAdminMessage(AdminDiagnosticContext context, CancellationToken cancellationToken);
         internal Task InternalInitialize();
         internal Task<AgentMessage> InternalOnMessage(AgentMessage message);
         internal Task InternalOnEvent(EventMessage message);
@@ -470,6 +472,15 @@ namespace FabrCore.Sdk
             logger.LogInformation("Connecting to MCP server '{Name}' via {Transport}",
                 mcpConfig.Name ?? "(unnamed)", mcpConfig.TransportType);
 
+            HttpClient? authenticatedClient = null;
+            if (!string.IsNullOrWhiteSpace(mcpConfig.Connection))
+            {
+                if (mcpConfig.TransportType != McpTransportType.Http || string.IsNullOrWhiteSpace(mcpConfig.Resource))
+                    throw new ArgumentException("Authenticated MCP requires HTTP transport and a resource reference.");
+                if (mcpConfig.Headers.Keys.Any(k => k.Equals("Authorization", StringComparison.OrdinalIgnoreCase)))
+                    throw new ArgumentException("Connection-backed MCP cannot also configure an Authorization header.");
+                authenticatedClient = await Connections.GetHttpClientAsync(mcpConfig.Connection, mcpConfig.Resource);
+            }
             IClientTransport transport = mcpConfig.TransportType switch
             {
                 McpTransportType.Stdio => new StdioClientTransport(new StdioClientTransportOptions
@@ -482,6 +493,12 @@ namespace FabrCore.Sdk
                         : null
                 }, loggerFactory),
 
+                McpTransportType.Http when authenticatedClient is not null => new HttpClientTransport(new HttpClientTransportOptions
+                {
+                    Name = mcpConfig.Name,
+                    Endpoint = new Uri(mcpConfig.Url ?? throw new ArgumentException("MCP URL is required")),
+                    AdditionalHeaders = mcpConfig.Headers
+                }, authenticatedClient, loggerFactory, ownsHttpClient: true),
                 McpTransportType.Http => new HttpClientTransport(new HttpClientTransportOptions
                 {
                     Name = mcpConfig.Name,

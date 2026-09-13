@@ -16,6 +16,8 @@ namespace FabrCore.Core
         public List<string> Arguments { get; set; } = new();
         public Dictionary<string, string> Env { get; set; } = new();
         public string? Url { get; set; }
+        public string? Connection { get; set; }
+        public string? Resource { get; set; }
         public Dictionary<string, string> Headers { get; set; } = new();
     }
 
@@ -38,6 +40,8 @@ namespace FabrCore.Core
         public string? Url { get; set; }
         [Id(6)]
         public Dictionary<string, string> Headers { get; set; } = new();
+        [Id(7)] public string? Connection { get; set; }
+        [Id(8)] public string? Resource { get; set; }
     }
 
     [RegisterConverter]
@@ -53,6 +57,8 @@ namespace FabrCore.Core
                 Arguments = surrogate.Arguments,
                 Env = surrogate.Env,
                 Url = surrogate.Url,
+                Connection = surrogate.Connection,
+                Resource = surrogate.Resource,
                 Headers = surrogate.Headers
             };
         }
@@ -67,6 +73,8 @@ namespace FabrCore.Core
                 Arguments = value.Arguments,
                 Env = value.Env,
                 Url = value.Url,
+                Connection = value.Connection,
+                Resource = value.Resource,
                 Headers = value.Headers
             };
         }

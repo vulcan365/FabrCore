@@ -52,5 +52,5 @@ or other runs' data. Artifacts and downloaded corpus files are ignored by Git.
   requires creating a separate database. It now requires explicit opt-in before
   any CREATE DATABASE attempt; the supplied account should leave it disabled.
 
-See [the console README](../src/FabrCore.Services.GraphRag.EvalConsole/README.md)
+See [the console README](../../src/FabrCore.Services.GraphRag.EvalConsole/README.md)
 for setup, commands, configuration, corpus customization, and gate definitions.

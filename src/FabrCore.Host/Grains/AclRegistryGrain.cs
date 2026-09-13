@@ -168,6 +168,50 @@ namespace FabrCore.Host.Grains
 
         // ── Principals ──
 
+        public async Task<string> ConditionalMutationAsync(string kind, string id, string? json, long expectedVersion)
+        {
+            var options = new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web);
+            options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+            var version = await GetVersionAsync();
+            if (expectedVersion != version) return System.Text.Json.JsonSerializer.Serialize(new { statusCode = 412, version });
+            var found = true;
+            switch (kind)
+            {
+                case "enforcement":
+                    if (id != "mode") throw new ArgumentException("The enforcement entity ID is mode.");
+                    AclEnforcementMode? mode = null;
+                    if (json is not null)
+                    {
+                        var document = JsonSerializer.Deserialize<JsonElement>(json);
+                        if (document.GetProperty("mode").ValueKind != JsonValueKind.Null)
+                        {
+                            mode = document.GetProperty("mode").Deserialize<AclEnforcementMode>(options);
+                            if (!Enum.IsDefined(mode.Value)) throw new ArgumentException("Unknown enforcement mode.");
+                        }
+                    }
+                    await SetEnforcementModeOverrideAsync(mode);
+                    break;
+                case "principals":
+                    if (json is null) found = await DeletePrincipalAsync(id);
+                    else { var v = JsonSerializer.Deserialize<AclPrincipal>(json, options)!; v.Handle = id; await UpsertPrincipalAsync(v); }
+                    break;
+                case "roles":
+                    if (json is null) found = await DeleteRoleAsync(id);
+                    else { var v = JsonSerializer.Deserialize<AclRole>(json, options)!; v.Name = id; await UpsertRoleAsync(v); }
+                    break;
+                case "groups":
+                    if (json is null) found = await DeleteGroupAsync(id);
+                    else { var v = JsonSerializer.Deserialize<AclGroup>(json, options)!; v.Name = id; await UpsertGroupAsync(v); }
+                    break;
+                case "grants":
+                    if (json is null) found = await DeleteGrantAsync(id);
+                    else { var v = JsonSerializer.Deserialize<PermissionGrant>(json, options)!; v.Id = id; await UpsertGrantAsync(v); }
+                    break;
+                default: throw new ArgumentException("Unknown ACL entity kind.");
+            }
+            return JsonSerializer.Serialize(new { statusCode = found ? 200 : 404, version = await GetVersionAsync() });
+        }
+
         public async Task ImportAsync(AclSnapshotData snapshot)
         {
             var merged = AclMigration.MergeIntoEmpty(await GetSnapshotAsync(), snapshot, _options);

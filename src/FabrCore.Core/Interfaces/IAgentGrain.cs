@@ -6,6 +6,9 @@ namespace FabrCore.Core.Interfaces
 {
     internal interface IAgentGrain : IGrainWithStringKey
     {
+        [AlwaysInterleave]
+        Task<string> AdministerAsync(string actor, string operation, string? sessionId, string body);
+        Task<string> ManageAsync(string operation, string body);
         /// <summary>
         /// Configures the agent with the specified configuration.
         /// If already configured, returns current health status unless forceReconfigure is true.

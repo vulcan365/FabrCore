@@ -20,8 +20,10 @@ An automation server needs only Host. Agent libraries reference SDK, which bring
 Core transitively and has no SQL implementation dependency.
 
 Standalone is a trusted workspace: agents can interact across principal handles
-without grants. Authentication, privileged admin API authentication, and existing
-storage/session ownership checks remain in effect. ACL management endpoints and
+without grants. Privileged admin API authentication and existing storage/session
+ownership checks remain in effect. The hosting application must authenticate callers
+and provide trusted identity headers where APIs use forwarded user handles; choosing
+SQL mode adds authorization and does not authenticate those headers. ACL management endpoints and
 SQL-only agents/plugins are unavailable. Requests for SQL-only agents or plugins
 produce a feature-unavailable error.
 
@@ -69,7 +71,18 @@ GraphRAG migrations. For a pre-provisioned database, set:
 }
 ```
 
-Validate-only startup checks required schemas and GraphRAG migration versions.
+Both initialization modes validate required tables, columns and SQL types, graph node/edge
+kinds, actual vector dimensions, and GraphRAG/operational migration versions. A version marker
+alone does not establish that a database is compatible. Invalid objects are identified in the
+startup error; apply supported migrations or explicitly migrate data into a compatible schema.
+FabrCore never drops existing data or rebuilds vector columns to hide a mismatch.
+Memory also requires the enabled `IX_MemoryEntity_Scope_Name_Type` index, which keeps entity
+and hot-index writes scoped under concurrent use. Automatic initialization creates it when absent.
+
+Memory and GraphRAG schema locks wait up to 60 seconds, with 90-second command timeouts.
+Startup cancellation reaches the built-in migration commands; transaction rollback and lock
+cleanup run even after cancellation. Existing custom implementations of the original migration
+interface remain source-compatible; their original method controls its own cancellation behavior.
 Database and feature selection requires a process restart. Missing or invalid
 configured connections, schema failures, and missing required model configuration
 fail startup; a failed SQL deployment never silently becomes a standalone host.

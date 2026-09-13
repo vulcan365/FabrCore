@@ -27,6 +27,12 @@ public sealed class RemoteAclAdminController(IAclEntityStore acl, IAclSnapshotPr
 
     private const string ActorHeader = RemoteAdminController.ActorHeader;
     private const string CommandHeader = RemoteAdminController.CommandHeader;
+    [HttpGet("access/metadata")]
+    public async Task<IActionResult> Metadata(CancellationToken cancellationToken)
+    {
+        var snapshot = await acl.GetSnapshotAsync(cancellationToken);
+        return Ok(new { snapshot.Version, enforcementMode = aclSnapshot.Current.ModeOverride?.ToString() });
+    }
     [HttpGet("access")]
     public async Task<IActionResult> GetAccess(CancellationToken cancellationToken)
     {
@@ -148,13 +154,23 @@ public sealed class RemoteAclAdminController(IAclEntityStore acl, IAclSnapshotPr
     {
         if (RejectSpoofedTargetHeaders() is { } rejected) return rejected;
         var snapshot = aclSnapshot.Current;
+        var roles = snapshot.RolesOf(handle).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var groups = snapshot.GroupsOf(SubjectKind.Principal, handle).Append(snapshot.AllPrincipalsGroup).ToHashSet(StringComparer.OrdinalIgnoreCase);
         return Ok(new
         {
             Principal = handle,
-            Roles = snapshot.RolesOf(handle),
-            Groups = snapshot.GroupsOf(SubjectKind.Principal, handle)
-                .Append(snapshot.AllPrincipalsGroup)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+            snapshot.Version,
+            Roles = roles,
+            Groups = groups,
+            IsSystem = snapshot.Principals.TryGetValue(handle, out var principal) && principal.IsSystem,
+            Grants = snapshot.Grants.Where(g => g.Subject is { } subject && (subject.Kind switch
+            {
+                SubjectKind.Principal => string.Equals(subject.Selector, handle, StringComparison.OrdinalIgnoreCase),
+                SubjectKind.Role => roles.Contains(subject.Selector),
+                SubjectKind.Group => groups.Contains(subject.Selector),
+                _ => false
+            })).Select(g => new { origin = g.Subject!.ToString(), grant = g })
+                .Concat(snapshot.Roles.Values.Where(r => roles.Contains(r.Name)).SelectMany(r => r.Grants.Select(g => new { origin = "role:" + r.Name, grant = g })))
         });
     }
 

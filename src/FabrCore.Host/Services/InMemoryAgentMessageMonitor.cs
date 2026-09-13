@@ -8,7 +8,7 @@ namespace FabrCore.Host.Services
     /// Default in-memory implementation of <see cref="IAgentMessageMonitor"/>.
     /// Stores messages in a bounded FIFO buffer and tracks accumulated LLM token usage per agent.
     /// </summary>
-    public class InMemoryAgentMessageMonitor : IAgentMessageMonitor
+    public partial class InMemoryAgentMessageMonitor : IAgentMessageMonitor
     {
         private readonly ConcurrentQueue<MonitoredMessage> _messages = new();
         private readonly ConcurrentQueue<MonitoredEvent> _events = new();
@@ -44,6 +44,7 @@ namespace FabrCore.Host.Services
 
         public Task RecordMessageAsync(MonitoredMessage message)
         {
+            Index("message", message);
             _messages.Enqueue(message);
             var currentCount = Interlocked.Increment(ref _count);
 
@@ -101,6 +102,7 @@ namespace FabrCore.Host.Services
 
         public Task RecordEventAsync(MonitoredEvent evt)
         {
+            Index("event", evt);
             _events.Enqueue(evt);
             var currentCount = Interlocked.Increment(ref _eventCount);
 
@@ -136,6 +138,7 @@ namespace FabrCore.Host.Services
                 return Task.CompletedTask;
             }
 
+            Index("llm", call);
             _llmCalls.Enqueue(call);
             var currentCount = Interlocked.Increment(ref _llmCallCount);
 
@@ -178,6 +181,7 @@ namespace FabrCore.Host.Services
 
         public Task ClearAsync()
         {
+            lock (queryLock) { queryRecords.Clear(); querySource = Guid.NewGuid().ToString("N"); }
             while (_messages.TryDequeue(out _)) { }
             Interlocked.Exchange(ref _count, 0);
             while (_events.TryDequeue(out _)) { }

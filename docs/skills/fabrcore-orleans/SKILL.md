@@ -12,6 +12,8 @@ description: >
   Do NOT use for: FabrCore server setup (AddFabrCoreServer, REST API) — use fabrcore-server.
   Do NOT use for: general Orleans unrelated to FabrCore.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
+metadata:
+  version: 2.0.0
 ---
 
 # Orleans Configuration for FabrCore
@@ -118,7 +120,7 @@ Configure in `appsettings.json`:
 - Orleans tables are created automatically on startup (`AutoInitDatabase`, default true)
 - Persistent state survives restarts
 - Multi-silo clustering supported
-- Streams default to memory; set `FabrCore:Orleans:SqlServerStreams` to `AdoNet` for the optional Orleans 10.3.1-alpha.1 SQL streaming provider. See [upgrade and client setup](../../orleans-10.3-adoption.md).
+- Streams default to memory; set `FabrCore:Orleans:SqlServerStreams` to `AdoNet` for the optional Orleans 10.3.1-alpha.1 SQL streaming provider. See [upgrade and client setup](https://github.com/vulcan365/FabrCore/blob/main/docs/orleans-10.3-adoption.md).
 - `StorageConnectionString` optional (falls back to `ConnectionString`)
 
 FabrCore creates its Orleans SQL objects in the `orlns` schema. When

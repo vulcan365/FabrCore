@@ -22,8 +22,4 @@
     <ProjectReference Include="..\FabrCore.Services.Microsoft365Copilot\FabrCore.Services.Microsoft365Copilot.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Update="MinVer" Version="8.0.0" />
-  </ItemGroup>
-
 </Project>

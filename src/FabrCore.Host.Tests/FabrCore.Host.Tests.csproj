@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <None Include="../../docs/migrations/data-protection.sql" Link="Migrations/data-protection.sql" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -22,10 +23,6 @@
     <ProjectReference Include="..\FabrCore.Host\FabrCore.Host.csproj" />
     <ProjectReference Include="..\FabrCore.Host.Testing\FabrCore.Host.Testing.csproj" />
     <ProjectReference Include="..\FabrCore.Host.AzureStorage\FabrCore.Host.AzureStorage.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Update="MinVer" Version="8.0.0" />
   </ItemGroup>
 
 </Project>

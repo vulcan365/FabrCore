@@ -28,7 +28,7 @@ The architecture is reasonable: separate retrieval chunks from extraction sectio
 extract graph facts with the LLM, and persist scoped contributions and embeddings.
 The main remaining problems are extraction fidelity, merging, retries, and scheduling,
 not evidence that SQL VECTOR must be replaced. See the
-[architecture review](graphrag-ingestion-review.md) for the comparison with other
+[architecture review](../graphrag-ingestion-review.md) for the comparison with other
 GraphRAG approaches. Co-occurrence graphs or deferred extraction do not by themselves
 satisfy the requirement for factual edges available after ingestion.
 

@@ -76,7 +76,7 @@ public sealed class RemoteAdminController(
     {
         if (RejectSpoofedTargetHeaders() is { } rejected) return rejected;
 
-        return Ok(ClusterCapabilityFactory.Create(services.GetRequiredService<FabrCore.Core.FabrCoreFeatureState>(), blueprintExpanders, remoteAdministrationOptions.Value));
+        return Ok(ClusterCapabilityFactory.Create(services.GetRequiredService<FabrCore.Core.FabrCoreFeatureState>(), blueprintExpanders, remoteAdministrationOptions.Value, services));
     }
 
     /// <summary>

@@ -20,7 +20,10 @@ public sealed class M001_BaselineSchema : IGraphRagMigration
     public long Version => 1;
     public string Description => "Baseline GraphRAG schema (entities, relationships, chunks, scopes, hierarchy, source documents, contributions, ingestion metrics)";
 
-    public async Task ApplyAsync(SqlConnection connection, SqlTransaction transaction, ILogger logger)
+    public Task ApplyAsync(SqlConnection connection, SqlTransaction transaction, ILogger logger)
+        => ApplyAsync(connection, transaction, logger, CancellationToken.None);
+
+    public async Task ApplyAsync(SqlConnection connection, SqlTransaction transaction, ILogger logger, CancellationToken cancellationToken)
     {
         var ddlStatements = new (string Name, string Ddl)[]
         {
@@ -48,7 +51,7 @@ public sealed class M001_BaselineSchema : IGraphRagMigration
             try
             {
                 await using var command = new SqlCommand(ddl, connection, transaction);
-                await command.ExecuteNonQueryAsync();
+                await command.ExecuteNonQueryAsync(cancellationToken);
                 logger.LogDebug("M001 baseline: {Name} ensured", name);
             }
             catch (SqlException ex)

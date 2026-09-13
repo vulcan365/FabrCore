@@ -12,6 +12,7 @@
 
 interface [GrainInterfaceType("FabrCore.Core.Interfaces.IAclRegistryGrain")] FabrCore.Core.Interfaces.IAclRegistryGrain [Version(0)]
   AF4EEEED: AddGroupMemberAsync(string, FabrCore.Core.Acl.GroupMember) -> Task
+  C717B94D: ConditionalMutationAsync(string, string, string?, long) -> Task<string>
   5E0C7A5A: DeleteGrantAsync(string) -> Task<bool>
   F29927D5: DeleteGroupAsync(string) -> Task<bool>
   5D976A9F: DeletePrincipalAsync(string) -> Task<bool>
@@ -32,14 +33,20 @@ interface [GrainInterfaceType("FabrCore.Core.Interfaces.IAclRegistryGrain")] Fab
   8D425B8F: UpsertPrincipalAsync(FabrCore.Core.Acl.AclPrincipal) -> Task
   7A9520F3: UpsertRoleAsync(FabrCore.Core.Acl.AclRole) -> Task
 
+interface [GrainInterfaceType("FabrCore.Core.Interfaces.IAdministrationOperationGrain")] FabrCore.Core.Interfaces.IAdministrationOperationGrain [Version(0)]
+  0EB28372: ReadAsync() -> Task<string>
+  6E2CEF56: StartAsync(string) -> Task<string>
+
 interface [GrainInterfaceType("FabrCore.Core.Interfaces.IAgentGrain")] FabrCore.Core.Interfaces.IAgentGrain [Version(0)]
   2AB75096: AddThreadMessages(string, System.Collections.Generic.IEnumerable<FabrCore.Core.StoredChatMessage>) -> Task
+  D017D110: AdministerAsync(string, string, string?, string) -> Task<string>
   1D686E7A: ClearThreadMessages(string) -> Task
   019D2EA1: ConfigureAgent(FabrCore.Core.AgentConfiguration, bool, FabrCore.Core.HealthDetailLevel) -> Task<FabrCore.Core.AgentHealthStatus>
   BED9F3AA: EvictAgent() -> Task<FabrCore.Core.AgentEvictionResult>
   71BA0D5E: GetCustomStateAsync() -> Task<System.Collections.Generic.Dictionary<string, System.Text.Json.JsonElement>>
   AEEEB1D8: GetHealth(FabrCore.Core.HealthDetailLevel) -> Task<FabrCore.Core.AgentHealthStatus>
   F77A19C4: GetThreadMessages(string) -> Task<System.Collections.Generic.List<FabrCore.Core.StoredChatMessage>>
+  525E94D2: ManageAsync(string, string) -> Task<string>
   1AE0185C: MergeCustomStateAsync(System.Collections.Generic.Dictionary<string, System.Text.Json.JsonElement>, System.Collections.Generic.IEnumerable<string>) -> Task
   438654B8: OnMessage(FabrCore.Core.AgentMessage) -> Task<FabrCore.Core.AgentMessage>
   695C63E5: ReplaceThreadMessages(string, System.Collections.Generic.IEnumerable<FabrCore.Core.StoredChatMessage>) -> Task
@@ -59,6 +66,9 @@ interface [GrainInterfaceType("FabrCore.Core.Interfaces.IAgentManagementGrain")]
   BA0F5E32: RegisterAgent(string, string, string) -> Task
   C3F5ABA9: RegisterPrincipal(string) -> Task
   0B050E09: RemoveAgent(string) -> Task<bool>
+
+interface [GrainInterfaceType("FabrCore.Core.Interfaces.IBlueprintAdministrationGrain")] FabrCore.Core.Interfaces.IBlueprintAdministrationGrain [Version(0)]
+  5F76D29C: ExecuteAsync(string, string, string, string?) -> Task<string>
 
 interface [GrainInterfaceType("FabrCore.Core.Interfaces.IFabrCoreSkillCatalogGrain")] FabrCore.Core.Interfaces.IFabrCoreSkillCatalogGrain [Version(0)]
   512B3851: ListAsync() -> Task<System.Collections.Generic.List<FabrCore.Core.Skills.FabrCoreSkillCatalogEntry>>

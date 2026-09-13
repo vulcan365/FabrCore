@@ -1,6 +1,7 @@
 # Build and release
 
-Run from PowerShell 7 with .NET 10 and Git installed. Scripts resolve repository paths
+Run from PowerShell 7 with Git and the SDK specified by `global.json` (10.0.302 with
+patch roll-forward) installed. Scripts resolve repository paths
 relative to themselves, so they also work when invoked from another directory.
 
 `Projects.psd1` is the shared package and test-project inventory used by local packaging,
@@ -22,8 +23,8 @@ not published. `FabrCore.Host.Testing` is included in all nine-package releases.
 ```
 
 `Build.ps1` runs VSTest projects with `dotnet test` and the two MSTest SDK projects with
-`dotnet run`. Integration, Evaluation and SqlMode categories are excluded from this
-deterministic build. SQL mode tests are explicit and use the existing Docker container;
+`dotnet run`. Integration, Evaluation, SqlMode and SqlIntegration categories are excluded from this
+offline build. TRX reports are written under `artifacts/test-results/offline`. SQL mode tests are explicit and use the existing Docker container;
 they create and clean up isolated test databases. Memory evaluation scripts are also
 explicit, require configured model/database credentials and can incur provider charges.
 
@@ -53,8 +54,49 @@ releases require a clean main branch, fetch tags, fast-forward main, and stop at
 Git failure. They prompt before tagging/pushing and leave the checkout on main. The
 Develop helper prompts before merging and also stops on Git failures.
 
-GitHub Actions accepts stable `vX.Y.Z` tags, uses the same build script, and publishes only
-after tests and packing succeed. Publishing is not part of local build validation.
+## Release validation
+
+```powershell
+./scripts/Build.ps1 -Version 2.0.0-local.verify -OutputDirectory ./artifacts/packages
+./scripts/Test-ReleaseSql.ps1 -Container sql2025 -PackageDirectory ./artifacts/packages -Version 2.0.0-local.verify
+```
+
+Use a running SQL Server 2025 Linux Docker container with port 1433 published and its initial
+`MSSQL_SA_PASSWORD` environment variable available to Docker inspection. The SQL runner uses
+`/opt/mssql-tools18/bin/sqlcmd`, creates a unique release database, and supplies explicit
+connection settings to every suite. Host tests also create their own uniquely named databases.
+Only these test databases are removed; caller environment variables are restored in `finally`.
+Do not use an application database as a test fixture.
+
+The runner selects Host `SqlMode` and `SqlIntegration` tests and Memory/GraphRAG `Integration`
+tests, excluding `Evaluation`. Reports go under `artifacts/test-results/sql/<run-id>`.
+A failing or skipped required test, zero executed tests, or missing TRX report fails validation.
+These tests use deterministic model doubles and do not invoke paid providers.
+
+`Test-PackageConsumers.ps1 -PackageDirectory ./artifacts/packages -Version <version>` checks
+package identities, assemblies, readmes and internal dependencies, then extracts and compiles
+the README C# examples. It restores from the supplied feed plus NuGet.org with a new isolated
+cache and source mapping that requires FabrCore packages to come from the supplied feed.
+Its generated projects live outside the repository. The SDK-only agent project references SDK;
+the runtime consumer loads all nine package assemblies, starts a standalone host, checks readiness
+and agent discovery, and exercises typed storage. The SQL runner supplies an isolated SQL
+connection and requires the additional startup/restart persistence checks. Temporary consumer
+projects and caches are removed after the run.
+
+The reusable `release-validation.yml` workflow runs these checks for pull requests, main/develop
+pushes, and release tags. Stable `vX.Y.Z` publishing depends on successful validation of the same
+commit and downloads its exact package artifacts rather than rebuilding. CI retains TRX reports
+and validated packages. Local validation never tags or publishes.
+
+## Public API compatibility
+
+Published packages use `PublicAPI.Shipped.txt` as their released baseline and
+`PublicAPI.Unshipped.txt` for reviewed future additions. The public API analyzer runs during
+normal builds and fails on undeclared additions or missing declared APIs; deleting baseline
+files also fails the build. Preserve shipped signatures during 2.x changes, including optional
+parameters and nullability. Record additive APIs in the unshipped file using the analyzer's
+code fix; do not regenerate the shipped baseline to silence a breaking change. These checks
+complement the existing Orleans contract files and storage compatibility tests.
 
 The optional local prerelease publisher reads `NUGET_API_KEY` from the environment, falling
 back on Windows to an encrypted SecureString saved with `Export-Clixml` in the ignored

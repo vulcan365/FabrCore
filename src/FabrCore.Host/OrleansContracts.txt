@@ -12,9 +12,13 @@
 
 class [GrainType("aclregistry")] FabrCore.Host.Grains.AclRegistryGrain
 
+class [GrainType("administrationoperation")] FabrCore.Host.Grains.AdministrationOperationGrain
+
 class [GrainType("agent")] FabrCore.Host.Grains.AgentGrain
 
 class [GrainType("agentmanagement")] FabrCore.Host.Grains.AgentManagementGrain
+
+class [GrainType("blueprintadministration")] FabrCore.Host.Grains.BlueprintAdministrationGrain
 
 class [GrainType("fabrcoreskillcatalog")] FabrCore.Host.Grains.FabrCoreSkillCatalogGrain
 

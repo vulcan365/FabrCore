@@ -1,0 +1,29 @@
+#nullable enable
+FabrCore.Services.Connections.ConnectionBlueprintExpander
+FabrCore.Services.Connections.ConnectionBlueprintExpander.ConfigurationSchema.get -> System.Text.Json.JsonElement?
+FabrCore.Services.Connections.ConnectionBlueprintExpander.ConnectionBlueprintExpander() -> void
+FabrCore.Services.Connections.ConnectionBlueprintExpander.ExpandAsync(FabrCore.Core.Blueprints.BlueprintExpansionContext! context, System.Text.Json.JsonElement extension, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<FabrCore.Core.Blueprints.BlueprintExpansion!>
+FabrCore.Services.Connections.ConnectionBlueprintExpander.ExtensionKey.get -> string!
+FabrCore.Services.Connections.ConnectionsExtensions
+FabrCore.Services.Connections.ConnectionsOptions
+FabrCore.Services.Connections.ConnectionsOptions.ClientHandoffEnabled.get -> bool
+FabrCore.Services.Connections.ConnectionsOptions.ClientHandoffEnabled.set -> void
+FabrCore.Services.Connections.ConnectionsOptions.ConnectionsOptions() -> void
+FabrCore.Services.Connections.ConnectionsOptions.Enabled.get -> bool
+FabrCore.Services.Connections.ConnectionsOptions.Enabled.set -> void
+FabrCore.Services.Connections.ConnectionsOptions.EntraAgentIdEnabled.get -> bool
+FabrCore.Services.Connections.ConnectionsOptions.EntraAgentIdEnabled.set -> void
+FabrCore.Services.Connections.ConnectionsOptions.HandoffAudience.get -> string?
+FabrCore.Services.Connections.ConnectionsOptions.HandoffAudience.set -> void
+FabrCore.Services.Connections.ConnectionsOptions.HandoffAuthority.get -> string?
+FabrCore.Services.Connections.ConnectionsOptions.HandoffAuthority.set -> void
+FabrCore.Services.Connections.ConnectionsOptions.ProtectedKeyRingConfigured.get -> bool
+FabrCore.Services.Connections.ConnectionsOptions.ProtectedKeyRingConfigured.set -> void
+FabrCore.Services.Connections.IConnectionCredentialProvider
+FabrCore.Services.Connections.IConnectionCredentialProvider.GetCredentialAsync(FabrCore.Connections.ConnectionProfile! profile, string! tokenEndpoint, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.Dictionary<string!, string!>!>!
+FabrCore.Services.Connections.IConnectionHandoffPrincipalValidator
+FabrCore.Services.Connections.IConnectionHandoffPrincipalValidator.ValidateAsync(string! userProof, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<string?>!
+FabrCore.Services.Connections.IConnectionPrincipalResolver
+FabrCore.Services.Connections.IConnectionPrincipalResolver.Resolve(System.Security.Claims.ClaimsPrincipal! principal) -> string?
+static FabrCore.Services.Connections.ConnectionsExtensions.AddFabrCoreConnections(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<FabrCore.Services.Connections.ConnectionsOptions!>! configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static FabrCore.Services.Connections.ConnectionsExtensions.MapFabrCoreConnections(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints) -> Microsoft.AspNetCore.Routing.IEndpointRouteBuilder!

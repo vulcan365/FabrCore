@@ -2,9 +2,29 @@
 name: fabrcore-plugins-tools
 description: "Create and register FabrCore.Sdk 2.0 plugins and standalone tools, resolve settings and state, generate embeddings, and apply tool discovery metadata. Use for IFabrCorePlugin, ToolAlias, IEmbeddings and registry behavior; use specialized Memory/GraphRAG skills for SQL knowledge integrations."
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
+metadata:
+  version: 2.0.0
 ---
 
 # FabrCore Plugins and Standalone Tools
+
+For plugins calling authenticated external APIs, use the agent-bound connection
+facade described in [fabrcore-connections](../fabrcore-connections/SKILL.md).
+Have trusted agent code acquire an authenticated client and pass that capability
+to the plugin. Return business results to the model, never tokens. The profile's
+owner and agent grant must come from host/admin configuration, not tool arguments.
+
+## Cloud discovery and diagnostic tool boundaries
+
+The 2.0 administration catalog discovers installed agent types, model aliases,
+plugins, tools, skills and extension schemas without returning credentials. Agent
+building configures installed components; it does not compile or install assemblies.
+Custom blueprint preview expanders must explicitly implement
+`IBlueprintPreviewExpander` and perform no provisioning or tool execution.
+Diagnostic admin agents exclude business plugins and MCP execution. Expose application
+observations through the proxy's protected read-only snapshot hook; do not make an
+ordinary business tool available merely because an operator requested diagnosis.
+
 
 ## FabrCore 2.0 baseline
 

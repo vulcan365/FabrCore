@@ -48,6 +48,10 @@ latest version. The 2.0 baseline is .NET 10, Orleans 10.3.1, and Agent Framework
 For rollback, retain the old binaries/configuration and a consistent pre-upgrade database backup.
 Do not point old binaries at newly migrated schemas or promise automatic schema downgrade.
 
+Cloud administration, isolated diagnostics, conditional management, SQL monitoring
+and evidence exports are part of the same 2.0.0 release. See the 2.0 guide below;
+do not invent a post-2.0 version or separate upgrade boundary for them.
+
 ## Distribution and maintenance
 
 Copy this entire `fabrcore-releases` folder, including `references` and `scripts`, to the AI tool's

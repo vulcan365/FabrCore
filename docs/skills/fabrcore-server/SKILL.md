@@ -2,9 +2,46 @@
 name: fabrcore-server
 description: "Configure FabrCore.Host 2.0 startup, standalone/SQL modes, model providers, cloud configuration, service registration, Host REST APIs, blueprints, typed storage and telemetry. Use for AddFabrCoreServer, FabrCoreServerOptions and deployment configuration; use fabrcore-releases for release migration."
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
+metadata:
+  version: 2.0.0
 ---
 
 # FabrCore Server Setup
+
+## Optional connections and remote agents
+
+For `AddFabrCoreConnections`, `MapFabrCoreConnections`, `AddFabrCoreRemoteAgents`,
+protected credential persistence, and external-client consent, read
+[fabrcore-connections](../fabrcore-connections/SKILL.md). These are explicit host
+opt-ins, independent of SQL mode and inbound Copilot/A2A. Agent ID and encrypted
+client handoffs have separate flags. FabrCore exposes API endpoints; client apps
+own login/callback UI. Blueprints hold connection references, never credentials.
+
+Host protection defaults require no application Data Protection setup in the
+in-memory Localhost case. SQL uses a shared key table and requires the host's
+key-encryption certificate; configure `FabrCore:DataProtection`. Preserve custom
+providers and key-ring identity when migrating existing protected records.
+
+## Cloud management in the 2.0 release
+
+FabrCore 2.0 includes vendor-neutral administration under `/fabrcoreapi/admin/v1`:
+principal discovery, conditional ACL/blueprint CRUD, installed capability discovery,
+agent building/lifecycle/state/thread management, pollable operation receipts,
+isolated admin conversations and retained monitoring/evidence queries. Insights is
+Vulcan365's cloud server; third-party implementations use the same public contract.
+Read [the cloud administration skill](../fabrcore-cloud-administration/SKILL.md) for
+the complete protocol and SDK example. Legacy APIs remain available; discover
+capabilities before selecting a workflow. Outbound HTTP long polling remains the
+cloud transport, with no WebSocket or diagnostic token stream requirement.
+
+Configure `FabrCore:Administration:Model` for a diagnostic model override and
+`TimeoutSeconds` for its default 120-second deadline. SQL mode alone does not turn
+on monitoring: opt in with `FabrCore:Monitoring:Provider=sql`. Its bounded queue
+defaults to 10,000 records/64 MiB, 250-record batches and one-second flushes, with
+seven-day retention. Recording does not await SQL; drops and failures appear in
+health. Provision the monitoring migration in manual-schema mode. Existing audit
+configuration and APIs remain unchanged.
+
 
 ## FabrCore 2.0 baseline
 
@@ -296,7 +333,7 @@ sufficient:
     },
     "CloudServer": {
       "Enabled": false,
-      "Url": "https://forge.vulcan365.ai",
+      "Url": "https://cloud.example.com",
       "ApiKey": null,
       "ClusterId": null,
       "Environment": null,
@@ -1142,7 +1179,7 @@ External systems should prefer bundle export plus local verification against the
 | `Extensions` | Dictionary\<string, JsonElement\> | Top-level package-owned extension data; serialized with `JsonExtensionData` |
 
 `AgentBlueprintRequest` and SDK `EnsureBlueprintAgentsAsync` are agents-only compatibility
-surfaces. Prefer `FabrCoreBlueprint` for new code, especially squad or Forge fleet delivery.
+surfaces. Prefer `FabrCoreBlueprint` for new code, especially squad or cloud fleet delivery.
 
 **`AgentBlueprintResponse`** — returned by `/agent/blueprint`:
 

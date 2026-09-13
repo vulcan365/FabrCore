@@ -143,6 +143,7 @@ internal sealed class OrleansEntityStorageProvider :
 
     private sealed class SimpleGrainState<T> : IGrainState<T>
     {
+        [System.Diagnostics.CodeAnalysis.AllowNull]
         public T State { get; set; } = default!;
         public string? ETag { get; set; }
         public bool RecordExists { get; set; }

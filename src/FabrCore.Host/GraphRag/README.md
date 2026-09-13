@@ -472,7 +472,7 @@ skip but still permits this opt-in cache; disable caching to force every extract
 Chunk/entity embedding stages and SQL writes still run on forced ingestion; an
 explicit embedding cache can reuse the vectors. Actual chat usage
 excludes cache hits. This accelerates repeat work without improving factual completeness.
-See `docs/graphrag-result-cache-experiment-2026-09-05.md` for the measured tradeoffs.
+See `docs/evals/graphrag-result-cache-experiment-2026-09-05.md` for the measured tradeoffs.
 
 ## Exact embedding reuse (opt-in)
 

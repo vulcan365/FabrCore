@@ -12,7 +12,4 @@
     <None Update="corpus*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="appsettings*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
-  <ItemGroup>
-    <PackageReference Update="MinVer" Version="8.0.0" />
-  </ItemGroup>
 </Project>

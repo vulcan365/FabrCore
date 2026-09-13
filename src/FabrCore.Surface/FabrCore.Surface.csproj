@@ -4,6 +4,8 @@
 		<TargetFramework>net10.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
+		<!-- Razor generates framework overrides with oblivious nullability; their API signatures remain tracked. -->
+		<NoWarn>$(NoWarn);RS0041</NoWarn>
 	</PropertyGroup>
 
 	<PropertyGroup>
@@ -28,11 +30,6 @@
 	<ItemGroup>
 		<!-- The consuming app owns the deployed profile; keep this file as a package template. -->
 		<Content Update="fabrcore-surface.json" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />
-	</ItemGroup>
-
-
-	<ItemGroup>
-	  <PackageReference Update="MinVer" Version="8.0.0" />
 	</ItemGroup>
 
 </Project>

@@ -201,4 +201,4 @@ agent reaches a per-turn token budget sooner than a single-shot agent on the sam
 stop early with `_error` and `_fabrcore_run_stop_reason`, that is `ChatRunSafetyScope` doing its job
 — raise `PerTurnMaxInputTokens` or lower `_HarnessLoopMaxIterations`, and prefer the latter first.
 
-See [compaction correctness](../../../compaction-correctness.md) for protected content, model budgeting, and safe failure behavior.
+See [compaction correctness](https://github.com/vulcan365/FabrCore/blob/main/docs/compaction-correctness.md) for protected content, model budgeting, and safe failure behavior.

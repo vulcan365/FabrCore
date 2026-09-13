@@ -22,8 +22,4 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
   </ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Update="MinVer" Version="8.0.0" />
-  </ItemGroup>
-
 </Project>

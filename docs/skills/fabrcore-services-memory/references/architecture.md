@@ -55,7 +55,7 @@ Audit, chat histories, backups, telemetry, and external copies require separate 
 
 ## Release and operations
 
-Keep the [frozen defaults](../../../memory-release-defaults.md) until a measured change is
+Keep the [frozen defaults](https://github.com/vulcan365/FabrCore/blob/main/docs/memory-release-defaults.md) until a measured change is
 accepted. Run scripts/Run-MemoryEvals.ps1 from the repository for sequential mode comparisons;
 retain contemporary controls and do not automatically promote a candidate baseline.
 

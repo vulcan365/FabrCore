@@ -2,9 +2,17 @@
 name: fabrcore-microsoft365copilot
 description: "Integrate FabrCore 2.0 with Microsoft 365 Copilot and Teams using the separate Copilot package: channel hosting, agent provisioning, authentication, principal resolution, streaming, attachments, cards, Entra SSO and proactive delivery. Use fabrcore-a2a for Copilot Studio A2A connected agents."
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*) Bash(az:*) Bash(curl:*) Bash(devtunnel:*)"
+metadata:
+  version: 2.0.0
 ---
 
 # FabrCore ⇄ Microsoft 365 Copilot (Custom Engine Agent)
+
+For the inverse direction—FabrCore calling a Copilot Studio or Work IQ agent—use
+[fabrcore-connections](../fabrcore-connections/SKILL.md). It covers remote handles,
+shared authenticated connections, external consent, and optional Entra Agent ID.
+This channel addon does not enable those features or provide their downstream
+permissions. Existing channel authentication and outbound user consent are separate.
 
 ## FabrCore 2.0 baseline
 

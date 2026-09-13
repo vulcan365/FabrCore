@@ -14,7 +14,10 @@ public sealed class M005_ScopedCanonicalKnowledge : IGraphRagMigration
     public long Version => 5;
     public string Description => "Add canonical identities and scope graph evidence and taxonomy assignments";
 
-    public async Task ApplyAsync(SqlConnection connection, SqlTransaction transaction, ILogger logger)
+    public Task ApplyAsync(SqlConnection connection, SqlTransaction transaction, ILogger logger)
+        => ApplyAsync(connection, transaction, logger, CancellationToken.None);
+
+    public async Task ApplyAsync(SqlConnection connection, SqlTransaction transaction, ILogger logger, CancellationToken cancellationToken)
     {
         var schema = GraphRagSchemaInitializer.SchemaName;
         var columnsDdl = $$"""
@@ -143,17 +146,17 @@ public sealed class M005_ScopedCanonicalKnowledge : IGraphRagMigration
                   WHERE scope.ScopeKey = discovered.ScopeKey);
             """;
 
-        await ExecuteAsync(columnsDdl, connection, transaction);
-        await ExecuteAsync(backfillDml, connection, transaction);
-        await ExecuteAsync(constraintsDdl, connection, transaction);
-        await ExecuteAsync(indexesDdl, connection, transaction);
-        await ExecuteAsync(scopeBackfillDml, connection, transaction);
+        await ExecuteAsync(columnsDdl, connection, transaction, cancellationToken);
+        await ExecuteAsync(backfillDml, connection, transaction, cancellationToken);
+        await ExecuteAsync(constraintsDdl, connection, transaction, cancellationToken);
+        await ExecuteAsync(indexesDdl, connection, transaction, cancellationToken);
+        await ExecuteAsync(scopeBackfillDml, connection, transaction, cancellationToken);
         logger.LogDebug("M005: canonical identities and scoped graph evidence ensured");
     }
 
-    private static async Task ExecuteAsync(string sql, SqlConnection connection, SqlTransaction transaction)
+    private static async Task ExecuteAsync(string sql, SqlConnection connection, SqlTransaction transaction, CancellationToken cancellationToken)
     {
         await using var command = new SqlCommand(sql, connection, transaction);
-        await command.ExecuteNonQueryAsync();
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 }

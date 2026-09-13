@@ -243,7 +243,16 @@ namespace FabrCore.Sdk
                 MaxPromptInputTokensPerCall = ChatRunSafetyScope.Current?.MaxPromptInputTokensPerCall ?? callInfo.MaxPromptInputTokensPerCall,
             };
 
-            if (_capture?.CapturePayloads == true)
+            // Admin transcripts are stored only in the actor-scoped diagnostic session store.
+            var adminCall = scope?.OriginContext?.StartsWith("_admin:", StringComparison.Ordinal) == true;
+            if (adminCall)
+            {
+                call.OriginContext = scope!.OriginContext!;
+                call.AdministrationActor = AdminDiagnosticContext.Current.Value?.Session.Actor;
+                call.AdministrationSessionId = AdminDiagnosticContext.Current.Value?.Session.Id;
+                call.ErrorMessage = error is null ? null : error.GetType().Name;
+            }
+            if (_capture?.CapturePayloads == true && !adminCall)
             {
                 call.RequestMessages = SnapshotMessages(requestMessages, _capture);
                 call.ResponseMessages = SnapshotMessages(response?.Messages, _capture);
@@ -269,7 +278,11 @@ namespace FabrCore.Sdk
                         })),
                         Metadata = new Dictionary<string, string?>(StringComparer.Ordinal)
                         {
-                            ["origin"] = origin,
+                            ["origin"] = call.OriginContext,
+                            ["channel"] = adminCall ? "_admin" : null,
+                            ["executionCategory"] = adminCall ? "admin" : "runtime",
+                            ["adminActor"] = call.AdministrationActor,
+                            ["adminSessionId"] = call.AdministrationSessionId,
                             ["parent_message_id"] = parentId,
                             ["model"] = call.Model,
                             ["streaming"] = streaming.ToString(),

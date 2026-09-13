@@ -10,6 +10,17 @@ metadata:
 
 # FabrCore Development Skill
 
+## Cloud management included in 2.0.0
+
+For remote cluster management use
+[fabrcore-cloud-administration](../fabrcore-cloud-administration/SKILL.md): vendor-neutral
+HTTP administration, complete principal/ACL management, blueprint preview/deployment,
+agent configuration/lifecycle, read-only diagnostic conversations, paged monitoring
+and execution evidence exports. Insights is Vulcan365's implementation, not a required
+dependency. Cloud long polling is separate from the existing agent WebSocket transport.
+All of these features belong to the 2.0 release; do not describe them as a later update.
+
+
 ## FabrCore 2.0 baseline
 
 FabrCore 2.0 GA targets .NET 10. Host includes SQL Server, Memory and GraphRAG; shared service contracts live in Core and remote Memory clients/harness integration in SDK. Use fabrcore-releases for migrations from 1.6, 1.7 or 1.8. Standalone defaults to in-memory runtime state and trusted cross-principal messaging; ConnectionStrings:FabrCore enables SQL features and enforced ACL.
@@ -23,6 +34,9 @@ For release upgrades, use [fabrcore-releases](../fabrcore-releases/SKILL.md).
 | Concept | Type | Key Class/Interface | Skill |
 |---------|------|-------------------|-------|
 | Agent | Business logic actor | `FabrCoreAgentProxy`, `TryGetStateAsync` | fabrcore-agent |
+| Cloud administration | Vendor-neutral cluster management | `FabrCoreAdministrationClient` | fabrcore-cloud-administration |
+| Authenticated connections | Optional user/app credentials, Agent ID, client consent | `IAgentConnections`, `FabrCoreConnectionsClient` | [fabrcore-connections](../fabrcore-connections/SKILL.md) |
+| Outbound Copilot / Work IQ | Remote agents behind FabrCore handles | `RemoteAgent`, `AddFabrCoreRemoteAgents()` | [fabrcore-connections](../fabrcore-connections/SKILL.md) |
 | Agent Blueprint | Canonical stored/apply manifest | `FabrCoreBlueprint`, `IBlueprintExpander`, `/fabrcoreapi/Blueprint` | fabrcore-server |
 | Agent Eviction | Hard-delete an agent instance | `AgentEvictionResult`, `DELETE /fabrcoreapi/Agent/{handle}` | fabrcore-server, fabrcore-orleans |
 | Agent Framework | LLM agent runtime | `AIAgent`, `AgentSession` | fabrcore-agentframework |

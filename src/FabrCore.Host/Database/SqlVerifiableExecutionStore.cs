@@ -7,8 +7,23 @@ using Microsoft.Data.SqlClient;
 namespace FabrCore.Host.Database;
 
 /// <summary>Atomic, append-only evidence and cross-process signature-chain coordination.</summary>
-public sealed class SqlVerifiableExecutionStore(OperationalDatabase database) : IVerifiableExecutionStore, IVerifiableExecutionWriteCoordinator
+public sealed class SqlVerifiableExecutionStore(OperationalDatabase database) : IVerifiableExecutionStore, IVerifiableExecutionWriteCoordinator, IVerifiableExecutionQueryProvider
 {
+    public async Task<FabrCore.Core.CloudServer.AdministrationPage<string>> ListTracesAsync(string? agentHandle = null, string? after = null, int limit = 100, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await database.OpenAsync(cancellationToken);
+        await using var identityCommand = OperationalDatabase.Command(connection, "SELECT CONCAT(CONVERT(nvarchar(128),SERVERPROPERTY('ServerName')),'/',DB_NAME(),'/',CONVERT(nvarchar(36),service_broker_guid)) FROM sys.databases WHERE database_id=DB_ID();");
+        var identity = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes((string)(await identityCommand.ExecuteScalarAsync(cancellationToken))!)));
+        await using var command = OperationalDatabase.Command(connection, """
+            SELECT DISTINCT TOP(@limit) TraceId FROM fabrOps.Evidence
+            WHERE (@after IS NULL OR TraceId>@after) AND (@agent IS NULL OR JSON_VALUE(RecordJson,'$.AgentHandle')=@agent) ORDER BY TraceId;
+            """, null, ("@limit", Math.Clamp(limit, 1, 1000) + 1), ("@after", after), ("@agent", agentHandle));
+        var ids = new List<string>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken)) ids.Add(reader.GetString(0));
+        var items = ids.Take(Math.Clamp(limit, 1, 1000)).ToList();
+        return new() { Items = items, NextCursor = ids.Count > items.Count ? items[^1] : null, DataScope = "cluster", SourceId = identity };
+    }
     public async ValueTask<IAsyncDisposable> AcquireWriteAsync(string traceId, string segmentId, CancellationToken ct = default)
     {
         var key = JsonSerializer.Serialize(new[] { OperationalDatabase.Key(traceId, nameof(traceId)), OperationalDatabase.Key(segmentId, nameof(segmentId), 256) });

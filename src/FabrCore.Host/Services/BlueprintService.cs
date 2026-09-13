@@ -42,7 +42,7 @@ public interface IFabrCoreBlueprintService
         CancellationToken cancellationToken = default);
 }
 
-internal sealed class FabrCoreBlueprintService(
+internal sealed class LocalFabrCoreBlueprintService(
     IFabrCoreAgentService agentService,
     IEnumerable<IBlueprintExpander> expanders,
     IUserScopedFabrCoreStorageProvider storage,

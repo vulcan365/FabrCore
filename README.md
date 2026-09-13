@@ -28,6 +28,8 @@ configuration. Read the [2.0 release notes](RELEASE_NOTES.md) and
 - **Interactive workspaces** using Surface: Blazor chat, command center, Adaptive Cards,
   and squads without requiring a Forge account.
 - **Connected agents** through HTTP, WebSocket v2, A2A, Microsoft 365 Copilot, and Teams.
+- **Optional authenticated connections** for user/app credentials, Entra Agent ID, authenticated MCP,
+  and handle-addressable Copilot agents. See [connections and Microsoft integration](docs/connections-and-microsoft-integration.md).
 - **Observable execution** with message and LLM monitoring, token usage, security audit,
   and optional signed execution evidence.
 
@@ -47,9 +49,11 @@ and [harness efficiency](docs/harness-efficiency.md) for behavior and tuning gui
 | Long-term Memory and GraphRAG | Unavailable | Available; select plugins and scopes per agent |
 | Security audit, execution evidence, A2A task snapshots | In-memory defaults | SQL-backed defaults |
 
-Standalone mode still applies authentication, privileged administration authentication, and
-storage/session ownership checks. Use SQL-mode ACL enforcement when hosting mutually untrusted
-principals. Default standalone runtime state does not survive a process restart.
+Standalone mode retains privileged administration authentication and storage/session ownership
+checks. The hosting application must authenticate callers and establish trusted user handles
+for APIs that consume forwarded identity headers; SQL-mode ACL does not replace authentication.
+Use SQL-mode ACL enforcement when hosting mutually untrusted principals. Default standalone
+runtime state does not survive a process restart.
 
 Supply `ConnectionStrings:FabrCore` through application configuration or a secret provider to
 enable the SQL feature set. The database must already exist and support the SQL Server 2025 /
@@ -71,7 +75,7 @@ them. SDK-only agent libraries have no SQL implementation dependency.
 
 ## Try the sample
 
-Install the **.NET 10 SDK**, then use a fresh checkout:
+Install **PowerShell 7** and the **.NET SDK selected by `global.json`** (10.0.302, with patch roll-forward), then use a fresh checkout:
 
 ```powershell
 git clone https://github.com/vulcan365/FabrCore.git
@@ -205,8 +209,18 @@ With PowerShell 7 installed:
 ./scripts/Test-BuildScripts.ps1      # Validate inventory and release-script behavior
 ```
 
-SQL integration tests and live model evaluations are explicit workflows. See
-[build instructions](builds/README.md) for prerequisites, local package feeds, and release previews.
+The release gate also runs SQL Server 2025 integration tests and verifies consumers of the
+actual packages, including the C# examples above. It requires all selected SQL tests to execute
+and pass before the validated package artifacts can be published. To run the same checks locally:
+
+```powershell
+./scripts/Build.ps1 -Version 2.0.0-local.verify -OutputDirectory ./artifacts/packages
+./scripts/Test-ReleaseSql.ps1 -Container sql2025 -PackageDirectory ./artifacts/packages -Version 2.0.0-local.verify
+```
+
+The SQL runner creates and removes its own test databases inside the selected container.
+Live model evaluations remain separate and can incur provider charges. See
+[build instructions](builds/README.md) for prerequisites, reports, package feeds, and release previews.
 
 ## Contributing and license
 

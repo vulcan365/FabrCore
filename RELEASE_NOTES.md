@@ -41,7 +41,9 @@ Agent class libraries can reference SDK without taking a SQL implementation depe
 
 - **No FabrCore database connection:** the default host is a trusted standalone workspace.
   Cross-principal agent communication does not require ACL grants. Authentication, privileged
-  administration authentication, and storage/session ownership checks still apply. Runtime state,
+  administration authentication, and storage/session ownership checks still apply. APIs using
+  forwarded identity headers require the hosting application to authenticate callers and supply
+  trusted user handles; ACL enforcement is not authentication. Runtime state,
   conversations, typed storage, delivery checkpoints, and reminders are in memory by default
   and are lost on process restart. SQL-only plugins, agents, and ACL administration are unavailable.
 - **`ConnectionStrings:FabrCore` configured:** the host enables SQL Orleans defaults, enforced
@@ -79,7 +81,17 @@ overrides, prerequisites, and deployment behavior.
 
 - The feature database must already exist and support the SQL Server 2025 / Azure SQL vector
   and graph schemas. Startup initializes required tables and applies GraphRAG migrations.
-  `FabrCore:Database:AutoInitialize=false` validates pre-provisioned schemas instead.
+  `FabrCore:Database:AutoInitialize=false` validates pre-provisioned schemas instead. Both paths
+  validate required tables and columns, graph node/edge kinds, actual 1536-dimensional vector
+  columns, and applicable migration versions. Incompatible schemas fail startup with the affected
+  object identified; existing data is never silently rebuilt.
+- Memory and GraphRAG initialization use a 90-second command timeout for their 60-second schema
+  lock waits. Startup cancellation reaches built-in migrations and SQL commands; migration
+  transactions roll back on failure and lock cleanup runs independently of cancellation.
+  Existing initializer and migration entry points remain available through compatible overloads.
+- Memory hot-index writes share the scope mutation lock. Entity updates, deletes, and hot-index
+  updates use the existing scope/name/type index to avoid cross-scope heap-scan deadlocks.
+  Pre-provisioned databases must retain the enabled `IX_MemoryEntity_Scope_Name_Type` index.
 - SQL mode validates required model configuration and credential aliases without paid inference.
   Configure `default` chat and `embeddings`; GraphRAG requires 1536-dimensional embeddings.
   Extraction model resolution uses an explicit override, then `graphrag`, then `default`.
@@ -219,9 +231,23 @@ depend on the selected model, corpus, and enabled options.
   tree, use fast-forward-only updates, and fail before publishing when validation fails.
 - NuGet publishing reads `NUGET_API_KEY`; release workflows validate stable tags and run tests before
   publishing. Local package creation and push previews use the same supported package list.
-- Current validation includes a Release build, 971 passing deterministic tests, eight passing SQL
-  integration tests, and inspection of all nine generated packages and internal dependencies.
-  Live model evaluations are separate from those deterministic checks.
+- Release validation runs offline tests, isolated SQL-mode/Orleans streaming tests, and deterministic
+  Memory/GraphRAG SQL integration suites. Missing prerequisites, skipped required SQL tests, and
+  absent test reports fail the gate. Paid model evaluations remain separate.
+- Package smoke tests restore the produced packages with a fresh cache, verify package identities
+  and internal dependencies, compile README examples, and exercise standalone/SQL startup,
+  readiness, agent discovery, and storage across SQL host restart.
+- Tag publishing consumes the artifacts from successful validation of the same commit. Test reports
+  and validated packages are retained by CI; no package rebuild occurs between validation and push.
+- The SDK is pinned by `global.json` with patch roll-forward. MinVer is centralized at 8.0.0;
+  evaluation dependencies are pinned and MSTest SDK/runner versions are aligned. The Aspire sample
+  uses matching AppHost SDK/package versions and its CLI bundle.
+- Shipped/unshipped public API baselines cover all nine packages alongside Orleans RPC contract
+  checks. Public API changes require an explicit baseline update and compatibility review.
+
+Validation commands, prerequisites, and report locations are documented in
+[build instructions](builds/README.md). Passing counts belong to individual runs; these notes do
+not claim that live provider evaluations ran as part of release validation.
 
 The source targets .NET 10, Orleans 10.3.1, and Microsoft Agent Framework 1.20.0.
 See [build and release instructions](builds/README.md) for reproducible commands.

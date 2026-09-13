@@ -123,7 +123,7 @@ stress results and all original baselines are preserved.
 Adopt both APIs, bounded harness recall, explicit core/own composition, opt-in scoped memory
 writes for background specialists, safer extraction/compaction failure behavior and structured
 relevance selection. Retain existing SQL storage and taxonomy. See
-[the architectural review](memory-harness-design.md) for the industry/source analysis.
+[the architectural review](../memory-harness-design.md) for the industry/source analysis.
 
 Continue using `scripts/Run-MemoryEvals.ps1`; it runs modes sequentially, compares available
 baselines and retains a matrix result without automatically promoting candidates. No unattended

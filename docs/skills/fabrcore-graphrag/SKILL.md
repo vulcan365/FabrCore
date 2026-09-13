@@ -1,6 +1,8 @@
 ---
 name: fabrcore-graphrag
 description: "Integrate, configure, troubleshoot, and evaluate the GraphRAG feature in FabrCore.Host 2.0. Use for scoped ingestion and search, extraction performance and quality, SQL graph/vector setup, administration APIs, or GraphRAG agent and plugin adapters."
+metadata:
+  version: 2.0.0
 ---
 
 # FabrCore GraphRAG Service Skill

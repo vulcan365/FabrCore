@@ -2,9 +2,22 @@
 name: fabrcore-harness
 description: "Build FabrCore 2.0 harness agents with todo lists, plan/execute modes, bounded iteration, background delegation, durable session snapshots and managed Agent Skills. Use for CreateFabrCoreHarnessAgent, AsFabrCoreHarnessAgent, FabrCoreHarnessResult and AgentRosterBuilder. Use fabrcore-testing for the in-memory unit-test harness."
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
+metadata:
+  version: 2.0.0
 ---
 
 # FabrCore Agent Harness
+
+## Administration stays outside the business harness
+
+FabrCore 2.0 operator diagnostics use a dedicated internal diagnostic agent and
+admin-session store. Do not attach the target harness's tools, Memory write tools,
+background business delegation or reply delivery to an admin turn. Its fixed source
+history snapshot and working-context compaction must never change the target thread.
+Read [admin diagnostics](../fabrcore-agent/references/admin-diagnostics.md) for the
+read-only snapshot hook and execution boundaries; ordinary harness behavior below
+remains the path for explicit management test messages.
+
 
 ## FabrCore 2.0 baseline
 

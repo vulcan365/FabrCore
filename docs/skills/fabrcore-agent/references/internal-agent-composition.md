@@ -5,8 +5,12 @@ Use this pattern when one public `FabrCoreAgentProxy` should privately own sever
 handle, registry entry, grain, ACL identity, durable conversation, or agent-to-agent transport.
 
 For the underlying research and production boundaries, see
-[`docs/multi-agent-harness-workflow.md`](../../../multi-agent-harness-workflow.md) and
-[`docs/multi-agent-harness-workflow-prodution-hardening.md`](../../../multi-agent-harness-workflow-prodution-hardening.md).
+[`docs/multi-agent-harness-workflow.md`](https://github.com/vulcan365/FabrCore/blob/main/docs/multi-agent-harness-workflow.md) and
+[`docs/multi-agent-harness-workflow-prodution-hardening.md`](https://github.com/vulcan365/FabrCore/blob/main/docs/multi-agent-harness-workflow-prodution-hardening.md).
+
+The privileged diagnostic internal agent is a separate 2.0 workflow; see
+[admin diagnostics](admin-diagnostics.md). It owns a persisted admin-session fork
+and never inherits the business specialists or their tools described here.
 
 ## Choose the composition
 

@@ -309,6 +309,34 @@ public sealed class SqlMemoryStoreIntegrationTests
     }
 
     [TestMethod]
+    public async Task EntityAndIndexWritesDoNotWaitForAnotherScopesRowLock()
+    {
+        var foreignScope = _database.CreateScopeKey("locked");
+        var foreign = await InsertMemoryAsync(foreignScope, "Locked", MemoryType.Fact, "foreign", UnitVector(1));
+        var local = await InsertMemoryAsync(_scope, "Writable", MemoryType.Fact, "local", UnitVector(2));
+        await using var holder = new SqlConnection(_database.ConnectionString);
+        await holder.OpenAsync();
+        await using var transaction = holder.BeginTransaction();
+        await using var command = new SqlCommand("""
+            UPDATE target SET Description = 'held'
+            FROM mem.MemoryEntity AS target WITH (ROWLOCK, INDEX(IX_MemoryEntity_Scope_Name_Type))
+            WHERE ScopeKey = @scope AND EntityId = @id
+            """, holder, transaction);
+        command.Parameters.AddWithValue("@scope", foreignScope);
+        command.Parameters.AddWithValue("@id", foreign.Id);
+        await command.ExecuteNonQueryAsync();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        try
+        {
+            local.Description = "Updated without scanning a locked foreign row";
+            await _database.Store.UpdateEntityAsync(_scope, local, timeout.Token);
+            await _database.Store.UpsertIndexContentAsync(_scope, "{}", timeout.Token);
+            Assert.IsTrue(await _database.Store.DeleteEntityAsync(_scope, local.Id, timeout.Token));
+        }
+        finally { await transaction.RollbackAsync(CancellationToken.None); }
+    }
+
+    [TestMethod]
     public async Task HotIndex_ConcurrentWritersDoNotLoseEntries()
     {
         _database.Options.HotIndex.MaxEntries = 100;

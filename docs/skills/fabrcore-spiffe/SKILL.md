@@ -9,9 +9,22 @@ description: >
   "UseVerifiableExecution", "LocalCertificateVerifiableExecutionSigner", "ExternalDbEffect",
   "ExternalLibraryCall", "RecordDbEffectAsync", "RecordHttpCallAsync", "RecordStorageEffectAsync",
   "RecordLibraryCallAsync", "attested side effect", "tamper evidence", "execution provenance".
+metadata:
+  version: 2.0.0
 ---
 
 # FabrCore Verifiable Execution and SPIFFE
+
+## Cloud evidence discovery and exports in 2.0
+
+Read [cloud export](references/cloud-export.md) for authenticated trace discovery,
+stable chunked exports and shared-store coverage. Custom stores opt into discovery
+through `IVerifiableExecutionQueryProvider`. Keep all evidence records, signatures,
+certificates and attestations unchanged when aggregating or exporting them.
+Diagnostic `_admin` evidence identifies actor, session, target and execution category;
+transcripts remain administration-only. An unsigned or incomplete result must not
+be described as verified, and verification never proves full cluster coverage.
+
 
 ## FabrCore 2.0 baseline
 

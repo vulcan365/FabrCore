@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><IsPackable>false</IsPackable><IsTestProject>true</IsTestProject></PropertyGroup>
+  <ItemGroup><PackageReference Include="MSTest" Version="4.4.0" /><PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.0" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="../FabrCore.Services.Connections/FabrCore.Services.Connections.csproj" /><ProjectReference Include="../FabrCore.Host.Testing/FabrCore.Host.Testing.csproj" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="../FabrCore.Services.RemoteAgents/FabrCore.Services.RemoteAgents.csproj" /></ItemGroup>
+</Project>

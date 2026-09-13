@@ -24,8 +24,4 @@
 		<ProjectReference Include="..\FabrCore.Host\FabrCore.Host.csproj" />
 	</ItemGroup>
 
-	<ItemGroup>
-	  <PackageReference Update="MinVer" Version="8.0.0" />
-	</ItemGroup>
-
 </Project>

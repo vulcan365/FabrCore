@@ -14,7 +14,10 @@ public sealed class M002_ActionAudit : IGraphRagMigration
     public long Version => 2;
     public string Description => "Add grag.ActionAudit and its indexes for user/admin action logging";
 
-    public async Task ApplyAsync(SqlConnection connection, SqlTransaction transaction, ILogger logger)
+    public Task ApplyAsync(SqlConnection connection, SqlTransaction transaction, ILogger logger)
+        => ApplyAsync(connection, transaction, logger, CancellationToken.None);
+
+    public async Task ApplyAsync(SqlConnection connection, SqlTransaction transaction, ILogger logger, CancellationToken cancellationToken)
     {
         var schema = GraphRagSchemaInitializer.SchemaName;
 
@@ -64,13 +67,13 @@ public sealed class M002_ActionAudit : IGraphRagMigration
 
         await using (var cmd = new SqlCommand(tableDdl, connection, transaction))
         {
-            await cmd.ExecuteNonQueryAsync();
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
         }
         logger.LogDebug("M002: ActionAudit table ensured");
 
         await using (var cmd = new SqlCommand(indexDdl, connection, transaction))
         {
-            await cmd.ExecuteNonQueryAsync();
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
         }
         logger.LogDebug("M002: ActionAudit indexes ensured");
     }

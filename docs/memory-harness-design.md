@@ -176,4 +176,4 @@ same service when the host chooses to do so.
   recovery validation remain follow-up work. No indefinite-execution guarantee is implied.
 
 See the [evaluation console](../src/FabrCore.Services.Memory.EvalConsole/README.md) and
-[benchmark checkpoint](memory-eval-status.md) for reproducible runs and measured limits.
+[benchmark checkpoint](evals/memory-eval-status.md) for reproducible runs and measured limits.

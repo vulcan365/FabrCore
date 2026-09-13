@@ -29,8 +29,4 @@
 		<InternalsVisibleTo Include="FabrCore.Services.Microsoft365Copilot.Tests" />
 	</ItemGroup>
 
-	<ItemGroup>
-	  <PackageReference Update="MinVer" Version="8.0.0" />
-	</ItemGroup>
-
 </Project>

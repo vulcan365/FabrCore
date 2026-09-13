@@ -11,10 +11,10 @@ public sealed class M007_IngestionPerformanceMetrics : IGraphRagMigration
     public long Version => 7;
     public string Description => "Add phase-level ingestion performance metrics";
 
-    public async Task ApplyAsync(
-        SqlConnection connection,
-        SqlTransaction transaction,
-        ILogger logger)
+    public Task ApplyAsync(SqlConnection connection, SqlTransaction transaction, ILogger logger)
+        => ApplyAsync(connection, transaction, logger, CancellationToken.None);
+
+    public async Task ApplyAsync(SqlConnection connection, SqlTransaction transaction, ILogger logger, CancellationToken cancellationToken)
     {
         var schema = GraphRagSchemaInitializer.SchemaName;
         var ddl = $$"""
@@ -46,7 +46,7 @@ public sealed class M007_IngestionPerformanceMetrics : IGraphRagMigration
             """;
 
         await using var command = new SqlCommand(ddl, connection, transaction);
-        await command.ExecuteNonQueryAsync();
+        await command.ExecuteNonQueryAsync(cancellationToken);
         logger.LogDebug("M007: ingestion performance metric columns ensured");
     }
 }

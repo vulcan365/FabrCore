@@ -5,11 +5,13 @@ param(
     [switch]$Pack = $true,
     [Alias('LocalFeed')][string]$OutputDirectory,
     [string]$Version,
+    [string]$ResultsDirectory = (Join-Path $PSScriptRoot "../artifacts/test-results/offline"),
     [switch]$DryRun
 )
 . (Join-Path $PSScriptRoot 'Build-Common.ps1')
 if (-not $OutputDirectory) { $OutputDirectory = Get-DefaultPackageFeed }
 $OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)
+$ResultsDirectory = [IO.Path]::GetFullPath($ResultsDirectory)
 if (-not $Version) { $Version = Get-NextLocalPackageVersion -LocalFeed $OutputDirectory }
 Assert-PackageVersion $Version
 Write-Host "Package version: $Version"
@@ -33,10 +35,10 @@ try {
     Invoke-Dotnet (@('build', $FabrCoreBuild.Solution, '-c', $Configuration, '--no-restore') + $versionArgs)
     if (-not $SkipTests) {
         foreach ($project in $FabrCoreBuild.VSTestProjects) {
-            Invoke-Dotnet @('test', $project, '-c', $Configuration, '--no-build', '--no-restore', '--filter', $FabrCoreBuild.OfflineTestFilter)
+            Invoke-Dotnet @('test', $project, '-c', $Configuration, '--no-build', '--no-restore', '--filter', $FabrCoreBuild.OfflineTestFilter, '--logger', 'trx', '--results-directory', (Join-Path $ResultsDirectory ([IO.Path]::GetFileNameWithoutExtension($project))))
         }
         foreach ($project in $FabrCoreBuild.TestingPlatformProjects) {
-            Invoke-Dotnet @('run', '--project', $project, '-c', $Configuration, '--no-build', '--no-restore', '--', '--filter', $FabrCoreBuild.OfflineTestFilter)
+            Invoke-Dotnet @('run', '--project', $project, '-c', $Configuration, '--no-build', '--no-restore', '--', '--filter', $FabrCoreBuild.OfflineTestFilter, '--report-trx', '--results-directory', (Join-Path $ResultsDirectory ([IO.Path]::GetFileNameWithoutExtension($project))))
         }
     }
     if ($Pack) {

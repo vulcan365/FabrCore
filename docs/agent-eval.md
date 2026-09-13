@@ -428,13 +428,13 @@ general claims about model performance.
 For example, beginning/end previews passed 24/24 strict checks on the late-correction fixture
 but only 13/24 on the middle-fact fixture. Full bounded bodies passed 48/48 across both;
 split windows passed 37/48. The smaller returned context on missed questions was lost
-coverage, not a useful efficiency gain. See the [experiment record](memory-chunk-windows-experiment.md).
+coverage, not a useful efficiency gain. See the [experiment record](evals/memory-chunk-windows-experiment.md).
 
 The first accepted version-2 ordinary matrix passed 208/208 checks across two repetitions
 per entry. That total combined 86 question checks, two compaction checks, and 120 ingestion/
 lifecycle checks. It is not 208 independent correct answers. Harness entries scored final
 answers while other entries scored retrieved content, so their token totals were not
-competing efficiency scores. See [the checkpoint](memory-eval-status.md).
+competing efficiency scores. See [the checkpoint](evals/memory-eval-status.md).
 
 The compaction test was strengthened to require actual history reduction and retention of
 a checkpoint from the discarded prefix. Retaining a fact already present in the untouched
@@ -646,7 +646,7 @@ Reference files:
 - [Chat measurements](../src/FabrCore.Services.Memory.EvalConsole/Measurements.cs) and [embedding measurements](../src/FabrCore.Services.Memory.EvalConsole/MeasuredEmbeddings.cs)
 - [Comparison rules](../src/FabrCore.Services.Memory.EvalConsole/ReportComparison.cs)
 - [Matrix runner](../scripts/Run-MemoryEvals.ps1) and [baseline registry](../src/FabrCore.Services.Memory.EvalConsole/baselines.json)
-- [Memory results and limitations](memory-eval-status.md)
+- [Memory results and limitations](evals/memory-eval-status.md)
 - [Architecture review](memory-harness-design.md) and [frozen defaults](memory-release-defaults.md)
 
 ## 15. Handoff checklist

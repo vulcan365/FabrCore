@@ -49,4 +49,11 @@ public interface IGraphRagMigration
     /// transaction to roll back and startup to fail.
     /// </summary>
     Task ApplyAsync(SqlConnection connection, SqlTransaction transaction, ILogger logger);
+
+    /// <summary>Apply with cancellation. Existing implementations retain the original contract.</summary>
+    Task ApplyAsync(SqlConnection connection, SqlTransaction transaction, ILogger logger, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ApplyAsync(connection, transaction, logger);
+    }
 }

@@ -16,6 +16,46 @@ namespace FabrCore.Host.Tests;
 [TestClass, DoNotParallelize, TestCategory("SqlMode")]
 public sealed class OperationalSqlTests
 {
+    [TestMethod]
+    public async Task MonitoringPersistsPagesAndSharedIdentityAcrossProviderRestart()
+    {
+        var config = new ConfigurationBuilder().Build();
+        using var monitor = new SqlAgentMessageMonitor(Database(), config, new(), NullLogger<SqlAgentMessageMonitor>.Instance, NullLogger<InMemoryAgentMessageMonitor>.Instance);
+        var trace = Guid.NewGuid().ToString("N");
+        for (var i = 0; i < 1105; i++)
+            Assert.IsTrue(monitor.RecordMessageAsync(new() { AgentHandle = "monitor-test:agent", TraceId = trace, Message = i.ToString() }).IsCompletedSuccessfully);
+        await monitor.StartAsync(CancellationToken.None);
+        try
+        {
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(40));
+            while ((await monitor.GetHealthAsync(deadline.Token)).GetProperty("queuedRecords").GetInt64() != 0) await Task.Delay(100, deadline.Token);
+            using var restarted = new SqlAgentMessageMonitor(Database(), config, new(), NullLogger<SqlAgentMessageMonitor>.Instance, NullLogger<InMemoryAgentMessageMonitor>.Instance);
+            Assert.AreEqual((await monitor.GetHealthAsync()).GetProperty("sourceId").GetString(), (await restarted.GetHealthAsync()).GetProperty("sourceId").GetString());
+            var query = new FabrCore.Core.Monitoring.MonitorQuery { TraceId = trace, Principal = "monitor-test", Limit = 100 };
+            var ids = new HashSet<string>();
+            FabrCore.Core.Monitoring.MonitorPage page;
+            do
+            {
+                page = await restarted.QueryAsync(query, deadline.Token);
+                Assert.IsFalse(page.Gap);
+                foreach (var row in page.Items) Assert.IsTrue(ids.Add(row.Id));
+                query.Cursor = page.NextCursor;
+            } while (page.HasMore);
+            Assert.AreEqual(1105, ids.Count);
+        }
+        finally { await monitor.StopAsync(CancellationToken.None); }
+    }
+
+    [TestMethod]
+    public async Task MonitoringSaturationDropsWithoutWaitingForSql()
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> { ["FabrCore:Monitoring:QueueRecords"] = "4" }).Build();
+        using var monitor = new SqlAgentMessageMonitor(Database(), config, new(), NullLogger<SqlAgentMessageMonitor>.Instance, NullLogger<InMemoryAgentMessageMonitor>.Instance);
+        for (var i = 0; i < 20; i++) Assert.IsTrue(monitor.RecordMessageAsync(new() { AgentHandle = "saturated:agent" }).IsCompletedSuccessfully);
+        var health = await monitor.GetHealthAsync();
+        Assert.AreEqual(4L, health.GetProperty("queuedRecords").GetInt64());
+        Assert.AreEqual(16L, health.GetProperty("droppedRecords").GetInt64());
+    }
     private static string? connectionString;
     private static string? databaseName;
     private static string? masterString;

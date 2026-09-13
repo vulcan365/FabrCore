@@ -22,6 +22,6 @@ public sealed class CapabilityController(
     [HttpGet]
     public IActionResult Get()
     {
-        return Ok(FabrCore.Host.Services.ClusterCapabilityFactory.Create(services.GetRequiredService<FabrCore.Core.FabrCoreFeatureState>(), blueprintExpanders, remoteAdministrationOptions.Value));
+        return Ok(FabrCore.Host.Services.ClusterCapabilityFactory.Create(services.GetRequiredService<FabrCore.Core.FabrCoreFeatureState>(), blueprintExpanders, remoteAdministrationOptions.Value, services));
     }
 }

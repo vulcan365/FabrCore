@@ -49,6 +49,8 @@ public sealed class CloudConfigurationEnvelope
 /// <summary>One principal-scoped blueprint delivered by a cloud configuration server.</summary>
 public sealed class CloudBlueprintDeployment
 {
+    public string? DeploymentId { get; set; }
+    public string ApplyMode { get; set; } = "ensure";
     public string PrincipalId { get; set; } = string.Empty;
     public FabrCoreBlueprint Blueprint { get; set; } = new();
     public bool ApplyOnRefresh { get; set; } = true;

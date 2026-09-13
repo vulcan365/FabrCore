@@ -153,7 +153,7 @@ public class DatabaseModeTests
         }
     }
 
-    private static WebApplication BuildHost(string environment,string? connection=null)
+    internal static WebApplication BuildHost(string environment,string? connection=null, bool autoInitialize=true, Action<IServiceCollection>? configureServices=null)
     {
         var builder=WebApplication.CreateBuilder(new WebApplicationOptions {EnvironmentName=environment,ApplicationName=typeof(FabrCoreHostExtensions).Assembly.GetName().Name});
         builder.Configuration.Sources.Clear();
@@ -162,9 +162,11 @@ public class DatabaseModeTests
             ["FabrCore:Host:AllowedWebSocketOrigins:0"]="http://localhost"
         });
         if(connection is not null) builder.Configuration["ConnectionStrings:FabrCore"]=connection;
+        builder.Configuration["FabrCore:Database:AutoInitialize"] = autoInitialize.ToString();
         builder.WebHost.UseTestServer();
         builder.Logging.ClearProviders();
         builder.AddFabrCoreServer(new FabrCoreServerOptions { AdditionalAssemblies=[typeof(DatabaseModeEchoAgent).Assembly] }.UseConfigurationStore<TestConfigurationStore>());
+        configureServices?.Invoke(builder.Services);
         var app=builder.Build();
         app.UseFabrCoreServer();
         return app;

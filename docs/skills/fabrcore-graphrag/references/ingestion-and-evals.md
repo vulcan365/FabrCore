@@ -165,7 +165,7 @@ validation is complete. Remaining work, in order:
 5. Test mixed-document sustained load, tail latency, SQL overlap/races and recovery.
 6. Run final regressions, select defaults explicitly, and document remaining limits.
 
-In the source repository, [eval-status.md](../../../eval-status.md) holds the exact
+In the source repository, [eval-status.md](https://github.com/vulcan365/FabrCore/blob/main/docs/evals/eval-status.md) holds the exact
 run IDs, incomplete-control exclusion, commands and full handoff. It is supplementary:
 the integration guidance here is usable when the skill is distributed alone. The
 reported test count is a checkpoint, not a claim that tests ran during skill publication.

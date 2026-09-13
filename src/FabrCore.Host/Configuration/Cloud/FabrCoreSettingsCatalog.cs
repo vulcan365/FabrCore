@@ -137,6 +137,9 @@ public sealed class FabrCoreSettingsCatalog
         new("ConnectionStrings", "section", null,
             "FabrCore SQL connection and optional feature connection overrides. Read at service registration.",
             SettingsApplyMode.RestartRequired, IsSection: true),
+        new("FabrCore:DataProtection", "section", null,
+            "Credential protection: Mode (Auto, Ephemeral, SqlServer, Custom), stable ApplicationName, CertificatePath/CertificatePassword, and PreviousCertificates. Auto uses ephemeral keys for memory storage or encrypted SQL keys for SQL persistence. Secrets remain host-managed.",
+            SettingsApplyMode.RestartRequired, IsSection: true),
 
         // --- Behavioural, but consumed through IOptions<T> and frozen at startup. ---
         new("FabrCore:Host", "section", null,

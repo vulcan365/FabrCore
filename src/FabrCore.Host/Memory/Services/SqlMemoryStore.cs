@@ -138,7 +138,7 @@ internal partial class SqlMemoryStore : IMemoryStore
         var connection = lease.Connection;
 
         var sql = $"""
-            UPDATE {SchemaName}.MemoryEntity
+            UPDATE target
             SET Name = @name,
                 EntityType = @entityType,
                 Description = @description,
@@ -147,6 +147,7 @@ internal partial class SqlMemoryStore : IMemoryStore
                 Metadata = @metadata,
                 UpdatedAt = SYSUTCDATETIME()
             OUTPUT INSERTED.UpdatedAt
+            FROM {SchemaName}.MemoryEntity AS target WITH (INDEX(IX_MemoryEntity_Scope_Name_Type))
             WHERE ScopeKey = @scopeKey AND EntityId = @entityId
             """;
 
@@ -206,7 +207,7 @@ internal partial class SqlMemoryStore : IMemoryStore
                 await cmd.ExecuteNonQueryAsync(ct);
             }
 
-            var deleteEntitySql = $"DELETE FROM {SchemaName}.MemoryEntity WHERE EntityId = @entityId AND ScopeKey = @scopeKey";
+            var deleteEntitySql = $"DELETE target FROM {SchemaName}.MemoryEntity AS target WITH (INDEX(IX_MemoryEntity_Scope_Name_Type)) WHERE EntityId = @entityId AND ScopeKey = @scopeKey";
             await using (var cmd = new SqlCommand(deleteEntitySql, connection, transaction))
             {
                 cmd.Parameters.AddWithValue("@entityId", entityId);
@@ -695,12 +696,8 @@ internal partial class SqlMemoryStore : IMemoryStore
         return result is DBNull or null ? null : (string)result;
     }
 
-    public async Task UpsertIndexContentAsync(string scopeKey, string indexJson, CancellationToken ct = default)
-    {
-        await using var lease = await OpenConnectionAsync(ct);
-        var connection = lease.Connection;
-        await UpsertIndexContentCoreAsync(connection, ActiveTransaction, scopeKey, indexJson, ct);
-    }
+    public Task UpsertIndexContentAsync(string scopeKey, string indexJson, CancellationToken ct = default)
+        => ModifyIndexContentAsync(scopeKey, _ => indexJson, ct);
 
     public async Task ModifyIndexContentAsync(
         string scopeKey, Func<string?, string?> transform, CancellationToken ct = default)
@@ -714,13 +711,9 @@ internal partial class SqlMemoryStore : IMemoryStore
         var transaction = ActiveTransaction ?? ownedTransaction!;
         try
         {
-            await using (var lockCmd = new SqlCommand(
-                "DECLARE @r int; EXEC @r = sp_getapplock @Resource = @resource, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 15000; IF @r < 0 THROW 51000, 'Memory index lock unavailable', 1;",
-                connection, transaction))
-            {
-                lockCmd.Parameters.AddWithValue("@resource", $"mem-index-{scopeKey}");
-                await lockCmd.ExecuteNonQueryAsync(ct);
-            }
+            // Use the facade's collation-aware scope lock too, avoiding lock-order inversion
+            // between a direct index update and an index update inside a memory mutation.
+            await AcquireMutationLockAsync(connection, transaction, scopeKey, ct);
 
             string? currentJson;
             var selectSql = $"""
@@ -754,21 +747,21 @@ internal partial class SqlMemoryStore : IMemoryStore
         var metadataJson = JsonSerializer.Serialize(
             new Dictionary<string, string> { [MemoryVersionKey] = MemoryVersionValue }, JsonOptions);
 
-        // MERGE with HOLDLOCK so two concurrent writers cannot both take the insert branch.
-        var mergeSql = $"""
-            MERGE {SchemaName}.MemoryEntity WITH (HOLDLOCK) AS target
-            USING (SELECT @scopeKey AS ScopeKey) AS source
-            ON target.ScopeKey = source.ScopeKey
-               AND target.Name = '{IndexSentinelName}' AND target.EntityType = '{IndexEntityType}'
-            WHEN MATCHED THEN
-                UPDATE SET Content = @content, UpdatedAt = SYSUTCDATETIME()
-            WHEN NOT MATCHED THEN
-                INSERT (EntityId, ScopeKey, Name, EntityType, Description, Content, Visibility, Metadata)
+        // The scope application lock serializes every index writer. A HOLDLOCK MERGE on
+        // this graph heap can request an object X lock while readers wait on its rows,
+        // deadlocking unrelated scopes. Seek the existing natural-key index instead.
+        var upsertSql = $"""
+            UPDATE target
+            SET Content = @content, UpdatedAt = SYSUTCDATETIME()
+            FROM {SchemaName}.MemoryEntity AS target WITH (INDEX(IX_MemoryEntity_Scope_Name_Type))
+            WHERE ScopeKey = @scopeKey AND Name = '{IndexSentinelName}' AND EntityType = '{IndexEntityType}';
+            IF @@ROWCOUNT = 0
+                INSERT INTO {SchemaName}.MemoryEntity (EntityId, ScopeKey, Name, EntityType, Description, Content, Visibility, Metadata)
                 VALUES (NEWID(), @scopeKey, '{IndexSentinelName}', '{IndexEntityType}',
                         'Hot layer memory index', @content, 'Hot', @metadata);
             """;
 
-        await using var cmd = new SqlCommand(mergeSql, connection, transaction);
+        await using var cmd = new SqlCommand(upsertSql, connection, transaction);
         cmd.Parameters.AddWithValue("@scopeKey", scopeKey);
         cmd.Parameters.AddWithValue("@content", indexJson);
         cmd.Parameters.AddWithValue("@metadata", metadataJson);

@@ -1,0 +1,75 @@
+#nullable enable
+FabrCore.Client.WebSocket.FabrCoreWebSocketClient
+FabrCore.Client.WebSocket.FabrCoreWebSocketClient.AcknowledgeAsync(long sequence, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Client.WebSocket.FabrCoreWebSocketClient.ClientId.get -> string!
+FabrCore.Client.WebSocket.FabrCoreWebSocketClient.ConnectAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Client.WebSocket.FabrCoreWebSocketClient.DisposeAsync() -> System.Threading.Tasks.ValueTask
+FabrCore.Client.WebSocket.FabrCoreWebSocketClient.FabrCoreWebSocketClient(System.Net.Http.HttpClient! httpClient, FabrCore.Client.WebSocket.FabrCoreWebSocketClientOptions! options, FabrCore.Client.WebSocket.IFabrCoreWebSocketCheckpointStore? checkpointStore = null, Microsoft.Extensions.Logging.ILogger<FabrCore.Client.WebSocket.FabrCoreWebSocketClient!>? logger = null) -> void
+FabrCore.Client.WebSocket.FabrCoreWebSocketClient.GetAgentHealthAsync(string! handle, FabrCore.Core.HealthDetailLevel detailLevel = FabrCore.Core.HealthDetailLevel.Basic, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.AgentHealthStatus!>!
+FabrCore.Client.WebSocket.FabrCoreWebSocketClient.GetSharedAgentsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<FabrCore.Core.AgentInfo!>!>!
+FabrCore.Client.WebSocket.FabrCoreWebSocketClient.GetTrackedAgentsAsync(bool activate = false, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<FabrCore.Core.TrackedAgentInfo!>!>!
+FabrCore.Client.WebSocket.FabrCoreWebSocketClient.IsAgentTrackedAsync(string! handle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Client.WebSocket.FabrCoreWebSocketClient.ReadDeliveriesAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<FabrCore.Client.WebSocket.FabrCoreWebSocketDelivery!>!
+FabrCore.Client.WebSocket.FabrCoreWebSocketClient.ResetAgentAsync(string! handle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.AgentHealthStatus!>!
+FabrCore.Client.WebSocket.FabrCoreWebSocketClient.ResyncRequired -> System.EventHandler<FabrCore.Client.WebSocket.FabrCoreWebSocketGapEventArgs!>?
+FabrCore.Client.WebSocket.FabrCoreWebSocketClient.SendEventAsync(FabrCore.Core.EventMessage! message, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.WebSockets.FabrCoreWebSocketAccepted!>!
+FabrCore.Client.WebSocket.FabrCoreWebSocketClient.SendMessageAndReceiveAsync(FabrCore.Core.AgentMessage! message, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.AgentMessage!>!
+FabrCore.Client.WebSocket.FabrCoreWebSocketClient.SendMessageAsync(FabrCore.Core.AgentMessage! message, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.WebSockets.FabrCoreWebSocketAccepted!>!
+FabrCore.Client.WebSocket.FabrCoreWebSocketClientOptions
+FabrCore.Client.WebSocket.FabrCoreWebSocketClientOptions.ClientId.get -> string!
+FabrCore.Client.WebSocket.FabrCoreWebSocketClientOptions.ClientId.init -> void
+FabrCore.Client.WebSocket.FabrCoreWebSocketClientOptions.FabrCoreWebSocketClientOptions() -> void
+FabrCore.Client.WebSocket.FabrCoreWebSocketClientOptions.HostUri.get -> System.Uri!
+FabrCore.Client.WebSocket.FabrCoreWebSocketClientOptions.HostUri.init -> void
+FabrCore.Client.WebSocket.FabrCoreWebSocketClientOptions.InitialReconnectDelay.get -> System.TimeSpan
+FabrCore.Client.WebSocket.FabrCoreWebSocketClientOptions.InitialReconnectDelay.init -> void
+FabrCore.Client.WebSocket.FabrCoreWebSocketClientOptions.MaximumReconnectDelay.get -> System.TimeSpan
+FabrCore.Client.WebSocket.FabrCoreWebSocketClientOptions.MaximumReconnectDelay.init -> void
+FabrCore.Client.WebSocket.FabrCoreWebSocketClientOptions.TicketPath.get -> System.Uri!
+FabrCore.Client.WebSocket.FabrCoreWebSocketClientOptions.TicketPath.init -> void
+FabrCore.Client.WebSocket.FabrCoreWebSocketClientOptions.WebSocketPath.get -> System.Uri!
+FabrCore.Client.WebSocket.FabrCoreWebSocketClientOptions.WebSocketPath.init -> void
+FabrCore.Client.WebSocket.FabrCoreWebSocketDelivery
+FabrCore.Client.WebSocket.FabrCoreWebSocketDelivery.<Clone>$() -> FabrCore.Client.WebSocket.FabrCoreWebSocketDelivery!
+FabrCore.Client.WebSocket.FabrCoreWebSocketDelivery.Deconstruct(out long Sequence, out string! DeliveryId, out FabrCore.Core.AgentMessage! Message) -> void
+FabrCore.Client.WebSocket.FabrCoreWebSocketDelivery.DeliveryId.get -> string!
+FabrCore.Client.WebSocket.FabrCoreWebSocketDelivery.DeliveryId.init -> void
+FabrCore.Client.WebSocket.FabrCoreWebSocketDelivery.Equals(FabrCore.Client.WebSocket.FabrCoreWebSocketDelivery? other) -> bool
+FabrCore.Client.WebSocket.FabrCoreWebSocketDelivery.FabrCoreWebSocketDelivery(long Sequence, string! DeliveryId, FabrCore.Core.AgentMessage! Message) -> void
+FabrCore.Client.WebSocket.FabrCoreWebSocketDelivery.Message.get -> FabrCore.Core.AgentMessage!
+FabrCore.Client.WebSocket.FabrCoreWebSocketDelivery.Message.init -> void
+FabrCore.Client.WebSocket.FabrCoreWebSocketDelivery.Sequence.get -> long
+FabrCore.Client.WebSocket.FabrCoreWebSocketDelivery.Sequence.init -> void
+FabrCore.Client.WebSocket.FabrCoreWebSocketException
+FabrCore.Client.WebSocket.FabrCoreWebSocketException.Code.get -> string!
+FabrCore.Client.WebSocket.FabrCoreWebSocketException.FabrCoreWebSocketException(string! code, string! message, bool retryable) -> void
+FabrCore.Client.WebSocket.FabrCoreWebSocketException.Retryable.get -> bool
+FabrCore.Client.WebSocket.FabrCoreWebSocketGapEventArgs
+FabrCore.Client.WebSocket.FabrCoreWebSocketGapEventArgs.FabrCoreWebSocketGapEventArgs(FabrCore.Core.WebSockets.FabrCoreWebSocketGap! gap) -> void
+FabrCore.Client.WebSocket.FabrCoreWebSocketGapEventArgs.Gap.get -> FabrCore.Core.WebSockets.FabrCoreWebSocketGap!
+FabrCore.Client.WebSocket.IFabrCoreWebSocketCheckpointStore
+FabrCore.Client.WebSocket.IFabrCoreWebSocketCheckpointStore.GetCheckpointAsync(string! clientId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<long?>
+FabrCore.Client.WebSocket.IFabrCoreWebSocketCheckpointStore.SetCheckpointAsync(string! clientId, long sequence, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+FabrCore.Client.WebSocket.IFabrCoreWebSocketClient
+FabrCore.Client.WebSocket.IFabrCoreWebSocketClient.AcknowledgeAsync(long sequence, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Client.WebSocket.IFabrCoreWebSocketClient.ClientId.get -> string!
+FabrCore.Client.WebSocket.IFabrCoreWebSocketClient.ConnectAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Client.WebSocket.IFabrCoreWebSocketClient.GetAgentHealthAsync(string! handle, FabrCore.Core.HealthDetailLevel detailLevel = FabrCore.Core.HealthDetailLevel.Basic, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.AgentHealthStatus!>!
+FabrCore.Client.WebSocket.IFabrCoreWebSocketClient.GetSharedAgentsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<FabrCore.Core.AgentInfo!>!>!
+FabrCore.Client.WebSocket.IFabrCoreWebSocketClient.GetTrackedAgentsAsync(bool activate = false, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<FabrCore.Core.TrackedAgentInfo!>!>!
+FabrCore.Client.WebSocket.IFabrCoreWebSocketClient.IsAgentTrackedAsync(string! handle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Client.WebSocket.IFabrCoreWebSocketClient.ReadDeliveriesAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<FabrCore.Client.WebSocket.FabrCoreWebSocketDelivery!>!
+FabrCore.Client.WebSocket.IFabrCoreWebSocketClient.ResetAgentAsync(string! handle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.AgentHealthStatus!>!
+FabrCore.Client.WebSocket.IFabrCoreWebSocketClient.ResyncRequired -> System.EventHandler<FabrCore.Client.WebSocket.FabrCoreWebSocketGapEventArgs!>?
+FabrCore.Client.WebSocket.IFabrCoreWebSocketClient.SendEventAsync(FabrCore.Core.EventMessage! message, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.WebSockets.FabrCoreWebSocketAccepted!>!
+FabrCore.Client.WebSocket.IFabrCoreWebSocketClient.SendMessageAndReceiveAsync(FabrCore.Core.AgentMessage! message, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.AgentMessage!>!
+FabrCore.Client.WebSocket.IFabrCoreWebSocketClient.SendMessageAsync(FabrCore.Core.AgentMessage! message, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.WebSockets.FabrCoreWebSocketAccepted!>!
+FabrCore.Client.WebSocket.InMemoryFabrCoreWebSocketCheckpointStore
+FabrCore.Client.WebSocket.InMemoryFabrCoreWebSocketCheckpointStore.GetCheckpointAsync(string! clientId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<long?>
+FabrCore.Client.WebSocket.InMemoryFabrCoreWebSocketCheckpointStore.InMemoryFabrCoreWebSocketCheckpointStore() -> void
+FabrCore.Client.WebSocket.InMemoryFabrCoreWebSocketCheckpointStore.SetCheckpointAsync(string! clientId, long sequence, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+override FabrCore.Client.WebSocket.FabrCoreWebSocketDelivery.Equals(object? obj) -> bool
+override FabrCore.Client.WebSocket.FabrCoreWebSocketDelivery.GetHashCode() -> int
+override FabrCore.Client.WebSocket.FabrCoreWebSocketDelivery.ToString() -> string!
+static FabrCore.Client.WebSocket.FabrCoreWebSocketDelivery.operator !=(FabrCore.Client.WebSocket.FabrCoreWebSocketDelivery? left, FabrCore.Client.WebSocket.FabrCoreWebSocketDelivery? right) -> bool
+static FabrCore.Client.WebSocket.FabrCoreWebSocketDelivery.operator ==(FabrCore.Client.WebSocket.FabrCoreWebSocketDelivery? left, FabrCore.Client.WebSocket.FabrCoreWebSocketDelivery? right) -> bool

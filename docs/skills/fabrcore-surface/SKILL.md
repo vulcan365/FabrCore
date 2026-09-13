@@ -1,9 +1,23 @@
 ---
 name: fabrcore-surface
 description: "Build, use, extend, or troubleshoot FabrCore.Surface, the FabrCore Razor class library for Adaptive Card rendering, SurfaceChatLink, SurfaceNotify, command-center chat, unread notifications, and Blazor app integration."
+metadata:
+  version: 2.0.0
 ---
 
 # FabrCore Surface
+
+## Cloud-managed blueprints and diagnostic UI
+
+FabrCore 2.0 keeps squads as an optional blueprint extension. Preserve top-level
+extension JSON when importing, cloning or editing definitions. Surface's expander
+implements `IBlueprintPreviewExpander` for effect-free management previews; installing
+Surface does not make it a dependency of the cloud protocol. Use the
+[cloud administration skill](../fabrcore-cloud-administration/SKILL.md) for conditional
+CRUD, revision/digest-pinned ensure/update deployment and deployment results.
+Insights owns the operator management experience. Diagnostic Ask about this agent
+uses privileged admin sessions, not SurfaceChatLink or ordinary `_admin` messages.
+
 
 ## FabrCore 2.0 baseline
 

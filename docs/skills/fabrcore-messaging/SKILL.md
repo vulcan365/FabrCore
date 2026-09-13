@@ -10,9 +10,23 @@ description: >
   and fabrcore-principal-delivery for SendToUserAsync, durable proactive/out-of-turn
   agent-to-principal delivery, external relay providers, endpoint context, or delivery outboxes.
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
+metadata:
+  version: 2.0.0
 ---
 
 # FabrCore Messaging & Access Control
+
+## Reserved diagnostic channels in 2.0
+
+Ordinary chat, event, WebSocket and agent-to-agent ingress must reject `_admin` and
+`_debug` (case-insensitive). A channel, header or message argument cannot grant
+administration access. `_debug` has no defined behavior. Authorized diagnostics use
+the separate administration API and internal grain/proxy dispatch, own busy flag,
+model session and reply path. Use the
+[cloud administration skill](../fabrcore-cloud-administration/SKILL.md) for those
+sessions. Management test messages/events intentionally use normal behavior and
+must remain explicit operations separate from read-only diagnostic chat.
+
 
 ## FabrCore 2.0 baseline
 

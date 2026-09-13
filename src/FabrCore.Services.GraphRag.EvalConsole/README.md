@@ -36,7 +36,7 @@ dotnet run --project src/FabrCore.Services.GraphRag.EvalConsole -- run --model p
 
 The model's effective serving limit must fit both input and output, including
 classification prompts. Smaller source sections do not by themselves reduce the
-separate document classification prompt. See the [Phi follow-up evaluation](../../docs/graphrag-phi4-mini-reasoning-followup-2026-09-11.md)
+separate document classification prompt. See the [Phi follow-up evaluation](../../docs/evals/graphrag-phi4-mini-reasoning-followup-2026-09-11.md)
 for measured deployment limitations and results.
 
 ## Configuration

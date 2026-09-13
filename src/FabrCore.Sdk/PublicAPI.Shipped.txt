@@ -1,0 +1,1446 @@
+#nullable enable
+FabrCore.Sdk.AgentAliasAttribute
+FabrCore.Sdk.AgentAliasAttribute.AgentAliasAttribute(string! alias) -> void
+FabrCore.Sdk.AgentAliasAttribute.Alias.get -> string!
+FabrCore.Sdk.AgentAssignment
+FabrCore.Sdk.AgentAssignment.AgentAssignment() -> void
+FabrCore.Sdk.AgentAssignment.AgentId.get -> string!
+FabrCore.Sdk.AgentAssignment.AgentId.set -> void
+FabrCore.Sdk.AgentAssignment.Capability.get -> string!
+FabrCore.Sdk.AgentAssignment.Capability.set -> void
+FabrCore.Sdk.AgentAssignment.Rationale.get -> string!
+FabrCore.Sdk.AgentAssignment.Rationale.set -> void
+FabrCore.Sdk.AgentAssignment.WorkItemId.get -> string!
+FabrCore.Sdk.AgentAssignment.WorkItemId.set -> void
+FabrCore.Sdk.AgentAttributionPipelinePolicy
+FabrCore.Sdk.AgentAttributionPipelinePolicy.AgentAttributionPipelinePolicy() -> void
+FabrCore.Sdk.AgentBlueprintRequest
+FabrCore.Sdk.AgentBlueprintRequest.AgentBlueprintRequest() -> void
+FabrCore.Sdk.AgentBlueprintRequest.Agents.get -> System.Collections.Generic.List<FabrCore.Core.AgentConfiguration!>!
+FabrCore.Sdk.AgentBlueprintRequest.Agents.set -> void
+FabrCore.Sdk.AgentBlueprintRequest.Name.get -> string?
+FabrCore.Sdk.AgentBlueprintRequest.Name.set -> void
+FabrCore.Sdk.AgentBlueprintRequest.Version.get -> string?
+FabrCore.Sdk.AgentBlueprintRequest.Version.set -> void
+FabrCore.Sdk.AgentBlueprintResponse
+FabrCore.Sdk.AgentBlueprintResponse.AgentBlueprintResponse() -> void
+FabrCore.Sdk.AgentBlueprintResponse.FailureCount.get -> int
+FabrCore.Sdk.AgentBlueprintResponse.FailureCount.set -> void
+FabrCore.Sdk.AgentBlueprintResponse.Name.get -> string?
+FabrCore.Sdk.AgentBlueprintResponse.Name.set -> void
+FabrCore.Sdk.AgentBlueprintResponse.Results.get -> System.Collections.Generic.List<FabrCore.Core.AgentHealthStatus!>!
+FabrCore.Sdk.AgentBlueprintResponse.Results.set -> void
+FabrCore.Sdk.AgentBlueprintResponse.SuccessCount.get -> int
+FabrCore.Sdk.AgentBlueprintResponse.SuccessCount.set -> void
+FabrCore.Sdk.AgentBlueprintResponse.TotalRequested.get -> int
+FabrCore.Sdk.AgentBlueprintResponse.TotalRequested.set -> void
+FabrCore.Sdk.AgentBlueprintResponse.Version.get -> string?
+FabrCore.Sdk.AgentBlueprintResponse.Version.set -> void
+FabrCore.Sdk.AgentRoster
+FabrCore.Sdk.AgentRoster.AgentRoster() -> void
+FabrCore.Sdk.AgentRoster.Available.get -> System.Collections.Generic.IReadOnlyList<FabrCore.Sdk.AgentRosterEntry!>!
+FabrCore.Sdk.AgentRoster.DescribeUnavailable() -> string!
+FabrCore.Sdk.AgentRoster.Entries.get -> System.Collections.Generic.IReadOnlyList<FabrCore.Sdk.AgentRosterEntry!>!
+FabrCore.Sdk.AgentRoster.Entries.init -> void
+FabrCore.Sdk.AgentRoster.Unavailable.get -> System.Collections.Generic.IReadOnlyList<FabrCore.Sdk.AgentRosterEntry!>!
+FabrCore.Sdk.AgentRosterBuilder
+FabrCore.Sdk.AgentRosterEntry
+FabrCore.Sdk.AgentRosterEntry.AgentRosterEntry() -> void
+FabrCore.Sdk.AgentRosterEntry.Description.get -> string!
+FabrCore.Sdk.AgentRosterEntry.Description.init -> void
+FabrCore.Sdk.AgentRosterEntry.Handle.get -> string!
+FabrCore.Sdk.AgentRosterEntry.Handle.init -> void
+FabrCore.Sdk.AgentRosterEntry.IsAvailable.get -> bool
+FabrCore.Sdk.AgentRosterEntry.Name.get -> string!
+FabrCore.Sdk.AgentRosterEntry.Name.init -> void
+FabrCore.Sdk.AgentRosterEntry.UnavailableReason.get -> string?
+FabrCore.Sdk.AgentRosterEntry.UnavailableReason.init -> void
+FabrCore.Sdk.AgentStatisticsResponse
+FabrCore.Sdk.AgentStatisticsResponse.AgentStatisticsResponse() -> void
+FabrCore.Sdk.AgentsListResponse
+FabrCore.Sdk.AgentsListResponse.Agents.get -> System.Collections.Generic.List<FabrCore.Core.AgentInfo!>!
+FabrCore.Sdk.AgentsListResponse.Agents.set -> void
+FabrCore.Sdk.AgentsListResponse.AgentsListResponse() -> void
+FabrCore.Sdk.AgentsListResponse.Count.get -> int
+FabrCore.Sdk.AgentsListResponse.Count.set -> void
+FabrCore.Sdk.ApiKeyResponse
+FabrCore.Sdk.ApiKeyResponse.ApiKeyResponse() -> void
+FabrCore.Sdk.ApiKeyResponse.Value.get -> string!
+FabrCore.Sdk.ApiKeyResponse.Value.set -> void
+FabrCore.Sdk.AuditConfigResponse
+FabrCore.Sdk.AuditConfigResponse.AuditConfigResponse() -> void
+FabrCore.Sdk.AuditConfigResponse.Categories.get -> System.Collections.Generic.Dictionary<string!, string!>!
+FabrCore.Sdk.AuditConfigResponse.Categories.set -> void
+FabrCore.Sdk.AuditConfigResponse.DefaultLevel.get -> string!
+FabrCore.Sdk.AuditConfigResponse.DefaultLevel.set -> void
+FabrCore.Sdk.AuditConfigResponse.FailedWrites.get -> long?
+FabrCore.Sdk.AuditConfigResponse.FailedWrites.set -> void
+FabrCore.Sdk.AuditConfigResponse.LastFailureUtc.get -> System.DateTimeOffset?
+FabrCore.Sdk.AuditConfigResponse.LastFailureUtc.set -> void
+FabrCore.Sdk.AuditConfigResponse.MaxBufferedEvents.get -> int
+FabrCore.Sdk.AuditConfigResponse.MaxBufferedEvents.set -> void
+FabrCore.Sdk.AuditConfigResponse.ProviderType.get -> string!
+FabrCore.Sdk.AuditConfigResponse.ProviderType.set -> void
+FabrCore.Sdk.AuditConfigResponse.RecordingAvailable.get -> bool
+FabrCore.Sdk.AuditConfigResponse.RecordingAvailable.set -> void
+FabrCore.Sdk.AvailableAgent
+FabrCore.Sdk.AvailableAgent.AvailableAgent() -> void
+FabrCore.Sdk.AvailableAgent.Capabilities.get -> System.Collections.Generic.List<string!>!
+FabrCore.Sdk.AvailableAgent.Capabilities.set -> void
+FabrCore.Sdk.AvailableAgent.Description.get -> string!
+FabrCore.Sdk.AvailableAgent.Description.set -> void
+FabrCore.Sdk.AvailableAgent.Id.get -> string!
+FabrCore.Sdk.AvailableAgent.Id.set -> void
+FabrCore.Sdk.AvailableAgent.Name.get -> string!
+FabrCore.Sdk.AvailableAgent.Name.set -> void
+FabrCore.Sdk.BatchEmbeddingItem
+FabrCore.Sdk.BatchEmbeddingItem.BatchEmbeddingItem() -> void
+FabrCore.Sdk.BatchEmbeddingItem.Id.get -> string!
+FabrCore.Sdk.BatchEmbeddingItem.Id.set -> void
+FabrCore.Sdk.BatchEmbeddingItem.Text.get -> string!
+FabrCore.Sdk.BatchEmbeddingItem.Text.set -> void
+FabrCore.Sdk.BatchEmbeddingRequest
+FabrCore.Sdk.BatchEmbeddingRequest.BatchEmbeddingRequest() -> void
+FabrCore.Sdk.BatchEmbeddingRequest.Items.get -> System.Collections.Generic.List<FabrCore.Sdk.BatchEmbeddingItem!>!
+FabrCore.Sdk.BatchEmbeddingRequest.Items.set -> void
+FabrCore.Sdk.BatchEmbeddingResponse
+FabrCore.Sdk.BatchEmbeddingResponse.BatchEmbeddingResponse() -> void
+FabrCore.Sdk.BatchEmbeddingResponse.Results.get -> System.Collections.Generic.List<FabrCore.Sdk.BatchEmbeddingResultItem!>!
+FabrCore.Sdk.BatchEmbeddingResponse.Results.set -> void
+FabrCore.Sdk.BatchEmbeddingResultItem
+FabrCore.Sdk.BatchEmbeddingResultItem.BatchEmbeddingResultItem() -> void
+FabrCore.Sdk.BatchEmbeddingResultItem.Dimensions.get -> int
+FabrCore.Sdk.BatchEmbeddingResultItem.Dimensions.set -> void
+FabrCore.Sdk.BatchEmbeddingResultItem.Id.get -> string!
+FabrCore.Sdk.BatchEmbeddingResultItem.Id.set -> void
+FabrCore.Sdk.BatchEmbeddingResultItem.Vector.get -> float[]!
+FabrCore.Sdk.BatchEmbeddingResultItem.Vector.set -> void
+FabrCore.Sdk.Blocker
+FabrCore.Sdk.Blocker.Blocker() -> void
+FabrCore.Sdk.Blocker.BlocksWorkItemIds.get -> System.Collections.Generic.List<string!>!
+FabrCore.Sdk.Blocker.BlocksWorkItemIds.set -> void
+FabrCore.Sdk.Blocker.Description.get -> string!
+FabrCore.Sdk.Blocker.Description.set -> void
+FabrCore.Sdk.Blocker.Id.get -> string!
+FabrCore.Sdk.Blocker.Id.set -> void
+FabrCore.Sdk.Blocker.Resolution.get -> string?
+FabrCore.Sdk.Blocker.Resolution.set -> void
+FabrCore.Sdk.Blocker.Severity.get -> string?
+FabrCore.Sdk.Blocker.Severity.set -> void
+FabrCore.Sdk.Blocker.Status.get -> string!
+FabrCore.Sdk.Blocker.Status.set -> void
+FabrCore.Sdk.ChatClientAgentExtensions
+FabrCore.Sdk.ChatClientAgentResult
+FabrCore.Sdk.ChatClientAgentResult.Agent.get -> Microsoft.Agents.AI.AIAgent!
+FabrCore.Sdk.ChatClientAgentResult.Agent.init -> void
+FabrCore.Sdk.ChatClientAgentResult.ChatClientAgentResult(FabrCore.Sdk.ChatClientAgentResult! original) -> void
+FabrCore.Sdk.ChatClientAgentResult.ChatClientAgentResult(Microsoft.Agents.AI.AIAgent! Agent, Microsoft.Agents.AI.AgentSession! Session, FabrCore.Sdk.FabrCoreChatHistoryProvider? ChatHistoryProvider = null) -> void
+FabrCore.Sdk.ChatClientAgentResult.ChatHistoryProvider.get -> FabrCore.Sdk.FabrCoreChatHistoryProvider?
+FabrCore.Sdk.ChatClientAgentResult.ChatHistoryProvider.init -> void
+FabrCore.Sdk.ChatClientAgentResult.Deconstruct(out Microsoft.Agents.AI.AIAgent! Agent, out Microsoft.Agents.AI.AgentSession! Session, out FabrCore.Sdk.FabrCoreChatHistoryProvider? ChatHistoryProvider) -> void
+FabrCore.Sdk.ChatClientAgentResult.Session.get -> Microsoft.Agents.AI.AgentSession!
+FabrCore.Sdk.ChatClientAgentResult.Session.init -> void
+FabrCore.Sdk.ChatCompletionMessageRequest
+FabrCore.Sdk.ChatCompletionMessageRequest.ChatCompletionMessageRequest() -> void
+FabrCore.Sdk.ChatCompletionMessageRequest.Content.get -> string!
+FabrCore.Sdk.ChatCompletionMessageRequest.Content.set -> void
+FabrCore.Sdk.ChatCompletionMessageRequest.Role.get -> string!
+FabrCore.Sdk.ChatCompletionMessageRequest.Role.set -> void
+FabrCore.Sdk.ChatCompletionOptions
+FabrCore.Sdk.ChatCompletionOptions.ChatCompletionOptions() -> void
+FabrCore.Sdk.ChatCompletionOptions.FrequencyPenalty.get -> float?
+FabrCore.Sdk.ChatCompletionOptions.FrequencyPenalty.set -> void
+FabrCore.Sdk.ChatCompletionOptions.MaxOutputTokens.get -> int?
+FabrCore.Sdk.ChatCompletionOptions.MaxOutputTokens.set -> void
+FabrCore.Sdk.ChatCompletionOptions.Model.get -> string!
+FabrCore.Sdk.ChatCompletionOptions.Model.set -> void
+FabrCore.Sdk.ChatCompletionOptions.PresencePenalty.get -> float?
+FabrCore.Sdk.ChatCompletionOptions.PresencePenalty.set -> void
+FabrCore.Sdk.ChatCompletionOptions.StopSequences.get -> System.Collections.Generic.List<string!>?
+FabrCore.Sdk.ChatCompletionOptions.StopSequences.set -> void
+FabrCore.Sdk.ChatCompletionOptions.Temperature.get -> float?
+FabrCore.Sdk.ChatCompletionOptions.Temperature.set -> void
+FabrCore.Sdk.ChatCompletionOptions.TopK.get -> int?
+FabrCore.Sdk.ChatCompletionOptions.TopK.set -> void
+FabrCore.Sdk.ChatCompletionOptions.TopP.get -> float?
+FabrCore.Sdk.ChatCompletionOptions.TopP.set -> void
+FabrCore.Sdk.ChatCompletionRequest
+FabrCore.Sdk.ChatCompletionRequest.ChatCompletionRequest() -> void
+FabrCore.Sdk.ChatCompletionRequest.Messages.get -> System.Collections.Generic.List<FabrCore.Sdk.ChatCompletionMessageRequest!>!
+FabrCore.Sdk.ChatCompletionRequest.Messages.set -> void
+FabrCore.Sdk.ChatCompletionRequest.Options.get -> FabrCore.Sdk.ChatCompletionOptions?
+FabrCore.Sdk.ChatCompletionRequest.Options.set -> void
+FabrCore.Sdk.ChatCompletionResponse
+FabrCore.Sdk.ChatCompletionResponse.ChatCompletionResponse() -> void
+FabrCore.Sdk.ChatCompletionResponse.Model.get -> string!
+FabrCore.Sdk.ChatCompletionResponse.Model.set -> void
+FabrCore.Sdk.ChatCompletionResponse.Text.get -> string!
+FabrCore.Sdk.ChatCompletionResponse.Text.set -> void
+FabrCore.Sdk.ChatCompletionResponse.Usage.get -> FabrCore.Sdk.ChatCompletionUsage!
+FabrCore.Sdk.ChatCompletionResponse.Usage.set -> void
+FabrCore.Sdk.ChatCompletionUsage
+FabrCore.Sdk.ChatCompletionUsage.ChatCompletionUsage() -> void
+FabrCore.Sdk.ChatCompletionUsage.InputTokens.get -> int
+FabrCore.Sdk.ChatCompletionUsage.InputTokens.set -> void
+FabrCore.Sdk.ChatCompletionUsage.OutputTokens.get -> int
+FabrCore.Sdk.ChatCompletionUsage.OutputTokens.set -> void
+FabrCore.Sdk.ChatRunSafetyCallInfo
+FabrCore.Sdk.ChatRunSafetyCallInfo.<Clone>$() -> FabrCore.Sdk.ChatRunSafetyCallInfo!
+FabrCore.Sdk.ChatRunSafetyCallInfo.ActualPromptInputTokens.get -> long
+FabrCore.Sdk.ChatRunSafetyCallInfo.ActualPromptInputTokens.init -> void
+FabrCore.Sdk.ChatRunSafetyCallInfo.ChatRunSafetyCallInfo(long ActualPromptInputTokens, long TurnCumulativeInputTokens, long MaxPromptInputTokensPerCall) -> void
+FabrCore.Sdk.ChatRunSafetyCallInfo.Deconstruct(out long ActualPromptInputTokens, out long TurnCumulativeInputTokens, out long MaxPromptInputTokensPerCall) -> void
+FabrCore.Sdk.ChatRunSafetyCallInfo.Equals(FabrCore.Sdk.ChatRunSafetyCallInfo? other) -> bool
+FabrCore.Sdk.ChatRunSafetyCallInfo.MaxPromptInputTokensPerCall.get -> long
+FabrCore.Sdk.ChatRunSafetyCallInfo.MaxPromptInputTokensPerCall.init -> void
+FabrCore.Sdk.ChatRunSafetyCallInfo.TurnCumulativeInputTokens.get -> long
+FabrCore.Sdk.ChatRunSafetyCallInfo.TurnCumulativeInputTokens.init -> void
+FabrCore.Sdk.ChatRunSafetyConfig
+FabrCore.Sdk.ChatRunSafetyConfig.<Clone>$() -> FabrCore.Sdk.ChatRunSafetyConfig!
+FabrCore.Sdk.ChatRunSafetyConfig.ChatRunSafetyConfig() -> void
+FabrCore.Sdk.ChatRunSafetyConfig.Equals(FabrCore.Sdk.ChatRunSafetyConfig? other) -> bool
+FabrCore.Sdk.ChatRunSafetyConfig.MaxPromptInputTokens.get -> int
+FabrCore.Sdk.ChatRunSafetyConfig.MaxPromptInputTokens.init -> void
+FabrCore.Sdk.ChatRunSafetyConfig.PerTurnMaxInputTokens.get -> int
+FabrCore.Sdk.ChatRunSafetyConfig.PerTurnMaxInputTokens.init -> void
+FabrCore.Sdk.ChatRunSafetyConfig.RunawayBudgetBehavior.get -> string!
+FabrCore.Sdk.ChatRunSafetyConfig.RunawayBudgetBehavior.init -> void
+FabrCore.Sdk.ChatRunSafetyConfig.StopWithDiagnostic.get -> bool
+FabrCore.Sdk.ChatRunSafetyScope
+FabrCore.Sdk.ChatRunSafetyScope.ActualPromptInputTokens.get -> long
+FabrCore.Sdk.ChatRunSafetyScope.AgentHandle.get -> string?
+FabrCore.Sdk.ChatRunSafetyScope.ApplyTo(System.Collections.Generic.Dictionary<string!, string!>! args) -> void
+FabrCore.Sdk.ChatRunSafetyScope.BeginHistoryCompaction() -> System.IDisposable!
+FabrCore.Sdk.ChatRunSafetyScope.Config.get -> FabrCore.Sdk.ChatRunSafetyConfig!
+FabrCore.Sdk.ChatRunSafetyScope.Dispose() -> void
+FabrCore.Sdk.ChatRunSafetyScope.IsCompacting.get -> bool
+FabrCore.Sdk.ChatRunSafetyScope.LlmCalls.get -> int
+FabrCore.Sdk.ChatRunSafetyScope.MaxPromptInputTokensPerCall.get -> long
+FabrCore.Sdk.ChatRunSafetyScope.ParentMessageId.get -> string?
+FabrCore.Sdk.ChatRunSafetyScope.PrepareCallAsync(System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.ChatMessage!>! requestMessages, bool streaming, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<FabrCore.Sdk.ChatRunSafetyCallInfo!>!
+FabrCore.Sdk.ChatRunSafetyScope.PrepareCallAsync(System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.ChatMessage!>! requestMessages, bool streaming, System.Threading.CancellationToken cancellationToken, Microsoft.Extensions.AI.ChatOptions? options) -> System.Threading.Tasks.Task<FabrCore.Sdk.ChatRunSafetyCallInfo!>!
+FabrCore.Sdk.ChatRunSafetyScope.RecordCompletedCall(long inputTokens, long fallbackPromptEstimate) -> void
+FabrCore.Sdk.ChatRunSafetyScope.StopReason.get -> FabrCore.Sdk.RunStopReason
+FabrCore.Sdk.ChatRunSafetyScope.TraceId.get -> string?
+FabrCore.Sdk.ChatRunSafetyScope.TurnCumulativeInputTokens.get -> long
+FabrCore.Sdk.CompactionConfig
+FabrCore.Sdk.CompactionConfig.CompactionConfig() -> void
+FabrCore.Sdk.CompactionConfig.CompactionConfig(FabrCore.Sdk.CompactionConfig! original) -> void
+FabrCore.Sdk.CompactionConfig.Enabled.get -> bool
+FabrCore.Sdk.CompactionConfig.Enabled.init -> void
+FabrCore.Sdk.CompactionConfig.KeepLastN.get -> int
+FabrCore.Sdk.CompactionConfig.KeepLastN.init -> void
+FabrCore.Sdk.CompactionConfig.MaxContextTokens.get -> int
+FabrCore.Sdk.CompactionConfig.MaxContextTokens.init -> void
+FabrCore.Sdk.CompactionConfig.StaleAfterMinutes.get -> int
+FabrCore.Sdk.CompactionConfig.StaleAfterMinutes.init -> void
+FabrCore.Sdk.CompactionConfig.SummaryModelConfigurationName.get -> string?
+FabrCore.Sdk.CompactionConfig.SummaryModelConfigurationName.init -> void
+FabrCore.Sdk.CompactionConfig.Threshold.get -> double
+FabrCore.Sdk.CompactionConfig.Threshold.init -> void
+FabrCore.Sdk.CompactionLadder
+FabrCore.Sdk.CompactionLadder.<Clone>$() -> FabrCore.Sdk.CompactionLadder!
+FabrCore.Sdk.CompactionLadder.CompactionLadder() -> void
+FabrCore.Sdk.CompactionLadder.Context.get -> FabrCore.Sdk.ContextCompactionConfig!
+FabrCore.Sdk.CompactionLadder.Context.init -> void
+FabrCore.Sdk.CompactionLadder.Describe() -> string!
+FabrCore.Sdk.CompactionLadder.Equals(FabrCore.Sdk.CompactionLadder? other) -> bool
+FabrCore.Sdk.CompactionLadder.FuseAtTokens.get -> int
+FabrCore.Sdk.CompactionLadder.History.get -> FabrCore.Sdk.CompactionConfig!
+FabrCore.Sdk.CompactionLadder.History.init -> void
+FabrCore.Sdk.CompactionLadder.HistoryAtTokens.get -> int
+FabrCore.Sdk.CompactionLadder.IsOutOfOrder.get -> bool
+FabrCore.Sdk.CompactionLadder.Projection.get -> FabrCore.Sdk.ProjectionConfig!
+FabrCore.Sdk.CompactionLadder.Projection.init -> void
+FabrCore.Sdk.CompactionLadder.RunSafety.get -> FabrCore.Sdk.ChatRunSafetyConfig!
+FabrCore.Sdk.CompactionLadder.RunSafety.init -> void
+FabrCore.Sdk.CompactionResult
+FabrCore.Sdk.CompactionResult.CompactedMessageCount.get -> int
+FabrCore.Sdk.CompactionResult.CompactedMessageCount.init -> void
+FabrCore.Sdk.CompactionResult.CompactionResult() -> void
+FabrCore.Sdk.CompactionResult.CompactionResult(FabrCore.Sdk.CompactionResult! original) -> void
+FabrCore.Sdk.CompactionResult.EstimatedTokensAfter.get -> int
+FabrCore.Sdk.CompactionResult.EstimatedTokensAfter.init -> void
+FabrCore.Sdk.CompactionResult.EstimatedTokensBefore.get -> int
+FabrCore.Sdk.CompactionResult.EstimatedTokensBefore.init -> void
+FabrCore.Sdk.CompactionResult.OriginalMessageCount.get -> int
+FabrCore.Sdk.CompactionResult.OriginalMessageCount.init -> void
+FabrCore.Sdk.CompactionResult.WasCompacted.get -> bool
+FabrCore.Sdk.CompactionResult.WasCompacted.init -> void
+FabrCore.Sdk.CompactionService
+FabrCore.Sdk.CompactionService.CompactIfNeededAsync(FabrCore.Sdk.FabrCoreChatHistoryProvider! provider, FabrCore.Sdk.CompactionConfig! config, string! modelConfigName, System.Func<System.Threading.Tasks.Task!>? onCompacting = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.CompactionResult!>!
+FabrCore.Sdk.CompactionService.CompactionService(FabrCore.Sdk.IFabrCoreChatClientService! chatClientService, Microsoft.Extensions.Logging.ILogger<FabrCore.Sdk.CompactionService!>! logger, FabrCore.Core.Monitoring.IAgentMessageMonitor? monitor = null) -> void
+FabrCore.Sdk.ContextCompaction
+FabrCore.Sdk.ContextCompactionConfig
+FabrCore.Sdk.ContextCompactionConfig.ContextCompactionConfig() -> void
+FabrCore.Sdk.ContextCompactionConfig.ContextCompactionConfig(FabrCore.Sdk.ContextCompactionConfig! original) -> void
+FabrCore.Sdk.ContextCompactionConfig.Enabled.get -> bool
+FabrCore.Sdk.ContextCompactionConfig.Enabled.init -> void
+FabrCore.Sdk.ContextCompactionConfig.EvictAtTokens.get -> int
+FabrCore.Sdk.ContextCompactionConfig.EvictThreshold.get -> double
+FabrCore.Sdk.ContextCompactionConfig.EvictThreshold.init -> void
+FabrCore.Sdk.ContextCompactionConfig.InputBudgetTokens.get -> int
+FabrCore.Sdk.ContextCompactionConfig.IsUsable.get -> bool
+FabrCore.Sdk.ContextCompactionConfig.MaxContextWindowTokens.get -> int
+FabrCore.Sdk.ContextCompactionConfig.MaxContextWindowTokens.init -> void
+FabrCore.Sdk.ContextCompactionConfig.MaxOutputTokens.get -> int
+FabrCore.Sdk.ContextCompactionConfig.MaxOutputTokens.init -> void
+FabrCore.Sdk.ContextCompactionConfig.TruncateAtTokens.get -> int
+FabrCore.Sdk.ContextCompactionConfig.TruncateThreshold.get -> double
+FabrCore.Sdk.ContextCompactionConfig.TruncateThreshold.init -> void
+FabrCore.Sdk.ContextCompactionConfig.WorkingSetTokens.get -> int?
+FabrCore.Sdk.ContextCompactionConfig.WorkingSetTokens.init -> void
+FabrCore.Sdk.CreateAgentsResponse
+FabrCore.Sdk.CreateAgentsResponse.CreateAgentsResponse() -> void
+FabrCore.Sdk.CreateAgentsResponse.FailureCount.get -> int
+FabrCore.Sdk.CreateAgentsResponse.FailureCount.set -> void
+FabrCore.Sdk.CreateAgentsResponse.Results.get -> System.Collections.Generic.List<FabrCore.Core.AgentHealthStatus!>!
+FabrCore.Sdk.CreateAgentsResponse.Results.set -> void
+FabrCore.Sdk.CreateAgentsResponse.SuccessCount.get -> int
+FabrCore.Sdk.CreateAgentsResponse.SuccessCount.set -> void
+FabrCore.Sdk.CreateAgentsResponse.TotalRequested.get -> int
+FabrCore.Sdk.CreateAgentsResponse.TotalRequested.set -> void
+FabrCore.Sdk.DiscoveryRegistryCollision
+FabrCore.Sdk.DiscoveryRegistryCollision.Alias.get -> string!
+FabrCore.Sdk.DiscoveryRegistryCollision.Alias.set -> void
+FabrCore.Sdk.DiscoveryRegistryCollision.Category.get -> string!
+FabrCore.Sdk.DiscoveryRegistryCollision.Category.set -> void
+FabrCore.Sdk.DiscoveryRegistryCollision.DiscoveryRegistryCollision() -> void
+FabrCore.Sdk.DiscoveryRegistryCollision.Types.get -> System.Collections.Generic.List<string!>!
+FabrCore.Sdk.DiscoveryRegistryCollision.Types.set -> void
+FabrCore.Sdk.DiscoveryRegistryEntry
+FabrCore.Sdk.DiscoveryRegistryEntry.Aliases.get -> System.Collections.Generic.List<string!>!
+FabrCore.Sdk.DiscoveryRegistryEntry.Aliases.set -> void
+FabrCore.Sdk.DiscoveryRegistryEntry.Capabilities.get -> string?
+FabrCore.Sdk.DiscoveryRegistryEntry.Capabilities.set -> void
+FabrCore.Sdk.DiscoveryRegistryEntry.Description.get -> string?
+FabrCore.Sdk.DiscoveryRegistryEntry.Description.set -> void
+FabrCore.Sdk.DiscoveryRegistryEntry.DiscoveryRegistryEntry() -> void
+FabrCore.Sdk.DiscoveryRegistryEntry.Methods.get -> System.Collections.Generic.List<FabrCore.Sdk.DiscoveryRegistryMethod!>!
+FabrCore.Sdk.DiscoveryRegistryEntry.Methods.set -> void
+FabrCore.Sdk.DiscoveryRegistryEntry.Notes.get -> System.Collections.Generic.List<string!>!
+FabrCore.Sdk.DiscoveryRegistryEntry.Notes.set -> void
+FabrCore.Sdk.DiscoveryRegistryEntry.TypeName.get -> string!
+FabrCore.Sdk.DiscoveryRegistryEntry.TypeName.set -> void
+FabrCore.Sdk.DiscoveryRegistryMethod
+FabrCore.Sdk.DiscoveryRegistryMethod.Description.get -> string!
+FabrCore.Sdk.DiscoveryRegistryMethod.Description.set -> void
+FabrCore.Sdk.DiscoveryRegistryMethod.DiscoveryRegistryMethod() -> void
+FabrCore.Sdk.DiscoveryRegistryMethod.Name.get -> string!
+FabrCore.Sdk.DiscoveryRegistryMethod.Name.set -> void
+FabrCore.Sdk.DiscoveryResponse
+FabrCore.Sdk.DiscoveryResponse.Agents.get -> System.Collections.Generic.List<FabrCore.Sdk.DiscoveryRegistryEntry!>!
+FabrCore.Sdk.DiscoveryResponse.Agents.set -> void
+FabrCore.Sdk.DiscoveryResponse.Collisions.get -> System.Collections.Generic.List<FabrCore.Sdk.DiscoveryRegistryCollision!>?
+FabrCore.Sdk.DiscoveryResponse.Collisions.set -> void
+FabrCore.Sdk.DiscoveryResponse.DiscoveryResponse() -> void
+FabrCore.Sdk.DiscoveryResponse.Plugins.get -> System.Collections.Generic.List<FabrCore.Sdk.DiscoveryRegistryEntry!>!
+FabrCore.Sdk.DiscoveryResponse.Plugins.set -> void
+FabrCore.Sdk.DiscoveryResponse.Tools.get -> System.Collections.Generic.List<FabrCore.Sdk.DiscoveryRegistryEntry!>!
+FabrCore.Sdk.DiscoveryResponse.Tools.set -> void
+FabrCore.Sdk.EffortLevel
+FabrCore.Sdk.EffortLevel.Quick = 0 -> FabrCore.Sdk.EffortLevel
+FabrCore.Sdk.EffortLevel.Standard = 1 -> FabrCore.Sdk.EffortLevel
+FabrCore.Sdk.EffortLevel.Thorough = 2 -> FabrCore.Sdk.EffortLevel
+FabrCore.Sdk.EmbeddingRequest
+FabrCore.Sdk.EmbeddingRequest.EmbeddingRequest() -> void
+FabrCore.Sdk.EmbeddingRequest.Text.get -> string!
+FabrCore.Sdk.EmbeddingRequest.Text.set -> void
+FabrCore.Sdk.EmbeddingResponse
+FabrCore.Sdk.EmbeddingResponse.Dimensions.get -> int
+FabrCore.Sdk.EmbeddingResponse.Dimensions.set -> void
+FabrCore.Sdk.EmbeddingResponse.EmbeddingResponse() -> void
+FabrCore.Sdk.EmbeddingResponse.Vector.get -> float[]!
+FabrCore.Sdk.EmbeddingResponse.Vector.set -> void
+FabrCore.Sdk.Embeddings
+FabrCore.Sdk.Embeddings.Embeddings(FabrCore.Sdk.IFabrCoreChatClientService! fabrcoreChatClientService) -> void
+FabrCore.Sdk.Embeddings.GetBatchEmbeddings(System.Collections.Generic.IReadOnlyList<string!>! texts) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.Embedding<float>!>!>!
+FabrCore.Sdk.Embeddings.GetEmbeddings(string! text) -> System.Threading.Tasks.Task<Microsoft.Extensions.AI.Embedding<float>!>!
+FabrCore.Sdk.ExecutionOptions
+FabrCore.Sdk.ExecutionOptions.AgentHost.get -> FabrCore.Sdk.IFabrCoreAgentHost!
+FabrCore.Sdk.ExecutionOptions.AgentHost.init -> void
+FabrCore.Sdk.ExecutionOptions.AvailableAgents.get -> System.Collections.Generic.IReadOnlyList<FabrCore.Sdk.AvailableAgent!>!
+FabrCore.Sdk.ExecutionOptions.AvailableAgents.init -> void
+FabrCore.Sdk.ExecutionOptions.ExecutionOptions() -> void
+FabrCore.Sdk.ExecutionOptions.FormatDispatchMessage.get -> System.Func<FabrCore.Sdk.WorkItem!, string!>?
+FabrCore.Sdk.ExecutionOptions.FormatDispatchMessage.init -> void
+FabrCore.Sdk.ExecutionOptions.MaxFollowUps.get -> int
+FabrCore.Sdk.ExecutionOptions.MaxFollowUps.init -> void
+FabrCore.Sdk.ExecutionOptions.MaxRetries.get -> int
+FabrCore.Sdk.ExecutionOptions.MaxRetries.init -> void
+FabrCore.Sdk.ExecutionOptions.MaxStallCycles.get -> int
+FabrCore.Sdk.ExecutionOptions.MaxStallCycles.init -> void
+FabrCore.Sdk.ExecutionOptions.OnExecutionComplete.get -> System.Func<string!, bool, System.Threading.Tasks.Task!>?
+FabrCore.Sdk.ExecutionOptions.OnExecutionComplete.init -> void
+FabrCore.Sdk.ExecutionOptions.OnPlanUpdated.get -> System.Func<FabrCore.Sdk.TaskTracking!, System.Threading.Tasks.Task!>?
+FabrCore.Sdk.ExecutionOptions.OnPlanUpdated.init -> void
+FabrCore.Sdk.ExecutionOptions.OnWorkItemCompleted.get -> System.Func<FabrCore.Sdk.WorkItem!, string!, System.Threading.Tasks.Task!>?
+FabrCore.Sdk.ExecutionOptions.OnWorkItemCompleted.init -> void
+FabrCore.Sdk.ExecutionOptions.OnWorkItemFailed.get -> System.Func<FabrCore.Sdk.WorkItem!, string!, bool, System.Threading.Tasks.Task!>?
+FabrCore.Sdk.ExecutionOptions.OnWorkItemFailed.init -> void
+FabrCore.Sdk.ExecutionOptions.OnWorkItemFollowUp.get -> System.Func<FabrCore.Sdk.WorkItem!, string!, string!, int, System.Threading.Tasks.Task!>?
+FabrCore.Sdk.ExecutionOptions.OnWorkItemFollowUp.init -> void
+FabrCore.Sdk.ExecutionOptions.OnWorkItemStarting.get -> System.Func<FabrCore.Sdk.WorkItem!, int, System.Threading.Tasks.Task!>?
+FabrCore.Sdk.ExecutionOptions.OnWorkItemStarting.init -> void
+FabrCore.Sdk.ExecutionOptions.PollDelay.get -> System.TimeSpan
+FabrCore.Sdk.ExecutionOptions.PollDelay.init -> void
+FabrCore.Sdk.ExecutionOptions.ResolveAgentHandle.get -> System.Func<string!, string!, string!>?
+FabrCore.Sdk.ExecutionOptions.ResolveAgentHandle.init -> void
+FabrCore.Sdk.ExecutionOptions.RetryDelay.get -> System.TimeSpan
+FabrCore.Sdk.ExecutionOptions.RetryDelay.init -> void
+FabrCore.Sdk.ExecutionState
+FabrCore.Sdk.ExecutionState.ExecutionState() -> void
+FabrCore.Sdk.ExecutionState.IsExecuting.get -> bool
+FabrCore.Sdk.FabrCoreAgentProxy
+FabrCore.Sdk.FabrCoreAgentProxy.ActiveMessage.get -> FabrCore.Core.AgentMessage?
+FabrCore.Sdk.FabrCoreAgentProxy.CompactionChatClientConfigName.get -> string?
+FabrCore.Sdk.FabrCoreAgentProxy.CompactionLadderInfo.get -> FabrCore.Sdk.CompactionLadder?
+FabrCore.Sdk.FabrCoreAgentProxy.CompactionServiceInstance.get -> FabrCore.Sdk.CompactionService?
+FabrCore.Sdk.FabrCoreAgentProxy.ConnectMcpServerAsync(FabrCore.Core.McpServerConfig! mcpConfig) -> System.Threading.Tasks.Task<System.Collections.Generic.IList<Microsoft.Extensions.AI.AITool!>!>!
+FabrCore.Sdk.FabrCoreAgentProxy.CreateAudioClientAgent(string! chatClientConfigName, string! threadId, System.Collections.Generic.IList<Microsoft.Extensions.AI.AITool!>? tools = null, System.Action<Microsoft.Agents.AI.ChatClientAgentOptions!>? configureOptions = null) -> System.Threading.Tasks.Task<Microsoft.Extensions.AI.ISpeechToTextClient!>!
+FabrCore.Sdk.FabrCoreAgentProxy.CreateChatClientAgent(string! chatClientConfigName, string! threadId, System.Collections.Generic.IList<Microsoft.Extensions.AI.AITool!>? tools = null, System.Action<Microsoft.Agents.AI.ChatClientAgentOptions!>? configureOptions = null) -> System.Threading.Tasks.Task<FabrCore.Sdk.ChatClientAgentResult!>!
+FabrCore.Sdk.FabrCoreAgentProxy.CreateFabrCoreHarnessAgent(string! chatClientConfigName, string! threadId, System.Collections.Generic.IList<Microsoft.Extensions.AI.AITool!>? tools = null, System.Action<FabrCore.Sdk.FabrCoreHarnessOptions!>? configure = null) -> System.Threading.Tasks.Task<FabrCore.Sdk.FabrCoreHarnessResult!>!
+FabrCore.Sdk.FabrCoreAgentProxy.CreateInternalAgentAsync(FabrCore.Sdk.InternalAgentOptions! options, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.InternalAgentResult!>!
+FabrCore.Sdk.FabrCoreAgentProxy.FabrCoreAgentProxy(FabrCore.Core.AgentConfiguration! config, System.IServiceProvider! serviceProvider, FabrCore.Sdk.IFabrCoreAgentHost! fabrcoreAgentHost) -> void
+FabrCore.Sdk.FabrCoreAgentProxy.FlushStateAsync() -> System.Threading.Tasks.Task!
+FabrCore.Sdk.FabrCoreAgentProxy.GetAudioClient(string! name, int networkTimeoutSeconds = 100) -> System.Threading.Tasks.Task<Microsoft.Extensions.AI.ISpeechToTextClient!>!
+FabrCore.Sdk.FabrCoreAgentProxy.GetChatClient(string! name, int networkTimeoutSeconds = 100) -> System.Threading.Tasks.Task<Microsoft.Extensions.AI.IChatClient!>!
+FabrCore.Sdk.FabrCoreAgentProxy.GetStateAsync<T>(string! key) -> System.Threading.Tasks.Task<T?>!
+FabrCore.Sdk.FabrCoreAgentProxy.GetStateOrCreateAsync<T>(string! key, System.Func<T>! factory) -> System.Threading.Tasks.Task<T>!
+FabrCore.Sdk.FabrCoreAgentProxy.HasPendingStateChanges.get -> bool
+FabrCore.Sdk.FabrCoreAgentProxy.HasStateAsync(string! key) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Sdk.FabrCoreAgentProxy.IsVerifiableExecutionEnabled.get -> bool
+FabrCore.Sdk.FabrCoreAgentProxy.RemoveState(string! key) -> void
+FabrCore.Sdk.FabrCoreAgentProxy.ResolveConfiguredToolsAsync() -> System.Threading.Tasks.Task<System.Collections.Generic.List<Microsoft.Extensions.AI.AITool!>!>!
+FabrCore.Sdk.FabrCoreAgentProxy.ResolveInternalAgentToolsAsync(FabrCore.Sdk.InternalAgentToolScopeOptions! options, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.InternalAgentToolScope!>!
+FabrCore.Sdk.FabrCoreAgentProxy.SendToUserAsync(FabrCore.Core.AgentMessage! message) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.FabrCoreAgentProxy.SendToUserAsync(string! message, string? messageType = null, FabrCore.Core.PrincipalDeliveryTarget? target = null) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.FabrCoreAgentProxy.SetState<T>(string! key, T value) -> void
+FabrCore.Sdk.FabrCoreAgentProxy.SetStatusMessage(string? message) -> void
+FabrCore.Sdk.FabrCoreAgentProxy.TryGetStateAsync<T>(string! key) -> System.Threading.Tasks.Task<FabrCore.Sdk.StateReadResult<T>!>!
+FabrCore.Sdk.FabrCoreAgentProxy.VerifiableExecution.get -> FabrCore.Core.VerifiableExecution.IVerifiableExecutionContext?
+FabrCore.Sdk.FabrCoreBackgroundAgent
+FabrCore.Sdk.FabrCoreBackgroundAgent.FabrCoreBackgroundAgent(FabrCore.Sdk.IFabrCoreAgentHost! agentHost, string! handle, string! name, string! description, System.TimeSpan? timeout = null, string? instructionOverlay = null, string? messageType = null) -> void
+FabrCore.Sdk.FabrCoreBackgroundAgent.TargetHandle.get -> string!
+FabrCore.Sdk.FabrCoreBackgroundAgentSession
+FabrCore.Sdk.FabrCoreCapabilitiesAttribute
+FabrCore.Sdk.FabrCoreCapabilitiesAttribute.Description.get -> string!
+FabrCore.Sdk.FabrCoreCapabilitiesAttribute.FabrCoreCapabilitiesAttribute(string! description) -> void
+FabrCore.Sdk.FabrCoreChatClientService
+FabrCore.Sdk.FabrCoreChatClientService.FabrCoreChatClientService(Microsoft.Extensions.Configuration.IConfiguration! configuration, Microsoft.Extensions.Logging.ILoggerFactory! loggerFactory) -> void
+FabrCore.Sdk.FabrCoreChatClientService.FabrCoreChatClientService(Microsoft.Extensions.Configuration.IConfiguration! configuration, Microsoft.Extensions.Logging.ILoggerFactory! loggerFactory, FabrCore.Sdk.IFabrCoreModelConfigurationResolver! modelConfigurationResolver) -> void
+FabrCore.Sdk.FabrCoreChatClientService.GetAudioClient(string! name, int networkTimeoutSeconds = 100) -> System.Threading.Tasks.Task<Microsoft.Extensions.AI.ISpeechToTextClient!>!
+FabrCore.Sdk.FabrCoreChatClientService.GetChatClient(string! name, int networkTimeoutSeconds = 100) -> System.Threading.Tasks.Task<Microsoft.Extensions.AI.IChatClient!>!
+FabrCore.Sdk.FabrCoreChatClientService.GetEmbeddingsClient(string! name) -> System.Threading.Tasks.Task<Microsoft.Extensions.AI.IEmbeddingGenerator<string!, Microsoft.Extensions.AI.Embedding<float>!>!>!
+FabrCore.Sdk.FabrCoreChatClientService.GetModelConfigurationAsync(string! name) -> System.Threading.Tasks.Task<FabrCore.Core.ModelConfiguration!>!
+FabrCore.Sdk.FabrCoreChatHistoryProvider
+FabrCore.Sdk.FabrCoreChatHistoryProvider.ActiveProjection.get -> FabrCore.Sdk.ProjectionConfig?
+FabrCore.Sdk.FabrCoreChatHistoryProvider.ActiveProjection.set -> void
+FabrCore.Sdk.FabrCoreChatHistoryProvider.FabrCoreChatHistoryProvider(FabrCore.Sdk.IFabrCoreAgentHost! agentHost, System.Text.Json.JsonElement serializedState, System.Text.Json.JsonSerializerOptions? jsonSerializerOptions = null, Microsoft.Extensions.Logging.ILogger? logger = null) -> void
+FabrCore.Sdk.FabrCoreChatHistoryProvider.FabrCoreChatHistoryProvider(FabrCore.Sdk.IFabrCoreAgentHost! agentHost, string! threadId, Microsoft.Extensions.Logging.ILogger? logger = null) -> void
+FabrCore.Sdk.FabrCoreChatHistoryProvider.FlushAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.FabrCoreChatHistoryProvider.GetMessagesAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.ChatMessage!>!>!
+FabrCore.Sdk.FabrCoreChatHistoryProvider.GetStoredMessagesAsync() -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.StoredChatMessage!>!>!
+FabrCore.Sdk.FabrCoreChatHistoryProvider.HasPendingMessages.get -> bool
+FabrCore.Sdk.FabrCoreChatHistoryProvider.ReplaceAndResetCacheAsync(System.Collections.Generic.List<FabrCore.Core.StoredChatMessage!>! newMessages) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.FabrCoreChatHistoryProvider.ThreadId.get -> string!
+FabrCore.Sdk.FabrCoreChatMessageStore
+FabrCore.Sdk.FabrCoreChatMessageStore.FabrCoreChatMessageStore(FabrCore.Sdk.IFabrCoreAgentHost! agentHost, System.Text.Json.JsonElement serializedState, System.Text.Json.JsonSerializerOptions? jsonSerializerOptions = null, Microsoft.Extensions.Logging.ILogger? logger = null) -> void
+FabrCore.Sdk.FabrCoreChatMessageStore.FabrCoreChatMessageStore(FabrCore.Sdk.IFabrCoreAgentHost! agentHost, string! threadId, Microsoft.Extensions.Logging.ILogger? logger = null) -> void
+FabrCore.Sdk.FabrCoreHarnessAgent
+FabrCore.Sdk.FabrCoreHarnessAgent.BackgroundAgents.get -> Microsoft.Agents.AI.BackgroundAgentsProvider?
+FabrCore.Sdk.FabrCoreHarnessAgent.ExecutionModeName.get -> string!
+FabrCore.Sdk.FabrCoreHarnessAgent.FabrCoreHarnessAgent(Microsoft.Extensions.AI.IChatClient! chatClient, FabrCore.Sdk.FabrCoreHarnessOptions? options = null, Microsoft.Extensions.Logging.ILoggerFactory? loggerFactory = null, System.IServiceProvider? services = null) -> void
+FabrCore.Sdk.FabrCoreHarnessAgent.IsLooping.get -> bool
+FabrCore.Sdk.FabrCoreHarnessAgent.MissingPlanModeBehavior.get -> FabrCore.Sdk.MissingPlanModeBehavior
+FabrCore.Sdk.FabrCoreHarnessAgent.Modes.get -> Microsoft.Agents.AI.AgentModeProvider?
+FabrCore.Sdk.FabrCoreHarnessAgent.PlanningModeName.get -> string!
+FabrCore.Sdk.FabrCoreHarnessAgent.Skills.get -> Microsoft.Agents.AI.AgentSkillsProvider?
+FabrCore.Sdk.FabrCoreHarnessAgent.Todos.get -> Microsoft.Agents.AI.TodoProvider?
+FabrCore.Sdk.FabrCoreHarnessExtensions
+FabrCore.Sdk.FabrCoreHarnessOptions
+FabrCore.Sdk.FabrCoreHarnessOptions.AIContextProviders.get -> System.Collections.Generic.IEnumerable<Microsoft.Agents.AI.AIContextProvider!>?
+FabrCore.Sdk.FabrCoreHarnessOptions.AIContextProviders.set -> void
+FabrCore.Sdk.FabrCoreHarnessOptions.AdditionalLoopEvaluators.get -> System.Collections.Generic.IEnumerable<Microsoft.Agents.AI.LoopEvaluator!>?
+FabrCore.Sdk.FabrCoreHarnessOptions.AdditionalLoopEvaluators.set -> void
+FabrCore.Sdk.FabrCoreHarnessOptions.AgentModeProviderOptions.get -> Microsoft.Agents.AI.AgentModeProviderOptions?
+FabrCore.Sdk.FabrCoreHarnessOptions.AgentModeProviderOptions.set -> void
+FabrCore.Sdk.FabrCoreHarnessOptions.AgentSkillsProviderOptions.get -> Microsoft.Agents.AI.AgentSkillsProviderOptions?
+FabrCore.Sdk.FabrCoreHarnessOptions.AgentSkillsProviderOptions.set -> void
+FabrCore.Sdk.FabrCoreHarnessOptions.AgentSkillsSource.get -> Microsoft.Agents.AI.AgentSkillsSource?
+FabrCore.Sdk.FabrCoreHarnessOptions.AgentSkillsSource.set -> void
+FabrCore.Sdk.FabrCoreHarnessOptions.BackgroundAgents.get -> System.Collections.Generic.IEnumerable<Microsoft.Agents.AI.AIAgent!>?
+FabrCore.Sdk.FabrCoreHarnessOptions.BackgroundAgents.set -> void
+FabrCore.Sdk.FabrCoreHarnessOptions.BackgroundAgentsProviderOptions.get -> Microsoft.Agents.AI.BackgroundAgentsProviderOptions?
+FabrCore.Sdk.FabrCoreHarnessOptions.BackgroundAgentsProviderOptions.set -> void
+FabrCore.Sdk.FabrCoreHarnessOptions.ChatHistoryProvider.get -> Microsoft.Agents.AI.ChatHistoryProvider?
+FabrCore.Sdk.FabrCoreHarnessOptions.ChatHistoryProvider.set -> void
+FabrCore.Sdk.FabrCoreHarnessOptions.ChatOptions.get -> Microsoft.Extensions.AI.ChatOptions?
+FabrCore.Sdk.FabrCoreHarnessOptions.ChatOptions.set -> void
+FabrCore.Sdk.FabrCoreHarnessOptions.Description.get -> string?
+FabrCore.Sdk.FabrCoreHarnessOptions.Description.set -> void
+FabrCore.Sdk.FabrCoreHarnessOptions.DisableAgentModeProvider.get -> bool
+FabrCore.Sdk.FabrCoreHarnessOptions.DisableAgentModeProvider.set -> void
+FabrCore.Sdk.FabrCoreHarnessOptions.DisableOpenTelemetry.get -> bool
+FabrCore.Sdk.FabrCoreHarnessOptions.DisableOpenTelemetry.set -> void
+FabrCore.Sdk.FabrCoreHarnessOptions.DisableTodoProvider.get -> bool
+FabrCore.Sdk.FabrCoreHarnessOptions.DisableTodoProvider.set -> void
+FabrCore.Sdk.FabrCoreHarnessOptions.EnableSensitiveTelemetryData.get -> bool
+FabrCore.Sdk.FabrCoreHarnessOptions.EnableSensitiveTelemetryData.set -> void
+FabrCore.Sdk.FabrCoreHarnessOptions.ExecutionModeName.get -> string!
+FabrCore.Sdk.FabrCoreHarnessOptions.ExecutionModeName.set -> void
+FabrCore.Sdk.FabrCoreHarnessOptions.FabrCoreHarnessOptions() -> void
+FabrCore.Sdk.FabrCoreHarnessOptions.HarnessInstructions.get -> string?
+FabrCore.Sdk.FabrCoreHarnessOptions.HarnessInstructions.set -> void
+FabrCore.Sdk.FabrCoreHarnessOptions.HistoryCompaction.get -> System.Func<FabrCore.Sdk.FabrCoreChatHistoryProvider!, FabrCore.Sdk.CompactionConfig!, System.Threading.Tasks.Task<FabrCore.Sdk.CompactionResult?>!>?
+FabrCore.Sdk.FabrCoreHarnessOptions.HistoryCompaction.set -> void
+FabrCore.Sdk.FabrCoreHarnessOptions.Id.get -> string?
+FabrCore.Sdk.FabrCoreHarnessOptions.Id.set -> void
+FabrCore.Sdk.FabrCoreHarnessOptions.LoopAgentOptions.get -> Microsoft.Agents.AI.LoopAgentOptions?
+FabrCore.Sdk.FabrCoreHarnessOptions.LoopAgentOptions.set -> void
+FabrCore.Sdk.FabrCoreHarnessOptions.LoopCompletionMarker.get -> string?
+FabrCore.Sdk.FabrCoreHarnessOptions.LoopCompletionMarker.set -> void
+FabrCore.Sdk.FabrCoreHarnessOptions.LoopJudgeChatClient.get -> Microsoft.Extensions.AI.IChatClient?
+FabrCore.Sdk.FabrCoreHarnessOptions.LoopJudgeChatClient.set -> void
+FabrCore.Sdk.FabrCoreHarnessOptions.LoopJudgeOptions.get -> Microsoft.Agents.AI.AIJudgeLoopEvaluatorOptions?
+FabrCore.Sdk.FabrCoreHarnessOptions.LoopJudgeOptions.set -> void
+FabrCore.Sdk.FabrCoreHarnessOptions.LoopMaxIterations.get -> int?
+FabrCore.Sdk.FabrCoreHarnessOptions.LoopMaxIterations.set -> void
+FabrCore.Sdk.FabrCoreHarnessOptions.LoopMode.get -> FabrCore.Sdk.HarnessLoopMode
+FabrCore.Sdk.FabrCoreHarnessOptions.LoopMode.set -> void
+FabrCore.Sdk.FabrCoreHarnessOptions.MaximumIterationsPerRequest.get -> int?
+FabrCore.Sdk.FabrCoreHarnessOptions.MaximumIterationsPerRequest.set -> void
+FabrCore.Sdk.FabrCoreHarnessOptions.MissingPlanModeBehavior.get -> FabrCore.Sdk.MissingPlanModeBehavior
+FabrCore.Sdk.FabrCoreHarnessOptions.MissingPlanModeBehavior.set -> void
+FabrCore.Sdk.FabrCoreHarnessOptions.Name.get -> string?
+FabrCore.Sdk.FabrCoreHarnessOptions.Name.set -> void
+FabrCore.Sdk.FabrCoreHarnessOptions.OpenTelemetrySourceName.get -> string?
+FabrCore.Sdk.FabrCoreHarnessOptions.OpenTelemetrySourceName.set -> void
+FabrCore.Sdk.FabrCoreHarnessOptions.PlanningModeName.get -> string!
+FabrCore.Sdk.FabrCoreHarnessOptions.PlanningModeName.set -> void
+FabrCore.Sdk.FabrCoreHarnessOptions.TodoProviderOptions.get -> Microsoft.Agents.AI.TodoProviderOptions?
+FabrCore.Sdk.FabrCoreHarnessOptions.TodoProviderOptions.set -> void
+FabrCore.Sdk.FabrCoreHarnessResult
+FabrCore.Sdk.FabrCoreHarnessResult.Agent.get -> FabrCore.Sdk.FabrCoreHarnessAgent!
+FabrCore.Sdk.FabrCoreHarnessResult.BackgroundAgents.get -> Microsoft.Agents.AI.BackgroundAgentsProvider?
+FabrCore.Sdk.FabrCoreHarnessResult.ChatHistoryProvider.get -> FabrCore.Sdk.FabrCoreChatHistoryProvider?
+FabrCore.Sdk.FabrCoreHarnessResult.ClearHarnessSessionAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.FabrCoreHarnessResult.DelegationsLostOnRestore.get -> int
+FabrCore.Sdk.FabrCoreHarnessResult.DescribeLostDelegations() -> string?
+FabrCore.Sdk.FabrCoreHarnessResult.DisposeAsync() -> System.Threading.Tasks.ValueTask
+FabrCore.Sdk.FabrCoreHarnessResult.GetAllTodosAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Microsoft.Agents.AI.TodoItem!>!>!
+FabrCore.Sdk.FabrCoreHarnessResult.GetModeAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string?>!
+FabrCore.Sdk.FabrCoreHarnessResult.GetRemainingTodosAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Microsoft.Agents.AI.TodoItem!>!>!
+FabrCore.Sdk.FabrCoreHarnessResult.GetRunningDelegations() -> System.Collections.Generic.IReadOnlyList<Microsoft.Agents.AI.BackgroundTaskInfo!>!
+FabrCore.Sdk.FabrCoreHarnessResult.IsSessionPersistent.get -> bool
+FabrCore.Sdk.FabrCoreHarnessResult.Modes.get -> Microsoft.Agents.AI.AgentModeProvider?
+FabrCore.Sdk.FabrCoreHarnessResult.RunAsync(FabrCore.Core.AgentMessage! message, Microsoft.Agents.AI.AgentRunOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Agents.AI.AgentResponse!>!
+FabrCore.Sdk.FabrCoreHarnessResult.RunAsync(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! messages, Microsoft.Agents.AI.AgentRunOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Agents.AI.AgentResponse!>!
+FabrCore.Sdk.FabrCoreHarnessResult.RunAsync(string! message, Microsoft.Agents.AI.AgentRunOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Agents.AI.AgentResponse!>!
+FabrCore.Sdk.FabrCoreHarnessResult.RunStreamingAsync(FabrCore.Core.AgentMessage! message, Microsoft.Agents.AI.AgentRunOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Agents.AI.AgentResponseUpdate!>!
+FabrCore.Sdk.FabrCoreHarnessResult.RunStreamingAsync(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! messages, Microsoft.Agents.AI.AgentRunOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Agents.AI.AgentResponseUpdate!>!
+FabrCore.Sdk.FabrCoreHarnessResult.Session.get -> Microsoft.Agents.AI.AgentSession!
+FabrCore.Sdk.FabrCoreHarnessResult.SessionRestored.get -> bool
+FabrCore.Sdk.FabrCoreHarnessResult.SetModeAsync(string! mode, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.FabrCoreHarnessResult.SetPlanModeAsync(bool planning, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.FabrCoreHarnessResult.SnapshotSessionAsync() -> System.Threading.Tasks.Task<bool>!
+FabrCore.Sdk.FabrCoreHarnessResult.ThreadId.get -> string!
+FabrCore.Sdk.FabrCoreHarnessResult.Todos.get -> Microsoft.Agents.AI.TodoProvider?
+FabrCore.Sdk.FabrCoreHiddenAttribute
+FabrCore.Sdk.FabrCoreHiddenAttribute.FabrCoreHiddenAttribute() -> void
+FabrCore.Sdk.FabrCoreHostApiClient
+FabrCore.Sdk.FabrCoreHostApiClient.AddAclGroupMemberAsync(string! callerUserHandle, string! groupName, FabrCore.Core.Acl.GroupMember! member, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.FabrCoreHostApiClient.ChatAsync(string! handle, string! message, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.AgentMessage!>!
+FabrCore.Sdk.FabrCoreHostApiClient.CheckPermissionAsync(string! callerUserHandle, string! principalHandle, string! action, string! resource = "*:*", System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.Acl.AclEvaluationResponse!>!
+FabrCore.Sdk.FabrCoreHostApiClient.CreateAgentsAsync(System.Collections.Generic.List<FabrCore.Core.AgentConfiguration!>! configs, FabrCore.Core.HealthDetailLevel detailLevel = FabrCore.Core.HealthDetailLevel.Basic, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.CreateAgentsResponse!>!
+FabrCore.Sdk.FabrCoreHostApiClient.DeleteAclGrantAsync(string! callerUserHandle, string! grantId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Sdk.FabrCoreHostApiClient.DeleteAclGroupAsync(string! callerUserHandle, string! groupName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Sdk.FabrCoreHostApiClient.DeleteAclPrincipalAsync(string! callerUserHandle, string! principalHandle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Sdk.FabrCoreHostApiClient.DeleteAclRoleAsync(string! callerUserHandle, string! roleName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Sdk.FabrCoreHostApiClient.DeleteAsync(string! container, string! entityKey, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Sdk.FabrCoreHostApiClient.DeleteFileAsync(string! fileId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Sdk.FabrCoreHostApiClient.DeleteHarnessSkillAsync(string! principalId, string! name, string! version, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Sdk.FabrCoreHostApiClient.DeleteStorageEntityAsync(string! userHandle, string! container, string! entityKey, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Sdk.FabrCoreHostApiClient.EnsureBlueprintAgentsAsync(string! userHandle, FabrCore.Sdk.AgentBlueprintRequest! blueprint, FabrCore.Core.HealthDetailLevel detailLevel = FabrCore.Core.HealthDetailLevel.Basic, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.AgentBlueprintResponse!>!
+FabrCore.Sdk.FabrCoreHostApiClient.EvaluateAclAsync(string! callerUserHandle, FabrCore.Core.Acl.AclEvaluationRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.Acl.AclEvaluationResponse!>!
+FabrCore.Sdk.FabrCoreHostApiClient.FabrCoreHostApiClient(System.Net.Http.HttpClient! httpClient, Microsoft.Extensions.Configuration.IConfiguration! configuration, Microsoft.Extensions.Logging.ILogger<FabrCore.Sdk.FabrCoreHostApiClient!>! logger) -> void
+FabrCore.Sdk.FabrCoreHostApiClient.GetAclConfigAsync(string! callerUserHandle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.Acl.AclConfigResponse!>!
+FabrCore.Sdk.FabrCoreHostApiClient.GetAclGrantAsync(string! callerUserHandle, string! grantId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.Acl.PermissionGrant?>!
+FabrCore.Sdk.FabrCoreHostApiClient.GetAclGrantsAsync(string! callerUserHandle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.Acl.PermissionGrant!>!>!
+FabrCore.Sdk.FabrCoreHostApiClient.GetAclGroupAsync(string! callerUserHandle, string! groupName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.Acl.AclGroup?>!
+FabrCore.Sdk.FabrCoreHostApiClient.GetAclGroupsAsync(string! callerUserHandle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.Acl.AclGroup!>!>!
+FabrCore.Sdk.FabrCoreHostApiClient.GetAclPrincipalAsync(string! callerUserHandle, string! principalHandle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.Acl.AclPrincipal?>!
+FabrCore.Sdk.FabrCoreHostApiClient.GetAclPrincipalsAsync(string! callerUserHandle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.Acl.AclPrincipal!>!>!
+FabrCore.Sdk.FabrCoreHostApiClient.GetAclRoleAsync(string! callerUserHandle, string! roleName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.Acl.AclRole?>!
+FabrCore.Sdk.FabrCoreHostApiClient.GetAclRolesAsync(string! callerUserHandle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.Acl.AclRole!>!>!
+FabrCore.Sdk.FabrCoreHostApiClient.GetAgentAsync(string! key, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.AgentInfo?>!
+FabrCore.Sdk.FabrCoreHostApiClient.GetAgentHealthAsync(string! handle, FabrCore.Core.HealthDetailLevel detailLevel = FabrCore.Core.HealthDetailLevel.Basic, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.AgentHealthStatus!>!
+FabrCore.Sdk.FabrCoreHostApiClient.GetAgentStatisticsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.AgentStatisticsResponse!>!
+FabrCore.Sdk.FabrCoreHostApiClient.GetAgentsAsync(string? status = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.AgentsListResponse!>!
+FabrCore.Sdk.FabrCoreHostApiClient.GetApiKeyAsync(string! alias, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.ApiKeyResponse!>!
+FabrCore.Sdk.FabrCoreHostApiClient.GetAsync<T>(string! container, string! entityKey, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<T?>!
+FabrCore.Sdk.FabrCoreHostApiClient.GetAuditConfigAsync(string! callerUserHandle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.AuditConfigResponse!>!
+FabrCore.Sdk.FabrCoreHostApiClient.GetAuditEventsAsync(string! callerUserHandle, string? category = null, string? outcome = null, string? subjectPrincipal = null, System.DateTimeOffset? since = null, int? limit = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.Auditing.AuditEvent!>!>!
+FabrCore.Sdk.FabrCoreHostApiClient.GetBatchEmbeddingsAsync(System.Collections.Generic.List<FabrCore.Sdk.BatchEmbeddingItem!>! items, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.BatchEmbeddingResponse!>!
+FabrCore.Sdk.FabrCoreHostApiClient.GetChatCompletionAsync(FabrCore.Sdk.ChatCompletionRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.ChatCompletionResponse!>!
+FabrCore.Sdk.FabrCoreHostApiClient.GetChatCompletionAsync(string! prompt, FabrCore.Sdk.ChatCompletionOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.ChatCompletionResponse!>!
+FabrCore.Sdk.FabrCoreHostApiClient.GetDiscoveryAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.DiscoveryResponse!>!
+FabrCore.Sdk.FabrCoreHostApiClient.GetEmbeddingsAsync(string! text, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.EmbeddingResponse!>!
+FabrCore.Sdk.FabrCoreHostApiClient.GetFileAsync(string! fileId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.IO.Stream?>!
+FabrCore.Sdk.FabrCoreHostApiClient.GetFileInfoAsync(string! fileId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.FileMetadataResponse?>!
+FabrCore.Sdk.FabrCoreHostApiClient.GetHarnessSkillAsync(string! principalId, string! name, string! version, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.Skills.FabrCoreSkillManifest?>!
+FabrCore.Sdk.FabrCoreHostApiClient.GetModelConfigAsync(string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.ModelConfigResponse!>!
+FabrCore.Sdk.FabrCoreHostApiClient.GetPrincipalGroupsAsync(string! callerUserHandle, string! principalHandle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<string!>!>!
+FabrCore.Sdk.FabrCoreHostApiClient.GetPrincipalRolesAsync(string! callerUserHandle, string! principalHandle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<string!>!>!
+FabrCore.Sdk.FabrCoreHostApiClient.GetPrincipalsAsync(string? status = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.PrincipalsListResponse!>!
+FabrCore.Sdk.FabrCoreHostApiClient.GetStorageEntityAsync<T>(string! userHandle, string! container, string! entityKey, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<T?>!
+FabrCore.Sdk.FabrCoreHostApiClient.IsPrincipalInRoleAsync(string! callerUserHandle, string! principalHandle, string! roleName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Sdk.FabrCoreHostApiClient.ListHarnessSkillsAsync(string! principalId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.Skills.FabrCoreSkillCatalogEntry!>!>!
+FabrCore.Sdk.FabrCoreHostApiClient.PublishHarnessSkillAsync(string! principalId, string! name, string! version, System.IO.Stream! zipStream, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.Skills.FabrCoreSkillPublishResult!>!
+FabrCore.Sdk.FabrCoreHostApiClient.PurgeOldAgentsAsync(int olderThanHours = 24, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.PurgeAgentsResponse!>!
+FabrCore.Sdk.FabrCoreHostApiClient.QueryAuditEventsAsync(string! callerUserHandle, FabrCore.Core.Auditing.AuditQuery! query, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.Auditing.AuditEvent!>!>!
+FabrCore.Sdk.FabrCoreHostApiClient.RemoveAclGroupMemberAsync(string! callerUserHandle, string! groupName, FabrCore.Core.Acl.GroupMember! member, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Sdk.FabrCoreHostApiClient.SendEventAsync(string! handle, FabrCore.Core.EventMessage! message, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.FabrCoreHostApiClient.SetAclEnforcementModeAsync(string! callerUserHandle, string? mode, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.FabrCoreHostApiClient.UploadFileAsync(System.IO.Stream! fileStream, string! fileName, int? ttlSeconds = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
+FabrCore.Sdk.FabrCoreHostApiClient.UpsertAclGrantAsync(string! callerUserHandle, FabrCore.Core.Acl.PermissionGrant! grant, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.FabrCoreHostApiClient.UpsertAclGroupAsync(string! callerUserHandle, FabrCore.Core.Acl.AclGroup! group, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.FabrCoreHostApiClient.UpsertAclPrincipalAsync(string! callerUserHandle, FabrCore.Core.Acl.AclPrincipal! principal, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.FabrCoreHostApiClient.UpsertAclRoleAsync(string! callerUserHandle, FabrCore.Core.Acl.AclRole! role, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.FabrCoreHostApiClient.UpsertAsync<T>(string! container, string! entityKey, T value, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.FabrCoreHostApiClient.UpsertStorageEntityAsync<T>(string! userHandle, string! container, string! entityKey, T value, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.FabrCoreNoteAttribute
+FabrCore.Sdk.FabrCoreNoteAttribute.FabrCoreNoteAttribute(string! note) -> void
+FabrCore.Sdk.FabrCoreNoteAttribute.Note.get -> string!
+FabrCore.Sdk.FabrCoreRegistry
+FabrCore.Sdk.FabrCoreRegistry.FabrCoreRegistry(Microsoft.Extensions.Logging.ILogger<FabrCore.Sdk.FabrCoreRegistry!>! logger) -> void
+FabrCore.Sdk.FabrCoreRegistry.FabrCoreRegistry(Microsoft.Extensions.Logging.ILogger<FabrCore.Sdk.FabrCoreRegistry!>! logger, System.Collections.Generic.IEnumerable<System.Reflection.Assembly!>! assemblies) -> void
+FabrCore.Sdk.FabrCoreRegistry.Features.get -> FabrCore.Core.FabrCoreFeatureState?
+FabrCore.Sdk.FabrCoreRegistry.Features.init -> void
+FabrCore.Sdk.FabrCoreRegistry.FindAgentType(string! alias) -> System.Type?
+FabrCore.Sdk.FabrCoreRegistry.GetAgentTypes() -> System.Collections.Generic.List<FabrCore.Sdk.RegistryEntry!>!
+FabrCore.Sdk.FabrCoreRegistry.GetCollisions() -> System.Collections.Generic.List<FabrCore.Sdk.RegistryCollision!>!
+FabrCore.Sdk.FabrCoreRegistry.GetPlugins() -> System.Collections.Generic.List<FabrCore.Sdk.RegistryEntry!>!
+FabrCore.Sdk.FabrCoreRegistry.GetTools() -> System.Collections.Generic.List<FabrCore.Sdk.RegistryEntry!>!
+FabrCore.Sdk.FabrCoreResolvedToolScope
+FabrCore.Sdk.FabrCoreResolvedToolScope.DisposeAsync() -> System.Threading.Tasks.ValueTask
+FabrCore.Sdk.FabrCoreResolvedToolScope.Tools.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.AITool!>!
+FabrCore.Sdk.FabrCoreRunStoppedException
+FabrCore.Sdk.FabrCoreRunStoppedException.ActualPromptInputTokens.get -> long
+FabrCore.Sdk.FabrCoreRunStoppedException.FabrCoreRunStoppedException(FabrCore.Sdk.RunStopReason reason, string! message, long actualPromptInputTokens, long turnCumulativeInputTokens, int llmCalls) -> void
+FabrCore.Sdk.FabrCoreRunStoppedException.LlmCalls.get -> int
+FabrCore.Sdk.FabrCoreRunStoppedException.Reason.get -> FabrCore.Sdk.RunStopReason
+FabrCore.Sdk.FabrCoreRunStoppedException.TurnCumulativeInputTokens.get -> long
+FabrCore.Sdk.FabrCoreStoredAgentSkillsSource
+FabrCore.Sdk.FabrCoreStoredAgentSkillsSource.FabrCoreStoredAgentSkillsSource(FabrCore.Sdk.IPrincipalScopedFabrCoreStorageProvider! storage, string! principalId, System.Collections.Generic.IEnumerable<FabrCore.Core.Skills.FabrCoreSkillReference!>! references) -> void
+FabrCore.Sdk.FabrCoreStoredAgentSkillsSource.InitializeAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.FabrCoreToolRegistry
+FabrCore.Sdk.FabrCoreToolRegistry.FabrCoreToolRegistry(Microsoft.Extensions.Logging.ILogger<FabrCore.Sdk.FabrCoreToolRegistry!>! logger) -> void
+FabrCore.Sdk.FabrCoreToolRegistry.FabrCoreToolRegistry(Microsoft.Extensions.Logging.ILogger<FabrCore.Sdk.FabrCoreToolRegistry!>! logger, System.Collections.Generic.IEnumerable<System.Reflection.Assembly!>! assemblies) -> void
+FabrCore.Sdk.FabrCoreToolRegistry.Features.get -> FabrCore.Core.FabrCoreFeatureState?
+FabrCore.Sdk.FabrCoreToolRegistry.Features.init -> void
+FabrCore.Sdk.FabrCoreToolRegistry.ResolveToolScopeAsync(System.IServiceProvider! serviceProvider, System.Collections.Generic.IEnumerable<string!>? pluginAliases, System.Collections.Generic.IEnumerable<string!>? toolAliases, FabrCore.Core.AgentConfiguration! config, FabrCore.Sdk.IFabrCoreAgentHost? agentHost = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.FabrCoreResolvedToolScope!>!
+FabrCore.Sdk.FabrCoreToolRegistry.ResolveToolsAsync(System.IServiceProvider! serviceProvider, System.Collections.Generic.IEnumerable<string!>? pluginAliases, System.Collections.Generic.IEnumerable<string!>? toolAliases, FabrCore.Core.AgentConfiguration! config, FabrCore.Sdk.IFabrCoreAgentHost? agentHost = null) -> System.Threading.Tasks.Task<System.Collections.Generic.List<Microsoft.Extensions.AI.AITool!>!>!
+FabrCore.Sdk.FileMetadataResponse
+FabrCore.Sdk.FileMetadataResponse.ContentType.get -> string!
+FabrCore.Sdk.FileMetadataResponse.ContentType.set -> void
+FabrCore.Sdk.FileMetadataResponse.ExpiresAt.get -> System.DateTime
+FabrCore.Sdk.FileMetadataResponse.ExpiresAt.set -> void
+FabrCore.Sdk.FileMetadataResponse.FileId.get -> string!
+FabrCore.Sdk.FileMetadataResponse.FileId.set -> void
+FabrCore.Sdk.FileMetadataResponse.FileMetadataResponse() -> void
+FabrCore.Sdk.FileMetadataResponse.FileSize.get -> long
+FabrCore.Sdk.FileMetadataResponse.FileSize.set -> void
+FabrCore.Sdk.FileMetadataResponse.OriginalFileName.get -> string!
+FabrCore.Sdk.FileMetadataResponse.OriginalFileName.set -> void
+FabrCore.Sdk.ForkedChatHistoryProvider
+FabrCore.Sdk.ForkedChatHistoryProvider.ForkedChatHistoryProvider(System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.ChatMessage!>! originalMessages, string? originalThreadId = null, Microsoft.Extensions.Logging.ILogger? logger = null) -> void
+FabrCore.Sdk.ForkedChatHistoryProvider.NewMessageCount.get -> int
+FabrCore.Sdk.ForkedChatHistoryProvider.NewMessages.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.ChatMessage!>!
+FabrCore.Sdk.ForkedChatHistoryProvider.OriginalMessageCount.get -> int
+FabrCore.Sdk.ForkedChatHistoryProvider.OriginalThreadId.get -> string?
+FabrCore.Sdk.ForkedChatHistoryProvider.PersistAsync(FabrCore.Sdk.IFabrCoreAgentHost! agentHost, string! threadId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.ForkedChatHistoryProvider.PersistNewMessagesOnlyAsync(FabrCore.Sdk.IFabrCoreAgentHost! agentHost, string! threadId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.ForkedChatHistoryProvider.TotalMessageCount.get -> int
+FabrCore.Sdk.ForkedChatMessageStore
+FabrCore.Sdk.ForkedChatMessageStore.ForkedChatMessageStore(System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.ChatMessage!>! originalMessages, string? originalThreadId = null, Microsoft.Extensions.Logging.ILogger? logger = null) -> void
+FabrCore.Sdk.ForkedSessionResult
+FabrCore.Sdk.ForkedSessionResult.Agent.get -> Microsoft.Agents.AI.ChatClientAgent!
+FabrCore.Sdk.ForkedSessionResult.Agent.init -> void
+FabrCore.Sdk.ForkedSessionResult.Deconstruct(out Microsoft.Agents.AI.ChatClientAgent! Agent, out Microsoft.Agents.AI.AgentSession! Session, out FabrCore.Sdk.ForkedChatHistoryProvider! HistoryProvider) -> void
+FabrCore.Sdk.ForkedSessionResult.ForkedSessionResult(FabrCore.Sdk.ForkedSessionResult! original) -> void
+FabrCore.Sdk.ForkedSessionResult.ForkedSessionResult(Microsoft.Agents.AI.ChatClientAgent! Agent, Microsoft.Agents.AI.AgentSession! Session, FabrCore.Sdk.ForkedChatHistoryProvider! HistoryProvider) -> void
+FabrCore.Sdk.ForkedSessionResult.HistoryProvider.get -> FabrCore.Sdk.ForkedChatHistoryProvider!
+FabrCore.Sdk.ForkedSessionResult.HistoryProvider.init -> void
+FabrCore.Sdk.ForkedSessionResult.Session.get -> Microsoft.Agents.AI.AgentSession!
+FabrCore.Sdk.ForkedSessionResult.Session.init -> void
+FabrCore.Sdk.HarnessArgs
+FabrCore.Sdk.HarnessLoopMode
+FabrCore.Sdk.HarnessLoopMode.Background = 2 -> FabrCore.Sdk.HarnessLoopMode
+FabrCore.Sdk.HarnessLoopMode.Judge = 8 -> FabrCore.Sdk.HarnessLoopMode
+FabrCore.Sdk.HarnessLoopMode.Marker = 4 -> FabrCore.Sdk.HarnessLoopMode
+FabrCore.Sdk.HarnessLoopMode.None = 0 -> FabrCore.Sdk.HarnessLoopMode
+FabrCore.Sdk.HarnessLoopMode.Todo = 1 -> FabrCore.Sdk.HarnessLoopMode
+FabrCore.Sdk.HarnessMessageArgs
+FabrCore.Sdk.HarnessSessionSnapshot
+FabrCore.Sdk.HarnessSessionSnapshot.HarnessSessionSnapshot() -> void
+FabrCore.Sdk.HarnessSessionSnapshot.Payload.get -> System.Text.Json.JsonElement
+FabrCore.Sdk.HarnessSessionSnapshot.Payload.set -> void
+FabrCore.Sdk.HarnessSessionSnapshot.SavedUtc.get -> System.DateTimeOffset
+FabrCore.Sdk.HarnessSessionSnapshot.SavedUtc.set -> void
+FabrCore.Sdk.HarnessSessionSnapshot.ThreadId.get -> string!
+FabrCore.Sdk.HarnessSessionSnapshot.ThreadId.set -> void
+FabrCore.Sdk.HarnessSessionSnapshot.Version.get -> int
+FabrCore.Sdk.HarnessSessionSnapshot.Version.set -> void
+FabrCore.Sdk.IEmbeddings
+FabrCore.Sdk.IEmbeddings.GetBatchEmbeddings(System.Collections.Generic.IReadOnlyList<string!>! texts) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.Embedding<float>!>!>!
+FabrCore.Sdk.IEmbeddings.GetEmbeddings(string! text) -> System.Threading.Tasks.Task<Microsoft.Extensions.AI.Embedding<float>!>!
+FabrCore.Sdk.IFabrCoreAgentHost
+FabrCore.Sdk.IFabrCoreAgentHost.AddThreadMessagesAsync(string! threadId, System.Collections.Generic.IEnumerable<FabrCore.Core.StoredChatMessage!>! messages) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.IFabrCoreAgentHost.ClearThreadAsync(string! threadId) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.IFabrCoreAgentHost.GetAgentHandle() -> string!
+FabrCore.Sdk.IFabrCoreAgentHost.GetAgentHealth(string? handle = null, FabrCore.Core.HealthDetailLevel detailLevel = FabrCore.Core.HealthDetailLevel.Detailed) -> System.Threading.Tasks.Task<FabrCore.Core.AgentHealthStatus!>!
+FabrCore.Sdk.IFabrCoreAgentHost.GetChatHistoryProvider(string! threadId) -> FabrCore.Sdk.FabrCoreChatHistoryProvider!
+FabrCore.Sdk.IFabrCoreAgentHost.GetCustomStateAsync() -> System.Threading.Tasks.Task<System.Collections.Generic.Dictionary<string!, System.Text.Json.JsonElement>!>!
+FabrCore.Sdk.IFabrCoreAgentHost.GetHandle() -> string!
+FabrCore.Sdk.IFabrCoreAgentHost.GetMessageStore(string! threadId) -> FabrCore.Sdk.FabrCoreChatHistoryProvider!
+FabrCore.Sdk.IFabrCoreAgentHost.GetParsedHandle() -> (string! UserHandle, string! AgentHandle)
+FabrCore.Sdk.IFabrCoreAgentHost.GetThreadMessagesAsync(string! threadId) -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.StoredChatMessage!>!>!
+FabrCore.Sdk.IFabrCoreAgentHost.GetUserHandle() -> string!
+FabrCore.Sdk.IFabrCoreAgentHost.HasUserHandle() -> bool
+FabrCore.Sdk.IFabrCoreAgentHost.MergeCustomStateAsync(System.Collections.Generic.Dictionary<string!, System.Text.Json.JsonElement>! changes, System.Collections.Generic.IEnumerable<string!>! deletes) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.IFabrCoreAgentHost.RegisterReminder(string! reminderName, string! messageType, string? message, System.TimeSpan dueTime, System.TimeSpan period) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.IFabrCoreAgentHost.RegisterTimer(string! timerName, string! messageType, string? message, System.TimeSpan dueTime, System.TimeSpan period) -> void
+FabrCore.Sdk.IFabrCoreAgentHost.ReplaceThreadMessagesAsync(string! threadId, System.Collections.Generic.IEnumerable<FabrCore.Core.StoredChatMessage!>! messages) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.IFabrCoreAgentHost.SendAndReceiveMessage(FabrCore.Core.AgentMessage! request) -> System.Threading.Tasks.Task<FabrCore.Core.AgentMessage!>!
+FabrCore.Sdk.IFabrCoreAgentHost.SendEvent(FabrCore.Core.EventMessage! request) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.IFabrCoreAgentHost.SendMessage(FabrCore.Core.AgentMessage! request) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.IFabrCoreAgentHost.SetStatusMessage(string? message) -> void
+FabrCore.Sdk.IFabrCoreAgentHost.TrackChatHistoryProvider(FabrCore.Sdk.FabrCoreChatHistoryProvider! provider) -> void
+FabrCore.Sdk.IFabrCoreAgentHost.TrackMessageStore(FabrCore.Sdk.FabrCoreChatHistoryProvider! store) -> void
+FabrCore.Sdk.IFabrCoreAgentHost.UnregisterReminder(string! reminderName) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.IFabrCoreAgentHost.UnregisterTimer(string! timerName) -> void
+FabrCore.Sdk.IFabrCoreAgentProxy
+FabrCore.Sdk.IFabrCoreAgentProxy.GetHealth(FabrCore.Core.HealthDetailLevel detailLevel) -> System.Threading.Tasks.Task<FabrCore.Core.ProxyHealthStatus!>!
+FabrCore.Sdk.IFabrCoreAgentProxy.OnCompaction(FabrCore.Sdk.FabrCoreChatHistoryProvider! chatHistoryProvider, FabrCore.Sdk.CompactionConfig! compactionConfig, int estimatedTokens = 0) -> System.Threading.Tasks.Task<FabrCore.Sdk.CompactionResult?>!
+FabrCore.Sdk.IFabrCoreAgentProxy.OnEvent(FabrCore.Core.EventMessage! message) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.IFabrCoreAgentProxy.OnInitialize() -> System.Threading.Tasks.Task!
+FabrCore.Sdk.IFabrCoreAgentProxy.OnMessage(FabrCore.Core.AgentMessage! message) -> System.Threading.Tasks.Task<FabrCore.Core.AgentMessage!>!
+FabrCore.Sdk.IFabrCoreAgentProxy.OnMessageBusy(FabrCore.Core.AgentMessage! message) -> System.Threading.Tasks.Task<FabrCore.Core.AgentMessage!>!
+FabrCore.Sdk.IFabrCoreAgentProxy.OnReset() -> System.Threading.Tasks.Task!
+FabrCore.Sdk.IFabrCoreAgentProxy.StatusMessage.get -> string?
+FabrCore.Sdk.IFabrCoreAgentProxy.StatusMessage.set -> void
+FabrCore.Sdk.IFabrCoreChatClientService
+FabrCore.Sdk.IFabrCoreChatClientService.GetAudioClient(string! name, int networkTimeoutSeconds = 100) -> System.Threading.Tasks.Task<Microsoft.Extensions.AI.ISpeechToTextClient!>!
+FabrCore.Sdk.IFabrCoreChatClientService.GetChatClient(string! name, int networkTimeoutSeconds = 100) -> System.Threading.Tasks.Task<Microsoft.Extensions.AI.IChatClient!>!
+FabrCore.Sdk.IFabrCoreChatClientService.GetEmbeddingsClient(string! name) -> System.Threading.Tasks.Task<Microsoft.Extensions.AI.IEmbeddingGenerator<string!, Microsoft.Extensions.AI.Embedding<float>!>!>!
+FabrCore.Sdk.IFabrCoreChatClientService.GetModelConfigurationAsync(string! name) -> System.Threading.Tasks.Task<FabrCore.Core.ModelConfiguration!>!
+FabrCore.Sdk.IFabrCoreHostApiClient
+FabrCore.Sdk.IFabrCoreHostApiClient.AddAclGroupMemberAsync(string! callerUserHandle, string! groupName, FabrCore.Core.Acl.GroupMember! member, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.IFabrCoreHostApiClient.ChatAsync(string! handle, string! message, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.AgentMessage!>!
+FabrCore.Sdk.IFabrCoreHostApiClient.CheckPermissionAsync(string! callerUserHandle, string! principalHandle, string! action, string! resource = "*:*", System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.Acl.AclEvaluationResponse!>!
+FabrCore.Sdk.IFabrCoreHostApiClient.CreateAgentsAsync(System.Collections.Generic.List<FabrCore.Core.AgentConfiguration!>! configs, FabrCore.Core.HealthDetailLevel detailLevel = FabrCore.Core.HealthDetailLevel.Basic, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.CreateAgentsResponse!>!
+FabrCore.Sdk.IFabrCoreHostApiClient.DeleteAclGrantAsync(string! callerUserHandle, string! grantId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Sdk.IFabrCoreHostApiClient.DeleteAclGroupAsync(string! callerUserHandle, string! groupName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Sdk.IFabrCoreHostApiClient.DeleteAclPrincipalAsync(string! callerUserHandle, string! principalHandle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Sdk.IFabrCoreHostApiClient.DeleteAclRoleAsync(string! callerUserHandle, string! roleName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Sdk.IFabrCoreHostApiClient.DeleteFileAsync(string! fileId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Sdk.IFabrCoreHostApiClient.DeleteHarnessSkillAsync(string! principalId, string! name, string! version, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Sdk.IFabrCoreHostApiClient.DeleteStorageEntityAsync(string! userHandle, string! container, string! entityKey, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Sdk.IFabrCoreHostApiClient.EnsureBlueprintAgentsAsync(string! userHandle, FabrCore.Sdk.AgentBlueprintRequest! blueprint, FabrCore.Core.HealthDetailLevel detailLevel = FabrCore.Core.HealthDetailLevel.Basic, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.AgentBlueprintResponse!>!
+FabrCore.Sdk.IFabrCoreHostApiClient.EvaluateAclAsync(string! callerUserHandle, FabrCore.Core.Acl.AclEvaluationRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.Acl.AclEvaluationResponse!>!
+FabrCore.Sdk.IFabrCoreHostApiClient.GetAclConfigAsync(string! callerUserHandle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.Acl.AclConfigResponse!>!
+FabrCore.Sdk.IFabrCoreHostApiClient.GetAclGrantAsync(string! callerUserHandle, string! grantId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.Acl.PermissionGrant?>!
+FabrCore.Sdk.IFabrCoreHostApiClient.GetAclGrantsAsync(string! callerUserHandle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.Acl.PermissionGrant!>!>!
+FabrCore.Sdk.IFabrCoreHostApiClient.GetAclGroupAsync(string! callerUserHandle, string! groupName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.Acl.AclGroup?>!
+FabrCore.Sdk.IFabrCoreHostApiClient.GetAclGroupsAsync(string! callerUserHandle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.Acl.AclGroup!>!>!
+FabrCore.Sdk.IFabrCoreHostApiClient.GetAclPrincipalAsync(string! callerUserHandle, string! principalHandle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.Acl.AclPrincipal?>!
+FabrCore.Sdk.IFabrCoreHostApiClient.GetAclPrincipalsAsync(string! callerUserHandle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.Acl.AclPrincipal!>!>!
+FabrCore.Sdk.IFabrCoreHostApiClient.GetAclRoleAsync(string! callerUserHandle, string! roleName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.Acl.AclRole?>!
+FabrCore.Sdk.IFabrCoreHostApiClient.GetAclRolesAsync(string! callerUserHandle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.Acl.AclRole!>!>!
+FabrCore.Sdk.IFabrCoreHostApiClient.GetAgentAsync(string! key, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.AgentInfo?>!
+FabrCore.Sdk.IFabrCoreHostApiClient.GetAgentHealthAsync(string! handle, FabrCore.Core.HealthDetailLevel detailLevel = FabrCore.Core.HealthDetailLevel.Basic, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.AgentHealthStatus!>!
+FabrCore.Sdk.IFabrCoreHostApiClient.GetAgentStatisticsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.AgentStatisticsResponse!>!
+FabrCore.Sdk.IFabrCoreHostApiClient.GetAgentsAsync(string? status = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.AgentsListResponse!>!
+FabrCore.Sdk.IFabrCoreHostApiClient.GetApiKeyAsync(string! alias, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.ApiKeyResponse!>!
+FabrCore.Sdk.IFabrCoreHostApiClient.GetAuditConfigAsync(string! callerUserHandle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.AuditConfigResponse!>!
+FabrCore.Sdk.IFabrCoreHostApiClient.GetAuditEventsAsync(string! callerUserHandle, string? category = null, string? outcome = null, string? subjectPrincipal = null, System.DateTimeOffset? since = null, int? limit = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.Auditing.AuditEvent!>!>!
+FabrCore.Sdk.IFabrCoreHostApiClient.GetBatchEmbeddingsAsync(System.Collections.Generic.List<FabrCore.Sdk.BatchEmbeddingItem!>! items, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.BatchEmbeddingResponse!>!
+FabrCore.Sdk.IFabrCoreHostApiClient.GetChatCompletionAsync(FabrCore.Sdk.ChatCompletionRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.ChatCompletionResponse!>!
+FabrCore.Sdk.IFabrCoreHostApiClient.GetChatCompletionAsync(string! prompt, FabrCore.Sdk.ChatCompletionOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.ChatCompletionResponse!>!
+FabrCore.Sdk.IFabrCoreHostApiClient.GetDiscoveryAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.DiscoveryResponse!>!
+FabrCore.Sdk.IFabrCoreHostApiClient.GetEmbeddingsAsync(string! text, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.EmbeddingResponse!>!
+FabrCore.Sdk.IFabrCoreHostApiClient.GetFileAsync(string! fileId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.IO.Stream?>!
+FabrCore.Sdk.IFabrCoreHostApiClient.GetFileInfoAsync(string! fileId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.FileMetadataResponse?>!
+FabrCore.Sdk.IFabrCoreHostApiClient.GetHarnessSkillAsync(string! principalId, string! name, string! version, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.Skills.FabrCoreSkillManifest?>!
+FabrCore.Sdk.IFabrCoreHostApiClient.GetModelConfigAsync(string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.ModelConfigResponse!>!
+FabrCore.Sdk.IFabrCoreHostApiClient.GetPrincipalGroupsAsync(string! callerUserHandle, string! principalHandle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<string!>!>!
+FabrCore.Sdk.IFabrCoreHostApiClient.GetPrincipalRolesAsync(string! callerUserHandle, string! principalHandle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<string!>!>!
+FabrCore.Sdk.IFabrCoreHostApiClient.GetPrincipalsAsync(string? status = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.PrincipalsListResponse!>!
+FabrCore.Sdk.IFabrCoreHostApiClient.GetStorageEntityAsync<T>(string! userHandle, string! container, string! entityKey, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<T?>!
+FabrCore.Sdk.IFabrCoreHostApiClient.IsPrincipalInRoleAsync(string! callerUserHandle, string! principalHandle, string! roleName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Sdk.IFabrCoreHostApiClient.ListHarnessSkillsAsync(string! principalId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.Skills.FabrCoreSkillCatalogEntry!>!>!
+FabrCore.Sdk.IFabrCoreHostApiClient.PublishHarnessSkillAsync(string! principalId, string! name, string! version, System.IO.Stream! zipStream, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.Skills.FabrCoreSkillPublishResult!>!
+FabrCore.Sdk.IFabrCoreHostApiClient.PurgeOldAgentsAsync(int olderThanHours = 24, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.PurgeAgentsResponse!>!
+FabrCore.Sdk.IFabrCoreHostApiClient.QueryAuditEventsAsync(string! callerUserHandle, FabrCore.Core.Auditing.AuditQuery! query, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.Auditing.AuditEvent!>!>!
+FabrCore.Sdk.IFabrCoreHostApiClient.RemoveAclGroupMemberAsync(string! callerUserHandle, string! groupName, FabrCore.Core.Acl.GroupMember! member, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Sdk.IFabrCoreHostApiClient.SendEventAsync(string! handle, FabrCore.Core.EventMessage! message, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.IFabrCoreHostApiClient.SetAclEnforcementModeAsync(string! callerUserHandle, string? mode, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.IFabrCoreHostApiClient.UploadFileAsync(System.IO.Stream! fileStream, string! fileName, int? ttlSeconds = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
+FabrCore.Sdk.IFabrCoreHostApiClient.UpsertAclGrantAsync(string! callerUserHandle, FabrCore.Core.Acl.PermissionGrant! grant, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.IFabrCoreHostApiClient.UpsertAclGroupAsync(string! callerUserHandle, FabrCore.Core.Acl.AclGroup! group, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.IFabrCoreHostApiClient.UpsertAclPrincipalAsync(string! callerUserHandle, FabrCore.Core.Acl.AclPrincipal! principal, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.IFabrCoreHostApiClient.UpsertAclRoleAsync(string! callerUserHandle, FabrCore.Core.Acl.AclRole! role, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.IFabrCoreHostApiClient.UpsertStorageEntityAsync<T>(string! userHandle, string! container, string! entityKey, T value, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.IFabrCoreModelConfigurationResolver
+FabrCore.Sdk.IFabrCoreModelConfigurationResolver.GetApiKeyAsync(string! alias, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
+FabrCore.Sdk.IFabrCoreModelConfigurationResolver.GetModelConfigurationAsync(string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.ModelConfiguration!>!
+FabrCore.Sdk.IFabrCorePlugin
+FabrCore.Sdk.IFabrCorePlugin.InitializeAsync(FabrCore.Core.AgentConfiguration! config, System.IServiceProvider! serviceProvider) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.IFabrCoreRegistry
+FabrCore.Sdk.IFabrCoreRegistry.FindAgentType(string! alias) -> System.Type?
+FabrCore.Sdk.IFabrCoreRegistry.GetAgentTypes() -> System.Collections.Generic.List<FabrCore.Sdk.RegistryEntry!>!
+FabrCore.Sdk.IFabrCoreRegistry.GetCollisions() -> System.Collections.Generic.List<FabrCore.Sdk.RegistryCollision!>!
+FabrCore.Sdk.IFabrCoreRegistry.GetPlugins() -> System.Collections.Generic.List<FabrCore.Sdk.RegistryEntry!>!
+FabrCore.Sdk.IFabrCoreRegistry.GetTools() -> System.Collections.Generic.List<FabrCore.Sdk.RegistryEntry!>!
+FabrCore.Sdk.IFabrCoreStorageProvider
+FabrCore.Sdk.IFabrCoreStorageProvider.DeleteAsync(string! container, string! entityKey, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Sdk.IFabrCoreStorageProvider.GetAsync<T>(string! container, string! entityKey, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<T?>!
+FabrCore.Sdk.IFabrCoreStorageProvider.UpsertAsync<T>(string! container, string! entityKey, T value, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.IHarnessSessionStore
+FabrCore.Sdk.IHarnessSessionStore.DeleteAsync(string! key) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.IHarnessSessionStore.WriteAsync(string! key, FabrCore.Sdk.HarnessSessionSnapshot! snapshot) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.IPrincipalScopedFabrCoreStorageProvider
+FabrCore.Sdk.IPrincipalScopedFabrCoreStorageProvider.DeleteAsync(string! principalId, string! container, string! entityKey, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Sdk.IPrincipalScopedFabrCoreStorageProvider.GetAsync<T>(string! principalId, string! container, string! entityKey, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<T?>!
+FabrCore.Sdk.IPrincipalScopedFabrCoreStorageProvider.UpsertAsync<T>(string! principalId, string! container, string! entityKey, T value, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Sdk.IScopedAgentMemoryTool
+FabrCore.Sdk.IScopedAgentMemoryTool.WriteScope.get -> string!
+FabrCore.Sdk.ITaskWorkingAgent
+FabrCore.Sdk.ITaskWorkingAgent.BuildTrackingContext(bool includeExecutionState = true) -> string!
+FabrCore.Sdk.ITaskWorkingAgent.CurrentPlan.get -> FabrCore.Sdk.TaskTracking?
+FabrCore.Sdk.ITaskWorkingAgent.Execution.get -> FabrCore.Sdk.ExecutionState!
+FabrCore.Sdk.ITaskWorkingAgent.HandleRetryTimer(string! workItemId) -> void
+FabrCore.Sdk.ITaskWorkingAgent.PlanAsync(System.Collections.Generic.IReadOnlyList<FabrCore.Sdk.AvailableAgent!>? availableAgents = null, string? extractionPrompt = null, FabrCore.Sdk.EffortLevel effortLevel = FabrCore.Sdk.EffortLevel.Quick, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.TaskTracking!>!
+FabrCore.Sdk.ITaskWorkingAgent.PlanOrReplanAsync(System.Collections.Generic.List<FabrCore.Sdk.TaskStatusUpdate!>? statusUpdates = null, FabrCore.Sdk.EffortLevel? effortLevel = null, string? extractionPrompt = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.TaskTracking?>!
+FabrCore.Sdk.ITaskWorkingAgent.ReplanAsync(FabrCore.Sdk.ReplanContext! replanContext, System.Collections.Generic.IReadOnlyList<FabrCore.Sdk.AvailableAgent!>? availableAgents = null, string? extractionPrompt = null, FabrCore.Sdk.EffortLevel? effortLevel = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.TaskTracking!>!
+FabrCore.Sdk.ITaskWorkingAgent.StartExecution() -> void
+FabrCore.Sdk.ITaskWorkingAgent.StopExecution() -> void
+FabrCore.Sdk.ITaskWorkingAgentFactory
+FabrCore.Sdk.ITaskWorkingAgentFactory.Create(FabrCore.Sdk.FabrCoreChatHistoryProvider! historyProvider) -> FabrCore.Sdk.ITaskWorkingAgent!
+FabrCore.Sdk.InternalAgentArgs
+FabrCore.Sdk.InternalAgentExecutionPolicy
+FabrCore.Sdk.InternalAgentExecutionPolicy.ConcurrentReadOnly = 0 -> FabrCore.Sdk.InternalAgentExecutionPolicy
+FabrCore.Sdk.InternalAgentExecutionPolicy.ConcurrentWithMemory = 3 -> FabrCore.Sdk.InternalAgentExecutionPolicy
+FabrCore.Sdk.InternalAgentExecutionPolicy.OrchestratorOnly = 2 -> FabrCore.Sdk.InternalAgentExecutionPolicy
+FabrCore.Sdk.InternalAgentExecutionPolicy.SerializedReadOnly = 1 -> FabrCore.Sdk.InternalAgentExecutionPolicy
+FabrCore.Sdk.InternalAgentOptions
+FabrCore.Sdk.InternalAgentOptions.<Clone>$() -> FabrCore.Sdk.InternalAgentOptions!
+FabrCore.Sdk.InternalAgentOptions.AIContextProviders.get -> System.Collections.Generic.IEnumerable<Microsoft.Agents.AI.AIContextProvider!>?
+FabrCore.Sdk.InternalAgentOptions.AIContextProviders.init -> void
+FabrCore.Sdk.InternalAgentOptions.Description.get -> string!
+FabrCore.Sdk.InternalAgentOptions.Description.init -> void
+FabrCore.Sdk.InternalAgentOptions.EnableContextCompaction.get -> bool
+FabrCore.Sdk.InternalAgentOptions.EnableContextCompaction.init -> void
+FabrCore.Sdk.InternalAgentOptions.EnableOpenTelemetry.get -> bool
+FabrCore.Sdk.InternalAgentOptions.EnableOpenTelemetry.init -> void
+FabrCore.Sdk.InternalAgentOptions.EnableSensitiveTelemetryData.get -> bool
+FabrCore.Sdk.InternalAgentOptions.EnableSensitiveTelemetryData.init -> void
+FabrCore.Sdk.InternalAgentOptions.Equals(FabrCore.Sdk.InternalAgentOptions? other) -> bool
+FabrCore.Sdk.InternalAgentOptions.ExecutionPolicy.get -> FabrCore.Sdk.InternalAgentExecutionPolicy
+FabrCore.Sdk.InternalAgentOptions.ExecutionPolicy.init -> void
+FabrCore.Sdk.InternalAgentOptions.Instructions.get -> string!
+FabrCore.Sdk.InternalAgentOptions.Instructions.init -> void
+FabrCore.Sdk.InternalAgentOptions.InternalAgentOptions() -> void
+FabrCore.Sdk.InternalAgentOptions.MaxConcurrency.get -> int
+FabrCore.Sdk.InternalAgentOptions.MaxConcurrency.init -> void
+FabrCore.Sdk.InternalAgentOptions.Model.get -> string!
+FabrCore.Sdk.InternalAgentOptions.Model.init -> void
+FabrCore.Sdk.InternalAgentOptions.Name.get -> string!
+FabrCore.Sdk.InternalAgentOptions.Name.init -> void
+FabrCore.Sdk.InternalAgentOptions.Timeout.get -> System.TimeSpan
+FabrCore.Sdk.InternalAgentOptions.Timeout.init -> void
+FabrCore.Sdk.InternalAgentOptions.ToolRisks.get -> System.Collections.Generic.IReadOnlyDictionary<string!, FabrCore.Sdk.InternalAgentToolRisk>?
+FabrCore.Sdk.InternalAgentOptions.ToolRisks.init -> void
+FabrCore.Sdk.InternalAgentOptions.ToolScope.get -> FabrCore.Sdk.InternalAgentToolScope?
+FabrCore.Sdk.InternalAgentOptions.ToolScope.init -> void
+FabrCore.Sdk.InternalAgentOptions.Tools.get -> System.Collections.Generic.IList<Microsoft.Extensions.AI.AITool!>?
+FabrCore.Sdk.InternalAgentOptions.Tools.init -> void
+FabrCore.Sdk.InternalAgentResult
+FabrCore.Sdk.InternalAgentResult.<Clone>$() -> FabrCore.Sdk.InternalAgentResult!
+FabrCore.Sdk.InternalAgentResult.Agent.get -> Microsoft.Agents.AI.AIAgent!
+FabrCore.Sdk.InternalAgentResult.Agent.init -> void
+FabrCore.Sdk.InternalAgentResult.AsBackgroundAgent() -> Microsoft.Agents.AI.AIAgent!
+FabrCore.Sdk.InternalAgentResult.Deconstruct(out Microsoft.Agents.AI.AIAgent! Agent, out string! Name, out FabrCore.Sdk.InternalAgentExecutionPolicy ExecutionPolicy, out System.TimeSpan Timeout) -> void
+FabrCore.Sdk.InternalAgentResult.Equals(FabrCore.Sdk.InternalAgentResult? other) -> bool
+FabrCore.Sdk.InternalAgentResult.ExecutionPolicy.get -> FabrCore.Sdk.InternalAgentExecutionPolicy
+FabrCore.Sdk.InternalAgentResult.ExecutionPolicy.init -> void
+FabrCore.Sdk.InternalAgentResult.InternalAgentResult(Microsoft.Agents.AI.AIAgent! Agent, string! Name, FabrCore.Sdk.InternalAgentExecutionPolicy ExecutionPolicy, System.TimeSpan Timeout) -> void
+FabrCore.Sdk.InternalAgentResult.Name.get -> string!
+FabrCore.Sdk.InternalAgentResult.Name.init -> void
+FabrCore.Sdk.InternalAgentResult.Timeout.get -> System.TimeSpan
+FabrCore.Sdk.InternalAgentResult.Timeout.init -> void
+FabrCore.Sdk.InternalAgentToolRisk
+FabrCore.Sdk.InternalAgentToolRisk.ApprovalRequired = 3 -> FabrCore.Sdk.InternalAgentToolRisk
+FabrCore.Sdk.InternalAgentToolRisk.Compute = 2 -> FabrCore.Sdk.InternalAgentToolRisk
+FabrCore.Sdk.InternalAgentToolRisk.MemoryWrite = 5 -> FabrCore.Sdk.InternalAgentToolRisk
+FabrCore.Sdk.InternalAgentToolRisk.Read = 1 -> FabrCore.Sdk.InternalAgentToolRisk
+FabrCore.Sdk.InternalAgentToolRisk.SystemOnly = 4 -> FabrCore.Sdk.InternalAgentToolRisk
+FabrCore.Sdk.InternalAgentToolRisk.Unclassified = 0 -> FabrCore.Sdk.InternalAgentToolRisk
+FabrCore.Sdk.InternalAgentToolScope
+FabrCore.Sdk.InternalAgentToolScope.DisposeAsync() -> System.Threading.Tasks.ValueTask
+FabrCore.Sdk.InternalAgentToolScope.ExecutionPolicy.get -> FabrCore.Sdk.InternalAgentExecutionPolicy
+FabrCore.Sdk.InternalAgentToolScope.Name.get -> string!
+FabrCore.Sdk.InternalAgentToolScope.ToolRisks.get -> System.Collections.Generic.IReadOnlyDictionary<string!, FabrCore.Sdk.InternalAgentToolRisk>!
+FabrCore.Sdk.InternalAgentToolScope.Tools.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.AITool!>!
+FabrCore.Sdk.InternalAgentToolScopeOptions
+FabrCore.Sdk.InternalAgentToolScopeOptions.<Clone>$() -> FabrCore.Sdk.InternalAgentToolScopeOptions!
+FabrCore.Sdk.InternalAgentToolScopeOptions.Equals(FabrCore.Sdk.InternalAgentToolScopeOptions? other) -> bool
+FabrCore.Sdk.InternalAgentToolScopeOptions.ExecutionPolicy.get -> FabrCore.Sdk.InternalAgentExecutionPolicy
+FabrCore.Sdk.InternalAgentToolScopeOptions.ExecutionPolicy.init -> void
+FabrCore.Sdk.InternalAgentToolScopeOptions.InternalAgentToolScopeOptions() -> void
+FabrCore.Sdk.InternalAgentToolScopeOptions.McpServers.get -> System.Collections.Generic.IReadOnlyList<FabrCore.Core.McpServerConfig!>!
+FabrCore.Sdk.InternalAgentToolScopeOptions.McpServers.init -> void
+FabrCore.Sdk.InternalAgentToolScopeOptions.Plugins.get -> System.Collections.Generic.IReadOnlyList<string!>!
+FabrCore.Sdk.InternalAgentToolScopeOptions.Plugins.init -> void
+FabrCore.Sdk.InternalAgentToolScopeOptions.RequireExplicitRiskClassification.get -> bool
+FabrCore.Sdk.InternalAgentToolScopeOptions.RequireExplicitRiskClassification.init -> void
+FabrCore.Sdk.InternalAgentToolScopeOptions.ScopeName.get -> string!
+FabrCore.Sdk.InternalAgentToolScopeOptions.ScopeName.init -> void
+FabrCore.Sdk.InternalAgentToolScopeOptions.ToolRisks.get -> System.Collections.Generic.IReadOnlyDictionary<string!, FabrCore.Sdk.InternalAgentToolRisk>!
+FabrCore.Sdk.InternalAgentToolScopeOptions.ToolRisks.init -> void
+FabrCore.Sdk.InternalAgentToolScopeOptions.Tools.get -> System.Collections.Generic.IReadOnlyList<string!>!
+FabrCore.Sdk.InternalAgentToolScopeOptions.Tools.init -> void
+FabrCore.Sdk.LlmCallContext
+FabrCore.Sdk.LlmCallContext.AgentHandle.get -> string?
+FabrCore.Sdk.LlmCallContext.AgentHandle.init -> void
+FabrCore.Sdk.LlmCallContext.Dispose() -> void
+FabrCore.Sdk.LlmCallContext.LlmCallContext() -> void
+FabrCore.Sdk.LlmCallContext.OriginContext.get -> string!
+FabrCore.Sdk.LlmCallContext.OriginContext.init -> void
+FabrCore.Sdk.LlmCallContext.TraceId.get -> string?
+FabrCore.Sdk.LlmCallContext.TraceId.init -> void
+FabrCore.Sdk.LlmUsageScope
+FabrCore.Sdk.LlmUsageScope.AgentHandle.get -> string?
+FabrCore.Sdk.LlmUsageScope.AgentHandle.set -> void
+FabrCore.Sdk.LlmUsageScope.ApplyTo(System.Collections.Generic.Dictionary<string!, string!>! args) -> void
+FabrCore.Sdk.LlmUsageScope.CachedInputTokens.get -> long
+FabrCore.Sdk.LlmUsageScope.CallCount.get -> long
+FabrCore.Sdk.LlmUsageScope.Dispose() -> void
+FabrCore.Sdk.LlmUsageScope.DurationMs.get -> long
+FabrCore.Sdk.LlmUsageScope.FinishReason.get -> string?
+FabrCore.Sdk.LlmUsageScope.InputTokens.get -> long
+FabrCore.Sdk.LlmUsageScope.LlmUsageScope() -> void
+FabrCore.Sdk.LlmUsageScope.MaxInputTokensPerCall.get -> long
+FabrCore.Sdk.LlmUsageScope.Merge(FabrCore.Core.Monitoring.LlmUsageInfo! usage) -> void
+FabrCore.Sdk.LlmUsageScope.MergeFromArgs(System.Collections.Generic.Dictionary<string!, string!>? args) -> void
+FabrCore.Sdk.LlmUsageScope.ModelId.get -> string?
+FabrCore.Sdk.LlmUsageScope.OriginContext.get -> string?
+FabrCore.Sdk.LlmUsageScope.OriginContext.set -> void
+FabrCore.Sdk.LlmUsageScope.OutputTokens.get -> long
+FabrCore.Sdk.LlmUsageScope.ParentMessageId.get -> string?
+FabrCore.Sdk.LlmUsageScope.ParentMessageId.set -> void
+FabrCore.Sdk.LlmUsageScope.ReasoningTokens.get -> long
+FabrCore.Sdk.LlmUsageScope.Record(Microsoft.Extensions.AI.ChatResponse! response, long elapsedMs) -> void
+FabrCore.Sdk.LlmUsageScope.TraceId.get -> string?
+FabrCore.Sdk.LlmUsageScope.TraceId.set -> void
+FabrCore.Sdk.MissingPlanModeBehavior
+FabrCore.Sdk.MissingPlanModeBehavior.PreserveCurrentMode = 1 -> FabrCore.Sdk.MissingPlanModeBehavior
+FabrCore.Sdk.MissingPlanModeBehavior.SelectExecution = 2 -> FabrCore.Sdk.MissingPlanModeBehavior
+FabrCore.Sdk.MissingPlanModeBehavior.SelectPlanning = 0 -> FabrCore.Sdk.MissingPlanModeBehavior
+FabrCore.Sdk.ModelConfigResponse
+FabrCore.Sdk.ModelConfigResponse.ApiKeyAlias.get -> string!
+FabrCore.Sdk.ModelConfigResponse.ApiKeyAlias.set -> void
+FabrCore.Sdk.ModelConfigResponse.CompactionEnabled.get -> bool?
+FabrCore.Sdk.ModelConfigResponse.CompactionEnabled.set -> void
+FabrCore.Sdk.ModelConfigResponse.CompactionKeepLastN.get -> int?
+FabrCore.Sdk.ModelConfigResponse.CompactionKeepLastN.set -> void
+FabrCore.Sdk.ModelConfigResponse.CompactionStaleAfterMinutes.get -> int?
+FabrCore.Sdk.ModelConfigResponse.CompactionStaleAfterMinutes.set -> void
+FabrCore.Sdk.ModelConfigResponse.CompactionThreshold.get -> double?
+FabrCore.Sdk.ModelConfigResponse.CompactionThreshold.set -> void
+FabrCore.Sdk.ModelConfigResponse.ContextCompactionEnabled.get -> bool?
+FabrCore.Sdk.ModelConfigResponse.ContextCompactionEnabled.set -> void
+FabrCore.Sdk.ModelConfigResponse.ContextEvictThreshold.get -> double?
+FabrCore.Sdk.ModelConfigResponse.ContextEvictThreshold.set -> void
+FabrCore.Sdk.ModelConfigResponse.ContextTruncateThreshold.get -> double?
+FabrCore.Sdk.ModelConfigResponse.ContextTruncateThreshold.set -> void
+FabrCore.Sdk.ModelConfigResponse.ContextWindowTokens.get -> int?
+FabrCore.Sdk.ModelConfigResponse.ContextWindowTokens.set -> void
+FabrCore.Sdk.ModelConfigResponse.MaxOutputTokens.get -> int?
+FabrCore.Sdk.ModelConfigResponse.MaxOutputTokens.set -> void
+FabrCore.Sdk.ModelConfigResponse.MaxPromptInputTokens.get -> int?
+FabrCore.Sdk.ModelConfigResponse.MaxPromptInputTokens.set -> void
+FabrCore.Sdk.ModelConfigResponse.Model.get -> string!
+FabrCore.Sdk.ModelConfigResponse.Model.set -> void
+FabrCore.Sdk.ModelConfigResponse.ModelConfigResponse() -> void
+FabrCore.Sdk.ModelConfigResponse.Name.get -> string!
+FabrCore.Sdk.ModelConfigResponse.Name.set -> void
+FabrCore.Sdk.ModelConfigResponse.PerTurnMaxInputTokens.get -> int?
+FabrCore.Sdk.ModelConfigResponse.PerTurnMaxInputTokens.set -> void
+FabrCore.Sdk.ModelConfigResponse.Provider.get -> string!
+FabrCore.Sdk.ModelConfigResponse.Provider.set -> void
+FabrCore.Sdk.ModelConfigResponse.ReasoningEffort.get -> string?
+FabrCore.Sdk.ModelConfigResponse.ReasoningEffort.set -> void
+FabrCore.Sdk.ModelConfigResponse.RunawayBudgetBehavior.get -> string?
+FabrCore.Sdk.ModelConfigResponse.RunawayBudgetBehavior.set -> void
+FabrCore.Sdk.ModelConfigResponse.TimeoutSeconds.get -> int
+FabrCore.Sdk.ModelConfigResponse.TimeoutSeconds.set -> void
+FabrCore.Sdk.ModelConfigResponse.Uri.get -> string!
+FabrCore.Sdk.ModelConfigResponse.Uri.set -> void
+FabrCore.Sdk.PlanDiff
+FabrCore.Sdk.PlanDiff.AddedWorkItemIds.get -> System.Collections.Generic.List<string!>!
+FabrCore.Sdk.PlanDiff.AddedWorkItemIds.set -> void
+FabrCore.Sdk.PlanDiff.ChangeSummary.get -> string!
+FabrCore.Sdk.PlanDiff.ChangeSummary.set -> void
+FabrCore.Sdk.PlanDiff.DependencyChangedWorkItemIds.get -> System.Collections.Generic.List<string!>!
+FabrCore.Sdk.PlanDiff.DependencyChangedWorkItemIds.set -> void
+FabrCore.Sdk.PlanDiff.PlanDiff() -> void
+FabrCore.Sdk.PlanDiff.ReassignedWorkItemIds.get -> System.Collections.Generic.List<string!>!
+FabrCore.Sdk.PlanDiff.ReassignedWorkItemIds.set -> void
+FabrCore.Sdk.PlanDiff.RemovedWorkItemIds.get -> System.Collections.Generic.List<string!>!
+FabrCore.Sdk.PlanDiff.RemovedWorkItemIds.set -> void
+FabrCore.Sdk.PlanDiff.StatusChangedWorkItemIds.get -> System.Collections.Generic.List<string!>!
+FabrCore.Sdk.PlanDiff.StatusChangedWorkItemIds.set -> void
+FabrCore.Sdk.PlanValidator
+FabrCore.Sdk.PluginAliasAttribute
+FabrCore.Sdk.PluginAliasAttribute.Alias.get -> string!
+FabrCore.Sdk.PluginAliasAttribute.PluginAliasAttribute(string! alias) -> void
+FabrCore.Sdk.PluginConfigExtensions
+FabrCore.Sdk.PrincipalsListResponse
+FabrCore.Sdk.PrincipalsListResponse.Count.get -> int
+FabrCore.Sdk.PrincipalsListResponse.Count.set -> void
+FabrCore.Sdk.PrincipalsListResponse.Principals.get -> System.Collections.Generic.List<FabrCore.Core.AgentInfo!>!
+FabrCore.Sdk.PrincipalsListResponse.Principals.set -> void
+FabrCore.Sdk.PrincipalsListResponse.PrincipalsListResponse() -> void
+FabrCore.Sdk.ProjectionConfig
+FabrCore.Sdk.ProjectionConfig.Enabled.get -> bool
+FabrCore.Sdk.ProjectionConfig.Enabled.init -> void
+FabrCore.Sdk.ProjectionConfig.MaxContextTokens.get -> int
+FabrCore.Sdk.ProjectionConfig.MaxContextTokens.init -> void
+FabrCore.Sdk.ProjectionConfig.MinKeepLastN.get -> int
+FabrCore.Sdk.ProjectionConfig.MinKeepLastN.init -> void
+FabrCore.Sdk.ProjectionConfig.ProjectionConfig() -> void
+FabrCore.Sdk.ProjectionConfig.ProjectionConfig(FabrCore.Sdk.ProjectionConfig! original) -> void
+FabrCore.Sdk.ProjectionConfig.Threshold.get -> double
+FabrCore.Sdk.ProjectionConfig.Threshold.init -> void
+FabrCore.Sdk.ProviderSanitizingChatClient
+FabrCore.Sdk.ProviderSanitizingChatClient.ProviderSanitizingChatClient(Microsoft.Extensions.AI.IChatClient! innerClient, bool stripNonUserAuthorName = true) -> void
+FabrCore.Sdk.PurgeAgentsResponse
+FabrCore.Sdk.PurgeAgentsResponse.Message.get -> string!
+FabrCore.Sdk.PurgeAgentsResponse.Message.set -> void
+FabrCore.Sdk.PurgeAgentsResponse.PurgeAgentsResponse() -> void
+FabrCore.Sdk.PurgeAgentsResponse.PurgedCount.get -> int
+FabrCore.Sdk.PurgeAgentsResponse.PurgedCount.set -> void
+FabrCore.Sdk.RegistryCollision
+FabrCore.Sdk.RegistryCollision.Alias.get -> string!
+FabrCore.Sdk.RegistryCollision.Alias.set -> void
+FabrCore.Sdk.RegistryCollision.Category.get -> string!
+FabrCore.Sdk.RegistryCollision.Category.set -> void
+FabrCore.Sdk.RegistryCollision.RegistryCollision() -> void
+FabrCore.Sdk.RegistryCollision.Types.get -> System.Collections.Generic.List<string!>!
+FabrCore.Sdk.RegistryCollision.Types.set -> void
+FabrCore.Sdk.RegistryEntry
+FabrCore.Sdk.RegistryEntry.Aliases.get -> System.Collections.Generic.List<string!>!
+FabrCore.Sdk.RegistryEntry.Aliases.set -> void
+FabrCore.Sdk.RegistryEntry.Capabilities.get -> string?
+FabrCore.Sdk.RegistryEntry.Capabilities.set -> void
+FabrCore.Sdk.RegistryEntry.Description.get -> string?
+FabrCore.Sdk.RegistryEntry.Description.set -> void
+FabrCore.Sdk.RegistryEntry.Methods.get -> System.Collections.Generic.List<FabrCore.Sdk.RegistryMethodEntry!>!
+FabrCore.Sdk.RegistryEntry.Methods.set -> void
+FabrCore.Sdk.RegistryEntry.Notes.get -> System.Collections.Generic.List<string!>!
+FabrCore.Sdk.RegistryEntry.Notes.set -> void
+FabrCore.Sdk.RegistryEntry.RegistryEntry() -> void
+FabrCore.Sdk.RegistryEntry.TypeName.get -> string!
+FabrCore.Sdk.RegistryEntry.TypeName.set -> void
+FabrCore.Sdk.RegistryMethodEntry
+FabrCore.Sdk.RegistryMethodEntry.Description.get -> string!
+FabrCore.Sdk.RegistryMethodEntry.Description.set -> void
+FabrCore.Sdk.RegistryMethodEntry.Name.get -> string!
+FabrCore.Sdk.RegistryMethodEntry.Name.set -> void
+FabrCore.Sdk.RegistryMethodEntry.RegistryMethodEntry() -> void
+FabrCore.Sdk.ReplanContext
+FabrCore.Sdk.ReplanContext.NewContext.get -> System.Collections.Generic.List<string!>!
+FabrCore.Sdk.ReplanContext.NewContext.set -> void
+FabrCore.Sdk.ReplanContext.PreviousPlan.get -> FabrCore.Sdk.TaskTracking!
+FabrCore.Sdk.ReplanContext.PreviousPlan.set -> void
+FabrCore.Sdk.ReplanContext.ReplanContext() -> void
+FabrCore.Sdk.ReplanContext.StatusUpdates.get -> System.Collections.Generic.List<FabrCore.Sdk.TaskStatusUpdate!>!
+FabrCore.Sdk.ReplanContext.StatusUpdates.set -> void
+FabrCore.Sdk.RunStopReason
+FabrCore.Sdk.RunStopReason.MidTurnCompactionFailed = 3 -> FabrCore.Sdk.RunStopReason
+FabrCore.Sdk.RunStopReason.None = 0 -> FabrCore.Sdk.RunStopReason
+FabrCore.Sdk.RunStopReason.PromptTooLarge = 1 -> FabrCore.Sdk.RunStopReason
+FabrCore.Sdk.RunStopReason.TurnBudgetExceeded = 2 -> FabrCore.Sdk.RunStopReason
+FabrCore.Sdk.StateReadResult<T>
+FabrCore.Sdk.StateReadResult<T>.Error.get -> System.Exception?
+FabrCore.Sdk.StateReadResult<T>.Error.init -> void
+FabrCore.Sdk.StateReadResult<T>.Key.get -> string!
+FabrCore.Sdk.StateReadResult<T>.Key.init -> void
+FabrCore.Sdk.StateReadResult<T>.StateReadResult() -> void
+FabrCore.Sdk.StateReadResult<T>.Succeeded.get -> bool
+FabrCore.Sdk.StateReadResult<T>.Succeeded.init -> void
+FabrCore.Sdk.StateReadResult<T>.Value.get -> T?
+FabrCore.Sdk.StateReadResult<T>.Value.init -> void
+FabrCore.Sdk.StateReadResult<T>.ValueKind.get -> System.Text.Json.JsonValueKind?
+FabrCore.Sdk.StateReadResult<T>.ValueKind.init -> void
+FabrCore.Sdk.StrategyPivot
+FabrCore.Sdk.StrategyPivot.AffectedWorkItemIds.get -> System.Collections.Generic.List<string!>!
+FabrCore.Sdk.StrategyPivot.AffectedWorkItemIds.set -> void
+FabrCore.Sdk.StrategyPivot.FromApproach.get -> string!
+FabrCore.Sdk.StrategyPivot.FromApproach.set -> void
+FabrCore.Sdk.StrategyPivot.Id.get -> string!
+FabrCore.Sdk.StrategyPivot.Id.set -> void
+FabrCore.Sdk.StrategyPivot.Reason.get -> string!
+FabrCore.Sdk.StrategyPivot.Reason.set -> void
+FabrCore.Sdk.StrategyPivot.StrategyPivot() -> void
+FabrCore.Sdk.StrategyPivot.ToApproach.get -> string!
+FabrCore.Sdk.StrategyPivot.ToApproach.set -> void
+FabrCore.Sdk.TaskStatusUpdate
+FabrCore.Sdk.TaskStatusUpdate.NewStatus.get -> string!
+FabrCore.Sdk.TaskStatusUpdate.NewStatus.set -> void
+FabrCore.Sdk.TaskStatusUpdate.Result.get -> string?
+FabrCore.Sdk.TaskStatusUpdate.Result.set -> void
+FabrCore.Sdk.TaskStatusUpdate.TaskStatusUpdate() -> void
+FabrCore.Sdk.TaskStatusUpdate.WorkItemId.get -> string!
+FabrCore.Sdk.TaskStatusUpdate.WorkItemId.set -> void
+FabrCore.Sdk.TaskTracking
+FabrCore.Sdk.TaskTracking.AgentAssignments.get -> System.Collections.Generic.List<FabrCore.Sdk.AgentAssignment!>!
+FabrCore.Sdk.TaskTracking.AgentAssignments.set -> void
+FabrCore.Sdk.TaskTracking.AllWork.get -> System.Collections.Generic.List<FabrCore.Sdk.WorkItem!>!
+FabrCore.Sdk.TaskTracking.AllWork.set -> void
+FabrCore.Sdk.TaskTracking.Blockers.get -> System.Collections.Generic.List<FabrCore.Sdk.Blocker!>!
+FabrCore.Sdk.TaskTracking.Blockers.set -> void
+FabrCore.Sdk.TaskTracking.CriticalPath.get -> System.Collections.Generic.List<string!>!
+FabrCore.Sdk.TaskTracking.CriticalPath.set -> void
+FabrCore.Sdk.TaskTracking.EffortLevel.get -> FabrCore.Sdk.EffortLevel
+FabrCore.Sdk.TaskTracking.EffortLevel.set -> void
+FabrCore.Sdk.TaskTracking.ExecutionOrder.get -> System.Collections.Generic.List<string!>!
+FabrCore.Sdk.TaskTracking.ExecutionOrder.set -> void
+FabrCore.Sdk.TaskTracking.LastReplanDiff.get -> FabrCore.Sdk.PlanDiff?
+FabrCore.Sdk.TaskTracking.LastReplanDiff.set -> void
+FabrCore.Sdk.TaskTracking.Phase.get -> string!
+FabrCore.Sdk.TaskTracking.Phase.set -> void
+FabrCore.Sdk.TaskTracking.PlanRationale.get -> string?
+FabrCore.Sdk.TaskTracking.PlanRationale.set -> void
+FabrCore.Sdk.TaskTracking.PlanVersion.get -> int
+FabrCore.Sdk.TaskTracking.PlanVersion.set -> void
+FabrCore.Sdk.TaskTracking.PlannedAt.get -> System.DateTime
+FabrCore.Sdk.TaskTracking.PlannedAt.set -> void
+FabrCore.Sdk.TaskTracking.StrategyPivots.get -> System.Collections.Generic.List<FabrCore.Sdk.StrategyPivot!>!
+FabrCore.Sdk.TaskTracking.StrategyPivots.set -> void
+FabrCore.Sdk.TaskTracking.Summary.get -> string!
+FabrCore.Sdk.TaskTracking.Summary.set -> void
+FabrCore.Sdk.TaskTracking.TaskTracking() -> void
+FabrCore.Sdk.TaskWorkingAgent
+FabrCore.Sdk.TaskWorkingAgent.BuildTrackingContext(bool includeExecutionState = true) -> string!
+FabrCore.Sdk.TaskWorkingAgent.CurrentPlan.get -> FabrCore.Sdk.TaskTracking?
+FabrCore.Sdk.TaskWorkingAgent.Execution.get -> FabrCore.Sdk.ExecutionState!
+FabrCore.Sdk.TaskWorkingAgent.HandleRetryTimer(string! workItemId) -> void
+FabrCore.Sdk.TaskWorkingAgent.PlanAsync(System.Collections.Generic.IReadOnlyList<FabrCore.Sdk.AvailableAgent!>? availableAgents = null, string? extractionPrompt = null, FabrCore.Sdk.EffortLevel effortLevel = FabrCore.Sdk.EffortLevel.Quick, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.TaskTracking!>!
+FabrCore.Sdk.TaskWorkingAgent.PlanOrReplanAsync(System.Collections.Generic.List<FabrCore.Sdk.TaskStatusUpdate!>? statusUpdates = null, FabrCore.Sdk.EffortLevel? effortLevel = null, string? extractionPrompt = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.TaskTracking?>!
+FabrCore.Sdk.TaskWorkingAgent.ReplanAsync(FabrCore.Sdk.ReplanContext! replanContext, System.Collections.Generic.IReadOnlyList<FabrCore.Sdk.AvailableAgent!>? availableAgents = null, string? extractionPrompt = null, FabrCore.Sdk.EffortLevel? effortLevel = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.TaskTracking!>!
+FabrCore.Sdk.TaskWorkingAgent.StartExecution() -> void
+FabrCore.Sdk.TaskWorkingAgent.StopExecution() -> void
+FabrCore.Sdk.TaskWorkingAgent.TaskWorkingAgent(Microsoft.Extensions.AI.IChatClient! chatClient, FabrCore.Sdk.FabrCoreChatHistoryProvider! historyProvider, Microsoft.Extensions.Logging.ILogger? logger = null, System.Func<string!, string!, System.Threading.Tasks.Task!>? onProgress = null, FabrCore.Sdk.ExecutionOptions? executionOptions = null) -> void
+FabrCore.Sdk.TaskWorkingAgentFactory
+FabrCore.Sdk.TaskWorkingAgentFactory.Create(FabrCore.Sdk.FabrCoreChatHistoryProvider! historyProvider) -> FabrCore.Sdk.ITaskWorkingAgent!
+FabrCore.Sdk.TaskWorkingAgentFactory.TaskWorkingAgentFactory(Microsoft.Extensions.AI.IChatClient! chatClient, Microsoft.Extensions.Logging.ILogger<FabrCore.Sdk.TaskWorkingAgent!>? logger = null, System.Func<string!, string!, System.Threading.Tasks.Task!>? onProgress = null, FabrCore.Sdk.ExecutionOptions? executionOptions = null) -> void
+FabrCore.Sdk.TokenTrackingChatClient
+FabrCore.Sdk.TokenTrackingChatClient.ContextWindowTokens.get -> int
+FabrCore.Sdk.TokenTrackingChatClient.ContextWindowTokens.init -> void
+FabrCore.Sdk.TokenTrackingChatClient.ReservedOutputTokens.get -> int
+FabrCore.Sdk.TokenTrackingChatClient.ReservedOutputTokens.init -> void
+FabrCore.Sdk.TokenTrackingChatClient.TokenTrackingChatClient(Microsoft.Extensions.AI.IChatClient! innerClient) -> void
+FabrCore.Sdk.TokenTrackingChatClient.TokenTrackingChatClient(Microsoft.Extensions.AI.IChatClient! innerClient, string? agentHandle, FabrCore.Core.Monitoring.IAgentMessageMonitor? monitor, FabrCore.Core.VerifiableExecution.IVerifiableExecutionContext? verifiableExecution = null, Microsoft.Extensions.Logging.ILogger? logger = null) -> void
+FabrCore.Sdk.ToolAliasAttribute
+FabrCore.Sdk.ToolAliasAttribute.Alias.get -> string!
+FabrCore.Sdk.ToolAliasAttribute.ToolAliasAttribute(string! alias) -> void
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectKind
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectKind.Db = 0 -> FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectKind
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectKind.External = 4 -> FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectKind
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectKind.Http = 1 -> FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectKind
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectKind.Library = 3 -> FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectKind
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectKind.Storage = 2 -> FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectKind
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectOptions
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectOptions.ComponentName.get -> string?
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectOptions.ComponentName.set -> void
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectOptions.ComponentType.get -> string?
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectOptions.ComponentType.set -> void
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectOptions.Metadata.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string?>?
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectOptions.Metadata.set -> void
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectOptions.Method.get -> string?
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectOptions.Method.set -> void
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectOptions.Operation.get -> string?
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectOptions.Operation.set -> void
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectOptions.PayloadHash.get -> string?
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectOptions.PayloadHash.set -> void
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectOptions.ResultHash.get -> string?
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectOptions.ResultHash.set -> void
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectOptions.Subject.get -> string?
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectOptions.Subject.set -> void
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectOptions.Target.get -> string?
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectOptions.Target.set -> void
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectOptions.VerifiableExecutionEffectOptions() -> void
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectResult<T>
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectResult<T>.Envelope.get -> FabrCore.Core.VerifiableExecution.VerifiableExecutionEnvelope?
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectResult<T>.Envelope.init -> void
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectResult<T>.EvidenceRecorded.get -> bool
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectResult<T>.Value.get -> T?
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectResult<T>.Value.init -> void
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectResult<T>.VerifiableExecutionEffectResult() -> void
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionHash
+FabrCore.Sdk.VerifiableExecution.VerifiableExecutionSdkExtensions
+FabrCore.Sdk.WorkItem
+FabrCore.Sdk.WorkItem.Attempts.get -> int
+FabrCore.Sdk.WorkItem.Attempts.set -> void
+FabrCore.Sdk.WorkItem.BlockedReason.get -> string?
+FabrCore.Sdk.WorkItem.BlockedReason.set -> void
+FabrCore.Sdk.WorkItem.DependencyIds.get -> System.Collections.Generic.List<string!>!
+FabrCore.Sdk.WorkItem.DependencyIds.set -> void
+FabrCore.Sdk.WorkItem.Description.get -> string!
+FabrCore.Sdk.WorkItem.Description.set -> void
+FabrCore.Sdk.WorkItem.EstimatedComplexity.get -> string?
+FabrCore.Sdk.WorkItem.EstimatedComplexity.set -> void
+FabrCore.Sdk.WorkItem.ExecutionOrder.get -> int?
+FabrCore.Sdk.WorkItem.ExecutionOrder.set -> void
+FabrCore.Sdk.WorkItem.Id.get -> string!
+FabrCore.Sdk.WorkItem.Id.set -> void
+FabrCore.Sdk.WorkItem.Owner.get -> string?
+FabrCore.Sdk.WorkItem.Owner.set -> void
+FabrCore.Sdk.WorkItem.ParentId.get -> string?
+FabrCore.Sdk.WorkItem.ParentId.set -> void
+FabrCore.Sdk.WorkItem.Priority.get -> string?
+FabrCore.Sdk.WorkItem.Priority.set -> void
+FabrCore.Sdk.WorkItem.Result.get -> string?
+FabrCore.Sdk.WorkItem.Result.set -> void
+FabrCore.Sdk.WorkItem.Status.get -> string!
+FabrCore.Sdk.WorkItem.Status.set -> void
+FabrCore.Sdk.WorkItem.SubTasks.get -> System.Collections.Generic.List<FabrCore.Sdk.WorkItem!>!
+FabrCore.Sdk.WorkItem.SubTasks.set -> void
+FabrCore.Sdk.WorkItem.SuccessCriteria.get -> string?
+FabrCore.Sdk.WorkItem.SuccessCriteria.set -> void
+FabrCore.Sdk.WorkItem.Title.get -> string!
+FabrCore.Sdk.WorkItem.Title.set -> void
+FabrCore.Sdk.WorkItem.WorkItem() -> void
+FabrCore.Sdk.WorkItemOutcome
+FabrCore.Sdk.WorkItemOutcome.Completed = 0 -> FabrCore.Sdk.WorkItemOutcome
+FabrCore.Sdk.WorkItemOutcome.Failed = 2 -> FabrCore.Sdk.WorkItemOutcome
+FabrCore.Sdk.WorkItemOutcome.NeedsInfo = 1 -> FabrCore.Sdk.WorkItemOutcome
+FabrCore.Sdk.WorkItemResponseEvaluation
+FabrCore.Sdk.WorkItemResponseEvaluation.FollowUpMessage.get -> string?
+FabrCore.Sdk.WorkItemResponseEvaluation.FollowUpMessage.set -> void
+FabrCore.Sdk.WorkItemResponseEvaluation.Outcome.get -> FabrCore.Sdk.WorkItemOutcome
+FabrCore.Sdk.WorkItemResponseEvaluation.Outcome.set -> void
+FabrCore.Sdk.WorkItemResponseEvaluation.Summary.get -> string!
+FabrCore.Sdk.WorkItemResponseEvaluation.Summary.set -> void
+FabrCore.Sdk.WorkItemResponseEvaluation.WorkItemResponseEvaluation() -> void
+FabrCore.Services.Memory.Administration.MemoryAdminClientSelector
+FabrCore.Services.Memory.Administration.MemoryAdminClientSelector.ConsolidateScopeAsync(string! scopeKey, string? actorId = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Services.Memory.Models.MemoryConsolidationResult!>!
+FabrCore.Services.Memory.Administration.MemoryAdminClientSelector.CountMemoriesAsync(string! scopeKey, FabrCore.Services.Memory.Models.MemoryType? typeFilter = null, FabrCore.Services.Memory.Models.MemoryTemperature? temperatureFilter = null, string? searchTerm = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
+FabrCore.Services.Memory.Administration.MemoryAdminClientSelector.CreateMemoryAsync(string! scopeKey, string! title, FabrCore.Services.Memory.Models.MemoryType type, string! content, string? description = null, FabrCore.Services.Memory.Models.MemoryTemperature temperature = FabrCore.Services.Memory.Models.MemoryTemperature.Warm, bool isPointInTime = false, System.Collections.Generic.Dictionary<string!, string!>? metadata = null, string? actorId = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Services.Memory.Administration.Models.AdminMemoryDto!>!
+FabrCore.Services.Memory.Administration.MemoryAdminClientSelector.CreateSharedScopeAsync(string! scopeKey, string? description, string? actorId = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Services.Memory.Administration.Models.AdminMemoryScopeDto!>!
+FabrCore.Services.Memory.Administration.MemoryAdminClientSelector.DeleteMemoryAsync(System.Guid memoryId, string? actorId = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Services.Memory.Administration.MemoryAdminClientSelector.DeleteScopeAsync(string! scopeKey, string? actorId = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Services.Memory.Administration.Models.AdminScopeDeleteResult!>!
+FabrCore.Services.Memory.Administration.MemoryAdminClientSelector.GetCapabilityAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Services.Memory.Administration.MemoryAdminCapability!>!
+FabrCore.Services.Memory.Administration.MemoryAdminClientSelector.GetDashboardStatsAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Services.Memory.Administration.Models.AdminMemoryDashboardStats!>!
+FabrCore.Services.Memory.Administration.MemoryAdminClientSelector.GetMemoryAsync(System.Guid memoryId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Services.Memory.Administration.Models.AdminMemoryDetailDto?>!
+FabrCore.Services.Memory.Administration.MemoryAdminClientSelector.ListAuditEntriesAsync(string? scopeKey = null, int page = 1, int pageSize = 50, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<FabrCore.Services.Memory.Audit.MemoryAuditEntry!>!>!
+FabrCore.Services.Memory.Administration.MemoryAdminClientSelector.ListMemoriesAsync(string! scopeKey, FabrCore.Services.Memory.Models.MemoryType? typeFilter = null, FabrCore.Services.Memory.Models.MemoryTemperature? temperatureFilter = null, string? searchTerm = null, int page = 1, int pageSize = 25, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<FabrCore.Services.Memory.Administration.Models.AdminMemoryDto!>!>!
+FabrCore.Services.Memory.Administration.MemoryAdminClientSelector.ListScopesAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<FabrCore.Services.Memory.Administration.Models.AdminMemoryScopeDto!>!>!
+FabrCore.Services.Memory.Administration.MemoryAdminClientSelector.MemoryAdminClientSelector(System.IServiceProvider! services, Microsoft.Extensions.Options.IOptions<FabrCore.Services.Memory.Configuration.MemoryAdminClientOptions!>! options) -> void
+FabrCore.Services.Memory.Administration.MemoryAdminClientSelector.UpdateMemoryAsync(System.Guid memoryId, string! title, FabrCore.Services.Memory.Models.MemoryType type, string! content, string? description, FabrCore.Services.Memory.Models.MemoryTemperature temperature, string? actorId = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Services.Memory.Administration.Models.AdminMemoryDetailDto!>!
+FabrCore.Services.Memory.Administration.RemoteMemoryAdminClient
+FabrCore.Services.Memory.Administration.RemoteMemoryAdminClient.ConsolidateScopeAsync(string! scopeKey, string? actorId = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Services.Memory.Models.MemoryConsolidationResult!>!
+FabrCore.Services.Memory.Administration.RemoteMemoryAdminClient.CountMemoriesAsync(string! scopeKey, FabrCore.Services.Memory.Models.MemoryType? typeFilter = null, FabrCore.Services.Memory.Models.MemoryTemperature? temperatureFilter = null, string? searchTerm = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
+FabrCore.Services.Memory.Administration.RemoteMemoryAdminClient.CreateMemoryAsync(string! scopeKey, string! title, FabrCore.Services.Memory.Models.MemoryType type, string! content, string? description = null, FabrCore.Services.Memory.Models.MemoryTemperature temperature = FabrCore.Services.Memory.Models.MemoryTemperature.Warm, bool isPointInTime = false, System.Collections.Generic.Dictionary<string!, string!>? metadata = null, string? actorId = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Services.Memory.Administration.Models.AdminMemoryDto!>!
+FabrCore.Services.Memory.Administration.RemoteMemoryAdminClient.CreateSharedScopeAsync(string! scopeKey, string? description, string? actorId = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Services.Memory.Administration.Models.AdminMemoryScopeDto!>!
+FabrCore.Services.Memory.Administration.RemoteMemoryAdminClient.DeleteMemoryAsync(System.Guid memoryId, string? actorId = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Services.Memory.Administration.RemoteMemoryAdminClient.DeleteScopeAsync(string! scopeKey, string? actorId = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Services.Memory.Administration.Models.AdminScopeDeleteResult!>!
+FabrCore.Services.Memory.Administration.RemoteMemoryAdminClient.GetCapabilityAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Services.Memory.Administration.MemoryAdminCapability!>!
+FabrCore.Services.Memory.Administration.RemoteMemoryAdminClient.GetDashboardStatsAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Services.Memory.Administration.Models.AdminMemoryDashboardStats!>!
+FabrCore.Services.Memory.Administration.RemoteMemoryAdminClient.GetMemoryAsync(System.Guid memoryId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Services.Memory.Administration.Models.AdminMemoryDetailDto?>!
+FabrCore.Services.Memory.Administration.RemoteMemoryAdminClient.ListAuditEntriesAsync(string? scopeKey = null, int page = 1, int pageSize = 50, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<FabrCore.Services.Memory.Audit.MemoryAuditEntry!>!>!
+FabrCore.Services.Memory.Administration.RemoteMemoryAdminClient.ListMemoriesAsync(string! scopeKey, FabrCore.Services.Memory.Models.MemoryType? typeFilter = null, FabrCore.Services.Memory.Models.MemoryTemperature? temperatureFilter = null, string? searchTerm = null, int page = 1, int pageSize = 25, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<FabrCore.Services.Memory.Administration.Models.AdminMemoryDto!>!>!
+FabrCore.Services.Memory.Administration.RemoteMemoryAdminClient.ListScopesAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<FabrCore.Services.Memory.Administration.Models.AdminMemoryScopeDto!>!>!
+FabrCore.Services.Memory.Administration.RemoteMemoryAdminClient.RemoteMemoryAdminClient(System.Net.Http.HttpClient! httpClient, Microsoft.Extensions.Options.IOptions<FabrCore.Services.Memory.Configuration.MemoryAdminClientOptions!>! options, FabrCore.Services.Memory.Administration.IMemoryAdminPrincipalAccessor! principalAccessor, Microsoft.Extensions.Logging.ILogger<FabrCore.Services.Memory.Administration.RemoteMemoryAdminClient!>! logger) -> void
+FabrCore.Services.Memory.Administration.RemoteMemoryAdminClient.UpdateMemoryAsync(System.Guid memoryId, string! title, FabrCore.Services.Memory.Models.MemoryType type, string! content, string? description, FabrCore.Services.Memory.Models.MemoryTemperature temperature, string? actorId = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Services.Memory.Administration.Models.AdminMemoryDetailDto!>!
+FabrCore.Services.Memory.Configuration.RemoteMemoryServiceExtensions
+abstract FabrCore.Sdk.FabrCoreAgentProxy.OnInitialize() -> System.Threading.Tasks.Task!
+abstract FabrCore.Sdk.FabrCoreAgentProxy.OnMessage(FabrCore.Core.AgentMessage! message) -> System.Threading.Tasks.Task<FabrCore.Core.AgentMessage!>!
+const FabrCore.Sdk.AgentRosterBuilder.DescriptionCap = 500 -> int
+const FabrCore.Sdk.ContextCompaction.DefaultEvictThreshold = 0.5 -> double
+const FabrCore.Sdk.ContextCompaction.DefaultTruncateThreshold = 0.8 -> double
+const FabrCore.Sdk.ContextCompaction.StateKey = "_fabrcore_context_compaction" -> string!
+const FabrCore.Sdk.FabrCoreHarnessAgent.DefaultInstructions = "You are a capable AI assistant working inside the FabrCore runtime. You use tools to complete tasks.\r\n\r\n## How to work\r\n\r\n- Think the task through before acting. Break complex work into clear steps.\r\n- Track multi-step work with the todo tools: add the steps up front, then complete each one as you finish it. Never mark a todo complete for work that did not actually happen.\r\n- Give concise progress updates when you learn something material or change direction. Avoid narrating routine tool calls.\n- If a tool call fails or returns something unexpected, adapt. Do not repeat the same call and expect a different result.\r\n- Delegate only substantial independent work that benefits from a specialist. Keep delegated instructions and requested results focused. Wait for running tasks with the wait tool rather than repeatedly polling status. Read replies critically — a reply is not proof the work was done correctly.\n- Finish with a clear, consolidated answer to what was actually asked, not a list of the steps you took." -> string!
+const FabrCore.Sdk.FabrCoreHarnessResult.SnapshotMaxBytes = 1048576 -> int
+const FabrCore.Sdk.FabrCoreHarnessResult.SnapshotWarnBytes = 262144 -> int
+const FabrCore.Sdk.HarnessArgs.BackgroundAgents = "_HarnessBackgroundAgents" -> string!
+const FabrCore.Sdk.HarnessArgs.BackgroundTimeoutSeconds = "_HarnessBackgroundTimeoutSeconds" -> string!
+const FabrCore.Sdk.HarnessArgs.BackgroundWaitTimeoutSeconds = "_HarnessBackgroundWaitTimeoutSeconds" -> string!
+const FabrCore.Sdk.HarnessArgs.DefaultMode = "_HarnessDefaultMode" -> string!
+const FabrCore.Sdk.HarnessArgs.Instructions = "_HarnessInstructions" -> string!
+const FabrCore.Sdk.HarnessArgs.Loop = "_HarnessLoop" -> string!
+const FabrCore.Sdk.HarnessArgs.LoopJudgeModel = "_HarnessLoopJudgeModel" -> string!
+const FabrCore.Sdk.HarnessArgs.LoopJudgePrompt = "_HarnessLoopJudgePrompt" -> string!
+const FabrCore.Sdk.HarnessArgs.LoopMarker = "_HarnessLoopMarker" -> string!
+const FabrCore.Sdk.HarnessArgs.LoopMaxIterations = "_HarnessLoopMaxIterations" -> string!
+const FabrCore.Sdk.HarnessArgs.MaxIterationsPerRequest = "_HarnessMaxIterationsPerRequest" -> string!
+const FabrCore.Sdk.HarnessArgs.Mode = "_HarnessMode" -> string!
+const FabrCore.Sdk.HarnessArgs.SessionPersistence = "_HarnessSessionPersistence" -> string!
+const FabrCore.Sdk.HarnessArgs.Skills = "_HarnessSkills" -> string!
+const FabrCore.Sdk.HarnessArgs.Todo = "_HarnessTodo" -> string!
+const FabrCore.Sdk.HarnessMessageArgs.PlanMode = "_plan-mode" -> string!
+const FabrCore.Sdk.HarnessSessionSnapshot.CurrentVersion = 1 -> int
+const FabrCore.Sdk.InternalAgentArgs.MaxConcurrency = "_InternalAgentsMaxConcurrency" -> string!
+override FabrCore.Sdk.AgentAttributionPipelinePolicy.Process(System.ClientModel.Primitives.PipelineMessage! message, System.Collections.Generic.IReadOnlyList<System.ClientModel.Primitives.PipelinePolicy!>! pipeline, int currentIndex) -> void
+override FabrCore.Sdk.AgentAttributionPipelinePolicy.ProcessAsync(System.ClientModel.Primitives.PipelineMessage! message, System.Collections.Generic.IReadOnlyList<System.ClientModel.Primitives.PipelinePolicy!>! pipeline, int currentIndex) -> System.Threading.Tasks.ValueTask
+override FabrCore.Sdk.ChatClientAgentResult.Equals(object? obj) -> bool
+override FabrCore.Sdk.ChatClientAgentResult.GetHashCode() -> int
+override FabrCore.Sdk.ChatClientAgentResult.ToString() -> string!
+override FabrCore.Sdk.ChatRunSafetyCallInfo.Equals(object? obj) -> bool
+override FabrCore.Sdk.ChatRunSafetyCallInfo.GetHashCode() -> int
+override FabrCore.Sdk.ChatRunSafetyCallInfo.ToString() -> string!
+override FabrCore.Sdk.ChatRunSafetyConfig.Equals(object? obj) -> bool
+override FabrCore.Sdk.ChatRunSafetyConfig.GetHashCode() -> int
+override FabrCore.Sdk.ChatRunSafetyConfig.ToString() -> string!
+override FabrCore.Sdk.CompactionConfig.Equals(object? obj) -> bool
+override FabrCore.Sdk.CompactionConfig.GetHashCode() -> int
+override FabrCore.Sdk.CompactionConfig.ToString() -> string!
+override FabrCore.Sdk.CompactionLadder.Equals(object? obj) -> bool
+override FabrCore.Sdk.CompactionLadder.GetHashCode() -> int
+override FabrCore.Sdk.CompactionLadder.ToString() -> string!
+override FabrCore.Sdk.CompactionResult.Equals(object? obj) -> bool
+override FabrCore.Sdk.CompactionResult.GetHashCode() -> int
+override FabrCore.Sdk.CompactionResult.ToString() -> string!
+override FabrCore.Sdk.ContextCompactionConfig.Equals(object? obj) -> bool
+override FabrCore.Sdk.ContextCompactionConfig.GetHashCode() -> int
+override FabrCore.Sdk.ContextCompactionConfig.ToString() -> string!
+override FabrCore.Sdk.FabrCoreBackgroundAgent.Description.get -> string?
+override FabrCore.Sdk.FabrCoreBackgroundAgent.Name.get -> string?
+override FabrCore.Sdk.FabrCoreChatHistoryProvider.ProvideChatHistoryAsync(Microsoft.Agents.AI.ChatHistoryProvider.InvokingContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>!>
+override FabrCore.Sdk.FabrCoreChatHistoryProvider.StoreChatHistoryAsync(Microsoft.Agents.AI.ChatHistoryProvider.InvokedContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+override FabrCore.Sdk.FabrCoreStoredAgentSkillsSource.GetSkillsAsync(Microsoft.Agents.AI.AgentSkillsSourceContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IList<Microsoft.Agents.AI.AgentSkill!>!>!
+override FabrCore.Sdk.ForkedChatHistoryProvider.ProvideChatHistoryAsync(Microsoft.Agents.AI.ChatHistoryProvider.InvokingContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>!>
+override FabrCore.Sdk.ForkedChatHistoryProvider.StoreChatHistoryAsync(Microsoft.Agents.AI.ChatHistoryProvider.InvokedContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+override FabrCore.Sdk.ForkedSessionResult.Equals(object? obj) -> bool
+override FabrCore.Sdk.ForkedSessionResult.GetHashCode() -> int
+override FabrCore.Sdk.ForkedSessionResult.ToString() -> string!
+override FabrCore.Sdk.InternalAgentOptions.Equals(object? obj) -> bool
+override FabrCore.Sdk.InternalAgentOptions.GetHashCode() -> int
+override FabrCore.Sdk.InternalAgentOptions.ToString() -> string!
+override FabrCore.Sdk.InternalAgentResult.Equals(object? obj) -> bool
+override FabrCore.Sdk.InternalAgentResult.GetHashCode() -> int
+override FabrCore.Sdk.InternalAgentResult.ToString() -> string!
+override FabrCore.Sdk.InternalAgentToolScopeOptions.Equals(object? obj) -> bool
+override FabrCore.Sdk.InternalAgentToolScopeOptions.GetHashCode() -> int
+override FabrCore.Sdk.InternalAgentToolScopeOptions.ToString() -> string!
+override FabrCore.Sdk.ProjectionConfig.Equals(object? obj) -> bool
+override FabrCore.Sdk.ProjectionConfig.GetHashCode() -> int
+override FabrCore.Sdk.ProjectionConfig.ToString() -> string!
+override FabrCore.Sdk.ProviderSanitizingChatClient.GetResponseAsync(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! messages, Microsoft.Extensions.AI.ChatOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.AI.ChatResponse!>!
+override FabrCore.Sdk.ProviderSanitizingChatClient.GetStreamingResponseAsync(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! messages, Microsoft.Extensions.AI.ChatOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
+override FabrCore.Sdk.TokenTrackingChatClient.GetResponseAsync(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! messages, Microsoft.Extensions.AI.ChatOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.AI.ChatResponse!>!
+override FabrCore.Sdk.TokenTrackingChatClient.GetStreamingResponseAsync(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! messages, Microsoft.Extensions.AI.ChatOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
+readonly FabrCore.Sdk.FabrCoreAgentProxy.chatClientService -> FabrCore.Sdk.IFabrCoreChatClientService!
+readonly FabrCore.Sdk.FabrCoreAgentProxy.config -> FabrCore.Core.AgentConfiguration!
+readonly FabrCore.Sdk.FabrCoreAgentProxy.configuration -> Microsoft.Extensions.Configuration.IConfiguration!
+readonly FabrCore.Sdk.FabrCoreAgentProxy.fabrcoreAgentHost -> FabrCore.Sdk.IFabrCoreAgentHost!
+readonly FabrCore.Sdk.FabrCoreAgentProxy.logger -> Microsoft.Extensions.Logging.ILogger<FabrCore.Sdk.FabrCoreAgentProxy!>!
+readonly FabrCore.Sdk.FabrCoreAgentProxy.loggerFactory -> Microsoft.Extensions.Logging.ILoggerFactory!
+readonly FabrCore.Sdk.FabrCoreAgentProxy.serviceProvider -> System.IServiceProvider!
+static FabrCore.Sdk.AgentRosterBuilder.BuildAsync(System.Collections.Generic.IEnumerable<string!>! handles, FabrCore.Sdk.IFabrCoreAgentHost! agentHost, FabrCore.Sdk.IFabrCoreRegistry? registry = null, Microsoft.Extensions.Logging.ILogger? logger = null) -> System.Threading.Tasks.Task<FabrCore.Sdk.AgentRoster!>!
+static FabrCore.Sdk.AgentRosterBuilder.ShortHandle(string! handle) -> string!
+static FabrCore.Sdk.ChatClientAgentExtensions.ForkAsync(this FabrCore.Sdk.FabrCoreChatHistoryProvider! originalProvider, Microsoft.Extensions.AI.IChatClient! chatClient, Microsoft.Extensions.AI.ChatOptions? options = null, Microsoft.Extensions.Logging.ILogger? logger = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.ForkedSessionResult!>!
+static FabrCore.Sdk.ChatClientAgentExtensions.ForkAsync(this FabrCore.Sdk.FabrCoreChatHistoryProvider! originalProvider, Microsoft.Extensions.Logging.ILogger? logger = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.ForkedChatHistoryProvider!>!
+static FabrCore.Sdk.ChatClientAgentResult.operator !=(FabrCore.Sdk.ChatClientAgentResult? left, FabrCore.Sdk.ChatClientAgentResult? right) -> bool
+static FabrCore.Sdk.ChatClientAgentResult.operator ==(FabrCore.Sdk.ChatClientAgentResult? left, FabrCore.Sdk.ChatClientAgentResult? right) -> bool
+static FabrCore.Sdk.ChatRunSafetyCallInfo.operator !=(FabrCore.Sdk.ChatRunSafetyCallInfo? left, FabrCore.Sdk.ChatRunSafetyCallInfo? right) -> bool
+static FabrCore.Sdk.ChatRunSafetyCallInfo.operator ==(FabrCore.Sdk.ChatRunSafetyCallInfo? left, FabrCore.Sdk.ChatRunSafetyCallInfo? right) -> bool
+static FabrCore.Sdk.ChatRunSafetyConfig.operator !=(FabrCore.Sdk.ChatRunSafetyConfig? left, FabrCore.Sdk.ChatRunSafetyConfig? right) -> bool
+static FabrCore.Sdk.ChatRunSafetyConfig.operator ==(FabrCore.Sdk.ChatRunSafetyConfig? left, FabrCore.Sdk.ChatRunSafetyConfig? right) -> bool
+static FabrCore.Sdk.ChatRunSafetyScope.Begin(string? agentHandle, string? parentMessageId, string? traceId, FabrCore.Sdk.ChatRunSafetyConfig! config, FabrCore.Core.Monitoring.IAgentMessageMonitor? monitor, Microsoft.Extensions.Logging.ILogger? logger) -> FabrCore.Sdk.ChatRunSafetyScope!
+static FabrCore.Sdk.ChatRunSafetyScope.Current.get -> FabrCore.Sdk.ChatRunSafetyScope?
+static FabrCore.Sdk.ChatRunSafetyScope.EstimateTokens(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! messages) -> long
+static FabrCore.Sdk.ChatRunSafetyScope.EstimateTokens(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! messages, Microsoft.Extensions.AI.ChatOptions? options) -> long
+static FabrCore.Sdk.CompactionConfig.operator !=(FabrCore.Sdk.CompactionConfig? left, FabrCore.Sdk.CompactionConfig? right) -> bool
+static FabrCore.Sdk.CompactionConfig.operator ==(FabrCore.Sdk.CompactionConfig? left, FabrCore.Sdk.CompactionConfig? right) -> bool
+static FabrCore.Sdk.CompactionLadder.operator !=(FabrCore.Sdk.CompactionLadder? left, FabrCore.Sdk.CompactionLadder? right) -> bool
+static FabrCore.Sdk.CompactionLadder.operator ==(FabrCore.Sdk.CompactionLadder? left, FabrCore.Sdk.CompactionLadder? right) -> bool
+static FabrCore.Sdk.CompactionResult.operator !=(FabrCore.Sdk.CompactionResult? left, FabrCore.Sdk.CompactionResult? right) -> bool
+static FabrCore.Sdk.CompactionResult.operator ==(FabrCore.Sdk.CompactionResult? left, FabrCore.Sdk.CompactionResult? right) -> bool
+static FabrCore.Sdk.CompactionService.EstimateTokens(FabrCore.Core.StoredChatMessage! message) -> int
+static FabrCore.Sdk.CompactionService.EstimateTokens(System.Collections.Generic.List<FabrCore.Core.StoredChatMessage!>! messages) -> int
+static FabrCore.Sdk.ContextCompaction.StripSessionState(System.Text.Json.JsonElement payload, Microsoft.Extensions.Logging.ILogger? logger = null) -> System.Text.Json.JsonElement
+static FabrCore.Sdk.ContextCompaction.TryCreateProvider(FabrCore.Sdk.ContextCompactionConfig! config, Microsoft.Extensions.Logging.ILoggerFactory? loggerFactory = null) -> Microsoft.Agents.AI.AIContextProvider?
+static FabrCore.Sdk.ContextCompactionConfig.operator !=(FabrCore.Sdk.ContextCompactionConfig? left, FabrCore.Sdk.ContextCompactionConfig? right) -> bool
+static FabrCore.Sdk.ContextCompactionConfig.operator ==(FabrCore.Sdk.ContextCompactionConfig? left, FabrCore.Sdk.ContextCompactionConfig? right) -> bool
+static FabrCore.Sdk.FabrCoreBackgroundAgent.FromRoster(FabrCore.Sdk.AgentRoster! roster, FabrCore.Sdk.IFabrCoreAgentHost! agentHost, System.TimeSpan? timeout = null, string? instructionOverlay = null, string? messageType = null) -> System.Collections.Generic.List<FabrCore.Sdk.FabrCoreBackgroundAgent!>!
+static FabrCore.Sdk.FabrCoreChatHistoryProvider.Create(FabrCore.Sdk.IFabrCoreAgentHost! agentHost, string! threadId, Microsoft.Extensions.Logging.ILogger? logger = null) -> FabrCore.Sdk.FabrCoreChatHistoryProvider!
+static FabrCore.Sdk.FabrCoreHarnessExtensions.AsFabrCoreHarnessAgent(this Microsoft.Extensions.AI.IChatClient! chatClient, FabrCore.Sdk.FabrCoreHarnessOptions? options = null, Microsoft.Extensions.Logging.ILoggerFactory? loggerFactory = null, System.IServiceProvider? services = null) -> FabrCore.Sdk.FabrCoreHarnessAgent!
+static FabrCore.Sdk.ForkedSessionResult.operator !=(FabrCore.Sdk.ForkedSessionResult? left, FabrCore.Sdk.ForkedSessionResult? right) -> bool
+static FabrCore.Sdk.ForkedSessionResult.operator ==(FabrCore.Sdk.ForkedSessionResult? left, FabrCore.Sdk.ForkedSessionResult? right) -> bool
+static FabrCore.Sdk.HarnessSessionSnapshot.CorruptKeyFor(string! threadId) -> string!
+static FabrCore.Sdk.HarnessSessionSnapshot.KeyFor(string! threadId) -> string!
+static FabrCore.Sdk.InternalAgentOptions.operator !=(FabrCore.Sdk.InternalAgentOptions? left, FabrCore.Sdk.InternalAgentOptions? right) -> bool
+static FabrCore.Sdk.InternalAgentOptions.operator ==(FabrCore.Sdk.InternalAgentOptions? left, FabrCore.Sdk.InternalAgentOptions? right) -> bool
+static FabrCore.Sdk.InternalAgentResult.operator !=(FabrCore.Sdk.InternalAgentResult? left, FabrCore.Sdk.InternalAgentResult? right) -> bool
+static FabrCore.Sdk.InternalAgentResult.operator ==(FabrCore.Sdk.InternalAgentResult? left, FabrCore.Sdk.InternalAgentResult? right) -> bool
+static FabrCore.Sdk.InternalAgentToolScopeOptions.operator !=(FabrCore.Sdk.InternalAgentToolScopeOptions? left, FabrCore.Sdk.InternalAgentToolScopeOptions? right) -> bool
+static FabrCore.Sdk.InternalAgentToolScopeOptions.operator ==(FabrCore.Sdk.InternalAgentToolScopeOptions? left, FabrCore.Sdk.InternalAgentToolScopeOptions? right) -> bool
+static FabrCore.Sdk.LlmCallContext.Begin(string! agentHandle, string! originContext, string? traceId = null) -> FabrCore.Sdk.LlmCallContext!
+static FabrCore.Sdk.LlmCallContext.Current.get -> FabrCore.Sdk.LlmCallContext?
+static FabrCore.Sdk.LlmUsageScope.Begin(string? agentHandle = null, string? parentMessageId = null, string? traceId = null, string? originContext = null) -> FabrCore.Sdk.LlmUsageScope!
+static FabrCore.Sdk.LlmUsageScope.Current.get -> FabrCore.Sdk.LlmUsageScope?
+static FabrCore.Sdk.PlanValidator.BreakCycles(System.Collections.Generic.List<FabrCore.Sdk.WorkItem!>! workItems) -> void
+static FabrCore.Sdk.PlanValidator.ComputeCriticalPath(System.Collections.Generic.List<FabrCore.Sdk.WorkItem!>! workItems) -> System.Collections.Generic.List<string!>!
+static FabrCore.Sdk.PlanValidator.ComputeExecutionOrder(System.Collections.Generic.List<FabrCore.Sdk.WorkItem!>! workItems) -> System.Collections.Generic.List<string!>!
+static FabrCore.Sdk.PlanValidator.HasCycles(System.Collections.Generic.List<FabrCore.Sdk.WorkItem!>! workItems) -> bool
+static FabrCore.Sdk.PlanValidator.Validate(FabrCore.Sdk.TaskTracking! tracking) -> void
+static FabrCore.Sdk.PluginConfigExtensions.GetPluginSetting(this FabrCore.Core.AgentConfiguration! config, string! pluginAlias, string! key) -> string?
+static FabrCore.Sdk.PluginConfigExtensions.GetPluginSettings(this FabrCore.Core.AgentConfiguration! config, string! pluginAlias) -> System.Collections.Generic.Dictionary<string!, string!>!
+static FabrCore.Sdk.ProjectionConfig.operator !=(FabrCore.Sdk.ProjectionConfig? left, FabrCore.Sdk.ProjectionConfig? right) -> bool
+static FabrCore.Sdk.ProjectionConfig.operator ==(FabrCore.Sdk.ProjectionConfig? left, FabrCore.Sdk.ProjectionConfig? right) -> bool
+static FabrCore.Sdk.VerifiableExecution.VerifiableExecutionHash.HashBytes(byte[]? value) -> string!
+static FabrCore.Sdk.VerifiableExecution.VerifiableExecutionHash.HashObject<T>(T value) -> string!
+static FabrCore.Sdk.VerifiableExecution.VerifiableExecutionHash.HashText(string? value) -> string!
+static FabrCore.Sdk.VerifiableExecution.VerifiableExecutionSdkExtensions.RecordDbEffectAsync(this FabrCore.Core.VerifiableExecution.IVerifiableExecutionContext? context, string! operation, string! target, string? subject, System.Func<System.Threading.Tasks.Task!>! effect, System.Collections.Generic.IReadOnlyDictionary<string!, string?>? metadata = null, Microsoft.Extensions.Logging.ILogger? logger = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.VerifiableExecution.VerifiableExecutionEnvelope?>!
+static FabrCore.Sdk.VerifiableExecution.VerifiableExecutionSdkExtensions.RecordDbEffectAsync<T>(this FabrCore.Core.VerifiableExecution.IVerifiableExecutionContext? context, string! operation, string! target, string? subject, System.Func<System.Threading.Tasks.Task<T>!>! effect, System.Collections.Generic.IReadOnlyDictionary<string!, string?>? metadata = null, Microsoft.Extensions.Logging.ILogger? logger = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectResult<T>!>!
+static FabrCore.Sdk.VerifiableExecution.VerifiableExecutionSdkExtensions.RecordExternalEffectAsync<T>(this FabrCore.Core.VerifiableExecution.IVerifiableExecutionContext? context, FabrCore.Core.VerifiableExecution.ExecutionRecordKind kind, FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectOptions! options, System.Func<System.Threading.Tasks.Task<T>!>! effect, Microsoft.Extensions.Logging.ILogger? logger = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectResult<T>!>!
+static FabrCore.Sdk.VerifiableExecution.VerifiableExecutionSdkExtensions.RecordHttpCallAsync<T>(this FabrCore.Core.VerifiableExecution.IVerifiableExecutionContext? context, string! operation, string! method, System.Uri! url, System.Func<System.Threading.Tasks.Task<T>!>! call, System.Collections.Generic.IReadOnlyDictionary<string!, string?>? metadata = null, Microsoft.Extensions.Logging.ILogger? logger = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectResult<T>!>!
+static FabrCore.Sdk.VerifiableExecution.VerifiableExecutionSdkExtensions.RecordHttpCallAsync<T>(this FabrCore.Core.VerifiableExecution.IVerifiableExecutionContext? context, string! operation, string! method, string! url, System.Func<System.Threading.Tasks.Task<T>!>! call, System.Collections.Generic.IReadOnlyDictionary<string!, string?>? metadata = null, Microsoft.Extensions.Logging.ILogger? logger = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectResult<T>!>!
+static FabrCore.Sdk.VerifiableExecution.VerifiableExecutionSdkExtensions.RecordLibraryCallAsync<T>(this FabrCore.Core.VerifiableExecution.IVerifiableExecutionContext? context, string! operation, string! componentName, string! method, System.Func<System.Threading.Tasks.Task<T>!>! call, System.Collections.Generic.IReadOnlyDictionary<string!, string?>? metadata = null, Microsoft.Extensions.Logging.ILogger? logger = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectResult<T>!>!
+static FabrCore.Sdk.VerifiableExecution.VerifiableExecutionSdkExtensions.RecordStorageEffectAsync<T>(this FabrCore.Core.VerifiableExecution.IVerifiableExecutionContext? context, string! operation, string! target, string? subject, System.Func<System.Threading.Tasks.Task<T>!>! effect, System.Collections.Generic.IReadOnlyDictionary<string!, string?>? metadata = null, Microsoft.Extensions.Logging.ILogger? logger = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Sdk.VerifiableExecution.VerifiableExecutionEffectResult<T>!>!
+static FabrCore.Services.Memory.Configuration.RemoteMemoryServiceExtensions.AddRemoteMemoryAdministration(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<FabrCore.Services.Memory.Configuration.MemoryAdminClientOptions!>! configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static readonly FabrCore.Sdk.FabrCoreBackgroundAgent.DefaultTimeout -> System.TimeSpan
+virtual FabrCore.Sdk.ChatClientAgentResult.<Clone>$() -> FabrCore.Sdk.ChatClientAgentResult!
+virtual FabrCore.Sdk.ChatClientAgentResult.EqualityContract.get -> System.Type!
+virtual FabrCore.Sdk.ChatClientAgentResult.Equals(FabrCore.Sdk.ChatClientAgentResult? other) -> bool
+virtual FabrCore.Sdk.ChatClientAgentResult.PrintMembers(System.Text.StringBuilder! builder) -> bool
+virtual FabrCore.Sdk.CompactionConfig.<Clone>$() -> FabrCore.Sdk.CompactionConfig!
+virtual FabrCore.Sdk.CompactionConfig.EqualityContract.get -> System.Type!
+virtual FabrCore.Sdk.CompactionConfig.Equals(FabrCore.Sdk.CompactionConfig? other) -> bool
+virtual FabrCore.Sdk.CompactionConfig.PrintMembers(System.Text.StringBuilder! builder) -> bool
+virtual FabrCore.Sdk.CompactionResult.<Clone>$() -> FabrCore.Sdk.CompactionResult!
+virtual FabrCore.Sdk.CompactionResult.EqualityContract.get -> System.Type!
+virtual FabrCore.Sdk.CompactionResult.Equals(FabrCore.Sdk.CompactionResult? other) -> bool
+virtual FabrCore.Sdk.CompactionResult.PrintMembers(System.Text.StringBuilder! builder) -> bool
+virtual FabrCore.Sdk.ContextCompactionConfig.<Clone>$() -> FabrCore.Sdk.ContextCompactionConfig!
+virtual FabrCore.Sdk.ContextCompactionConfig.EqualityContract.get -> System.Type!
+virtual FabrCore.Sdk.ContextCompactionConfig.Equals(FabrCore.Sdk.ContextCompactionConfig? other) -> bool
+virtual FabrCore.Sdk.ContextCompactionConfig.PrintMembers(System.Text.StringBuilder! builder) -> bool
+virtual FabrCore.Sdk.FabrCoreAgentProxy.GetCustomHealthMetrics(FabrCore.Core.HealthDetailLevel detailLevel) -> System.Collections.Generic.Dictionary<string!, string!>?
+virtual FabrCore.Sdk.FabrCoreAgentProxy.GetHealth(FabrCore.Core.HealthDetailLevel detailLevel) -> System.Threading.Tasks.Task<FabrCore.Core.ProxyHealthStatus!>!
+virtual FabrCore.Sdk.FabrCoreAgentProxy.OnCompaction(FabrCore.Sdk.FabrCoreChatHistoryProvider! chatHistoryProvider, FabrCore.Sdk.CompactionConfig! compactionConfig, int estimatedTokens = 0) -> System.Threading.Tasks.Task<FabrCore.Sdk.CompactionResult?>!
+virtual FabrCore.Sdk.FabrCoreAgentProxy.OnEvent(FabrCore.Core.EventMessage! message) -> System.Threading.Tasks.Task!
+virtual FabrCore.Sdk.FabrCoreAgentProxy.OnMessageBusy(FabrCore.Core.AgentMessage! message) -> System.Threading.Tasks.Task<FabrCore.Core.AgentMessage!>!
+virtual FabrCore.Sdk.FabrCoreAgentProxy.OnReset() -> System.Threading.Tasks.Task!
+virtual FabrCore.Sdk.ForkedSessionResult.<Clone>$() -> FabrCore.Sdk.ForkedSessionResult!
+virtual FabrCore.Sdk.ForkedSessionResult.EqualityContract.get -> System.Type!
+virtual FabrCore.Sdk.ForkedSessionResult.Equals(FabrCore.Sdk.ForkedSessionResult? other) -> bool
+virtual FabrCore.Sdk.ForkedSessionResult.PrintMembers(System.Text.StringBuilder! builder) -> bool
+virtual FabrCore.Sdk.ProjectionConfig.<Clone>$() -> FabrCore.Sdk.ProjectionConfig!
+virtual FabrCore.Sdk.ProjectionConfig.EqualityContract.get -> System.Type!
+virtual FabrCore.Sdk.ProjectionConfig.Equals(FabrCore.Sdk.ProjectionConfig? other) -> bool
+virtual FabrCore.Sdk.ProjectionConfig.PrintMembers(System.Text.StringBuilder! builder) -> bool

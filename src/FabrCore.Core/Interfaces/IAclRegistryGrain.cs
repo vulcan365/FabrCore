@@ -28,6 +28,7 @@ namespace FabrCore.Core.Interfaces
 
         /// <summary>Gets the current entity-set version without transferring entities.</summary>
         Task<long> GetVersionAsync();
+        Task<string> ConditionalMutationAsync(string kind, string id, string? json, long expectedVersion);
 
         // ── Principals ──
 

@@ -8,9 +8,9 @@ namespace FabrCore.Services.GraphRag.Migrations;
 /// Forward-only schema migration runner for the GraphRAG <c>grag.*</c>
 /// database. On each startup it:
 /// <list type="number">
+///   <item>Acquires an exclusive session-scoped <c>sp_getapplock</c> so only one silo applies migrations at a time.</item>
 ///   <item>Ensures the <c>grag</c> schema exists.</item>
 ///   <item>Ensures <c>grag.SchemaVersion</c> exists (bootstrapped here, not via a migration — chicken-and-egg).</item>
-///   <item>Acquires an exclusive session-scoped <c>sp_getapplock</c> so only one silo applies migrations at a time.</item>
 ///   <item>Reads applied version numbers, runs each pending migration from <see cref="Migrations.Registered"/> in order, each in its own transaction, recording success in <c>grag.SchemaVersion</c>.</item>
 ///   <item>Releases the applock.</item>
 /// </list>
@@ -40,26 +40,29 @@ public static class GraphRagMigrationRunner
     /// a freshly-deployed binary applies migrations on the first call and is a
     /// no-op on the second.
     /// </summary>
-    public static async Task RunMigrationsAsync(string connectionString, ILogger? logger = null)
+    public static Task RunMigrationsAsync(string connectionString, ILogger? logger = null)
+        => RunMigrationsAsync(connectionString, logger, CancellationToken.None);
+
+    public static async Task RunMigrationsAsync(string connectionString, ILogger? logger, CancellationToken cancellationToken)
     {
         await using var connection = new SqlConnection(connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(cancellationToken);
 
         // Serialize bootstrap too: IF-NOT-EXISTS + CREATE SCHEMA is not atomic,
         // so concurrent first-start silos can otherwise race before the
         // SchemaVersion table exists.
-        await AcquireApplockAsync(connection, logger);
         try
         {
+            await AcquireApplockAsync(connection, logger, cancellationToken);
             await ExecuteAsync(connection, GraphRagSchemaInitializer.GetSchemaDdl(),
-                "ensuring grag schema", logger);
+                "ensuring grag schema", logger, cancellationToken);
 
             // SchemaVersion backs the runner and is therefore bootstrapped
             // outside the migration registry, but still under the applock.
             await ExecuteAsync(connection, GetSchemaVersionTableDdl(),
-                "ensuring grag.SchemaVersion", logger);
+                "ensuring grag.SchemaVersion", logger, cancellationToken);
 
-            var applied = await LoadAppliedVersionsAsync(connection);
+            var applied = await LoadAppliedVersionsAsync(connection, cancellationToken);
             var pending = Migrations.Registered
                 .Where(m => !applied.Contains(m.Version))
                 .OrderBy(m => m.Version)
@@ -78,12 +81,16 @@ public static class GraphRagMigrationRunner
 
             foreach (var migration in pending)
             {
-                await ApplyOneAsync(connection, migration, logger);
+                await ApplyOneAsync(connection, migration, logger, cancellationToken);
             }
 
             logger?.LogInformation(
                 "GraphRAG schema migration complete (current version: {Version})",
                 pending[^1].Version);
+        }
+        catch (SqlException ex) when (cancellationToken.IsCancellationRequested)
+        {
+            throw new OperationCanceledException("GraphRAG schema initialization was canceled.", ex, cancellationToken);
         }
         finally
         {
@@ -107,12 +114,12 @@ public static class GraphRagMigrationRunner
         """;
 
     private static async Task ExecuteAsync(
-        SqlConnection conn, string sql, string description, ILogger? logger)
+        SqlConnection conn, string sql, string description, ILogger? logger, CancellationToken cancellationToken)
     {
         try
         {
             await using var cmd = new SqlCommand(sql, conn);
-            await cmd.ExecuteNonQueryAsync();
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
         }
         catch (SqlException ex)
         {
@@ -121,11 +128,12 @@ public static class GraphRagMigrationRunner
         }
     }
 
-    private static async Task AcquireApplockAsync(SqlConnection conn, ILogger? logger)
+    private static async Task AcquireApplockAsync(SqlConnection conn, ILogger? logger, CancellationToken cancellationToken)
     {
         await using var cmd = new SqlCommand("sp_getapplock", conn)
         {
-            CommandType = System.Data.CommandType.StoredProcedure
+            CommandType = System.Data.CommandType.StoredProcedure,
+            CommandTimeout = 90
         };
         cmd.Parameters.AddWithValue("@Resource", ApplockResource);
         cmd.Parameters.AddWithValue("@LockMode", "Exclusive");
@@ -136,7 +144,7 @@ public static class GraphRagMigrationRunner
             Direction = System.Data.ParameterDirection.ReturnValue
         };
         cmd.Parameters.Add(ret);
-        await cmd.ExecuteNonQueryAsync();
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
 
         var code = (int)ret.Value!;
         // 0 = granted immediately, 1 = granted after wait, negative = error/timeout.
@@ -153,45 +161,43 @@ public static class GraphRagMigrationRunner
     {
         try
         {
-            await using var cmd = new SqlCommand("sp_releaseapplock", conn)
-            {
-                CommandType = System.Data.CommandType.StoredProcedure
-            };
+            await using var cmd = new SqlCommand(
+                "IF APPLOCK_MODE('public', @Resource, 'Session') <> 'NoLock' EXEC sp_releaseapplock @Resource=@Resource, @LockOwner=@LockOwner", conn);
             cmd.Parameters.AddWithValue("@Resource", ApplockResource);
             cmd.Parameters.AddWithValue("@LockOwner", "Session");
-            await cmd.ExecuteNonQueryAsync();
+            await cmd.ExecuteNonQueryAsync(CancellationToken.None);
             logger?.LogDebug("GraphRAG migration applock released");
         }
         catch (Exception ex)
         {
-            // The session is about to close anyway, so a release failure is
-            // logged but not surfaced.
+            // Discard a session whose lock state could not be confirmed.
+            SqlConnection.ClearPool(conn);
             logger?.LogWarning(ex, "GraphRAG migration applock release failed (non-fatal)");
         }
     }
 
-    private static async Task<HashSet<long>> LoadAppliedVersionsAsync(SqlConnection conn)
+    private static async Task<HashSet<long>> LoadAppliedVersionsAsync(SqlConnection conn, CancellationToken cancellationToken)
     {
         var sql = $"SELECT Version FROM {GraphRagSchemaInitializer.SchemaName}.SchemaVersion";
         await using var cmd = new SqlCommand(sql, conn);
-        await using var reader = await cmd.ExecuteReaderAsync();
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
         var set = new HashSet<long>();
-        while (await reader.ReadAsync())
+        while (await reader.ReadAsync(cancellationToken))
             set.Add(reader.GetInt64(0));
         return set;
     }
 
-    private static async Task ApplyOneAsync(
-        SqlConnection conn, IGraphRagMigration migration, ILogger? logger)
+    internal static async Task ApplyOneAsync(
+        SqlConnection conn, IGraphRagMigration migration, ILogger? logger, CancellationToken cancellationToken)
     {
-        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync();
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(cancellationToken);
         var sw = Stopwatch.StartNew();
         try
         {
             logger?.LogInformation("GraphRAG migration: applying version {Version} — {Description}",
                 migration.Version, migration.Description);
 
-            await migration.ApplyAsync(conn, tx, logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
+            await migration.ApplyAsync(conn, tx, logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance, cancellationToken);
 
             sw.Stop();
 
@@ -205,10 +211,10 @@ public static class GraphRagMigrationRunner
                 insert.Parameters.AddWithValue("@version", migration.Version);
                 insert.Parameters.AddWithValue("@description", migration.Description);
                 insert.Parameters.AddWithValue("@durationMs", (int)sw.ElapsedMilliseconds);
-                await insert.ExecuteNonQueryAsync();
+                await insert.ExecuteNonQueryAsync(cancellationToken);
             }
 
-            await tx.CommitAsync();
+            await tx.CommitAsync(cancellationToken);
             logger?.LogInformation(
                 "GraphRAG migration: version {Version} applied in {Duration}ms",
                 migration.Version, sw.ElapsedMilliseconds);
@@ -216,10 +222,12 @@ public static class GraphRagMigrationRunner
         catch (Exception ex)
         {
             sw.Stop();
-            try { await tx.RollbackAsync(); } catch { /* best effort */ }
+            try { await tx.RollbackAsync(CancellationToken.None); } catch { SqlConnection.ClearPool(conn); }
             logger?.LogError(ex,
                 "GraphRAG migration: version {Version} ({Description}) FAILED after {Duration}ms — startup will abort and retry on next launch",
                 migration.Version, migration.Description, sw.ElapsedMilliseconds);
+            if (cancellationToken.IsCancellationRequested)
+                throw new OperationCanceledException("GraphRAG migration was canceled and rolled back.", ex, cancellationToken);
             throw;
         }
     }

@@ -14,7 +14,10 @@ public sealed class M004_SourceDocumentRuntimeColumns : IGraphRagMigration
     public long Version => 4;
     public string Description => "Add SourceDocument content hash, version, and ingest lock columns";
 
-    public async Task ApplyAsync(SqlConnection connection, SqlTransaction transaction, ILogger logger)
+    public Task ApplyAsync(SqlConnection connection, SqlTransaction transaction, ILogger logger)
+        => ApplyAsync(connection, transaction, logger, CancellationToken.None);
+
+    public async Task ApplyAsync(SqlConnection connection, SqlTransaction transaction, ILogger logger, CancellationToken cancellationToken)
     {
         var schema = GraphRagSchemaInitializer.SchemaName;
 
@@ -41,7 +44,7 @@ public sealed class M004_SourceDocumentRuntimeColumns : IGraphRagMigration
             """;
 
         await using var command = new SqlCommand(columnsDdl, connection, transaction);
-        await command.ExecuteNonQueryAsync();
+        await command.ExecuteNonQueryAsync(cancellationToken);
         logger.LogDebug("M004: SourceDocument runtime columns ensured");
     }
 }

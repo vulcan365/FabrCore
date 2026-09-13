@@ -1,0 +1,100 @@
+#nullable enable
+FabrCore.Host.Security.IFabrCoreDataProtectionProvider
+FabrCore.Host.Security.FabrCoreDataProtectionExtensions
+static FabrCore.Host.Security.FabrCoreDataProtectionExtensions.AddFabrCoreDataProtection(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+FabrCore.Host.Api.Controllers.AclCollectionsController
+FabrCore.Host.Api.Controllers.AclCollectionsController.AclCollectionsController(Orleans.IClusterClient! cluster) -> void
+FabrCore.Host.Api.Controllers.AclCollectionsController.Delete(string! kind, string! id) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.AclCollectionsController.Get(string! kind, string! id) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.AclCollectionsController.List(string! kind, int offset = 0, int limit = 100, long? version = null) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.AclCollectionsController.Put(string! kind, string! id, System.Text.Json.JsonElement body) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.AdminConversationsController
+FabrCore.Host.Api.Controllers.AdminConversationsController.AdminConversationsController(Orleans.IClusterClient! cluster) -> void
+FabrCore.Host.Api.Controllers.AdminConversationsController.Create(string! principalId, string! agentHandle, FabrCore.Core.CloudServer.AdminSessionRequest! request) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.AdminConversationsController.Delete(string! principalId, string! agentHandle, string! sessionId) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.AdminConversationsController.Get(string! principalId, string! agentHandle, string! sessionId) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.AdminConversationsController.List(string! principalId, string! agentHandle) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.AdminConversationsController.ReadTurn(string! principalId, string! agentHandle, string! sessionId, string! turnId) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.AdminConversationsController.Turn(string! principalId, string! agentHandle, string! sessionId, FabrCore.Core.CloudServer.AdminTurnRequest! request) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.AdministrationOpenApiController
+FabrCore.Host.Api.Controllers.AdministrationOpenApiController.AdministrationOpenApiController(Microsoft.AspNetCore.Mvc.ApiExplorer.IApiDescriptionGroupCollectionProvider! descriptions) -> void
+FabrCore.Host.Api.Controllers.AdministrationOpenApiController.Get() -> Microsoft.AspNetCore.Mvc.IActionResult!
+FabrCore.Host.Api.Controllers.AdministrationOperationsController
+FabrCore.Host.Api.Controllers.AdministrationOperationsController.AdministrationOperationsController(Orleans.IClusterClient! cluster) -> void
+FabrCore.Host.Api.Controllers.AdministrationOperationsController.Read(string! principalId, string! operationId) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.AdministrationOperationsController.Start(string! principalId, string! operationId, FabrCore.Core.CloudServer.AdministrationOperationRequest! request) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.AgentManagementController
+FabrCore.Host.Api.Controllers.AgentManagementController.Action(string! principalId, string! agentHandle, string! managementAction, FabrCore.Core.CloudServer.AgentManagementRequest! request) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.AgentManagementController.AgentManagementController(Orleans.IClusterClient! cluster, FabrCore.Host.Services.IFabrCoreAgentService! agents, FabrCore.Host.Services.IFabrCoreConfigurationStore! configuration, System.Collections.Generic.IEnumerable<FabrCore.Core.Blueprints.IBlueprintExpander!>! expanders, FabrCore.Host.Services.IFabrCoreSkillCatalogService! skills) -> void
+FabrCore.Host.Api.Controllers.AgentManagementController.Catalog(string! principalId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.AgentManagementController.Create(string! principalId, System.Collections.Generic.List<FabrCore.Core.AgentConfiguration!>! configurations) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.AgentManagementController.Get(string! principalId, string! agentHandle) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.BlueprintAdministrationController
+FabrCore.Host.Api.Controllers.BlueprintAdministrationController.BlueprintAdministrationController(Orleans.IClusterClient! cluster) -> void
+FabrCore.Host.Api.Controllers.BlueprintAdministrationController.Delete(string! principalId, string! name) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.BlueprintAdministrationController.Deploy(string! principalId, string! name, FabrCore.Core.CloudServer.BlueprintDeploymentRequest! request) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.BlueprintAdministrationController.List(string! principalId) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.BlueprintAdministrationController.Preview(string! principalId, string! name) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.BlueprintAdministrationController.Save(string! principalId, string! name, FabrCore.Core.Blueprints.FabrCoreBlueprint! blueprint) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.BlueprintAdministrationController.Summaries(string! principalId, int offset = 0, int limit = 100, string? revision = null) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.BlueprintAdministrationController.Validate(string! principalId, FabrCore.Core.Blueprints.FabrCoreBlueprint! blueprint) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.EvidenceAdministrationController
+FabrCore.Host.Api.Controllers.EvidenceAdministrationController.Chunk(string! id, int chunk, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.EvidenceAdministrationController.CreateExport(string! traceId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.EvidenceAdministrationController.Delete(string! id, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.EvidenceAdministrationController.EvidenceAdministrationController(FabrCore.Core.VerifiableExecution.IVerifiableExecutionStore! evidence, FabrCore.Core.VerifiableExecution.IVerifiableExecutionVerifier! verifier, FabrCore.Host.Services.IUserScopedFabrCoreStorageProvider! storage) -> void
+FabrCore.Host.Api.Controllers.EvidenceAdministrationController.List(string? agentHandle = null, string? after = null, int limit = 100, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.EvidenceExportManifest
+FabrCore.Host.Api.Controllers.EvidenceExportManifest.Bytes.get -> long
+FabrCore.Host.Api.Controllers.EvidenceExportManifest.Bytes.set -> void
+FabrCore.Host.Api.Controllers.EvidenceExportManifest.Chunks.get -> int
+FabrCore.Host.Api.Controllers.EvidenceExportManifest.Chunks.set -> void
+FabrCore.Host.Api.Controllers.EvidenceExportManifest.CoverageNotice.get -> string!
+FabrCore.Host.Api.Controllers.EvidenceExportManifest.CoverageNotice.set -> void
+FabrCore.Host.Api.Controllers.EvidenceExportManifest.CreatedAt.get -> System.DateTimeOffset
+FabrCore.Host.Api.Controllers.EvidenceExportManifest.CreatedAt.set -> void
+FabrCore.Host.Api.Controllers.EvidenceExportManifest.DataScope.get -> string!
+FabrCore.Host.Api.Controllers.EvidenceExportManifest.DataScope.set -> void
+FabrCore.Host.Api.Controllers.EvidenceExportManifest.EvidenceExportManifest() -> void
+FabrCore.Host.Api.Controllers.EvidenceExportManifest.Id.get -> string!
+FabrCore.Host.Api.Controllers.EvidenceExportManifest.Id.set -> void
+FabrCore.Host.Api.Controllers.EvidenceExportManifest.Revision.get -> string!
+FabrCore.Host.Api.Controllers.EvidenceExportManifest.Revision.set -> void
+FabrCore.Host.Api.Controllers.EvidenceExportManifest.TraceId.get -> string!
+FabrCore.Host.Api.Controllers.EvidenceExportManifest.TraceId.set -> void
+FabrCore.Host.Api.Controllers.EvidenceExportManifest.Verification.get -> FabrCore.Core.VerifiableExecution.VerifiableExecutionVerificationResult?
+FabrCore.Host.Api.Controllers.EvidenceExportManifest.Verification.set -> void
+FabrCore.Host.Api.Controllers.PrincipalDirectoryController
+FabrCore.Host.Api.Controllers.PrincipalDirectoryController.List(int offset = 0, int limit = 100, string? revision = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.PrincipalDirectoryController.PrincipalDirectoryController(FabrCore.Host.Services.IFabrCoreAgentService! agents, System.IServiceProvider! services) -> void
+FabrCore.Host.Api.Controllers.RemoteAclAdminController.Metadata(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.RemoteMonitorController
+FabrCore.Host.Api.Controllers.RemoteMonitorController.Health(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.RemoteMonitorController.Payload(long sequence, int offset = 0, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.RemoteMonitorController.Query(FabrCore.Core.Monitoring.MonitorQuery! query, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Api.Controllers.RemoteMonitorController.RemoteMonitorController(FabrCore.Core.Monitoring.IAgentMessageMonitor! monitor, Microsoft.Extensions.Options.IOptions<FabrCore.Host.Configuration.RemoteAdministrationOptions!>! options) -> void
+FabrCore.Host.Api.Controllers.RemoteMonitorController.Tokens() -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Database.SqlAgentMessageMonitor
+FabrCore.Host.Database.SqlAgentMessageMonitor.ClearAsync() -> System.Threading.Tasks.Task!
+FabrCore.Host.Database.SqlAgentMessageMonitor.GetAgentTokenSummaryAsync(string! agentHandle) -> System.Threading.Tasks.Task<FabrCore.Core.Monitoring.AgentTokenSummary?>!
+FabrCore.Host.Database.SqlAgentMessageMonitor.GetAllAgentTokenSummariesAsync() -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.Monitoring.AgentTokenSummary!>!>!
+FabrCore.Host.Database.SqlAgentMessageMonitor.GetEventsAsync(string? agentHandle = null, int? limit = null) -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.Monitoring.MonitoredEvent!>!>!
+FabrCore.Host.Database.SqlAgentMessageMonitor.GetHealthAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Text.Json.JsonElement>!
+FabrCore.Host.Database.SqlAgentMessageMonitor.GetLlmCallsAsync(string? agentHandle = null, int? limit = null) -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.Monitoring.MonitoredLlmCall!>!>!
+FabrCore.Host.Database.SqlAgentMessageMonitor.GetMessagesAsync(string? agentHandle = null, int? limit = null) -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.Monitoring.MonitoredMessage!>!>!
+FabrCore.Host.Database.SqlAgentMessageMonitor.LlmCaptureOptions.get -> FabrCore.Core.Monitoring.LlmCaptureOptions!
+FabrCore.Host.Database.SqlAgentMessageMonitor.OnEventRecorded -> System.Action<FabrCore.Core.Monitoring.MonitoredEvent!>?
+FabrCore.Host.Database.SqlAgentMessageMonitor.OnLlmCallRecorded -> System.Action<FabrCore.Core.Monitoring.MonitoredLlmCall!>?
+FabrCore.Host.Database.SqlAgentMessageMonitor.OnMessageRecorded -> System.Action<FabrCore.Core.Monitoring.MonitoredMessage!>?
+FabrCore.Host.Database.SqlAgentMessageMonitor.QueryAsync(FabrCore.Core.Monitoring.MonitorQuery! query, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.Monitoring.MonitorPage!>!
+FabrCore.Host.Database.SqlAgentMessageMonitor.ReadPayloadAsync(long sequence, int offset, int count, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string?>!
+FabrCore.Host.Database.SqlAgentMessageMonitor.RecordEventAsync(FabrCore.Core.Monitoring.MonitoredEvent! evt) -> System.Threading.Tasks.Task!
+FabrCore.Host.Database.SqlAgentMessageMonitor.RecordLlmCallAsync(FabrCore.Core.Monitoring.MonitoredLlmCall! call) -> System.Threading.Tasks.Task!
+FabrCore.Host.Database.SqlAgentMessageMonitor.RecordMessageAsync(FabrCore.Core.Monitoring.MonitoredMessage! message) -> System.Threading.Tasks.Task!
+FabrCore.Host.Database.SqlAgentMessageMonitor.SqlAgentMessageMonitor(FabrCore.Host.Database.OperationalDatabase! database, Microsoft.Extensions.Configuration.IConfiguration! configuration, FabrCore.Core.Monitoring.LlmCaptureOptions! capture, Microsoft.Extensions.Logging.ILogger<FabrCore.Host.Database.SqlAgentMessageMonitor!>! logger, Microsoft.Extensions.Logging.ILogger<FabrCore.Host.Services.InMemoryAgentMessageMonitor!>! recentLogger) -> void
+FabrCore.Host.Database.SqlVerifiableExecutionStore.ListTracesAsync(string? agentHandle = null, string? after = null, int limit = 100, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.CloudServer.AdministrationPage<string!>!>!
+FabrCore.Host.Grains.AclRegistryGrain.ConditionalMutationAsync(string! kind, string! id, string? json, long expectedVersion) -> System.Threading.Tasks.Task<string!>!
+FabrCore.Host.Services.InMemoryAgentMessageMonitor.GetHealthAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Text.Json.JsonElement>!
+FabrCore.Host.Services.InMemoryAgentMessageMonitor.QueryAsync(FabrCore.Core.Monitoring.MonitorQuery! query, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.Monitoring.MonitorPage!>!
+FabrCore.Host.Services.InMemoryAgentMessageMonitor.ReadPayloadAsync(long sequence, int offset, int count, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string?>!
+FabrCore.Host.Services.InMemoryVerifiableExecutionStore.ListTracesAsync(string? agentHandle = null, string? after = null, int limit = 100, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.CloudServer.AdministrationPage<string!>!>!

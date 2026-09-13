@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <Sdk Name="Aspire.AppHost.Sdk" Version="9.5.0" />
+  <Sdk Name="Aspire.AppHost.Sdk" Version="13.5.3" />
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -8,6 +8,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <AspireUseCliBundle>true</AspireUseCliBundle>
     <RootNamespace>FabrCore.SampleApp.AppHost</RootNamespace>
     <AssemblyName>FabrCore.SampleApp.AppHost</AssemblyName>
     <UserSecretsId>f6752766-6e36-4dfc-8fa9-5bb78a51d16b</UserSecretsId>

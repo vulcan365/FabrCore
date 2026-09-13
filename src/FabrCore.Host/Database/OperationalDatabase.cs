@@ -56,13 +56,14 @@ public sealed class OperationalDatabase(FabrCoreDatabaseOptions options, IConfig
         {
             await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync(ct);
             await LockAsync(connection, transaction, "schema-v1", ct);
-            await using var command = Command(connection, Schema, transaction);
+            await using var command = Command(connection, Schema + "\n" + SqlAgentMessageMonitor.Schema, transaction);
             await command.ExecuteNonQueryAsync(ct);
             await transaction.CommitAsync(ct);
         }
+        await DatabaseSchemaContract.ValidateAsync(configuration.GetConnectionString(options.OperationsConnectionStringName ?? options.ConnectionStringName)!, "fabrOps", ct);
         await using var validate = Command(connection, """
             IF OBJECT_ID('fabrOps.SchemaVersion') IS NULL THROW 51000, 'Operational schema is missing.', 1;
-            IF NOT EXISTS(SELECT 1 FROM fabrOps.SchemaVersion WHERE Version=1) THROW 51000, 'Operational migrations are pending.', 1;
+            IF NOT EXISTS(SELECT 1 FROM fabrOps.SchemaVersion WHERE Version=1) THROW 51000, 'fabrOps.SchemaVersion is missing required migration 1. Provision the supported operational schema and migration record before restarting; do not mark an incomplete schema as migrated.', 1;
             SELECT TOP(0) Id, Payload FROM fabrOps.Audit;
             SELECT TOP(0) TraceId, SegmentId, Sequence, RecordJson, SignatureJson, CertificateJson FROM fabrOps.Evidence;
             SELECT TOP(0) TraceId, SegmentId, NextSequence FROM fabrOps.EvidenceSequence;

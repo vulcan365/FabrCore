@@ -2,9 +2,32 @@
 name: fabrcore-agent
 description: "Build FabrCore.Sdk 2.0 agents with FabrCoreAgentProxy, lifecycle callbacks, model clients, tools, state, timers, reminders, internal specialists and context compaction. Use for agent implementation and persisted-state handling; use fabrcore-harness for todo loops and delegation workflows."
 allowed-tools: "Bash(dotnet:*) Bash(mkdir:*) Bash(ls:*) Bash(pwsh:*) Bash(powershell:*) Bash(git:*) Bash(dir:*)"
+metadata:
+  version: 2.0.0
 ---
 
 # FabrCore Agent Development
+
+## Optional authenticated connections
+
+The proxy's protected `Connections` facade obtains tokens or authenticated HTTP
+clients for declared connection aliases. Read
+[fabrcore-connections](../fabrcore-connections/SKILL.md) for principal ownership,
+explicit agent grants, application credentials, Agent ID, and blueprint bindings.
+Prefer `Connections.GetHttpClientAsync(alias, resource, ct)` in trusted code;
+never expose token retrieval as a model tool. Diagnostic turns deny access.
+
+## Operator diagnostics in the 2.0 release
+
+Read [admin diagnostics](references/admin-diagnostics.md) when exposing application
+snapshots, troubleshooting fork persistence or implementing admin UI. The protected
+`GetAdminDiagnosticSnapshotAsync(CancellationToken)` hook returns read-only copies.
+Diagnostic turns use a dedicated model/execution context and forked session store;
+they can overlap normal OnMessage but never call business tools or normal replies.
+Do not simulate this with an ordinary message whose channel is `_admin`: both
+`_admin` and `_debug` are rejected on ordinary ingress. One admin turn per target
+and lifecycle conflicts are enforced even when normal user processing is idle.
+
 
 ## FabrCore 2.0 baseline
 

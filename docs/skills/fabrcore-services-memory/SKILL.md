@@ -1,6 +1,8 @@
 ---
 name: fabrcore-services-memory
 description: "Integrate FabrCore.Services.Memory through direct APIs, agent-memory tools, FabrCore harness recall and compaction, or scoped internal-agent memory. Use for persistent agent knowledge, corrections, and memory lifecycle; not ordinary chat-history storage."
+metadata:
+  version: 2.0.0
 ---
 
 # FabrCore agent memory
@@ -19,7 +21,7 @@ Use `IAgentMemoryProvider` to obtain a scope-bound `IAgentMemoryService`. Develo
 4. Save durable facts at the point the application knows them. Retain the returned ID for explicit updates, tier changes, or deletion. See [lifecycle calls](assets/memory-lifecycle.cs) and [API](references/api-reference.md).
 5. For a proxy-created FabrCore harness, use `WithMemoryLifecycle(memory, services)` for bounded recall and memory-aware persisted-history compaction. Tools are opt-in. For manual agents, inject `FormatRecallContext(recall)` before answering and optionally delegate `OnCompaction` to `MemoryCompactionHandler`. Choose one integration per concern to avoid duplicate recall, tools, or extraction. See [harness and internal agents](references/harness-and-internal-agents.md) and [configuration example](assets/memory-harness.cs).
 6. Bind internal agents through `ForInternalAgent`: OwnOnly by default, CoreOnly for shared reads/writes, or CoreAndOwn for own-first combined reads and own-only writes. Background writes require explicit scoped tools and execution policy. Keep scope selection in trusted host code.
-7. Preserve the [frozen defaults](../../memory-release-defaults.md). Default recall selects headers and primary chunks; semantic candidates and matched-chunk evidence are opt-in. The [imagining template](assets/memory-imagining-agent-template.cs) is an optional multi-query path with additional model cost.
+7. Preserve the [frozen defaults](https://github.com/vulcan365/FabrCore/blob/main/docs/memory-release-defaults.md). Default recall selects headers and primary chunks; semantic candidates and matched-chunk evidence are opt-in. The [imagining template](assets/memory-imagining-agent-template.cs) is an optional multi-query path with additional model cost.
 
 The formatted marker keeps injected memory out of later extraction; it is not a security boundary. Recalled instructions remain reference data under the current agent policy.
 

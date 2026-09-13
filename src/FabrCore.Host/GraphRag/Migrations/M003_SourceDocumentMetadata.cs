@@ -12,7 +12,10 @@ public sealed class M003_SourceDocumentMetadata : IGraphRagMigration
     public long Version => 3;
     public string Description => "Add source metadata columns and source-key identity for ingested documents";
 
-    public async Task ApplyAsync(SqlConnection connection, SqlTransaction transaction, ILogger logger)
+    public Task ApplyAsync(SqlConnection connection, SqlTransaction transaction, ILogger logger)
+        => ApplyAsync(connection, transaction, logger, CancellationToken.None);
+
+    public async Task ApplyAsync(SqlConnection connection, SqlTransaction transaction, ILogger logger, CancellationToken cancellationToken)
     {
         var schema = GraphRagSchemaInitializer.SchemaName;
 
@@ -119,22 +122,22 @@ public sealed class M003_SourceDocumentMetadata : IGraphRagMigration
             END
             """;
 
-        await ExecuteAsync(columnsDdl, connection, transaction);
+        await ExecuteAsync(columnsDdl, connection, transaction, cancellationToken);
         logger.LogDebug("M003: SourceDocument metadata columns ensured");
 
-        await ExecuteAsync(backfillDml, connection, transaction);
+        await ExecuteAsync(backfillDml, connection, transaction, cancellationToken);
         logger.LogDebug("M003: SourceDocument metadata backfilled");
 
-        await ExecuteAsync(constraintsDdl, connection, transaction);
+        await ExecuteAsync(constraintsDdl, connection, transaction, cancellationToken);
         logger.LogDebug("M003: SourceDocument metadata constraints ensured");
 
-        await ExecuteAsync(indexesDdl, connection, transaction);
+        await ExecuteAsync(indexesDdl, connection, transaction, cancellationToken);
         logger.LogDebug("M003: SourceDocument source identity indexes ensured");
     }
 
-    private static async Task ExecuteAsync(string sql, SqlConnection connection, SqlTransaction transaction)
+    private static async Task ExecuteAsync(string sql, SqlConnection connection, SqlTransaction transaction, CancellationToken cancellationToken)
     {
         await using var cmd = new SqlCommand(sql, connection, transaction);
-        await cmd.ExecuteNonQueryAsync();
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 }
