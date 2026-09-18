@@ -52,10 +52,7 @@ workflow offline, including version propagation, package selection, and failure 
 Release dry runs do not fetch, pull, switch branches, tag, merge or push. Real version
 releases require a clean main branch, fetch tags, fast-forward main, and stop at the first
 Git failure. They prompt before tagging/pushing and leave the checkout on main. The
-Develop helper prompts before merging and also stops on Git failures. When `develop`
-or `main` is already checked out in a linked worktree, it uses that checkout and
-checks both working trees are clean. The merge and push run in the main checkout;
-the caller's directory and any separate develop checkout stay in place.
+Develop helper prompts before merging and also stops on Git failures.
 
 ## Release validation
 

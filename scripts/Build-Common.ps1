@@ -5,8 +5,8 @@ $script:FabrCoreRepoRoot = Split-Path $PSScriptRoot -Parent
 $script:FabrCoreBuild = Import-PowerShellDataFile (Join-Path $script:FabrCoreRepoRoot 'builds/Projects.psd1')
 
 function Invoke-CheckedGit {
-    param([Parameter(Mandatory)][string[]]$Arguments, [string]$WorkingDirectory = $script:FabrCoreRepoRoot)
-    & git -C $WorkingDirectory @Arguments
+    param([Parameter(Mandatory)][string[]]$Arguments)
+    & git -C $script:FabrCoreRepoRoot @Arguments
     if ($LASTEXITCODE -ne 0) { throw "Git failed: $($Arguments[0]) (exit $LASTEXITCODE)." }
 }
 
@@ -19,19 +19,8 @@ function Get-LatestStableTag {
 }
 
 function Assert-CleanReleaseTree {
-    param([string]$WorkingDirectory = $script:FabrCoreRepoRoot)
-    if (@(Invoke-CheckedGit @('status', '--porcelain') -WorkingDirectory $WorkingDirectory).Count -gt 0) {
-        throw "Commit or stash changes in '$WorkingDirectory' before releasing."
-    }
-}
-
-function Get-BranchWorktreePath {
-    param([Parameter(Mandatory)][string]$Branch)
-    $records = (Invoke-CheckedGit @('worktree', 'list', '--porcelain', '-z')) -join "`n"
-    $worktreePath = $null
-    foreach ($field in $records.Split([char]0)) {
-        if ($field.StartsWith('worktree ')) { $worktreePath = $field.Substring(9) }
-        elseif ($field -eq "branch refs/heads/$Branch") { return $worktreePath }
+    if (@(Invoke-CheckedGit @('status', '--porcelain')).Count -gt 0) {
+        throw 'Commit or stash changes before releasing.'
     }
 }
 
