@@ -7,21 +7,13 @@ if ($DryRun) {
     return
 }
 Assert-CleanReleaseTree
-$developPath = Get-BranchWorktreePath 'develop'
-$mainPath = Get-BranchWorktreePath 'main'
-if (-not $developPath) { $developPath = $script:FabrCoreRepoRoot }
-if (-not $mainPath) { $mainPath = $developPath }
-Assert-CleanReleaseTree -WorkingDirectory $developPath
-Assert-CleanReleaseTree -WorkingDirectory $mainPath
 Invoke-CheckedGit @('fetch','origin')
-Invoke-CheckedGit @('checkout','develop') -WorkingDirectory $developPath
-Invoke-CheckedGit @('pull','--ff-only','origin','develop') -WorkingDirectory $developPath
+Invoke-CheckedGit @('checkout','develop')
+Invoke-CheckedGit @('pull','--ff-only','origin','develop')
 Invoke-CheckedGit @('log','origin/main..develop','--oneline')
 if ((Read-Host 'Merge develop into main? (y/n)') -ne 'y') { return }
-Assert-CleanReleaseTree -WorkingDirectory $mainPath
-Invoke-CheckedGit @('checkout','main') -WorkingDirectory $mainPath
-Invoke-CheckedGit @('pull','--ff-only','origin','main') -WorkingDirectory $mainPath
-Invoke-CheckedGit @('merge','develop','--no-ff','--no-edit') -WorkingDirectory $mainPath
-Invoke-CheckedGit @('push','origin','main') -WorkingDirectory $mainPath
-Write-Host "Main checkout: $mainPath"
+Invoke-CheckedGit @('checkout','main')
+Invoke-CheckedGit @('pull','--ff-only','origin','main')
+Invoke-CheckedGit @('merge','develop','--no-ff','--no-edit')
+Invoke-CheckedGit @('push','origin','main')
 Write-Host 'develop merged into main. Run Release-Patch.ps1, Release-Minor.ps1 or Release-Major.ps1 to release.'
