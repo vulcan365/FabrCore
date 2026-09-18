@@ -100,6 +100,20 @@ namespace FabrCore.Sdk
             AgentConfiguration config,
             IFabrCoreAgentHost? agentHost = null,
             CancellationToken cancellationToken = default)
+            => await ResolveToolScopeCoreAsync(serviceProvider, pluginAliases, toolAliases, config,
+                agentHost, requireAll: true, cancellationToken);
+
+        // Normal agents retain optional-alias behavior, but now own disposable plugins.
+        internal Task<FabrCoreResolvedToolScope> ResolveConfiguredToolScopeAsync(
+            IServiceProvider serviceProvider, IEnumerable<string>? pluginAliases,
+            IEnumerable<string>? toolAliases, AgentConfiguration config, IFabrCoreAgentHost agentHost)
+            => ResolveToolScopeCoreAsync(serviceProvider, pluginAliases, toolAliases, config,
+                agentHost, requireAll: false, CancellationToken.None);
+
+        private async Task<FabrCoreResolvedToolScope> ResolveToolScopeCoreAsync(
+            IServiceProvider serviceProvider, IEnumerable<string>? pluginAliases,
+            IEnumerable<string>? toolAliases, AgentConfiguration config, IFabrCoreAgentHost? agentHost,
+            bool requireAll, CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(serviceProvider);
             ArgumentNullException.ThrowIfNull(config);
@@ -113,7 +127,7 @@ namespace FabrCore.Sdk
                     cancellationToken.ThrowIfCancellationRequested();
                     var (resolved, _, instance) = await ResolvePluginAsync(serviceProvider, alias, config, agentHost);
                     if (instance is IDisposable or IAsyncDisposable) resources.Add(instance);
-                    if (resolved.Count == 0)
+                    if (requireAll && resolved.Count == 0)
                         throw new InvalidOperationException($"Required plugin alias '{alias}' did not resolve to any tools.");
 
                     tools.AddRange(resolved);
@@ -122,9 +136,10 @@ namespace FabrCore.Sdk
                 foreach (var alias in toolAliases ?? [])
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    var resolved = ResolveStandaloneTool(alias, serviceProvider)
-                        ?? throw new InvalidOperationException($"Required tool alias '{alias}' could not be resolved.");
-                    tools.Add(resolved);
+                    var resolved = ResolveStandaloneTool(alias, serviceProvider);
+                    if (resolved != null) tools.Add(resolved);
+                    else if (requireAll)
+                        throw new InvalidOperationException($"Required tool alias '{alias}' could not be resolved.");
                 }
 
                 return new FabrCoreResolvedToolScope(tools, resources);
@@ -369,18 +384,24 @@ namespace FabrCore.Sdk
 
         internal static async Task DisposeResourcesAsync(IEnumerable<object> resources)
         {
+            List<Exception>? errors = null;
             foreach (var resource in resources.Reverse())
             {
-                switch (resource)
+                try
                 {
-                    case IAsyncDisposable asyncDisposable:
-                        await asyncDisposable.DisposeAsync();
-                        break;
-                    case IDisposable disposable:
-                        disposable.Dispose();
-                        break;
+                    switch (resource)
+                    {
+                        case IAsyncDisposable asyncDisposable:
+                            await asyncDisposable.DisposeAsync();
+                            break;
+                        case IDisposable disposable:
+                            disposable.Dispose();
+                            break;
+                    }
                 }
+                catch (Exception error) { (errors ??= []).Add(error); }
             }
+            if (errors != null) throw new AggregateException("Plugin cleanup failed.", errors);
         }
     }
 }

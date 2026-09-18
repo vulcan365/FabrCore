@@ -114,9 +114,17 @@ Configure stdio and HTTP MCP servers, tool discovery/filtering, transport lifeti
 
 Use `CreateInternalAgentAsync` for a bounded policy reviewer with separate model/context, telemetry attribution, tool scope, timeout, and concurrency policy. Contrast private specialists with full handle-addressable agents and show agent-as-tool and background adapters. Explain risk-classified tool restrictions and lost in-flight work on deactivation.
 
+### 3.6 Configure a reusable C# scripting environment
+
+Add the optional FabrCore.Scripting package and runtime registration. Define a CSharpScriptingPluginBase with exact developer-chosen NuGet versions, imports, instructions and limits. Select its alias in FabrCoreAgentProxy before resolving tools. Explain reuse across agents, separate dependency graphs, one scripting plugin per agent and fresh out-of-process execution. Run a no-model Newtonsoft.Json checkpoint.
+
+### 3.7 Return script results, artifacts and failures
+
+Trace JSON input through the worker and ScriptExecutionResult back to the AIFunction/model. Exercise structured return values, console output, compilation errors and bounded artifacts. Explain cache prewarming, SDK/runtime requirements, private feeds, per-invocation cleanup and the OS isolation boundary. Keep database authorization in trusted tools and render validated result data with known Blazor components.
+
 **Insights alternative:** discover registered agents/plugins/tools and configure an agent's selected capabilities. C# implementation and deployment of assemblies remain developer work.
 
-**References:** [Tools](https://fabrcore.ai/docs/tools), [MCP](https://fabrcore.ai/docs/mcp), [Agent Framework](https://fabrcore.ai/docs/agent-framework); [plugins/tools skill](skills/fabrcore-plugins-tools/SKILL.md), [MCP skill](skills/fabrcore-mcp/SKILL.md), [internal composition](skills/fabrcore-agent/references/internal-agent-composition.md).
+**References:** [Tools](https://fabrcore.ai/docs/tools), [MCP](https://fabrcore.ai/docs/mcp), [Agent Framework](https://fabrcore.ai/docs/agent-framework); [plugins/tools skill](skills/fabrcore-plugins-tools/SKILL.md), [scripting skill](skills/fabrcore-scripting/SKILL.md), [scripting reference](scripting.md), [MCP skill](skills/fabrcore-mcp/SKILL.md), [internal composition](skills/fabrcore-agent/references/internal-agent-composition.md).
 
 ## Module 4 — Manage state, sessions, and context
 
@@ -509,6 +517,7 @@ These supplement the linear tour; they do not replace explanations in the story.
 | Skill family | Primary guide coverage |
 | --- | --- |
 | `fabrcore`, `fabrcore-server` | 1, 4, 8, 11, 13; configuration/API inventories |
+| `fabrcore-scripting` | 3.6–3.7; reusable environments, JSON results, artifacts and deployment |
 | `fabrcore-agent`, `fabrcore-agentframework` | 2–4, 6; private composition and diagnostic boundaries |
 | `fabrcore-messaging` | 2, 5, 10–11; channels, Args, system/control traffic, correlation |
 | `fabrcore-plugins-tools`, `fabrcore-mcp` | 3, 10, 12 |

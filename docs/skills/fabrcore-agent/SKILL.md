@@ -29,6 +29,10 @@ Do not simulate this with an ordinary message whose channel is `_admin`: both
 and lifecycle conflicts are enforced even when normal user processing is idle.
 
 
+For optional model-written C#, use [fabrcore-scripting](../fabrcore-scripting/SKILL.md).
+Select one reusable scripting plugin in `config.Plugins` before resolving tools;
+its NuGet configuration belongs in the concrete plugin's `Configure` method.
+
 ## FabrCore 2.0 baseline
 
 Target FabrCore.Sdk 2.0.0 on .NET 10. Ordinary agents, tools and compaction work without SQL. Default standalone state is lost on restart; use configured durable Orleans storage for persistence. Integrated long-term Memory requires Host SQL mode and explicit agent scope/plugin selection.

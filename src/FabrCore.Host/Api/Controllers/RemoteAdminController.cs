@@ -156,6 +156,22 @@ public sealed class RemoteAdminController(
         });
     }
 
+    [HttpGet("settings/state")]
+    public IActionResult GetConfigurationState()
+    {
+        if (RejectSpoofedTargetHeaders() is { } rejected) return rejected;
+        return Ok(services.GetRequiredService<RuntimeConfigurationState>().Report(services));
+    }
+
+    [HttpPost("settings/preview")]
+    public IActionResult PreviewConfiguration([FromBody] Dictionary<string, string?> settings)
+    {
+        if (RejectSpoofedTargetHeaders() is { } rejected) return rejected;
+        try { return Ok(services.GetRequiredService<RuntimeConfigurationState>().Preview(settings, services)); }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        { return BadRequest(new { Error = "Candidate rejected by the host configuration rules. No settings were changed." }); }
+    }
+
     [HttpGet("runtime/principals")]
     public async Task<IActionResult> GetPrincipals([FromQuery] string? status = null)
     {

@@ -11,7 +11,12 @@ namespace FabrCore.Host.Tests;
 public sealed class DataProtectionSqlTests
 {
     [TestMethod]
-    public async Task AutoSqlKeysAreEncryptedSharedRestartSafeAndScoped()
+    [DataRow("Integrated")]
+    [DataRow("IntegratedLocalhost")]
+    [DataRow("OperationsOverride")]
+    [DataRow("OrleansStorage")]
+    [DataRow("OrleansFallback")]
+    public async Task AutoSqlKeysAreEncryptedSharedRestartSafeAndScoped(string persistence)
     {
         var password = Environment.GetEnvironmentVariable("FABRCORE_SQL_TEST_PASSWORD");
         if (string.IsNullOrWhiteSpace(password)) Assert.Inconclusive("An isolated SQL test server is required.");
@@ -30,15 +35,34 @@ public sealed class DataProtectionSqlTests
         try
         {
             Dictionary<string, string?> config = new() {
-                ["ConnectionStrings:FabrCore"] = settings.ConnectionString,
-                ["FabrCore:Orleans:ClusteringMode"] = "Localhost",
                 ["FabrCore:DataProtection:CertificatePath"] = path,
                 ["FabrCore:DataProtection:ApplicationName"] = "cluster-one"
             };
+            switch (persistence)
+            {
+                case "Integrated":
+                case "IntegratedLocalhost":
+                    config["ConnectionStrings:FabrCore"] = settings.ConnectionString;
+                    if (persistence == "IntegratedLocalhost") config["FabrCore:Orleans:ClusteringMode"] = "Localhost";
+                    break;
+                case "OperationsOverride":
+                    config["ConnectionStrings:FabrCore"] = "Server=unused;Database=unused;Connect Timeout=1";
+                    config["ConnectionStrings:Operations"] = settings.ConnectionString;
+                    config["FabrCore:Database:OperationsConnectionStringName"] = "Operations";
+                    break;
+                case "OrleansStorage":
+                case "OrleansFallback":
+                    config["FabrCore:Orleans:ClusteringMode"] = "SqlServer";
+                    config["FabrCore:Orleans:ConnectionString"] = persistence == "OrleansStorage"
+                        ? "Server=unused;Database=unused;Connect Timeout=1" : settings.ConnectionString;
+                    if (persistence == "OrleansStorage") config["FabrCore:Orleans:StorageConnectionString"] = settings.ConnectionString;
+                    break;
+            }
             string ciphertext;
             using (var first = DataProtectionTests.Services(config))
                 ciphertext = first.GetRequiredService<IFabrCoreDataProtectionProvider>().CreateProtector("connections").Protect("persisted-token");
             config["FabrCore:Database:AutoInitialize"] = "false";
+            config["FabrCore:Orleans:AutoInitDatabase"] = "false";
             using (var restarted = DataProtectionTests.Services(config))
                 Assert.AreEqual("persisted-token", restarted.GetRequiredService<IFabrCoreDataProtectionProvider>().CreateProtector("connections").Unprotect(ciphertext));
             // A different application has its own keys even in the same database.

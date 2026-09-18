@@ -19,6 +19,10 @@ internal sealed class CloudSettingsState
     private readonly object gate = new();
     private readonly Dictionary<string, string?> baseline;
     private CloudConfigurationEnvelope? bootstrapEnvelope;
+    private RuntimeConfigurationState? runtime;
+    private IServiceProvider? services;
+    internal void AttachRuntime(RuntimeConfigurationState value) => runtime = value;
+    internal void AttachServices(IServiceProvider value) => services = value;
 
     public CloudSettingsState(
         CloudSettingsConfigurationProvider provider,
@@ -40,7 +44,10 @@ internal sealed class CloudSettingsState
     /// Keys whose cloud value now differs from the value this process started with, and whose
     /// consumers cannot pick up a change without a restart. Ordered for stable reporting.
     /// </summary>
-    public IReadOnlyList<string> PendingRestartSettings { get; private set; } = [];
+    private IReadOnlyList<string> pendingRestartSettings = [];
+    public IReadOnlyList<string> PendingRestartSettings => runtime is not null && services is not null
+        ? runtime.Report(services).Settings.Where(s => s.PendingRestart).Select(s => s.Key).ToArray()
+        : pendingRestartSettings;
 
     /// <summary>
     /// Hands the bootstrap-fetched envelope to the first caller and clears it, so the background
@@ -64,15 +71,17 @@ internal sealed class CloudSettingsState
     /// </summary>
     public void Apply(CloudConfigurationEnvelope envelope, FabrCoreSettingsCatalog catalog, ILogger logger)
     {
-        var filtered = Provider.Apply(envelope.Settings);
+        CloudSettingsFilterResult? filtered = null;
+        void Commit() => filtered = Provider.Apply(envelope.Settings);
+        if (runtime is not null) runtime.Apply(envelope, Commit); else Commit();
 
         lock (gate)
         {
             AppliedSettingsVersion = envelope.ConfigurationVersion;
-            PendingRestartSettings = ComputePendingRestart(filtered.Accepted, catalog);
+            pendingRestartSettings = ComputePendingRestart(filtered!.Accepted, catalog);
         }
 
-        LogSummary(filtered, PendingRestartSettings, envelope.ConfigurationVersion, logger);
+        LogSummary(filtered!, PendingRestartSettings, envelope.ConfigurationVersion, logger);
     }
 
     private List<string> ComputePendingRestart(

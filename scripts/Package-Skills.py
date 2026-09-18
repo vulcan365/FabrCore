@@ -61,8 +61,14 @@ def main():
     administration = administration.replace("(cloud-server-protocol.md)", "(transport.md)").replace(
         "(migrations/monitoring.sql)", "(../assets/monitoring.sql)")
     transport = (ROOT / "docs/cloud-server-protocol.md").read_text(encoding="utf-8-sig").replace(
-        "(cloud-administration.md)", "(administration.md)")
+        "(cloud-administration.md)", "(administration.md)").replace(
+        "(cloud-configuration-state-protocol.md)", "(https://github.com/vulcan365/FabrCore/blob/main/docs/cloud-configuration-state-protocol.md)")
     checks = {
+        "fabrcore-scripting/references/runtime.md": (ROOT / "docs/scripting.md").read_text(encoding="utf-8-sig").replace(
+            "(../samples/FabrCore.Scripting.Sample/Program.cs)", "(../assets/Program.cs)").replace(
+            "(../samples/FabrCore.SampleApp/README.md#try-c-scripting)",
+            "(https://github.com/vulcan365/FabrCore/blob/main/samples/FabrCore.SampleApp/README.md#try-c-scripting)"),
+        "fabrcore-scripting/assets/Program.cs": (ROOT / "samples/FabrCore.Scripting.Sample/Program.cs").read_text(encoding="utf-8-sig").split('[PluginAlias("reporting-scripts")]')[0].rstrip() + "\n",
         "fabrcore-connections/references/integration.md": (ROOT / "docs/connections-and-microsoft-integration.md").read_text(encoding="utf-8-sig").replace("(migrations/data-protection.sql)", "(../assets/data-protection.sql)"),
         "fabrcore-connections/assets/data-protection.sql": (ROOT / "docs/migrations/data-protection.sql").read_text(encoding="utf-8-sig"),
         "fabrcore-cloud-administration/references/administration.md": administration,

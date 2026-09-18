@@ -12,6 +12,7 @@
   <ItemGroup>
     <ProjectReference Include="..\FabrCore.SampleApp.ServiceDefaults\FabrCore.SampleApp.ServiceDefaults.csproj" />
     <ProjectReference Include="..\..\src\FabrCore.Host\FabrCore.Host.csproj" />
+    <ProjectReference Include="..\..\src\FabrCore.Scripting\FabrCore.Scripting.csproj" />
     <ProjectReference Include="..\..\src\FabrCore.Services.Microsoft365Copilot\FabrCore.Services.Microsoft365Copilot.csproj" />
     <ProjectReference Include="..\..\src\FabrCore.Surface\FabrCore.Surface.csproj" />
   </ItemGroup>

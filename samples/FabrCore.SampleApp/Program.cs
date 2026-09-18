@@ -3,6 +3,7 @@ using FabrCore.SampleApp.Components;
 using FabrCore.SampleApp.Contoso;
 using FabrCore.SampleApp.Crm;
 using FabrCore.SampleApp.Surface;
+using FabrCore.Scripting;
 using FabrCore.Host;
 using FabrCore.Services.GraphRag;
 using FabrCore.Services.Memory.Configuration;
@@ -28,6 +29,8 @@ namespace FabrCore.SampleApp
             builder.Services.AddSingleton<InMemoryCrmStore>();
             builder.Services.AddSingleton<InMemorySurfaceDemoDomainStore>();
             builder.Services.AddSingleton<ContosoBikeShopStore>();
+            // Trusted local demo only: scripting workers run with this application's OS permissions.
+            builder.Services.AddFabrCoreScripting();
             builder.Services.AddSingleton<ISurfaceActionRegistry, CrmSurfaceActionRegistry>();
 
             // The application and its referenced FabrCore assemblies are discovered automatically.
@@ -57,6 +60,7 @@ namespace FabrCore.SampleApp
                 options.EnableDiagnosticsPanel = true;
                 options.EnableAgentCreate = false;
                 options.DefaultSurfaceAgentHandles.Add(SurfaceDemoBootstrapper.CrmAgentHandle);
+                options.DefaultSurfaceAgentHandles.Add(SurfaceDemoBlueprintFactory.ScriptingAgentHandle);
             });
             builder.Services.AddHostedService<SurfaceDemoBootstrapper>();
 

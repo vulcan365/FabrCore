@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Description>Optional C# scripting plugins with developer-defined NuGet environments and separate worker processes.</Description>
+    <FabrCorePublicApi>true</FabrCorePublicApi>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../FabrCore.Sdk/FabrCore.Sdk.csproj" />
+    <PackageReference Include="NuGet.Versioning" Version="7.0.0" />
+    <Compile Remove="Worker/Program.cs" />
+    <EmbeddedResource Include="Worker/*.cs" />
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>FabrCore.Scripting.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+</Project>

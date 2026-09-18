@@ -34,6 +34,14 @@ namespace FabrCore.Host.A2A;
 /// </remarks>
 public static class A2AExtensions
 {
+    internal static void AddLegacyConfigurationFallback(IHostApplicationBuilder builder)
+    {
+        if (builder.Configuration.GetSection(A2ADefaults.SectionName).Exists() ||
+            builder.Configuration.Sources.OfType<Microsoft.Extensions.Configuration.Json.JsonConfigurationSource>()
+                .Any(s => string.Equals(s.Path, "fabrcore.json", StringComparison.OrdinalIgnoreCase))) return;
+        builder.Configuration.Sources.Insert(0, new Microsoft.Extensions.Configuration.Json.JsonConfigurationSource
+        { Path = "fabrcore.json", Optional = true, ReloadOnChange = true, FileProvider = builder.Environment.ContentRootFileProvider });
+    }
     /// <summary>
     /// Registers the A2A protocol services: the agent catalog resolved from configuration, the
     /// agent card factory, the task executor and store, caller authentication, and principal
@@ -62,7 +70,7 @@ public static class A2AExtensions
         // IConfiguration by itself. Pull it in when the section is not already present.
         if (!builder.Configuration.GetSection(A2ADefaults.SectionName).Exists())
         {
-            builder.Configuration.AddJsonFile("fabrcore.json", optional: true, reloadOnChange: true);
+            AddLegacyConfigurationFallback(builder);
         }
 
         var section = builder.Configuration.GetSection(A2ADefaults.SectionName);
@@ -70,6 +78,7 @@ public static class A2AExtensions
         configure?.Invoke(options);
 
         builder.Services.AddSingleton(Options.Create(options));
+        builder.Services.AddSingleton<Configuration.Cloud.IFabrCoreRuntimeSettingsContributor, Configuration.Cloud.A2ARuntimeSettingsContributor>();
         builder.Services.AddSingleton(new A2AMarker(options.Enabled));
 
         if (!options.Enabled)

@@ -1,12 +1,16 @@
 # FabrCore 2.0.0
 
-These consolidated release notes cover changes after `v1.7.0`, including the intervening
-1.7.x and 1.8.x development and the current 2.0 changes. They replace the previous cumulative
-release log; earlier history remains available in Git and [historical release documentation](docs/releases).
+These release notes describe the 2.0 release relative to `v1.8.1`, including the final
+2.0 package, protocol, and configuration changes. Features already available in 1.8, such as
+the harness, private specialists, Surface squads, WebSocket v2, and built-in A2A hosting,
+remain part of the platform. Earlier history is available in Git and
+[historical release documentation](docs/releases).
 
 FabrCore 2.0 simplifies hosting around two modes: a standalone, trusted workspace with no
 database, and a SQL-enabled host with persistent runtime state, enforced ACL, Memory,
-GraphRAG, and durable operational stores. This is a breaking package and configuration release.
+GraphRAG, and durable operational stores. It also adds optional connections, remote agents,
+cloud administration, runtime configuration reporting, and C# scripting. This is a breaking
+package, configuration, and A2A protocol release.
 
 ## Highlights
 
@@ -15,8 +19,18 @@ GraphRAG, and durable operational stores. This is a breaking package and configu
   [Orleans adoption guide](docs/orleans-10.3-adoption.md) for migration and client configuration.
 - Consolidated SQL Server, Memory, GraphRAG, and service contracts into Host, Core, and SDK.
 - Added explicit standalone/SQL behavior, relational ACL storage, and ACL migration tooling.
-- Added built-in A2A hosting and durable SQL task snapshots, audit records, and execution evidence.
-- Updated Microsoft Agent Framework from 1.16.0 at `v1.7.0` to 1.20.0 and corrected both
+- Upgraded inbound A2A to 1.0 (specification release 1.0.1), with shared channel-agent bindings
+  and optional canonical Entra identity for Teams, Microsoft 365 Copilot, and A2A.
+- Added durable SQL task snapshots, audit records, and execution evidence.
+- Added optional principal-owned connections, authenticated MCP, encrypted authorization
+  handoffs, and handle-addressable Work IQ and Copilot Studio agents.
+- Added agent/blueprint administration, diagnostic conversations, paged monitoring, optional
+  SQL monitoring, and evidence exports through vendor-neutral administration APIs.
+- Added desired/resolved/applied runtime configuration reports, named code rules, previews,
+  and a reference cloud server for independent implementations.
+- Added `FabrCore.Scripting` for reusable C# plugins with developer-selected NuGet packages
+  and a fresh worker process per execution.
+- Updated Microsoft Agent Framework from 1.19.0 at `v1.8.1` to 1.20.0 and corrected both
   per-model-call context compaction and durable conversation compaction.
 - Expanded Memory and GraphRAG ingestion, retrieval controls, and evaluation workflows.
 - Improved model configuration, assembly discovery, Microsoft 365 delivery, and release automation.
@@ -36,6 +50,34 @@ There are no forwarding packages. Update project references and rebuild consumer
 types moved assemblies. Remove the former manual Memory/GraphRAG service registrations;
 `AddFabrCoreServer` registers the integrated features according to the selected database mode.
 Agent class libraries can reference SDK without taking a SQL implementation dependency.
+
+Use the same 2.0.0 version for all FabrCore package references and rebuild applications and
+direct Orleans clients together. The [README package table](README.md#packages) lists the
+thirteen published packages, including the optional connection, remote-agent, and scripting packages.
+
+### Update A2A clients and review channel identity
+
+The host now supports **A2A 1.0 only**; A2A 0.3 clients must be updated. Calls require
+`A2A-Version: 1.0` (discovery cards do not). JSON-RPC uses `SendMessage`,
+`SendStreamingMessage`, `GetTask`, `ListTasks`, `CancelTask`, and `SubscribeToTask`.
+REST paths are directly under `/a2a/{agent}`, without the previous `/v1` prefix. Cards
+advertise `supportedInterfaces`; parts, role/state names, and response/stream wrappers use
+the 1.0 format. Missing or unsupported call versions are rejected.
+
+`CanonicalEntra` principal resolution and named `AgentBindings` let Teams/Microsoft 365
+and A2A address the same user's agent. This is opt-in: existing strategy defaults remain,
+and changing strategy does not migrate existing principal or agent state. Cross-channel user
+continuity requires validated delegated user identity; application credentials alone do not
+identify the person chatting. See [channel identity and wire migration](docs/channel-agent-identity.md).
+
+### Verify existing persisted state
+
+Keep Orleans type-manifest checks enabled and explicitly register application-defined
+persisted types when necessary. The `JsonElement` storage converter preserves custom JSON;
+it cannot reconstruct data already lost by an earlier serialization. Test an upgrade using
+a copy of your deployment's SQL/Azure state and custom payloads. Contract baselines and
+synthetic compatibility fixtures do not establish compatibility for every existing client
+or stored application type. See [Orleans storage compatibility](docs/orleans-10.3-adoption.md).
 
 ### Choose the runtime mode explicitly when upgrading
 
@@ -76,6 +118,22 @@ credential through `FABRCORE_ADMIN_API_KEY`.
 
 See [database modes and migration](docs/database-modes.md) for complete commands, connection
 overrides, prerequisites, and deployment behavior.
+
+### Configure protection before enabling connections
+
+Host automatically supplies FabrCore credential protection when the optional connections
+service is enabled. Default in-memory standalone hosts use ephemeral keys. SQL persistence
+uses an encrypted shared key ring in `fabrOps.DataProtectionKey` and requires a deployment
+certificate with its private key, or an explicitly configured shared encrypted provider.
+Azure/custom persistence without SQL requires a custom shared provider; there is no silent
+ephemeral fallback for durable storage.
+
+Set `FabrCore:DataProtection:CertificatePath` and, when needed, `CertificatePassword` through
+protected configuration. Keep the application identity stable across restarts and silos;
+retain previous certificates during rotation. Manual-schema installations must apply the
+[key-ring migration](docs/migrations/data-protection.sql) before enabling the service.
+This protection is separate from application authentication cookies and does not require
+adding a login UI. See [connection setup and protection](docs/connections-and-microsoft-integration.md#host-setup).
 
 ## Database startup and durable operations
 
@@ -169,18 +227,96 @@ and [harness efficiency](docs/harness-efficiency.md) for safeguards, tests, and 
 
 ## A2A and channel integration
 
-- Added built-in A2A endpoints with agent cards, JSON-RPC/HTTP+JSON handling, streaming,
-  cancellation, task lookup, and resubscription support.
-- Added configurable discovery descriptions/capabilities, hidden-agent filtering, handle patterns,
-  and per-agent overrides, with API-key/JWT authentication and principal-resolution strategies.
-- Added asynchronous `IA2APrincipalResolver.ResolvePrincipalHandleAsync` and shared channel-agent
-  binding behavior, including canonical Entra principal handling across channels.
-- Improved Copilot Studio interoperability for JSON-RPC and streaming response shapes.
-- Added `FabrCore.Host.Testing` with in-memory Host/A2A test helpers.
-- Fixed Microsoft 365 streaming and Teams proactive-message delivery issues, and corrected
-  Surface chat header foreground/background styling.
+- Updated the existing built-in endpoints, agent cards, JSON-RPC/HTTP+JSON handling, and SSE
+  streams to A2A 1.0, including task listing, version negotiation, and 1.0 response shapes.
+- Task access checks include the creating principal, exposed agent, and caller identity,
+  including persisted snapshots. Task IDs are server-generated; a new turn uses a new task.
+- Shared named bindings align agent configuration across channels. Invocation uses the caller's
+  principal grain, stamps the trusted sender, and applies existing cross-principal ACL checks.
+- Concurrent provisioning is deduplicated and failed provisioning can be retried.
+- Microsoft 365 app packages use manifest 1.25. Attachment-only messages receive an explicit
+  explanation; streaming delivers progress and the completed reply, not individual model tokens.
+- `FabrCore.Host.Testing` continues to provide in-memory Host/A2A helpers for testing exposure,
+  authentication, and routing without a running Orleans silo.
 
-See [A2A hosting](docs/a2a.md) for configuration and protocol behavior.
+Push notifications and extended cards remain unsupported. Cancellation ends the A2A wait
+and updates task state; it does not interrupt work already running inside an agent. See
+[A2A hosting](docs/a2a.md) and [channel identity](docs/channel-agent-identity.md) for details.
+
+## Connections and remote agents
+
+- `FabrCore.Connections` supplies provider-neutral contracts, user/admin API clients, and
+  client-side handoff encryption. `FabrCore.Services.Connections` adds opt-in profile storage,
+  protected authorization, resource token acquisition, endpoints, and blueprint expansion.
+- Connections belong to principals. An agent needs both an alias binding and an explicit
+  full-handle grant on the profile. Delegated connections require matching ownership;
+  application connections can explicitly grant agents owned by another principal.
+- Supported flows include user authorization code with PKCE, application client credentials,
+  on-behalf-of exchange, and separately enabled Entra Agent ID exchanges. Profiles contain
+  credential references; client applications own login, consent, and callback handling.
+- SDK HTTP clients renew authorization per request and restrict destinations to the configured
+  resource base. HTTP MCP can use the same connection/resource binding. Disconnecting or
+  replacing authorization invalidates clients and remote conversation bindings.
+- Optional encrypted client handoffs use single-use challenges and validated user proof to
+  carry authorization operations through a cloud broker without plaintext codes or assertions.
+- `FabrCore.Services.RemoteAgents` exposes Work IQ A2A and Copilot Studio conversations as
+  ordinary FabrCore handles, restricted to the owning principal. Conversation/task state uses
+  agent storage. Work IQ supports streaming progress, structured artifacts, and task status,
+  resume, and cancel operations; Copilot Studio uses its client SDK.
+- The `connectedAgents` blueprint extension reuses connection bindings without embedding
+  credentials or performing consent/provisioning during preview.
+
+Connections, remote agents, Entra Agent ID, and encrypted handoffs require their respective
+opt-ins. Entra directory provisioning and provider consent remain deployment responsibilities.
+The Copilot Studio adapter uses the pinned `1.3.171-beta` client. Protocol and isolation tests
+do not replace live tenant validation of login, renewal, consent, and selected remote providers.
+See [connections and Microsoft integration](docs/connections-and-microsoft-integration.md).
+
+## Cloud administration, diagnostics, and monitoring
+
+- Added vendor-neutral administration APIs and `FabrCoreAdministrationClient`, with capability
+  discovery and an authenticated OpenAPI document. They work directly where enabled or through
+  the existing outbound cloud command transport; Forge/Insights is not required.
+- Agent management supports configuration, restart/reset, state/thread maintenance, and
+  operation receipts. Blueprint management supports conditional writes, validation, expansion
+  previews, deployment receipts, selected-agent retries, and definition drift reporting.
+- Conditional revisions prevent stale writes. Stable operation IDs expose running, completed,
+  failed, or incomplete outcomes so clients can inspect uncertain mutations before retrying.
+- Operator-owned diagnostic sessions use a separate transcript and read-only, target-bound
+  tools. Production tools, MCP execution, connection access, and state mutations are excluded.
+  Explicit test-message/test-event operations still invoke normal agent behavior.
+- Added paged principal/ACL administration, filtered monitor queries, cursor/gap reporting,
+  bounded payload reads, and immutable chunked evidence exports with verification metadata.
+- Optional `FabrCore:Monitoring:Provider=sql` adds queued SQL monitoring, retention, and health
+  counters. This is separate from SQL-default audit/evidence stores: ordinary monitoring is
+  not automatically made durable by enabling SQL mode. Durability begins after a successful
+  flush; saturated queues can drop records and report that loss.
+
+Manual-schema deployments must apply the [monitoring migration](docs/migrations/monitoring.sql)
+before selecting SQL monitoring. Observability reports retain provider/source scope and cannot
+prove completeness across offline hosts. See [cloud administration](docs/cloud-administration.md)
+and the [reference cloud server](samples/FabrCore.ReferenceCloud/README.md).
+
+## C# scripting plugins
+
+The optional `FabrCore.Scripting` package lets developers derive from `CSharpScriptingPluginBase`
+and configure exact NuGet versions, imports, instructions, and execution limits. Agents discover
+the inherited `GetScriptingEnvironment` and `ExecuteCSharp` tools through the plugin registry.
+Each call runs in a fresh .NET process with JSON input, a structured result, bounded console
+output, compiler/runtime diagnostics, and optional file artifacts.
+
+Prepared environments cache dependencies and worker assets, without sharing execution state.
+Preparation requires the .NET 10 SDK and package access; deployments can prewarm the cache and
+disable runtime preparation. Execution requires the .NET 10 runtime on the matching platform.
+Timeout/cancellation, output/artifact bounds, and best-effort memory supervision are configurable.
+SDK tool resolution now retains disposable configured plugins until proxy teardown.
+
+**The local worker is not a security sandbox.** It runs with the host OS user's permissions;
+use external OS/container isolation for untrusted workloads. Package selection is trusted
+developer configuration, and timeouts do not undo external side effects. See the
+[scripting guide](docs/scripting.md) and [console sample](samples/FabrCore.Scripting.Sample).
+The [SampleApp](samples/FabrCore.SampleApp/README.md) also includes a Surface scripting agent
+and a deterministic integration test covering its real worker, calculations, and report artifact.
 
 ## Memory and GraphRAG
 
@@ -219,10 +355,26 @@ depend on the selected model, corpus, and enabled options.
 - Cloud Server configuration includes bootstrap/provider/policy support, a settings catalog,
   live-versus-restart-required behavior, and last-known-good/readiness handling. Long polling has
   isolated HTTP resilience behavior. Cloud Server and Forge remain optional.
+- Runtime reports distinguish cloud-desired values, resolved configuration, and values observed
+  in supported providers/options consumers. Reports include source/rule information, process
+  identity, sequence, rejected revisions, verification status, and pending restart.
+- `FabrCoreServerOptions.ConfigureRuntime` registers named pure rules with defaults, overrides,
+  and final-value constraints. Standard environment/command-line inputs retain final precedence;
+  competing code owners are rejected. Rules run during registration, cloud refresh, and preview.
+- The `configuration-state: 1` capability, heartbeat reports, and settings state/preview endpoints
+  are available to independent cloud servers. Preview resolves a candidate without applying it
+  or replaying arbitrary startup callbacks. Reports are bounded and redact secrets.
+- The reference server demonstrates report ingestion, inspection, and eligible applied-value
+  adoption into a draft. Reports never rewrite desired settings automatically; preview does not
+  promise universal application, rollback, or storage migration. The fixture is single-process
+  and is not a durable production broker.
+
+See [configuration reconciliation](docs/cloud-configuration-reconciliation.md) and the
+[open wire contract](docs/cloud-configuration-state-protocol.md) for implementation boundaries.
 
 ## Builds, packaging, and validation
 
-- `builds/Projects.psd1` is the shared inventory for nine supported packages and test projects.
+- `builds/Projects.psd1` is the shared inventory for thirteen supported packages and test projects.
   Build, pack, release, and CI workflows use that inventory, including both VSTest and
   Microsoft.Testing.Platform projects.
 - Deterministic tests are separated from SQL integration tests and live evaluations. SQL/evaluation
@@ -231,9 +383,15 @@ depend on the selected model, corpus, and enabled options.
   tree, use fast-forward-only updates, and fail before publishing when validation fails.
 - NuGet publishing reads `NUGET_API_KEY`; release workflows validate stable tags and run tests before
   publishing. Local package creation and push previews use the same supported package list.
+- Explicit `-Version` selects the exact build/package set. Automatic local versions advance beyond
+  stable tags and the local feed; push rejects incomplete sets. `Pack-Local.ps1` skips tests, and
+  `Push-NuGet.ps1` pushes then immediately unlists packages. Public stable releases use the tag workflow.
 - Release validation runs offline tests, isolated SQL-mode/Orleans streaming tests, and deterministic
   Memory/GraphRAG SQL integration suites. Missing prerequisites, skipped required SQL tests, and
   absent test reports fail the gate. Paid model evaluations remain separate.
+- CI separately executes real scripting-worker integration tests, which require SDK/package access
+  and are excluded from the ordinary offline filter. Repository links in both release documents
+  are also checked.
 - Package smoke tests restore the produced packages with a fresh cache, verify package identities
   and internal dependencies, compile README examples, and exercise standalone/SQL startup,
   readiness, agent discovery, and storage across SQL host restart.
@@ -242,7 +400,7 @@ depend on the selected model, corpus, and enabled options.
 - The SDK is pinned by `global.json` with patch roll-forward. MinVer is centralized at 8.0.0;
   evaluation dependencies are pinned and MSTest SDK/runner versions are aligned. The Aspire sample
   uses matching AppHost SDK/package versions and its CLI bundle.
-- Shipped/unshipped public API baselines cover all nine packages alongside Orleans RPC contract
+- Shipped/unshipped public API baselines cover the published packages alongside Orleans RPC contract
   checks. Public API changes require an explicit baseline update and compatibility review.
 
 Validation commands, prerequisites, and report locations are documented in

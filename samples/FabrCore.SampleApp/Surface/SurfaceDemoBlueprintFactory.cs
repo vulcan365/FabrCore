@@ -1,5 +1,6 @@
 using FabrCore.Core;
 using FabrCore.SampleApp.Contoso;
+using FabrCore.SampleApp.Scripting;
 using FabrCore.Surface.Ai.Orchestration;
 using FabrCore.Surface.Ai.Squads;
 using FabrCore.Surface.CommandCenter;
@@ -14,6 +15,8 @@ public static class SurfaceDemoBlueprintFactory
 
     public const string CrmAgentHandle = "crm-agent";
 
+    public const string ScriptingAgentHandle = "scripting-demo";
+
     public const string AssistantSquadHandle = $"{PrincipalHandle}:squad-assistant";
 
     public const string ContosoSquadName = "Contoso Bike Shop";
@@ -22,7 +25,7 @@ public static class SurfaceDemoBlueprintFactory
 
     public const string BlueprintName = "surface-app-demo";
 
-    public const string BlueprintVersion = "2026.07.05";
+    public const string BlueprintVersion = "2026.09.15";
 
     public static SurfaceBlueprintDocument Create()
         => new()
@@ -50,6 +53,15 @@ public static class SurfaceDemoBlueprintFactory
                     Models = "default",
                     ForceReconfigure = true,
                     Description = "SurfaceApp CRM records leaf agent"
+                },
+                new AgentConfiguration
+                {
+                    Handle = ScriptingAgentHandle,
+                    AgentType = ScriptingDemoAgent.Alias,
+                    Models = "default",
+                    ForceReconfigure = true,
+                    Description = "Scripting demo: calculate sample sales totals with C#",
+                    Plugins = [SalesScriptingPlugin.Alias]
                 }
             ],
             Squads =

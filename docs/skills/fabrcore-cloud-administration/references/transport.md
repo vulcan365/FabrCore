@@ -8,7 +8,7 @@ different conforming server behaves identically.
 
 Protocol constants and DTOs ship in the `FabrCore.Core` NuGet package under
 `FabrCore.Core.CloudServer` (`CloudServerProtocol`, `CloudConfigurationEnvelope`,
-`CloudHeartbeatRequest`, `CloudHeartbeatResponse`). Server implementations may reference the
+`CloudHeartbeatRequest`, `CloudHeartbeatResponse`, `CloudConfigurationState`, `CloudRuntimeSetting`). Server implementations may reference the
 package or implement the JSON contract directly.
 
 FabrCore 2.0 includes the [administration API](administration.md) for ACLs,
@@ -244,6 +244,14 @@ silently failing. Both are omitted when empty.
 `capabilities` is an additive service/API-version map. Forge uses it to avoid rendering
 features a cluster does not have. Authenticated operators can obtain the richer feature
 document directly from `GET /fabrcoreapi/capabilities`.
+
+Hosts advertising `"configuration-state": "1"` also send an optional `configurationState`
+object with desired/resolved/applied observations. This is an additive heartbeat-v1 extension,
+not an Insights-specific API. See [the configuration-state wire contract](https://github.com/vulcan365/FabrCore/blob/main/docs/cloud-configuration-state-protocol.md)
+for field semantics, validation, per-process ordering, preview, and selective adoption. A
+schema example or the older configuration-only catalog is never proof of applied runtime state.
+For these hosts, pending restart is based on known applied values versus host-resolved values;
+a cloud value masked by code does not itself imply a restart.
 
 Response — `200` with an optional body; an empty object (or empty body) is valid:
 

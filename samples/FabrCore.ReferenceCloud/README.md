@@ -20,6 +20,36 @@ Authenticate operator requests with the operator bearer credential:
    expiry. It must not be replayed. Check that a wrong lease token cannot complete it.
 5. DELETE consumed receipts. The fixture bounds retained receipts to 1,000.
 
+## Configuration state, preview, and adoption
+
+Hosts advertising `configuration-state: 1` send the open `CloudConfigurationState`
+contract in heartbeats. This sample retains the latest report per process, rejects
+scope mismatches and malformed reports, redacts secrets, and preserves reports on
+legacy heartbeats. It caps retained host identities at 1,000; restart clears them.
+
+With the operator bearer credential:
+
+- GET `/operator/configuration/reports` to inspect the retained reports and receive times.
+- Queue a GET command for `/fabrcoreapi/admin/v1/settings/state` to inspect a fresh report.
+- Queue a POST command for `/fabrcoreapi/admin/v1/settings/preview` with the complete
+  candidate flat settings dictionary encoded as JSON bytes in `CloudAdminCommand.Body`.
+  In the command wire JSON, `body` is base64 (the standard JSON encoding for `byte[]`).
+  `Content-Type: application/json` is supplied by the fixture. Read the eventual command
+  response and decode its body. Preview changes no configuration.
+- POST `/operator/configuration/draft` with
+  `{"hostInstanceId":"<reported instance>","keys":["FabrCore:Orleans:ClusteringMode"]}`.
+  The response contains `baseRevision` and a flat `settings` draft preserving existing
+  desired keys. It never modifies the configuration file or removes code ownership.
+  Production servers must validate and publish this draft with a revision check.
+
+The sample's generic command queue is for a **single connected host**; do not use it
+to target one of several connected hosts. A production broker must route and bind
+commands to the selected instance. Retained report storage itself distinguishes hosts.
+
+See the complete [server-neutral configuration-state contract](../../docs/cloud-configuration-state-protocol.md).
+`ConfigurationReportStore.cs` uses only FabrCore.Core and the BCL; it is also compiled
+directly into the OSS conformance tests, with no Insights reference.
+
 For production, replace the queue and receipt dictionary with durable storage,
 bind leases to a host, implement authenticated operator permissions and cluster
 routing, and preserve uncertain execution across restart. See

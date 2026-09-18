@@ -64,6 +64,7 @@ internal sealed class CloudServerSyncService : BackgroundService
         this.httpClientFactory = httpClientFactory;
         this.logger = logger;
         this.cloudSettings = cloudSettings;
+        cloudSettings?.AttachServices(serviceProvider);
         this.settingsCatalog = settingsCatalog ?? new FabrCoreSettingsCatalog();
         this.hostInstanceId = $"{Environment.MachineName}:{Guid.NewGuid():N}";
         this.hostVersion = typeof(CloudServerSyncService).Assembly
@@ -215,11 +216,16 @@ internal sealed class CloudServerSyncService : BackgroundService
 
     private async Task RunHeartbeatLoopAsync(CancellationToken stoppingToken)
     {
+        if (serviceProvider.GetService<IHostApplicationLifetime>() is { } lifetime)
+        {
+            var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            using var registration = lifetime.ApplicationStarted.Register(() => started.TrySetResult());
+            await started.Task.WaitAsync(stoppingToken);
+        }
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                await Task.Delay(options.Heartbeat.Interval, stoppingToken);
                 var response = await apiClient.SendHeartbeatAsync(BuildHeartbeat(), stoppingToken);
                 if (response?.RefreshRequested == true)
                 {
@@ -235,6 +241,7 @@ internal sealed class CloudServerSyncService : BackgroundService
             {
                 logger.LogWarning(ex, "Cloud server heartbeat iteration failed");
             }
+            await Task.Delay(options.Heartbeat.Interval, stoppingToken);
         }
     }
 
@@ -245,6 +252,7 @@ internal sealed class CloudServerSyncService : BackgroundService
         ServiceId = apiClient.ServiceId,
         HostInstanceId = hostInstanceId,
         HostVersion = hostVersion,
+        ConfigurationState = serviceProvider.GetService<RuntimeConfigurationState>()?.Report(serviceProvider),
         AppliedConfigurationVersion = store.CurrentConfigurationVersion,
         AppliedSettingsVersion = cloudSettings?.AppliedSettingsVersion,
         PendingRestartSettings = cloudSettings is { PendingRestartSettings.Count: > 0 } settings
@@ -261,6 +269,7 @@ internal sealed class CloudServerSyncService : BackgroundService
         {
             ["host"] = hostVersion
         };
+        if (serviceProvider.GetService<RuntimeConfigurationState>() is not null) capabilities["configuration-state"] = "1";
 
         if (cloudSettings is not null)
         {
@@ -312,14 +321,13 @@ internal sealed class CloudServerSyncService : BackgroundService
         CancellationToken cancellationToken,
         bool applySettings = true)
     {
-        store.ApplySnapshot(envelope);
-
         // Settings are applied before blueprints so a blueprint that depends on a freshly
         // delivered setting sees it, and so a failing blueprint cannot strand the settings layer.
         if (applySettings)
         {
             cloudSettings?.Apply(envelope, settingsCatalog, logger);
         }
+        store.ApplySnapshot(envelope);
 
         // Blueprints is optional in the v1 protocol; third-party servers may send null even
         // though the envelope setter normalizes it. Never let an absent list block config.
