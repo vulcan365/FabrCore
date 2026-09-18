@@ -29,6 +29,13 @@ Build distributed AI agent systems with FabrCore — an open-source .NET 10 fram
 
 For release upgrades, use [fabrcore-releases](../fabrcore-releases/SKILL.md).
 
+Credential protection is automatic in FabrCore Host: in-memory Localhost uses
+ephemeral keys; SQL persistence uses an encrypted shared database key ring. SQL
+credential consumers require a deployment certificate, while registration and
+repository selection are handled by FabrCore. See
+[automatic credential protection](../fabrcore-server/SKILL.md#automatic-credential-protection)
+before adding application-level Data Protection setup.
+
 ## Quick Reference
 
 | Concept | Type | Key Class/Interface | Skill |
@@ -44,6 +51,7 @@ For release upgrades, use [fabrcore-releases](../fabrcore-releases/SKILL.md).
 | Harness Skills | Principal-scoped, exact-version managed Agent Skills | `_HarnessSkills`, `FabrCoreStoredAgentSkillsSource`, `AgentSkillsProvider` | fabrcore-harness, fabrcore-server |
 | Background Delegation | Model-driven fan-out to other agents | `FabrCoreBackgroundAgent`, `AgentRosterBuilder` | fabrcore-harness |
 | Plugin | Stateful tool collection | `IFabrCorePlugin` | fabrcore-plugins-tools |
+| C# scripting | Per-plugin NuGet environments and fresh worker processes | `CSharpScriptingPluginBase`, `AddFabrCoreScripting()` | [fabrcore-scripting](../fabrcore-scripting/SKILL.md) |
 | Standalone Tool | Single static method | `[ToolAlias]` attribute | fabrcore-plugins-tools |
 | Registry Metadata | Capabilities & notes | `[FabrCoreCapabilities]`, `[FabrCoreNote]` | fabrcore-agent, fabrcore-plugins-tools |
 | Server/Host | Orleans silo + REST API | `AddFabrCoreServer()`, `UseTimeProvider(...)` | fabrcore-server (includes full REST API docs with I/O models) |
@@ -106,6 +114,7 @@ FabrCore layers on top of Orleans (distributed actor model) and Microsoft.Extens
 - **Core service contracts** — open Memory, GraphRAG, and cluster-capability transport contracts
 - **Host Memory** — SQL Server 2025-backed durable agent memory, enabled by the feature database
 - **Host GraphRAG** — SQL Server 2025-backed scoped knowledge services, enabled by the feature database
+- **FabrCore.Scripting** — optional Roslyn worker execution, developer-defined NuGet environments, JSON tool results and bounded artifacts
 - **FabrCore.Surface** — optional OSS Blazor command center, Adaptive Cards, and squads
 
 ## Prerequisites

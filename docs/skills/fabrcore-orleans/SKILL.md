@@ -48,6 +48,24 @@ builder.AddFabrCoreServer();
 
 Orleans settings are read from the `FabrCore:Orleans` section in `appsettings.json`.
 
+### Credential protection follows persistence
+
+FabrCore registers credential protection automatically with `Mode=Auto` by default.
+Localhost with in-memory storage uses singleton ephemeral keys without application
+setup. SQL persistence uses a shared encrypted key ring: integrated SQL selects the
+operational database; Orleans-only SQL selects `StorageConnectionString`, then
+`ConnectionString`. An integrated SQL database takes precedence even when Orleans
+clustering explicitly stays `Localhost`.
+
+For SQL credential consumers, supply the host's
+`FabrCore:DataProtection:CertificatePath` (and password if needed); FabrCore manages
+the key table according to `Database:AutoInitialize` or, for Orleans-only SQL,
+`Orleans:AutoInitDatabase`. No manual Data Protection registration or legacy
+`ProtectedKeyRingConfigured` flag is needed. Azure/custom persistence without SQL
+requires shared custom protection. See
+[automatic credential protection](../fabrcore-server/SKILL.md#automatic-credential-protection)
+for deployment details and certificate requirements.
+
 ### Custom TimeProvider
 
 `AddFabrCoreServer()` can register a custom `System.TimeProvider` for Orleans scheduling, timers, and reminders:

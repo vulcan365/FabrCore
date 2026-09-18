@@ -22,6 +22,11 @@ supplies credential protection automatically when connections are enabled. This
 uses the Data Protection cryptographic library, adds no UI, and does not change an
 application's authentication-cookie protection.
 
+Leave `FabrCore:DataProtection:Mode` unset to use `Auto`. The built-in host setup
+requires no application calls to `AddDataProtection` or `AddFabrCoreDataProtection`
+and no `ProtectedKeyRingConfigured` flag. SQL still needs the deployment certificate
+described below; FabrCore selects and initializes the key repository automatically.
+
 ```csharp
 using FabrCore.Host;
 using FabrCore.Services.Connections;

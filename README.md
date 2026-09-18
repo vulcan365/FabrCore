@@ -14,9 +14,26 @@ SQL for persistent state, access control, long-term memory, and GraphRAG.
 Built by [Vulcan365 AI](https://vulcan365.ai). Explore [fabrcore.ai](https://fabrcore.ai)
 and the [guides and tutorials](https://fabrcore.ai/blogs).
 
-**Upgrading to 2.0?** This breaking release consolidates packages and changes database and ACL
-configuration. Read the [2.0 release notes](RELEASE_NOTES.md) and
+**Upgrading from 1.8 to 2.0?** This breaking release consolidates packages, changes database and ACL
+configuration, and replaces A2A 0.3 with A2A 1.0. Read the [2.0 release notes](RELEASE_NOTES.md) and
 [migration guide](docs/database-modes.md#acl-administration-and-migration) before upgrading.
+
+## What's new in 2.0
+
+- **Simpler hosting:** SQL Server, Memory, GraphRAG, and service contracts are integrated into
+  Host, Core, and SDK, with explicit standalone and SQL modes and relational ACL migration.
+- **Connected agents:** optional user/application connections, authenticated MCP, and remote
+  Work IQ and Copilot Studio agents, plus shared Entra identity across inbound channels.
+- **Administration and diagnostics:** agent and blueprint management, isolated diagnostic
+  conversations, paged monitoring, evidence exports, and optional SQL monitoring.
+- **Visible runtime configuration:** cloud reports distinguish desired, resolved, and observed
+  settings; named code rules and previews support independent cloud servers.
+- **C# scripting plugins:** developer-selected packages, structured results and artifacts, and
+  a fresh worker process per call. Process separation is not a security sandbox.
+- **More reliable context and knowledge:** corrected working-context and history compaction,
+  expanded scoped Memory and GraphRAG ingestion, and stronger package/SQL release validation.
+
+See the [release notes](RELEASE_NOTES.md) for compatibility changes, defaults, and limitations.
 
 ## What you can build
 
@@ -32,6 +49,8 @@ configuration. Read the [2.0 release notes](RELEASE_NOTES.md) and
   and handle-addressable Copilot agents. See [connections and Microsoft integration](docs/connections-and-microsoft-integration.md).
 - **Observable execution** with message and LLM monitoring, token usage, security audit,
   and optional signed execution evidence.
+- **Optional C# scripting** through reusable plugins with developer-selected NuGet packages
+  and separate worker processes. See [scripting plugins](docs/scripting.md) for setup and execution boundaries.
 
 The SDK uses `Microsoft.Extensions.AI` abstractions for model access. Context management
 preserves task instructions and tool-call relationships, bounds older tool output, and validates
@@ -93,6 +112,11 @@ dotnet run --project samples/FabrCore.SampleApp --launch-profile http
 Open **http://localhost:5248/surface**. The sample runs Host and Surface together with localhost
 Orleans, a development fallback identity, and in-memory demo data. SQL, Forge, and Microsoft 365
 credentials are not required for this standalone experience. Model calls use your configured provider.
+
+For a C# scripting example, select **scripting-demo** in Surface and ask it to calculate demo
+sales revenue by category. It uses a real worker process and developer-selected Newtonsoft.Json
+package. See the [SampleApp guide and test](samples/FabrCore.SampleApp/README.md#try-c-scripting)
+for expected results, first-run preparation, and trusted-local execution requirements.
 
 ## Add FabrCore to your application
 
@@ -159,14 +183,23 @@ and completion loops, use the [FabrCore harness](docs/skills/fabrcore-harness/SK
 | Package | Purpose |
 | --- | --- |
 | [FabrCore.Core](https://www.nuget.org/packages/FabrCore.Core) | Shared interfaces, models, protocols, and service contracts |
+| [FabrCore.Connections](https://www.nuget.org/packages/FabrCore.Connections) | Provider-neutral connection contracts, user/admin clients, and encrypted client handoffs |
 | [FabrCore.Sdk](https://www.nuget.org/packages/FabrCore.Sdk) | Agent development, harnesses, tools, MCP, and typed HTTP clients |
+| [FabrCore.Scripting](https://www.nuget.org/packages/FabrCore.Scripting) | Optional C# scripting plugins with developer-selected packages and separate worker processes |
 | [FabrCore.Host](https://www.nuget.org/packages/FabrCore.Host) | Orleans runtime and APIs, integrated SQL Server, Memory, GraphRAG, ACL, and operational stores |
 | [FabrCore.Client.Orleans](https://www.nuget.org/packages/FabrCore.Client.Orleans) | Direct Orleans client with host-assisted gateway discovery |
 | [FabrCore.Client.WebSocket](https://www.nuget.org/packages/FabrCore.Client.WebSocket) | Typed WebSocket v2 client with reconnect, replay, and acknowledgements |
 | [FabrCore.Host.AzureStorage](https://www.nuget.org/packages/FabrCore.Host.AzureStorage) | Optional Azure Storage provider for Orleans |
 | [FabrCore.Host.Testing](https://www.nuget.org/packages/FabrCore.Host.Testing) | In-memory Host/A2A integration-test helpers |
 | [FabrCore.Services.Microsoft365Copilot](https://www.nuget.org/packages/FabrCore.Services.Microsoft365Copilot) | Microsoft 365 Copilot and Teams channel integration |
+| [FabrCore.Services.Connections](https://www.nuget.org/packages/FabrCore.Services.Connections) | Optional connection profiles, OAuth/token acquisition, protected grants, and connection APIs |
+| [FabrCore.Services.RemoteAgents](https://www.nuget.org/packages/FabrCore.Services.RemoteAgents) | Optional Work IQ A2A and Copilot Studio agents behind FabrCore handles |
 | [FabrCore.Surface](https://www.nuget.org/packages/FabrCore.Surface) | Blazor workspace, chat, Adaptive Cards, and squads |
+
+The 2.0 release publishes all thirteen packages at the same version. Install the optional
+service packages you need and enable their features explicitly. Connections require user
+authentication and credential-protection configuration; scripting requires runtime registration
+and prepared worker dependencies. See the guides below before enabling either feature.
 
 Most applications connect through the HTTP API or WebSocket client. Agent creation and
 blueprint provisioning remain HTTP operations. A2A endpoints are built into Host and enabled
@@ -186,9 +219,12 @@ have moved into Host, Core, and SDK. See the [package migration table](RELEASE_N
 | Harnesses and context management | [Harness guide](docs/skills/fabrcore-harness/SKILL.md) · [Compaction](docs/compaction-correctness.md) |
 | Hosting and model configuration | [Server guide](docs/skills/fabrcore-server/SKILL.md) · [Orleans configuration](docs/skills/fabrcore-orleans/SKILL.md) |
 | Tools and integrations | [Plugins/tools](docs/skills/fabrcore-plugins-tools/SKILL.md) · [MCP](docs/skills/fabrcore-mcp/SKILL.md) · [A2A](docs/a2a.md) |
+| Connections and remote agents | [Connections, credential protection, and Microsoft integration](docs/connections-and-microsoft-integration.md) · [Shared channel identity and A2A 1.0 migration](docs/channel-agent-identity.md) |
+| C# scripting | [Scripting plugins](docs/scripting.md) · [Console sample](samples/FabrCore.Scripting.Sample) |
 | Applications and orchestration | [Sample application](samples/FabrCore.SampleApp) · [Blueprints](docs/blueprints.md) |
 | Memory behavior and evaluation | [Release defaults](docs/memory-release-defaults.md) · [Readiness review](docs/memory-readiness-review.md) |
-| Operations | [Monitoring](docs/skills/fabrcore-agentmonitor/SKILL.md) · [Cloud Server protocol](docs/cloud-server-protocol.md) |
+| Operations | [Monitoring](docs/skills/fabrcore-agentmonitor/SKILL.md) · [Cloud administration](docs/cloud-administration.md) · [Cloud Server protocol](docs/cloud-server-protocol.md) |
+| Runtime configuration | [Reconciliation](docs/cloud-configuration-reconciliation.md) · [Open report/preview protocol](docs/cloud-configuration-state-protocol.md) · [Reference cloud server](samples/FabrCore.ReferenceCloud/README.md) |
 | Builds and releases | [Build instructions](builds/README.md) |
 
 FabrCore is open source and works without Forge. Forge is the separate commercial operations
@@ -204,23 +240,30 @@ telemetry, and optional durable SQL streams (preview provider).
 With PowerShell 7 installed:
 
 ```powershell
-./scripts/Build.ps1                  # Release build, deterministic tests, and nine packages
+./scripts/Build.ps1                  # Release build, deterministic tests, and all configured packages
 ./scripts/Build.ps1 -Version 2.0.0-blah # Build and pack an explicit version
 ./scripts/Test-BuildScripts.ps1      # Validate inventory and release-script behavior
 ```
 
-The release gate also runs SQL Server 2025 integration tests and verifies consumers of the
+The release gate also runs SQL Server 2025 integration tests, real scripting workers, and verifies consumers of the
 actual packages, including the C# examples above. It requires all selected SQL tests to execute
 and pass before the validated package artifacts can be published. To run the same checks locally:
 
 ```powershell
 ./scripts/Build.ps1 -Version 2.0.0-local.verify -OutputDirectory ./artifacts/packages
 ./scripts/Test-ReleaseSql.ps1 -Container sql2025 -PackageDirectory ./artifacts/packages -Version 2.0.0-local.verify
+dotnet test src/FabrCore.Scripting.Tests/FabrCore.Scripting.Tests.csproj --configuration Release --filter 'TestCategory=Integration'
 ```
 
 The SQL runner creates and removes its own test databases inside the selected container.
 Live model evaluations remain separate and can incur provider charges. See
 [build instructions](builds/README.md) for prerequisites, reports, package feeds, and release previews.
+
+Stable releases are published by GitHub Actions from a `vX.Y.Z` tag after validation succeeds.
+`Release-Major.ps1` calculates the next major version from stable Git tags and requires a clean
+`main` branch; use `-DryRun` to preview the locally known version. `Pack-Local.ps1` skips tests,
+and `Push-NuGet.ps1` immediately unlists uploaded packages for prerelease testing. Use the
+tagged release workflow for the public 2.0.0 release.
 
 ## Contributing and license
 

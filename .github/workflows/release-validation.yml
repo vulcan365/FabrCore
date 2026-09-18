@@ -51,6 +51,13 @@ jobs:
         env:
           TEST_SQL_CONTAINER: ${{ job.services.sql.id }}
         run: ./scripts/Test-ReleaseSql.ps1 -Container $env:TEST_SQL_CONTAINER -PackageDirectory ./artifacts/packages -Version $env:PACKAGE_VERSION
+      - name: Validate scripting workers
+        # Real worker tests need the SDK and package access; the default offline filter excludes them.
+        shell: pwsh
+        run: dotnet test src/FabrCore.Scripting.Tests/FabrCore.Scripting.Tests.csproj --configuration Release --filter 'TestCategory=Integration' --logger 'trx;LogFileName=scripting.trx' --results-directory artifacts/test-results/scripting
+      - name: Validate SampleApp scripting example
+        shell: pwsh
+        run: dotnet test samples/FabrCore.SampleApp.Tests/FabrCore.SampleApp.Tests.csproj --configuration Release --filter 'TestCategory=Integration' --logger 'trx;LogFileName=sample-scripting.trx' --results-directory artifacts/test-results/sample-scripting
       - name: Retain test reports
         if: always()
         uses: actions/upload-artifact@v4

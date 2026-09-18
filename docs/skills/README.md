@@ -9,6 +9,9 @@ Copy whole skill folders with their references, scripts and assets. Start with
 `fabrcore-cloud-administration` for third-party cloud server and Insights integrations.
 Use `fabrcore-connections` for optional OAuth/app credentials, Entra Agent ID,
 authenticated MCP, outbound Copilot/Work IQ agents, and encrypted client handoffs.
+Use `fabrcore-scripting` for developer-defined NuGet environments and out-of-process
+C# tools. Its assets include a reusable plugin, complete agent, no-model console
+checkpoint and script/input pair; its runtime reference travels with the bundle.
 Each top-level skill identifies the 2.0.0 target in its metadata. Specialist
 references identify incomplete capture, persistence and validation boundaries.
 
@@ -37,3 +40,7 @@ extracted distribution does not require a FabrCore checkout.
 The connections skill bundles `docs/connections-and-microsoft-integration.md` as
 `fabrcore-connections/references/integration.md`, with its migration link adjusted
 to the bundled SQL asset. Packaging checks both copies against their sources.
+
+The scripting skill bundles `docs/scripting.md` as `references/runtime.md`, with
+the sample link pointed at its local asset. Packaging checks that reference and
+the console asset against the implementation documentation and sample.

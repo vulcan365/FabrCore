@@ -422,7 +422,9 @@ namespace FabrCore.Sdk
         protected async Task<List<AITool>> ResolveConfiguredToolsAsync()
         {
             var registry = serviceProvider.GetRequiredService<FabrCoreToolRegistry>();
-            var tools = await registry.ResolveToolsAsync(serviceProvider, config.Plugins, config.Tools, config, fabrcoreAgentHost);
+            var scope = await registry.ResolveConfiguredToolScopeAsync(serviceProvider, config.Plugins, config.Tools, config, fabrcoreAgentHost);
+            _configuredToolScopes.Add(scope);
+            var tools = scope.Tools.ToList();
 
             // Connect configured MCP servers (fail-open: log warning and continue on failure)
             if (config.McpServers is { Count: > 0 })
@@ -1424,8 +1426,16 @@ namespace FabrCore.Sdk
             await FlushStateAsync();
         }
 
+        private readonly List<FabrCoreResolvedToolScope> _configuredToolScopes = [];
+
         async Task IFabrCoreAgentProxy.InternalDisposeAsync()
         {
+            foreach (var scope in _configuredToolScopes.AsEnumerable().Reverse())
+            {
+                try { await scope.DisposeAsync(); }
+                catch (Exception error) { logger.LogWarning(error, "Error disposing configured plugins for agent '{Handle}'", config.Handle); }
+            }
+            _configuredToolScopes.Clear();
             await DisposeHarnessResourcesAsync();
             await DisposeInternalAgentResourcesAsync();
 

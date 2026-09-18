@@ -32,6 +32,7 @@ try { Invoke-CheckedGit @('rev-parse','--verify', 'refs/heads/fabrcore-validatio
 catch { $failedAsExpected = $true }
 if (-not $failedAsExpected) { throw 'Git failure did not stop execution.' }
 & (Join-Path $PSScriptRoot 'Test-PackageWorkflow.ps1')
+& (Join-Path $PSScriptRoot 'Test-DevelopWorktrees.ps1')
 Write-Host 'Build script checks passed.'
 # GitHub's pwsh runner propagates LASTEXITCODE; the deliberate failing Git probe
 # above must not make a successful validation step fail.

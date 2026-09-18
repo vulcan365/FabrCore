@@ -4,6 +4,7 @@
         'FabrCore.Core'
         'FabrCore.Connections'
         'FabrCore.Sdk'
+        'FabrCore.Scripting'
         'FabrCore.Client.Orleans'
         'FabrCore.Client.WebSocket'
         'FabrCore.Host'
@@ -16,6 +17,7 @@
     )
     VSTestProjects = @(
         'src/FabrCore.Sdk.Tests/FabrCore.Sdk.Tests.csproj'
+        'src/FabrCore.Scripting.Tests/FabrCore.Scripting.Tests.csproj'
         'src/FabrCore.Services.Connections.Tests/FabrCore.Services.Connections.Tests.csproj'
         'src/FabrCore.Host.Tests/FabrCore.Host.Tests.csproj'
         'src/FabrCore.Client.Orleans.Tests/FabrCore.Client.Orleans.Tests.csproj'

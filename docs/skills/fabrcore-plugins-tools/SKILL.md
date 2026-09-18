@@ -14,6 +14,10 @@ Have trusted agent code acquire an authenticated client and pass that capability
 to the plugin. Return business results to the model, never tokens. The profile's
 owner and agent grant must come from host/admin configuration, not tool arguments.
 
+For model-written C# with per-plugin NuGet packages, use
+[fabrcore-scripting](../fabrcore-scripting/SKILL.md). It includes the reusable base
+plugin pattern, complete code assets and the worker/deployment reference.
+
 ## Cloud discovery and diagnostic tool boundaries
 
 The 2.0 administration catalog discovers installed agent types, model aliases,
@@ -92,11 +96,12 @@ public class MyPlugin : IFabrCorePlugin
 ### Plugin Lifecycle
 
 1. **Discovery** — `FabrCoreRegistry` scans assemblies for `[PluginAlias]` at startup; `[FabrCoreCapabilities]` and `[FabrCoreNote]` metadata is included in the registry
-2. **Resolution** — `FabrCoreToolRegistry.ResolveToolsAsync()` instantiates the plugin
-   (internal agents use `ResolveToolScopeAsync()`, which requires every alias to resolve and
-   owns disposal of the plugin instances it created)
+2. **Resolution** — `ResolveConfiguredToolsAsync()` on a proxy instantiates plugins in an owned scope retained until proxy teardown.
+   Internal agents use an owned scope as well. Direct registry callers can use
+   `ResolveToolScopeAsync()` (requires every alias to resolve) and must dispose it.
+   Raw `ResolveToolsAsync()` does not retain an owned disposal scope.
 3. **Initialization** — `InitializeAsync(config, serviceProvider)` called with agent's config
-4. **Tool Extraction** — Public methods with `[Description]` become `AITool` instances; method names and descriptions are included in the registry
+4. **Tool Extraction** — Public methods, including inherited methods, with `[Description]` become `AITool` instances; method names and descriptions are included in the registry
 5. **Disposal** — If plugin implements `IDisposable` or `IAsyncDisposable`, disposed on agent deactivation
 
 ### Registry Metadata Attributes

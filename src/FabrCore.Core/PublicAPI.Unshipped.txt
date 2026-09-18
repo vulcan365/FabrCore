@@ -275,3 +275,61 @@ FabrCore.Core.VerifiableExecution.IVerifiableExecutionQueryProvider
 FabrCore.Core.VerifiableExecution.IVerifiableExecutionQueryProvider.ListTracesAsync(string? agentHandle = null, string? after = null, int limit = 100, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.CloudServer.AdministrationPage<string!>!>!
 static FabrCore.Core.CloudServer.FabrCoreAdminChannels.IsReserved(string? channel) -> bool
 static FabrCore.Core.CloudServer.FabrCoreAdminChannels.RejectOrdinary(string? channel) -> void
+FabrCore.Core.CloudServer.CloudConfigurationState
+FabrCore.Core.CloudServer.CloudConfigurationState.ApiVersion.get -> string!
+FabrCore.Core.CloudServer.CloudConfigurationState.ApiVersion.set -> void
+FabrCore.Core.CloudServer.CloudConfigurationState.ApplicationBuild.get -> string!
+FabrCore.Core.CloudServer.CloudConfigurationState.ApplicationBuild.set -> void
+FabrCore.Core.CloudServer.CloudConfigurationState.BootId.get -> string!
+FabrCore.Core.CloudServer.CloudConfigurationState.BootId.set -> void
+FabrCore.Core.CloudServer.CloudConfigurationState.CloudConfigurationState() -> void
+FabrCore.Core.CloudServer.CloudConfigurationState.DesiredRevision.get -> string?
+FabrCore.Core.CloudServer.CloudConfigurationState.DesiredRevision.set -> void
+FabrCore.Core.CloudServer.CloudConfigurationState.Error.get -> string?
+FabrCore.Core.CloudServer.CloudConfigurationState.Error.set -> void
+FabrCore.Core.CloudServer.CloudConfigurationState.ObservedAt.get -> System.DateTimeOffset
+FabrCore.Core.CloudServer.CloudConfigurationState.ObservedAt.set -> void
+FabrCore.Core.CloudServer.CloudConfigurationState.RejectedRevision.get -> string?
+FabrCore.Core.CloudServer.CloudConfigurationState.RejectedRevision.set -> void
+FabrCore.Core.CloudServer.CloudConfigurationState.Sequence.get -> long
+FabrCore.Core.CloudServer.CloudConfigurationState.Sequence.set -> void
+FabrCore.Core.CloudServer.CloudConfigurationState.Settings.get -> System.Collections.Generic.List<FabrCore.Core.CloudServer.CloudRuntimeSetting!>!
+FabrCore.Core.CloudServer.CloudConfigurationState.Settings.set -> void
+FabrCore.Core.CloudServer.CloudConfigurationState.Started.get -> bool
+FabrCore.Core.CloudServer.CloudConfigurationState.Started.set -> void
+FabrCore.Core.CloudServer.CloudConfigurationState.Truncated.get -> bool
+FabrCore.Core.CloudServer.CloudConfigurationState.Truncated.set -> void
+FabrCore.Core.CloudServer.CloudHeartbeatRequest.ConfigurationState.get -> FabrCore.Core.CloudServer.CloudConfigurationState?
+FabrCore.Core.CloudServer.CloudHeartbeatRequest.ConfigurationState.set -> void
+FabrCore.Core.CloudServer.CloudRuntimeSetting
+FabrCore.Core.CloudServer.CloudRuntimeSetting.AppliedKnown.get -> bool
+FabrCore.Core.CloudServer.CloudRuntimeSetting.AppliedKnown.set -> void
+FabrCore.Core.CloudServer.CloudRuntimeSetting.AppliedRevision.get -> string?
+FabrCore.Core.CloudServer.CloudRuntimeSetting.AppliedRevision.set -> void
+FabrCore.Core.CloudServer.CloudRuntimeSetting.AppliedValue.get -> string?
+FabrCore.Core.CloudServer.CloudRuntimeSetting.AppliedValue.set -> void
+FabrCore.Core.CloudServer.CloudRuntimeSetting.ApplyMode.get -> string!
+FabrCore.Core.CloudServer.CloudRuntimeSetting.ApplyMode.set -> void
+FabrCore.Core.CloudServer.CloudRuntimeSetting.CanAdopt.get -> bool
+FabrCore.Core.CloudServer.CloudRuntimeSetting.CanAdopt.set -> void
+FabrCore.Core.CloudServer.CloudRuntimeSetting.CloudRuntimeSetting() -> void
+FabrCore.Core.CloudServer.CloudRuntimeSetting.DesiredValue.get -> string?
+FabrCore.Core.CloudServer.CloudRuntimeSetting.DesiredValue.set -> void
+FabrCore.Core.CloudServer.CloudRuntimeSetting.HasDesiredValue.get -> bool
+FabrCore.Core.CloudServer.CloudRuntimeSetting.HasDesiredValue.set -> void
+FabrCore.Core.CloudServer.CloudRuntimeSetting.Key.get -> string!
+FabrCore.Core.CloudServer.CloudRuntimeSetting.Key.set -> void
+FabrCore.Core.CloudServer.CloudRuntimeSetting.Overridden.get -> bool
+FabrCore.Core.CloudServer.CloudRuntimeSetting.Overridden.set -> void
+FabrCore.Core.CloudServer.CloudRuntimeSetting.PendingRestart.get -> bool
+FabrCore.Core.CloudServer.CloudRuntimeSetting.PendingRestart.set -> void
+FabrCore.Core.CloudServer.CloudRuntimeSetting.Reason.get -> string?
+FabrCore.Core.CloudServer.CloudRuntimeSetting.Reason.set -> void
+FabrCore.Core.CloudServer.CloudRuntimeSetting.ResolvedValue.get -> string?
+FabrCore.Core.CloudServer.CloudRuntimeSetting.ResolvedValue.set -> void
+FabrCore.Core.CloudServer.CloudRuntimeSetting.Secret.get -> bool
+FabrCore.Core.CloudServer.CloudRuntimeSetting.Secret.set -> void
+FabrCore.Core.CloudServer.CloudRuntimeSetting.Source.get -> string!
+FabrCore.Core.CloudServer.CloudRuntimeSetting.Source.set -> void
+FabrCore.Core.CloudServer.CloudRuntimeSetting.SourceId.get -> string?
+FabrCore.Core.CloudServer.CloudRuntimeSetting.SourceId.set -> void

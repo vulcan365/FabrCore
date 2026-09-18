@@ -11,6 +11,8 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <None Include="../../docs/migrations/data-protection.sql" Link="Migrations/data-protection.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Compile Include="../../samples/FabrCore.ReferenceCloud/ConfigurationReportStore.cs" Link="CloudServer/Reference/ConfigurationReportStore.cs" />
+    <Compile Include="../../samples/FabrCore.ReferenceCloud/ReferenceCloudApplication.cs" Link="CloudServer/Reference/ReferenceCloudApplication.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,0 +1,108 @@
+#nullable enable
+abstract FabrCore.Scripting.CSharpScriptingPluginBase.Configure(FabrCore.Scripting.ScriptingEnvironmentBuilder! environment) -> void
+FabrCore.Scripting.CSharpScriptingPluginBase
+FabrCore.Scripting.CSharpScriptingPluginBase.CSharpScriptingPluginBase() -> void
+FabrCore.Scripting.CSharpScriptingPluginBase.DisposeAsync() -> System.Threading.Tasks.ValueTask
+FabrCore.Scripting.CSharpScriptingPluginBase.ExecuteCSharp(string! code, System.Text.Json.JsonElement? input = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Scripting.ScriptExecutionResult!>!
+FabrCore.Scripting.CSharpScriptingPluginBase.GetScriptingEnvironment() -> FabrCore.Scripting.ScriptingEnvironmentInfo!
+FabrCore.Scripting.CSharpScriptingPluginBase.InitializeAsync(FabrCore.Core.AgentConfiguration! config, System.IServiceProvider! serviceProvider) -> System.Threading.Tasks.Task!
+FabrCore.Scripting.ScriptArtifact
+FabrCore.Scripting.ScriptArtifact.<Clone>$() -> FabrCore.Scripting.ScriptArtifact!
+FabrCore.Scripting.ScriptArtifact.Content.get -> byte[]!
+FabrCore.Scripting.ScriptArtifact.Content.init -> void
+FabrCore.Scripting.ScriptArtifact.Deconstruct(out string! Name, out byte[]! Content) -> void
+FabrCore.Scripting.ScriptArtifact.Equals(FabrCore.Scripting.ScriptArtifact? other) -> bool
+FabrCore.Scripting.ScriptArtifact.Name.get -> string!
+FabrCore.Scripting.ScriptArtifact.Name.init -> void
+FabrCore.Scripting.ScriptArtifact.ScriptArtifact(string! Name, byte[]! Content) -> void
+FabrCore.Scripting.ScriptExecutionResult
+FabrCore.Scripting.ScriptExecutionResult.<Clone>$() -> FabrCore.Scripting.ScriptExecutionResult!
+FabrCore.Scripting.ScriptExecutionResult.Artifacts.get -> System.Collections.Generic.IReadOnlyList<FabrCore.Scripting.ScriptArtifact!>!
+FabrCore.Scripting.ScriptExecutionResult.Artifacts.init -> void
+FabrCore.Scripting.ScriptExecutionResult.Equals(FabrCore.Scripting.ScriptExecutionResult? other) -> bool
+FabrCore.Scripting.ScriptExecutionResult.Error.get -> string?
+FabrCore.Scripting.ScriptExecutionResult.Error.init -> void
+FabrCore.Scripting.ScriptExecutionResult.Output.get -> string!
+FabrCore.Scripting.ScriptExecutionResult.Output.init -> void
+FabrCore.Scripting.ScriptExecutionResult.ScriptExecutionResult() -> void
+FabrCore.Scripting.ScriptExecutionResult.Status.get -> FabrCore.Scripting.ScriptExecutionStatus
+FabrCore.Scripting.ScriptExecutionResult.Status.init -> void
+FabrCore.Scripting.ScriptExecutionResult.Value.get -> System.Text.Json.JsonElement?
+FabrCore.Scripting.ScriptExecutionResult.Value.init -> void
+FabrCore.Scripting.ScriptExecutionStatus
+FabrCore.Scripting.ScriptExecutionStatus.Cancelled = 4 -> FabrCore.Scripting.ScriptExecutionStatus
+FabrCore.Scripting.ScriptExecutionStatus.CompilationError = 1 -> FabrCore.Scripting.ScriptExecutionStatus
+FabrCore.Scripting.ScriptExecutionStatus.MemoryLimitExceeded = 5 -> FabrCore.Scripting.ScriptExecutionStatus
+FabrCore.Scripting.ScriptExecutionStatus.OutputLimitExceeded = 6 -> FabrCore.Scripting.ScriptExecutionStatus
+FabrCore.Scripting.ScriptExecutionStatus.RuntimeError = 2 -> FabrCore.Scripting.ScriptExecutionStatus
+FabrCore.Scripting.ScriptExecutionStatus.Success = 0 -> FabrCore.Scripting.ScriptExecutionStatus
+FabrCore.Scripting.ScriptExecutionStatus.TimedOut = 3 -> FabrCore.Scripting.ScriptExecutionStatus
+FabrCore.Scripting.ScriptExecutionStatus.WorkerError = 7 -> FabrCore.Scripting.ScriptExecutionStatus
+FabrCore.Scripting.ScriptingEnvironmentBuilder
+FabrCore.Scripting.ScriptingEnvironmentBuilder.AddImports(params string![]! namespaces) -> FabrCore.Scripting.ScriptingEnvironmentBuilder!
+FabrCore.Scripting.ScriptingEnvironmentBuilder.AddPackage(string! packageId, string! version) -> FabrCore.Scripting.ScriptingEnvironmentBuilder!
+FabrCore.Scripting.ScriptingEnvironmentBuilder.ScriptingEnvironmentBuilder() -> void
+FabrCore.Scripting.ScriptingEnvironmentBuilder.WithArtifactLimit(int bytes) -> FabrCore.Scripting.ScriptingEnvironmentBuilder!
+FabrCore.Scripting.ScriptingEnvironmentBuilder.WithInstructions(string! text) -> FabrCore.Scripting.ScriptingEnvironmentBuilder!
+FabrCore.Scripting.ScriptingEnvironmentBuilder.WithMemoryLimit(long bytes) -> FabrCore.Scripting.ScriptingEnvironmentBuilder!
+FabrCore.Scripting.ScriptingEnvironmentBuilder.WithOutputLimit(int characters) -> FabrCore.Scripting.ScriptingEnvironmentBuilder!
+FabrCore.Scripting.ScriptingEnvironmentBuilder.WithTimeout(System.TimeSpan value) -> FabrCore.Scripting.ScriptingEnvironmentBuilder!
+FabrCore.Scripting.ScriptingEnvironmentInfo
+FabrCore.Scripting.ScriptingEnvironmentInfo.<Clone>$() -> FabrCore.Scripting.ScriptingEnvironmentInfo!
+FabrCore.Scripting.ScriptingEnvironmentInfo.Deconstruct(out string! EnvironmentId, out System.Collections.Generic.IReadOnlyDictionary<string!, string!>! Packages, out System.Collections.Generic.IReadOnlyList<string!>! Imports, out string! Instructions, out double TimeoutSeconds, out long MemoryLimitBytes, out int MaxOutputCharacters, out int MaxArtifactBytes) -> void
+FabrCore.Scripting.ScriptingEnvironmentInfo.EnvironmentId.get -> string!
+FabrCore.Scripting.ScriptingEnvironmentInfo.EnvironmentId.init -> void
+FabrCore.Scripting.ScriptingEnvironmentInfo.Equals(FabrCore.Scripting.ScriptingEnvironmentInfo? other) -> bool
+FabrCore.Scripting.ScriptingEnvironmentInfo.Imports.get -> System.Collections.Generic.IReadOnlyList<string!>!
+FabrCore.Scripting.ScriptingEnvironmentInfo.Imports.init -> void
+FabrCore.Scripting.ScriptingEnvironmentInfo.Instructions.get -> string!
+FabrCore.Scripting.ScriptingEnvironmentInfo.Instructions.init -> void
+FabrCore.Scripting.ScriptingEnvironmentInfo.MaxArtifactBytes.get -> int
+FabrCore.Scripting.ScriptingEnvironmentInfo.MaxArtifactBytes.init -> void
+FabrCore.Scripting.ScriptingEnvironmentInfo.MaxOutputCharacters.get -> int
+FabrCore.Scripting.ScriptingEnvironmentInfo.MaxOutputCharacters.init -> void
+FabrCore.Scripting.ScriptingEnvironmentInfo.MemoryLimitBytes.get -> long
+FabrCore.Scripting.ScriptingEnvironmentInfo.MemoryLimitBytes.init -> void
+FabrCore.Scripting.ScriptingEnvironmentInfo.Packages.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>!
+FabrCore.Scripting.ScriptingEnvironmentInfo.Packages.init -> void
+FabrCore.Scripting.ScriptingEnvironmentInfo.ScriptingEnvironmentInfo(string! EnvironmentId, System.Collections.Generic.IReadOnlyDictionary<string!, string!>! Packages, System.Collections.Generic.IReadOnlyList<string!>! Imports, string! Instructions, double TimeoutSeconds, long MemoryLimitBytes, int MaxOutputCharacters, int MaxArtifactBytes) -> void
+FabrCore.Scripting.ScriptingEnvironmentInfo.TimeoutSeconds.get -> double
+FabrCore.Scripting.ScriptingEnvironmentInfo.TimeoutSeconds.init -> void
+FabrCore.Scripting.ScriptingRuntime
+FabrCore.Scripting.ScriptingRuntime.PreparePluginAsync<TPlugin>(System.IServiceProvider! services, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Scripting.ScriptingEnvironmentInfo!>!
+FabrCore.Scripting.ScriptingRuntime.ScriptingRuntime(FabrCore.Scripting.ScriptingRuntimeOptions! options, Microsoft.Extensions.Logging.ILogger<FabrCore.Scripting.ScriptingRuntime!>! logger) -> void
+FabrCore.Scripting.ScriptingRuntimeOptions
+FabrCore.Scripting.ScriptingRuntimeOptions.AllowEnvironmentPreparation.get -> bool
+FabrCore.Scripting.ScriptingRuntimeOptions.AllowEnvironmentPreparation.set -> void
+FabrCore.Scripting.ScriptingRuntimeOptions.CacheDirectory.get -> string!
+FabrCore.Scripting.ScriptingRuntimeOptions.CacheDirectory.set -> void
+FabrCore.Scripting.ScriptingRuntimeOptions.DotnetPath.get -> string!
+FabrCore.Scripting.ScriptingRuntimeOptions.DotnetPath.set -> void
+FabrCore.Scripting.ScriptingRuntimeOptions.MaxCodeCharacters.get -> int
+FabrCore.Scripting.ScriptingRuntimeOptions.MaxCodeCharacters.set -> void
+FabrCore.Scripting.ScriptingRuntimeOptions.MaxInputCharacters.get -> int
+FabrCore.Scripting.ScriptingRuntimeOptions.MaxInputCharacters.set -> void
+FabrCore.Scripting.ScriptingRuntimeOptions.NuGetConfigPath.get -> string?
+FabrCore.Scripting.ScriptingRuntimeOptions.NuGetConfigPath.set -> void
+FabrCore.Scripting.ScriptingRuntimeOptions.PreparationTimeout.get -> System.TimeSpan
+FabrCore.Scripting.ScriptingRuntimeOptions.PreparationTimeout.set -> void
+FabrCore.Scripting.ScriptingRuntimeOptions.ScriptingRuntimeOptions() -> void
+FabrCore.Scripting.ScriptingRuntimeOptions.WorkingDirectory.get -> string!
+FabrCore.Scripting.ScriptingRuntimeOptions.WorkingDirectory.set -> void
+FabrCore.Scripting.ScriptingServiceCollectionExtensions
+override FabrCore.Scripting.ScriptArtifact.Equals(object? obj) -> bool
+override FabrCore.Scripting.ScriptArtifact.GetHashCode() -> int
+override FabrCore.Scripting.ScriptArtifact.ToString() -> string!
+override FabrCore.Scripting.ScriptExecutionResult.Equals(object? obj) -> bool
+override FabrCore.Scripting.ScriptExecutionResult.GetHashCode() -> int
+override FabrCore.Scripting.ScriptExecutionResult.ToString() -> string!
+override FabrCore.Scripting.ScriptingEnvironmentInfo.Equals(object? obj) -> bool
+override FabrCore.Scripting.ScriptingEnvironmentInfo.GetHashCode() -> int
+override FabrCore.Scripting.ScriptingEnvironmentInfo.ToString() -> string!
+static FabrCore.Scripting.ScriptArtifact.operator !=(FabrCore.Scripting.ScriptArtifact? left, FabrCore.Scripting.ScriptArtifact? right) -> bool
+static FabrCore.Scripting.ScriptArtifact.operator ==(FabrCore.Scripting.ScriptArtifact? left, FabrCore.Scripting.ScriptArtifact? right) -> bool
+static FabrCore.Scripting.ScriptExecutionResult.operator !=(FabrCore.Scripting.ScriptExecutionResult? left, FabrCore.Scripting.ScriptExecutionResult? right) -> bool
+static FabrCore.Scripting.ScriptExecutionResult.operator ==(FabrCore.Scripting.ScriptExecutionResult? left, FabrCore.Scripting.ScriptExecutionResult? right) -> bool
+static FabrCore.Scripting.ScriptingEnvironmentInfo.operator !=(FabrCore.Scripting.ScriptingEnvironmentInfo? left, FabrCore.Scripting.ScriptingEnvironmentInfo? right) -> bool
+static FabrCore.Scripting.ScriptingEnvironmentInfo.operator ==(FabrCore.Scripting.ScriptingEnvironmentInfo? left, FabrCore.Scripting.ScriptingEnvironmentInfo? right) -> bool
+static FabrCore.Scripting.ScriptingServiceCollectionExtensions.AddFabrCoreScripting(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<FabrCore.Scripting.ScriptingRuntimeOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

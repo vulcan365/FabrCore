@@ -98,3 +98,37 @@ FabrCore.Host.Services.InMemoryAgentMessageMonitor.GetHealthAsync(System.Threadi
 FabrCore.Host.Services.InMemoryAgentMessageMonitor.QueryAsync(FabrCore.Core.Monitoring.MonitorQuery! query, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.Monitoring.MonitorPage!>!
 FabrCore.Host.Services.InMemoryAgentMessageMonitor.ReadPayloadAsync(long sequence, int offset, int count, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string?>!
 FabrCore.Host.Services.InMemoryVerifiableExecutionStore.ListTracesAsync(string? agentHandle = null, string? after = null, int limit = 100, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.CloudServer.AdministrationPage<string!>!>!
+FabrCore.Host.Api.Controllers.RemoteAdminController.GetConfigurationState() -> Microsoft.AspNetCore.Mvc.IActionResult!
+FabrCore.Host.Api.Controllers.RemoteAdminController.PreviewConfiguration(System.Collections.Generic.Dictionary<string!, string?>! settings) -> Microsoft.AspNetCore.Mvc.IActionResult!
+FabrCore.Host.Configuration.Cloud.IFabrCoreRuntimeSettingsContributor
+FabrCore.Host.Configuration.Cloud.IFabrCoreRuntimeSettingsContributor.Observe() -> System.Collections.Generic.IEnumerable<FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation!>!
+FabrCore.Host.Configuration.Cloud.RuntimeConfigurationContext
+FabrCore.Host.Configuration.Cloud.RuntimeConfigurationContext.Contains(string! key) -> bool
+FabrCore.Host.Configuration.Cloud.RuntimeConfigurationContext.Default(string! key, string? value, string! reason) -> void
+FabrCore.Host.Configuration.Cloud.RuntimeConfigurationContext.EnvironmentName.get -> string!
+FabrCore.Host.Configuration.Cloud.RuntimeConfigurationContext.Get(string! key) -> string?
+FabrCore.Host.Configuration.Cloud.RuntimeConfigurationContext.Require(string! key, System.Func<string?, bool>! predicate, string! reason) -> void
+FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation
+FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation.<Clone>$() -> FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation!
+FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation.AppliedKnown.get -> bool
+FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation.AppliedKnown.init -> void
+FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation.Deconstruct(out string! Key, out string? Value, out string! SourceId, out bool AppliedKnown, out bool Secret, out string? Reason) -> void
+FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation.Equals(FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation? other) -> bool
+FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation.Key.get -> string!
+FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation.Key.init -> void
+FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation.Reason.get -> string?
+FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation.Reason.init -> void
+FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation.RuntimeSettingObservation(string! Key, string? Value, string! SourceId, bool AppliedKnown = true, bool Secret = false, string? Reason = null) -> void
+FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation.Secret.get -> bool
+FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation.Secret.init -> void
+FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation.SourceId.get -> string!
+FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation.SourceId.init -> void
+FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation.Value.get -> string?
+FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation.Value.init -> void
+FabrCore.Host.FabrCoreServerOptions.ConfigureRuntime(string! name, System.Action<FabrCore.Host.Configuration.Cloud.RuntimeConfigurationContext!>! configure) -> FabrCore.Host.FabrCoreServerOptions!
+override FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation.Equals(object? obj) -> bool
+override FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation.GetHashCode() -> int
+override FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation.ToString() -> string!
+static FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation.operator !=(FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation? left, FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation? right) -> bool
+static FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation.operator ==(FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation? left, FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation? right) -> bool
+FabrCore.Host.Configuration.Cloud.RuntimeConfigurationContext.Override(string! key, string? value, string! reason) -> void

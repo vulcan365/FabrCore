@@ -7,7 +7,7 @@ relative to themselves, so they also work when invoked from another directory.
 `Projects.psd1` is the shared package and test-project inventory used by local packaging,
 builds, publish previews and GitHub Actions. SQL Server, Memory, GraphRAG and service
 contracts are now integrated into Host/Core/SDK; their former standalone packages are
-not published. `FabrCore.Host.Testing` is included in all nine-package releases.
+not published. `FabrCore.Host.Testing` and the optional `FabrCore.Scripting` extension are included in the configured package inventory.
 
 ```powershell
 ./scripts/Build.ps1                          # Build, test, and pack to C:/repos/nuget on Windows
@@ -38,7 +38,7 @@ Without `-Version`, build uses the next patch after the highest stable local Git
 release line already in the local feed, and appends a fresh `-local.<UTC timestamp>` suffix.
 A stable package already in the feed advances to its next patch. Fetch tags first if they may
 be stale. Build also advances past future local timestamps or a higher-sorting prerelease so
-the generated version is newer than the feed. Push selects the highest semantic version and requires all nine packages; it never
+the generated version is newer than the feed. Push selects the highest semantic version and requires every configured package; it never
 silently publishes an older set when the newest is incomplete. Both flat and version-subfolder
 layouts are supported. Conflicting duplicate package contents are rejected.
 
@@ -52,7 +52,10 @@ workflow offline, including version propagation, package selection, and failure 
 Release dry runs do not fetch, pull, switch branches, tag, merge or push. Real version
 releases require a clean main branch, fetch tags, fast-forward main, and stop at the first
 Git failure. They prompt before tagging/pushing and leave the checkout on main. The
-Develop helper prompts before merging and also stops on Git failures.
+Develop helper prompts before merging and also stops on Git failures. When `develop`
+or `main` is already checked out in a linked worktree, it uses that checkout and
+checks both working trees are clean. The merge and push run in the main checkout;
+the caller's directory and any separate develop checkout stay in place.
 
 ## Release validation
 

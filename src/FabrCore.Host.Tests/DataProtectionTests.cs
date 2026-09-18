@@ -20,9 +20,17 @@ public sealed class DataProtectionTests
     }
 
     [TestMethod]
-    public void LocalhostDefaultsAreSingletonEphemeralAndDoNotConfigureAppCookies()
+    [DataRow(null, null)]
+    [DataRow("Localhost", "Auto")]
+    [DataRow("Localhost", "Ephemeral")]
+    public void LocalhostDefaultsAreSingletonEphemeralAndDoNotConfigureAppCookies(string? clustering, string? mode)
     {
-        using var first = Services(); using var restarted = Services();
+        Dictionary<string, string?> config = new()
+        {
+            ["FabrCore:Orleans:ClusteringMode"] = clustering,
+            ["FabrCore:DataProtection:Mode"] = mode
+        };
+        using var first = Services(config); using var restarted = Services(config);
         var provider = first.GetRequiredService<IFabrCoreDataProtectionProvider>();
         Assert.AreSame(provider, first.GetRequiredService<IFabrCoreDataProtectionProvider>());
         Assert.IsNull(first.GetService<IDataProtectionProvider>());
@@ -32,11 +40,54 @@ public sealed class DataProtectionTests
     }
 
     [TestMethod]
-    public void SqlDatabaseTakesPrecedenceOverLocalhostAndRequiresKeyEncryption()
+    public void DefaultApplicationCookieProtectionDoesNotReplaceLocalhostDefaults()
     {
-        using var services = Services(new() { ["ConnectionStrings:FabrCore"] = "Server=unused;Database=unused", ["FabrCore:Orleans:ClusteringMode"] = "Localhost" });
+        using var services = Services(configure: s => s.AddDataProtection());
+        var application = services.GetRequiredService<IDataProtectionProvider>();
+        var credentials = services.GetRequiredService<IFabrCoreDataProtectionProvider>();
+        var ciphertext = credentials.CreateProtector("test").Protect("secret");
+        Assert.AreEqual("secret", credentials.CreateProtector("test").Unprotect(ciphertext));
+        Assert.ThrowsExactly<CryptographicException>(() => application.CreateProtector("test").Unprotect(ciphertext));
+    }
+
+    [TestMethod]
+    [DataRow(null)]
+    [DataRow("SqlServer")]
+    [DataRow("Localhost")]
+    public void IntegratedSqlAutoModeRequiresEncryptionRegardlessOfClustering(string? clustering)
+    {
+        using var services = Services(new()
+        {
+            ["ConnectionStrings:FabrCore"] = "Server=unused;Database=unused",
+            ["FabrCore:Orleans:ClusteringMode"] = clustering
+        });
         var error = Assert.ThrowsExactly<InvalidOperationException>(() => services.GetRequiredService<IFabrCoreDataProtectionProvider>());
         StringAssert.Contains(error.Message, "CertificatePath");
+    }
+
+    [TestMethod]
+    public void OrleansOnlySqlAutoModeRequiresEncryption()
+    {
+        using var services = Services(new()
+        {
+            ["FabrCore:Orleans:ClusteringMode"] = "SqlServer",
+            ["FabrCore:Orleans:ConnectionString"] = "Server=unused;Database=unused"
+        });
+        var error = Assert.ThrowsExactly<InvalidOperationException>(() => services.GetRequiredService<IFabrCoreDataProtectionProvider>());
+        StringAssert.Contains(error.Message, "CertificatePath");
+    }
+
+    [TestMethod]
+    public void IntegratedSqlRejectsEphemeralEvenWithLocalhostClustering()
+    {
+        using var services = Services(new()
+        {
+            ["ConnectionStrings:FabrCore"] = "Server=unused;Database=unused",
+            ["FabrCore:Orleans:ClusteringMode"] = "Localhost",
+            ["FabrCore:DataProtection:Mode"] = "Ephemeral"
+        });
+        var error = Assert.ThrowsExactly<InvalidOperationException>(() => services.GetRequiredService<IFabrCoreDataProtectionProvider>());
+        StringAssert.Contains(error.Message, "Ephemeral protection cannot be used with durable storage");
     }
 
     [TestMethod]

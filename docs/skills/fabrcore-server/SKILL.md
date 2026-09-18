@@ -17,10 +17,31 @@ opt-ins, independent of SQL mode and inbound Copilot/A2A. Agent ID and encrypted
 client handoffs have separate flags. FabrCore exposes API endpoints; client apps
 own login/callback UI. Blueprints hold connection references, never credentials.
 
-Host protection defaults require no application Data Protection setup in the
-in-memory Localhost case. SQL uses a shared key table and requires the host's
-key-encryption certificate; configure `FabrCore:DataProtection`. Preserve custom
-providers and key-ring identity when migrating existing protected records.
+### Automatic credential protection
+
+`AddFabrCoreServer` / `AddFabrCoreServices` register FabrCore credential protection
+automatically. Leave `FabrCore:DataProtection:Mode` at its default `Auto`; application
+code does not need `AddDataProtection`, `AddFabrCoreDataProtection`, or the legacy
+`ProtectedKeyRingConfigured` flag for the built-in modes.
+
+| Effective persistence | FabrCore behavior |
+| --- | --- |
+| Localhost with in-memory storage and no integrated SQL database | Singleton ephemeral keys; credentials and keys are lost on restart; no certificate needed |
+| `ConnectionStrings:FabrCore` (or the configured database alias) | Shared encrypted keys in the operational database, including when clustering explicitly remains `Localhost` |
+| Orleans-only `SqlServer` | Shared encrypted keys in `StorageConnectionString`, falling back to `ConnectionString` |
+| Azure/custom durable storage without SQL | Configure a custom shared protection provider |
+
+SQL registration, repository selection, and key-table initialization are automatic.
+When enabling a credential consumer such as connections, supply
+`FabrCore:DataProtection:CertificatePath` and, if needed, `CertificatePassword`
+through host secrets. Every silo needs the same decryption certificate/private key
+and stable application identity. FabrCore does not generate a deployment certificate.
+Protection is activated lazily; unused credential protection does not require a
+certificate. SQL failures never fall back to ephemeral keys.
+
+This provider is separate from application authentication-cookie protection.
+Preserve custom encrypted providers and key-ring identity during migration. See
+[certificate setup, rotation, and manual schema](../fabrcore-connections/references/integration.md#host-setup).
 
 ## Cloud management in the 2.0 release
 

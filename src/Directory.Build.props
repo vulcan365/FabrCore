@@ -23,7 +23,7 @@
   <PropertyGroup>
     <FabrCorePublicApi Condition="'$(MSBuildProjectName)' == 'FabrCore.Core' Or '$(MSBuildProjectName)' == 'FabrCore.Sdk' Or '$(MSBuildProjectName)' == 'FabrCore.Host' Or '$(MSBuildProjectName)' == 'FabrCore.Host.AzureStorage' Or '$(MSBuildProjectName)' == 'FabrCore.Host.Testing' Or '$(MSBuildProjectName)' == 'FabrCore.Client.Orleans' Or '$(MSBuildProjectName)' == 'FabrCore.Client.WebSocket' Or '$(MSBuildProjectName)' == 'FabrCore.Services.Microsoft365Copilot' Or '$(MSBuildProjectName)' == 'FabrCore.Surface'">true</FabrCorePublicApi>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'FabrCore.Connections' Or '$(MSBuildProjectName)' == 'FabrCore.Services.Connections' Or '$(MSBuildProjectName)' == 'FabrCore.Services.RemoteAgents'">
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'FabrCore.Connections' Or '$(MSBuildProjectName)' == 'FabrCore.Services.Connections' Or '$(MSBuildProjectName)' == 'FabrCore.Services.RemoteAgents' Or '$(MSBuildProjectName)' == 'FabrCore.Scripting'">
     <FabrCorePublicApi>true</FabrCorePublicApi>
   </PropertyGroup>
   <PropertyGroup Condition="'$(FabrCorePublicApi)' == 'true'">

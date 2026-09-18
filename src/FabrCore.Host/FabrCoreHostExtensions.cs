@@ -27,6 +27,16 @@ namespace FabrCore.Host
 
     public class FabrCoreServerOptions
     {
+        internal List<Configuration.Cloud.RuntimeConfigurationRule> RuntimeRules { get; } = [];
+
+        /// <summary>Registers a pure, named rule evaluated after cloud inputs and before consumers, and on refresh/preview.</summary>
+        public FabrCoreServerOptions ConfigureRuntime(string name, Action<Configuration.Cloud.RuntimeConfigurationContext> configure)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(name);
+            ArgumentNullException.ThrowIfNull(configure);
+            RuntimeRules.Add(new(name, configure));
+            return this;
+        }
         /// <summary>
         /// Gets or sets optional assemblies which FabrCore should load in addition to the
         /// application assembly. The application assembly and referenced FabrCore project/package
@@ -464,6 +474,7 @@ namespace FabrCore.Host
                 // values that make remote provisioning worthwhile (Orleans clustering, connection
                 // strings) are read while the silo is built and never again. A no-op unless the
                 // Cloud Server feature and its Settings sub-feature are both enabled.
+                A2AExtensions.AddLegacyConfigurationFallback(builder);
                 var cloudSettings = Configuration.Cloud.CloudSettingsBootstrapper.TryApply(builder, loggerFactory);
                 if (cloudSettings is not null)
                 {
@@ -471,6 +482,19 @@ namespace FabrCore.Host
                 }
 
                 builder.Services.TryAddSingleton<Configuration.Cloud.FabrCoreSettingsCatalog>();
+                var runtimeState = new Configuration.Cloud.RuntimeConfigurationState(builder.Configuration,
+                    builder.Environment.EnvironmentName, options.RuntimeRules, cloudSettings);
+                builder.Services.AddSingleton(runtimeState);
+                builder.Services.AddHostedService<Configuration.Cloud.RuntimeConfigurationLifecycle>();
+                Configuration.Cloud.RuntimeOptionsObservation.AddSnapshot<FabrCoreHostOptions>(builder.Services, FabrCoreHostOptions.SectionName);
+                Configuration.Cloud.RuntimeOptionsObservation.AddSnapshot<FabrCoreWebSocketOptions>(builder.Services, FabrCoreWebSocketOptions.SectionName);
+                Configuration.Cloud.RuntimeOptionsObservation.AddSnapshot<FabrCoreAclOptions>(builder.Services, FabrCoreAclOptions.SectionName);
+                Configuration.Cloud.RuntimeOptionsObservation.AddSnapshot<FabrCore.Core.Auditing.AuditOptions>(builder.Services, "FabrCore:Audit");
+                Configuration.Cloud.RuntimeOptionsObservation.AddSnapshot<AgentGrainOptions>(builder.Services, AgentGrainOptions.SectionName);
+                Configuration.Cloud.RuntimeOptionsObservation.AddSnapshot<PrincipalGrainOptions>(builder.Services, PrincipalGrainOptions.SectionName);
+                Configuration.Cloud.RuntimeOptionsObservation.AddSnapshot<PrincipalContextOptions>(builder.Services, PrincipalContextOptions.SectionName);
+                Configuration.Cloud.RuntimeOptionsObservation.AddSnapshot<PrincipalDeliveryOptions>(builder.Services, PrincipalDeliveryOptions.SectionName);
+                Configuration.Cloud.RuntimeOptionsObservation.AddMonitor<GatewayDiscoveryOptions>(builder.Services, GatewayDiscoveryOptions.SectionName);
 
                 var applicationAssemblies = LoadApplicationAssemblies(
                     builder.Environment.ApplicationName,
@@ -943,6 +967,22 @@ namespace FabrCore.Host
 
                 // Resolve the Orleans provider for the configured mode.
                 var orleansProvider = ResolveOrleansProvider(options, orleansOptions, logger);
+                var runtime = builder.Services.First(d => d.ServiceType == typeof(Configuration.Cloud.RuntimeConfigurationState))
+                    .ImplementationInstance as Configuration.Cloud.RuntimeConfigurationState;
+                runtime!.ResolveInfrastructure = config =>
+                {
+                    var resolved = config.GetSection(OrleansClusterOptions.SectionName).Get<OrleansClusterOptions>() ?? new();
+                    Database.FabrCoreDatabaseOptions.Resolve(config).ApplyOrleansDefaults(resolved, config, options.OrleansProvider);
+                    return new Dictionary<string, string?>
+                    {
+                        ["FabrCore:Orleans:ClusteringMode"] = resolved.ClusteringMode.ToString(),
+                        ["FabrCore:Orleans:ClusterId"] = resolved.ClusterId,
+                        ["FabrCore:Orleans:ServiceId"] = resolved.ServiceId,
+                        ["FabrCore:Orleans:ConnectionString"] = resolved.ConnectionString,
+                        ["FabrCore:Orleans:StorageConnectionString"] = resolved.EffectiveStorageConnectionString
+                    };
+                };
+                runtime.CaptureInfrastructure = (services, state) => Configuration.Cloud.BuiltInRuntimeObservations.CaptureOrleans(services, state);
 
                 // Let the provider auto-provision its backing resources (SQL tables,
                 // Azure tables/containers/queues, ...) before the silo starts.

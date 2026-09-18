@@ -7,6 +7,8 @@ namespace FabrCore.Core.CloudServer;
 /// </summary>
 public sealed class CloudHeartbeatRequest
 {
+    /// <summary>Optional bounded and redacted per-process desired/resolved/applied report.</summary>
+    public CloudConfigurationState? ConfigurationState { get; set; }
     /// <summary>Gets or sets the heartbeat schema version.</summary>
     public int SchemaVersion { get; set; } = CloudServerProtocol.CurrentSchemaVersion;
 
