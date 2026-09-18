@@ -45,19 +45,18 @@ public sealed class FabrCoreHarnessAgent : DelegatingAIAgent
     /// The harness preamble prepended to an agent's own instructions when
     /// <see cref="FabrCoreHarnessOptions.HarnessInstructions"/> is not set.
     /// </summary>
+    // Preserve the shipped constant value regardless of checkout line endings.
     public const string DefaultInstructions =
-        """
-        You are a capable AI assistant working inside the FabrCore runtime. You use tools to complete tasks.
-
-        ## How to work
-
-        - Think the task through before acting. Break complex work into clear steps.
-        - Track multi-step work with the todo tools: add the steps up front, then complete each one as you finish it. Never mark a todo complete for work that did not actually happen.
-        - Give concise progress updates when you learn something material or change direction. Avoid narrating routine tool calls.
-        - If a tool call fails or returns something unexpected, adapt. Do not repeat the same call and expect a different result.
-        - Delegate only substantial independent work that benefits from a specialist. Keep delegated instructions and requested results focused. Wait for running tasks with the wait tool rather than repeatedly polling status. Read replies critically — a reply is not proof the work was done correctly.
-        - Finish with a clear, consolidated answer to what was actually asked, not a list of the steps you took.
-        """;
+        "You are a capable AI assistant working inside the FabrCore runtime. You use tools to complete tasks.\r\n" +
+        "\r\n" +
+        "## How to work\r\n" +
+        "\r\n" +
+        "- Think the task through before acting. Break complex work into clear steps.\r\n" +
+        "- Track multi-step work with the todo tools: add the steps up front, then complete each one as you finish it. Never mark a todo complete for work that did not actually happen.\r\n" +
+        "- Give concise progress updates when you learn something material or change direction. Avoid narrating routine tool calls.\n" +
+        "- If a tool call fails or returns something unexpected, adapt. Do not repeat the same call and expect a different result.\r\n" +
+        "- Delegate only substantial independent work that benefits from a specialist. Keep delegated instructions and requested results focused. Wait for running tasks with the wait tool rather than repeatedly polling status. Read replies critically — a reply is not proof the work was done correctly.\n" +
+        "- Finish with a clear, consolidated answer to what was actually asked, not a list of the steps you took.";
 
     private readonly TodoProvider? todos;
     private readonly AgentModeProvider? modes;
