@@ -83,10 +83,14 @@ and agent discovery, and exercises typed storage. The SQL runner supplies an iso
 connection and requires the additional startup/restart persistence checks. Temporary consumer
 projects and caches are removed after the run.
 
-The reusable `release-validation.yml` workflow runs these checks for pull requests, main/develop
-pushes, and release tags. Stable `vX.Y.Z` publishing depends on successful validation of the same
-commit and downloads its exact package artifacts rather than rebuilding. CI retains TRX reports
-and validated packages. Local validation never tags or publishes.
+Releases use one tag-triggered `publish-nuget.yml` workflow. Run `Release-Develop.ps1`
+to merge and push develop to main, then run `Release-Major.ps1`, `Release-Minor.ps1`
+or `Release-Patch.ps1` yourself to create the release tag. GitHub builds, runs the
+offline tests, packs all configured packages once, and pushes them to NuGet.org in
+the same job. Branch pushes and pull requests do not trigger separate validation
+workflows. SQL, package-consumer and scripting integration checks remain available
+as local commands; they are not a separate publishing gate. Local validation never
+tags or publishes.
 
 ## Public API compatibility
 

@@ -245,9 +245,9 @@ With PowerShell 7 installed:
 ./scripts/Test-BuildScripts.ps1      # Validate inventory and release-script behavior
 ```
 
-The release gate also runs SQL Server 2025 integration tests, real scripting workers, and verifies consumers of the
-actual packages, including the C# examples above. It requires all selected SQL tests to execute
-and pass before the validated package artifacts can be published. To run the same checks locally:
+Additional local checks cover SQL Server 2025 integration, real scripting workers and
+consumers of the actual packages, including the C# examples above. Run them explicitly
+when needed; they are not separate GitHub publishing jobs:
 
 ```powershell
 ./scripts/Build.ps1 -Version 2.0.0-local.verify -OutputDirectory ./artifacts/packages
@@ -259,7 +259,9 @@ The SQL runner creates and removes its own test databases inside the selected co
 Live model evaluations remain separate and can incur provider charges. See
 [build instructions](builds/README.md) for prerequisites, reports, package feeds, and release previews.
 
-Stable releases are published by GitHub Actions from a `vX.Y.Z` tag after validation succeeds.
+Run `Release-Develop.ps1`, then `Release-Major.ps1`, `Release-Minor.ps1` or `Release-Patch.ps1`.
+A single GitHub Actions job builds, tests, packs and publishes NuGet packages from the resulting
+`vX.Y.Z` tag. Ordinary branch pushes do not start separate CI workflows.
 `Release-Major.ps1` calculates the next major version from stable Git tags and requires a clean
 `main` branch; use `-DryRun` to preview the locally known version. `Pack-Local.ps1` skips tests,
 and `Push-NuGet.ps1` immediately unlists uploaded packages for prerelease testing. Use the

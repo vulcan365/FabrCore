@@ -375,7 +375,7 @@ See [configuration reconciliation](docs/cloud-configuration-reconciliation.md) a
 ## Builds, packaging, and validation
 
 - `builds/Projects.psd1` is the shared inventory for thirteen supported packages and test projects.
-  Build, pack, release, and CI workflows use that inventory, including both VSTest and
+  Build, pack, and tag publishing use that inventory, including both VSTest and
   Microsoft.Testing.Platform projects.
 - Deterministic tests are separated from SQL integration tests and live evaluations. SQL/evaluation
   scripts resolve paths independently of the caller's working directory and restore environment settings.
@@ -386,17 +386,16 @@ See [configuration reconciliation](docs/cloud-configuration-reconciliation.md) a
 - Explicit `-Version` selects the exact build/package set. Automatic local versions advance beyond
   stable tags and the local feed; push rejects incomplete sets. `Pack-Local.ps1` skips tests, and
   `Push-NuGet.ps1` pushes then immediately unlists packages. Public stable releases use the tag workflow.
-- Release validation runs offline tests, isolated SQL-mode/Orleans streaming tests, and deterministic
-  Memory/GraphRAG SQL integration suites. Missing prerequisites, skipped required SQL tests, and
-  absent test reports fail the gate. Paid model evaluations remain separate.
-- CI separately executes real scripting-worker integration tests, which require SDK/package access
-  and are excluded from the ordinary offline filter. Repository links in both release documents
-  are also checked.
+- Local validation commands cover isolated SQL-mode/Orleans streaming tests, deterministic
+  Memory/GraphRAG SQL integration suites, real scripting workers and documentation links.
+  Scripting integration requires SDK/package access and is excluded from the offline filter.
+  Paid model evaluations remain separate.
 - Package smoke tests restore the produced packages with a fresh cache, verify package identities
   and internal dependencies, compile README examples, and exercise standalone/SQL startup,
   readiness, agent discovery, and storage across SQL host restart.
-- Tag publishing consumes the artifacts from successful validation of the same commit. Test reports
-  and validated packages are retained by CI; no package rebuild occurs between validation and push.
+- Run Release-Develop, then Major/Minor/Patch. One tag-triggered GitHub job builds, runs offline
+  tests, packs and publishes to NuGet.org. There are no separate branch/PR validation workflows
+  or prerequisite validation jobs.
 - The SDK is pinned by `global.json` with patch roll-forward. MinVer is centralized at 8.0.0;
   evaluation dependencies are pinned and MSTest SDK/runner versions are aligned. The Aspire sample
   uses matching AppHost SDK/package versions and its CLI bundle.

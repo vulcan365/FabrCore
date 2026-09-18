@@ -14,36 +14,28 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: true
 
 jobs:
-  version:
+  publish:
+    name: Build, Pack & Publish
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.tag.outputs.version }}
     steps:
-      - id: tag
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Validate release tag
         shell: pwsh
         run: |
           if ($env:GITHUB_REF_NAME -notmatch '^v\d+\.\d+\.\d+$') {
             throw "Only stable v<major>.<minor>.<patch> tags are publishable."
           }
-          "version=$($env:GITHUB_REF_NAME.Substring(1))" >> $env:GITHUB_OUTPUT
-  validate:
-    needs: version
-    uses: ./.github/workflows/release-validation.yml
-    with:
-      version: ${{ needs.version.outputs.version }}
-  publish:
-    needs: [version, validate]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          global-json-file: global.json
-      - uses: actions/download-artifact@v4
-        with:
-          name: release-packages
-          path: nupkgs
-      - name: Push validated packages to NuGet.org
+      - name: Build, test and pack
+        shell: pwsh
+        run: ./scripts/Build.ps1 -Version ($env:GITHUB_REF_NAME.Substring(1)) -OutputDirectory ./nupkgs
+      - name: Push to NuGet.org
         run: >-
           dotnet nuget push "./nupkgs/*.nupkg"
           --api-key ${{ secrets.NUGET_API_KEY }}
