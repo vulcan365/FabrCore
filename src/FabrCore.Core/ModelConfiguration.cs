@@ -31,6 +31,17 @@ namespace FabrCore.Core
         public string? ReasoningEffort { get; set; }
 
         /// <summary>
+        /// Provider API used for chat requests: ChatCompletions or Responses. Null uses
+        /// ChatCompletions. Responses requires a provider endpoint that serves <c>/responses</c>.
+        /// </summary>
+        /// <remarks>
+        /// Some models accept function tools together with reasoning only on the Responses API.
+        /// Responses calls are stateless: nothing is stored at the provider, and reasoning items
+        /// are carried in the conversation between tool-call turns.
+        /// </remarks>
+        public string? ChatApi { get; set; }
+
+        /// <summary>
         /// Total context window size in tokens for this model. Default is null (unknown).
         /// </summary>
         /// <remarks>
