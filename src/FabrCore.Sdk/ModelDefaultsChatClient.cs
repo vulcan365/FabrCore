@@ -42,6 +42,28 @@ internal sealed class ModelDefaultsChatClient : DelegatingChatClient
     {
         ArgumentNullException.ThrowIfNull(configuration);
         _ = ParseReasoningEffort(configuration);
+        _ = UsesResponsesApi(configuration);
+    }
+
+    /// <summary>
+    /// True when the model's chat requests go to the provider's Responses API rather than
+    /// chat completions.
+    /// </summary>
+    public static bool UsesResponsesApi(ModelConfiguration configuration)
+    {
+        if (string.IsNullOrWhiteSpace(configuration.ChatApi))
+        {
+            return false;
+        }
+
+        return configuration.ChatApi.Trim().ToLowerInvariant() switch
+        {
+            "chatcompletions" => false,
+            "responses" => true,
+            _ => throw new InvalidOperationException(
+                $"Model configuration '{configuration.Name}' has unsupported ChatApi " +
+                $"'{configuration.ChatApi}'. Supported values are: ChatCompletions, Responses.")
+        };
     }
 
     public override Task<ChatResponse> GetResponseAsync(

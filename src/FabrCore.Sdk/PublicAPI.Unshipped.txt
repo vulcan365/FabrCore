@@ -35,3 +35,5 @@ FabrCore.Sdk.FabrCoreAdministrationException.FabrCoreAdministrationException(Sys
 FabrCore.Sdk.FabrCoreAdministrationException.ResponseBody.get -> string!
 FabrCore.Sdk.FabrCoreAdministrationException.StatusCode.get -> System.Net.HttpStatusCode
 virtual FabrCore.Sdk.FabrCoreAgentProxy.GetAdminDiagnosticSnapshotAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.JsonElement>!>!
+FabrCore.Sdk.ModelConfigResponse.ChatApi.get -> string?
+FabrCore.Sdk.ModelConfigResponse.ChatApi.set -> void

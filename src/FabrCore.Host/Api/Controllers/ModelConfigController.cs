@@ -43,6 +43,7 @@ namespace FabrCore.Host.Api.Controllers
                     modelConfig.TimeoutSeconds,
                     modelConfig.MaxOutputTokens,
                     modelConfig.ReasoningEffort,
+                    modelConfig.ChatApi,
                     modelConfig.ContextWindowTokens,
                     modelConfig.ContextCompactionEnabled,
                     modelConfig.ContextEvictThreshold,

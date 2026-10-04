@@ -333,3 +333,5 @@ FabrCore.Core.CloudServer.CloudRuntimeSetting.Source.get -> string!
 FabrCore.Core.CloudServer.CloudRuntimeSetting.Source.set -> void
 FabrCore.Core.CloudServer.CloudRuntimeSetting.SourceId.get -> string?
 FabrCore.Core.CloudServer.CloudRuntimeSetting.SourceId.set -> void
+FabrCore.Core.ModelConfiguration.ChatApi.get -> string?
+FabrCore.Core.ModelConfiguration.ChatApi.set -> void

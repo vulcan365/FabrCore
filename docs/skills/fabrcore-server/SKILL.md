@@ -466,6 +466,7 @@ below.
       "TimeoutSeconds": 120,         // Optional: HTTP timeout (default 120)
       "MaxOutputTokens": 16384,      // Optional: max tokens in response
       "ReasoningEffort": "none",    // Optional: none | low | medium | high | xhigh
+      "ChatApi": "Responses",       // Optional: ChatCompletions (default) | Responses
       "ContextWindowTokens": 128000, // Optional: total context window — the compaction ladder anchor
       "ContextWorkingSetTokens": 64000, // Optional: smaller input budget, capped by window minus output
       "ContextCompactionEnabled": true,   // Optional: layer 1, in-run context compaction (default true)
@@ -502,6 +503,8 @@ below.
 Any OpenAI-compatible endpoint can be used by setting `Provider: "OpenAI"` and a custom `Uri`.
 
 `MaxOutputTokens` and `ReasoningEffort` are model-level defaults for every chat client resolved by configuration name, including direct tool-free `IChatClient.GetResponseAsync` calls. Explicit per-call `ChatOptions` values take precedence.
+
+`ChatApi` selects the provider API that chat clients for the model call. The default, `ChatCompletions`, calls `/chat/completions`. `Responses` calls `/responses` and sends `ReasoningEffort` as `reasoning.effort`; use it for models that accept function tools together with reasoning only on the Responses API. Responses calls are stateless: FabrCore sends `store: false`, keeps the conversation in its own history, and passes encrypted reasoning items back to the provider between tool-call turns, so a proxy in front of the provider needs no response state. The endpoint in `Uri` must serve `/responses`. Embeddings and audio clients are unaffected.
 
 ### OpenAI Configuration
 

@@ -4,6 +4,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using OpenAI;
+using OpenAI.Responses;
 using OpenTelemetry.Trace;
 using System.ClientModel;
 using System.Diagnostics;
@@ -148,11 +149,9 @@ namespace FabrCore.Sdk
 #pragma warning restore OPENAI001
                         ApplyAttributionPolicy(openAiClientOptions);
 
-                        chatClient = new OpenAIClient(
-                                new ApiKeyCredential(apiKey),
-                                openAiClientOptions)
-                            .GetChatClient(modelConfig.Model)
-                            .AsIChatClient();
+                        chatClient = CreateChatClient(
+                            new OpenAIClient(new ApiKeyCredential(apiKey), openAiClientOptions),
+                            modelConfig);
                         break;
 
                     case "azure":
@@ -177,15 +176,15 @@ namespace FabrCore.Sdk
                             azureClientOptions
                         );
 
-                        chatClient = azureClient.GetChatClient(modelConfig.Model).AsIChatClient();
+                        chatClient = CreateChatClient(azureClient, modelConfig);
                         break;
 
                     case "openrouter":
                     case "grok":
                     case "gemini":
-                        chatClient = CreateOpenAICompatibleClient(apiKey, modelConfig.Uri, timeoutSeconds)
-                            .GetChatClient(modelConfig.Model)
-                            .AsIChatClient();
+                        chatClient = CreateChatClient(
+                            CreateOpenAICompatibleClient(apiKey, modelConfig.Uri, timeoutSeconds),
+                            modelConfig);
                         break;
 
                     default:
@@ -450,6 +449,18 @@ namespace FabrCore.Sdk
                 options.AddPolicy(new AgentAttributionPipelinePolicy(), System.ClientModel.Primitives.PipelinePosition.PerCall);
             }
         }
+
+        /// <summary>
+        /// Creates the chat client on the API the model configuration selects. Responses calls are
+        /// stateless: nothing is stored at the provider and encrypted reasoning items travel in the
+        /// conversation, so FabrCore keeps owning the history and no response state is needed upstream.
+        /// </summary>
+#pragma warning disable OPENAI001, MAAI001 // The Responses client and its stateless adapter are experimental
+        internal static IChatClient CreateChatClient(OpenAIClient client, ModelConfiguration modelConfig) =>
+            ModelDefaultsChatClient.UsesResponsesApi(modelConfig)
+                ? client.GetResponsesClient().AsIChatClientWithStoredOutputDisabled(modelConfig.Model)
+                : client.GetChatClient(modelConfig.Model).AsIChatClient();
+#pragma warning restore OPENAI001, MAAI001
 
 #pragma warning disable OPENAI001 // OpenAIClientOptions.Endpoint is experimental
         private OpenAIClient CreateOpenAICompatibleClient(string apiKey, string endpointUri, int timeoutSeconds)

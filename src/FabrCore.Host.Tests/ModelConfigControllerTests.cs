@@ -31,7 +31,8 @@ public sealed class ModelConfigControllerTests
                       "Model": "gpt-test",
                       "ApiKeyAlias": "test-key",
                       "MaxOutputTokens": 1000,
-                      "ReasoningEffort": "none"
+                      "ReasoningEffort": "none",
+                      "ChatApi": "Responses"
                     }
                   ]
                 }
@@ -51,6 +52,7 @@ public sealed class ModelConfigControllerTests
             Assert.IsNotNull(ok);
             using var document = JsonDocument.Parse(JsonSerializer.Serialize(ok.Value));
             Assert.AreEqual("none", document.RootElement.GetProperty("ReasoningEffort").GetString());
+            Assert.AreEqual("Responses", document.RootElement.GetProperty("ChatApi").GetString());
             Assert.AreEqual(1000, document.RootElement.GetProperty("MaxOutputTokens").GetInt32());
         }
         finally

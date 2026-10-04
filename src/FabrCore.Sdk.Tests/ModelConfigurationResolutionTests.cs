@@ -48,7 +48,7 @@ public sealed class ModelConfigurationResolutionTests
             {
               "name":"default","provider":"OpenAI","uri":"https://openai.test/v1",
               "model":"gpt-test","apiKeyAlias":"provider","timeoutSeconds":90,
-              "maxOutputTokens":1000,"reasoningEffort":"high","contextWindowTokens":128000,
+              "maxOutputTokens":1000,"reasoningEffort":"high","chatApi":"Responses","contextWindowTokens":128000,
               "contextCompactionEnabled":true,"contextEvictThreshold":0.5,
               "contextTruncateThreshold":0.8,"compactionEnabled":true,
               "compactionKeepLastN":12,"compactionThreshold":0.87,
@@ -63,6 +63,7 @@ public sealed class ModelConfigurationResolutionTests
         Assert.AreEqual(90, result.TimeoutSeconds);
         Assert.AreEqual(1000, result.MaxOutputTokens);
         Assert.AreEqual("high", result.ReasoningEffort);
+        Assert.AreEqual("Responses", result.ChatApi);
         Assert.AreEqual(128000, result.ContextWindowTokens);
         Assert.AreEqual(true, result.ContextCompactionEnabled);
         Assert.AreEqual(0.5, result.ContextEvictThreshold);

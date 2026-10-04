@@ -22,6 +22,7 @@ namespace FabrCore.Sdk
         public int TimeoutSeconds { get; set; }
         public int? MaxOutputTokens { get; set; }
         public string? ReasoningEffort { get; set; }
+        public string? ChatApi { get; set; }
         public int? ContextWindowTokens { get; set; }
         public bool? ContextCompactionEnabled { get; set; }
         public double? ContextEvictThreshold { get; set; }
@@ -843,6 +844,7 @@ namespace FabrCore.Sdk
                 TimeoutSeconds = result.TimeoutSeconds,
                 MaxOutputTokens = result.MaxOutputTokens,
                 ReasoningEffort = result.ReasoningEffort,
+                ChatApi = result.ChatApi,
                 ContextWindowTokens = result.ContextWindowTokens,
                 ContextCompactionEnabled = result.ContextCompactionEnabled,
                 ContextEvictThreshold = result.ContextEvictThreshold,
