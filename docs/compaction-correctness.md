@@ -59,6 +59,32 @@ changes during generation; it is not a distributed compare-and-swap guarantee fo
 external writers. Cancellation is checked immediately before commit. Once the host write starts,
 its own completion/atomicity contract applies; cancellation cannot roll back an accepted write.
 
+## Output reserve and provider-stated limits
+
+In-run compaction needs the context window and an output reserve. `MaxOutputTokens` supplies the
+reserve when it is set, and is also sent to the provider as a cap on every request. When it is
+unset, no cap is sent and the reserve is derived from the window: one eighth of the window, at least 4096 tokens (or a quarter of a small window) and at most 32768.
+A derived reserve sizes the excerpt and history thresholds only. The projection fuse, the
+run-safety stop and the physical request guard use the operator-stated output limit, so for a
+model with no stated limit they stay at the window.
+
+When a provider rejects a request as larger than the model context, FabrCore excerpts tool
+output in that one request, the newest included, and retries once. A second rejection, or a
+request with no tool output left to trim, ends the run with `PromptTooLarge` rather than the
+provider error. User text, instructions and assistant prose are never trimmed, and persisted
+history is unchanged.
+
+A limit the provider states in the rejection then caps the configured window for that model
+configuration, for every agent on the host, until the model configuration changes or six hours
+pass. The ladder reports it as `(window N stated by provider)`. A stated limit never raises a
+window and never substitutes for a missing one: correct `ContextWindowTokens` to make it
+permanent, and when a provider publishes separate input and total limits, configure the input
+limit. A rejection that states no usable limit only tightens tool excerpting for the agent that
+received it. Recognition is conservative. OpenAI and Azure report a structured
+`context_length_exceeded` code; other OpenAI-compatible providers are matched on known message
+wording, so an unrecognized rejection still surfaces as the provider error. The history
+summarizer does not use this path.
+
 ## Summarizer limits and configuration
 
 The summarizer must have `ContextWindowTokens` configured. It reserves output and 1024 tokens

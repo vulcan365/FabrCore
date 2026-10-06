@@ -37,3 +37,7 @@ FabrCore.Sdk.FabrCoreAdministrationException.StatusCode.get -> System.Net.HttpSt
 virtual FabrCore.Sdk.FabrCoreAgentProxy.GetAdminDiagnosticSnapshotAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.JsonElement>!>!
 FabrCore.Sdk.ModelConfigResponse.ChatApi.get -> string?
 FabrCore.Sdk.ModelConfigResponse.ChatApi.set -> void
+FabrCore.Sdk.ContextCompactionConfig.OutputReserveIsDerived.get -> bool
+FabrCore.Sdk.ContextCompactionConfig.OutputReserveIsDerived.init -> void
+FabrCore.Sdk.ContextCompactionConfig.WindowIsLearned.get -> bool
+FabrCore.Sdk.ContextCompactionConfig.WindowIsLearned.init -> void

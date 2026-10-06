@@ -32,6 +32,9 @@ namespace FabrCore.Sdk
         /// <summary>Output reserve when a call does not specify its own limit.</summary>
         public int ReservedOutputTokens { get; init; }
 
+        /// <summary>Limits learned from provider rejections; a stated limit caps <see cref="ContextWindowTokens"/>.</summary>
+        internal ModelContextLimits? Limits { get; init; }
+
         /// <summary>Back-compat constructor used by tests and code paths that don't have monitor wiring.</summary>
         public TokenTrackingChatClient(IChatClient innerClient) : base(innerClient) { }
 
@@ -113,10 +116,30 @@ namespace FabrCore.Sdk
 
             // Accumulate updates only when the monitor is interested in the full response.
             List<ChatResponseUpdate>? collectedUpdates = (_capture?.Enabled == true) ? new List<ChatResponseUpdate>() : null;
+            Exception? error = null;
+            var receivedUpdate = false;
+            var rejectedInBand = false;
+            var enumerator = base.GetStreamingResponseAsync(materialized, options, cancellationToken)
+                .GetAsyncEnumerator(cancellationToken);
             try
             {
-                await foreach (var update in base.GetStreamingResponseAsync(materialized, options, cancellationToken))
+                while (true)
                 {
+                    ChatResponseUpdate update;
+                    // A yield cannot sit inside a try with a catch, so only the advance is guarded.
+                    try
+                    {
+                        if (!await enumerator.MoveNextAsync())
+                            break;
+                        update = enumerator.Current;
+                    }
+                    catch (Exception ex)
+                    {
+                        error = ex;
+                        throw;
+                    }
+
+                    receivedUpdate = true;
                     collectedUpdates?.Add(update);
 
                     foreach (var content in update.Contents)
@@ -130,6 +153,7 @@ namespace FabrCore.Sdk
                         }
                     }
 
+                    rejectedInBand |= ContextOverflow.TryClassify(update, out _);
                     if (update.ModelId is not null) modelId = update.ModelId;
                     if (update.FinishReason is { } fr) finishReason = fr.Value;
 
@@ -138,6 +162,7 @@ namespace FabrCore.Sdk
             }
             finally
             {
+                await enumerator.DisposeAsync();
                 sw.Stop();
 
                 ChatResponse? aggregated = null;
@@ -154,11 +179,18 @@ namespace FabrCore.Sdk
                     CachedInputTokenCount = cachedInputTokens
                 };
 
-                LlmUsageScope.Current?.Record(aggregated, sw.ElapsedMilliseconds);
-                if (!ShouldBypassRunSafety())
-                    ChatRunSafetyScope.Current?.RecordCompletedCall(inputTokens, callInfo.ActualPromptInputTokens);
+                // A call the provider refused before producing anything consumed nothing: like the
+                // non-streaming path, it is not counted as usage or charged to the turn budget, so a
+                // recovery retry is not billed twice. A stream that fails part-way is still charged.
+                var refused = (error is not null && !receivedUpdate) || (rejectedInBand && inputTokens == 0);
+                if (!refused)
+                {
+                    LlmUsageScope.Current?.Record(aggregated, sw.ElapsedMilliseconds);
+                    if (!ShouldBypassRunSafety())
+                        ChatRunSafetyScope.Current?.RecordCompletedCall(inputTokens, callInfo.ActualPromptInputTokens);
+                }
 
-                await TryRecordLlmCallAsync(materialized, aggregated, sw.ElapsedMilliseconds, streaming: true, error: null, callInfo);
+                await TryRecordLlmCallAsync(materialized, aggregated, sw.ElapsedMilliseconds, streaming: true, error, callInfo);
             }
         }
 
@@ -174,7 +206,11 @@ namespace FabrCore.Sdk
         {
             var promptEstimate = ChatRunSafetyScope.EstimateTokens(materialized, options);
             var outputReserve = Math.Max(ReservedOutputTokens, options?.MaxOutputTokens ?? 0);
-            if (ContextWindowTokens > 0 && promptEstimate > (long)ContextWindowTokens - outputReserve)
+            // A limit the provider has stated since this client was built caps the configured window.
+            var window = ContextWindowTokens > 0 && Limits?.StatedLimit is { } stated
+                ? Math.Min(ContextWindowTokens, stated)
+                : ContextWindowTokens;
+            if (window > 0 && promptEstimate > (long)window - outputReserve)
                 throw new FabrCoreRunStoppedException(RunStopReason.PromptTooLarge,
                     "The complete request exceeds the model input capacity after reserving output. Protected context was retained.",
                     promptEstimate, 0, 0);

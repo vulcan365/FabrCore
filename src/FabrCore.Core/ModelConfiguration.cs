@@ -18,9 +18,9 @@ namespace FabrCore.Core
         /// Setting this can improve response time by limiting output length.
         /// </summary>
         /// <remarks>
-        /// Also the output reserve for context compaction (layer 1). Together with
-        /// <see cref="ContextWindowTokens"/> it defines the input budget; if either is null, context
-        /// compaction cannot be composed and agents run with no in-run context bound.
+        /// When set, this is sent to the provider as a cap on every request and is also the output
+        /// reserve for context compaction (layer 1). When null, no cap is sent and the reserve is
+        /// derived from <see cref="ContextWindowTokens"/>, so context compaction still runs.
         /// </remarks>
         public int? MaxOutputTokens { get; set; }
 
@@ -45,8 +45,9 @@ namespace FabrCore.Core
         /// Total context window size in tokens for this model. Default is null (unknown).
         /// </summary>
         /// <remarks>
-        /// This is the anchor for the whole compaction ladder — every other threshold is a fraction of it.
-        /// Setting this and <see cref="MaxOutputTokens"/> is all most deployments ever need to configure.
+        /// This is the anchor for the whole compaction ladder — every other threshold is a fraction of it,
+        /// and it is the one value context compaction requires. When the provider publishes separate
+        /// input and total limits, use the input limit.
         /// </remarks>
         public int? ContextWindowTokens { get; set; }
 
@@ -58,7 +59,8 @@ namespace FabrCore.Core
         /// </summary>
         /// <remarks>
         /// Context compaction bounds what a single LLM call sees. It never touches persisted history.
-        /// Requires both <see cref="ContextWindowTokens"/> and <see cref="MaxOutputTokens"/>.
+        /// Requires <see cref="ContextWindowTokens"/>. <see cref="MaxOutputTokens"/> is optional: when
+        /// it is null the output reserve is derived from the window.
         /// </remarks>
         public bool? ContextCompactionEnabled { get; set; }
 

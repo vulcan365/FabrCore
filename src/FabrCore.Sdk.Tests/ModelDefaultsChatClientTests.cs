@@ -148,6 +148,23 @@ public sealed class ModelDefaultsChatClientTests
     }
 
     [TestMethod]
+    [DataRow("OpenAI")]
+    [DataRow("Azure")]
+    public async Task ProviderRequest_OmitsOutputCapWhenNoneIsConfigured(string provider)
+    {
+        var handler = new RecordingProviderHandler();
+        var providerClient = CreateProviderClient(provider, handler);
+        var client = ModelDefaultsChatClient.Apply(providerClient, CreateConfiguration(maxOutputTokens: null));
+
+        await client.GetResponseAsync("classify this");
+
+        using var document = JsonDocument.Parse(handler.RequestBody!);
+        var root = document.RootElement;
+        Assert.IsFalse(root.TryGetProperty("max_completion_tokens", out _));
+        Assert.IsFalse(root.TryGetProperty("max_tokens", out _));
+    }
+
+    [TestMethod]
     public async Task SdkModelConfigResponse_DeserializesReasoningEffort()
     {
         var handler = new ModelConfigHandler();

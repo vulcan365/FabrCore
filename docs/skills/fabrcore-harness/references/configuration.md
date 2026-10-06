@@ -172,13 +172,15 @@ The harness needs no harness-specific `fabrcore.json` keys. The compaction ladde
 `PerTurnMaxInputTokens`, `MaxPromptInputTokens`, and the `_Context*` / `_Compaction*` /
 `_Projection*` args — see **fabrcore-agent → Context management in 2.0**.
 
-Set both `ContextWindowTokens` and `MaxOutputTokens`. Without them layer 1 cannot be composed and a
+Set `ContextWindowTokens`. Without it layer 1 cannot be composed and a
 harness agent runs its whole tool loop with no in-run context bound; the startup log says
-`context:unconfigured` when this happens.
+`context:unconfigured` when this happens. `MaxOutputTokens` is optional: when it is unset no
+output cap is sent to the provider and the output reserve is derived from the window (one eighth,
+4096 to 32768 tokens), which the startup log reports as `(output reserve N derived)`.
 
 `ContextWorkingSetTokens` optionally sets a smaller conversation-input budget without changing the
 model window or output allowance. `_ContextWorkingSetTokens` overrides it for an agent. It must be
-positive and is capped at `ContextWindowTokens - MaxOutputTokens`. Existing eviction/truncation
+positive and is capped at `ContextWindowTokens` minus the output reserve. Existing eviction/truncation
 fractions apply to that budget; null preserves the previous thresholds. For example, a 32000-token
 working set excerpts old tool output at 16000 and tightens excerpts at 25600 with the default fractions. It is a compaction
 target, not a guarantee that every request fits: protected messages, instructions and tool schemas

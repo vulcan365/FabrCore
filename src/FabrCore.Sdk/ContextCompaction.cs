@@ -21,10 +21,28 @@ public record ContextCompactionConfig
     public int MaxContextWindowTokens { get; init; }
 
     /// <summary>
-    /// The model's maximum output tokens. Sourced from <c>ModelConfiguration.MaxOutputTokens</c>.
-    /// Zero means unknown, which disables context compaction entirely.
+    /// Output space reserved out of the window. Sourced from <c>ModelConfiguration.MaxOutputTokens</c>,
+    /// or derived from the window when no output limit is configured
+    /// (see <see cref="OutputReserveIsDerived"/>). Zero disables context compaction entirely.
     /// </summary>
     public int MaxOutputTokens { get; init; }
+
+    /// <summary>
+    /// True when <see cref="MaxOutputTokens"/> was derived from the window because no output limit was
+    /// configured. A derived reserve only sizes the trim thresholds: it is never sent to the provider
+    /// as a cap and never used as a hard stop.
+    /// </summary>
+    public bool OutputReserveIsDerived { get; init; }
+
+    /// <summary>The operator-stated output limit, or zero when the reserve was derived.</summary>
+    internal int StatedOutputTokens => OutputReserveIsDerived ? 0 : MaxOutputTokens;
+
+    /// <summary>
+    /// True when <see cref="MaxContextWindowTokens"/> is lower than the configured window because the
+    /// provider rejected a prompt and stated a smaller limit. Correct <c>ContextWindowTokens</c> on the
+    /// model configuration to clear it.
+    /// </summary>
+    public bool WindowIsLearned { get; init; }
 
     /// <summary>Optional conversation-input working set, independent of the physical model window.</summary>
     public int? WorkingSetTokens { get; init; }
@@ -53,9 +71,10 @@ public record ContextCompactionConfig
     public int TruncateAtTokens => (int)(InputBudgetTokens * TruncateThreshold);
 
     /// <summary>
-    /// True when this config can actually produce a strategy. False when the model configuration is
-    /// missing the window or output-token values, or the thresholds are out of order — in which case the
-    /// agent runs with no in-run context bound and only layers 2–4 protect it.
+    /// True when this config can actually produce a strategy. False when the window or the output
+    /// reserve is missing, or the thresholds are out of order — in which case the agent runs with no
+    /// in-run context bound and only layers 2–4 protect it. The agent proxy derives the reserve when
+    /// the model configuration sets a window but no output limit, so only the window is required there.
     /// </summary>
     public bool IsUsable =>
         Enabled
@@ -78,6 +97,19 @@ public static class ContextCompaction
 
     /// <summary>Default fraction of the input budget at which truncation fires.</summary>
     public const double DefaultTruncateThreshold = 0.8;
+
+    /// <summary>Largest output reserve derived for a model with no configured output limit.</summary>
+    internal const int MaxDerivedOutputReserve = 32_768;
+
+    /// <summary>
+    /// Output reserve for a model that sets a context window but no output limit: an eighth of the
+    /// window, at most <see cref="MaxDerivedOutputReserve"/>, and at least 4,096 unless that would
+    /// take more than a quarter of a small window.
+    /// </summary>
+    internal static int DeriveOutputReserve(int windowTokens) =>
+        windowTokens <= 0
+            ? 0
+            : Math.Clamp(windowTokens / 8, Math.Min(4096, windowTokens / 4), MaxDerivedOutputReserve);
 
     /// <summary>
     /// The <c>AgentSession.StateBag</c> key the context-compaction group index is stored under.
@@ -118,23 +150,81 @@ public static class ContextCompaction
         return new CompactionProvider(strategy, StateKey, loggerFactory);
     }
 
+    /// <summary>
+    /// Creates the context-compaction provider over settings that are re-read before every model
+    /// call, so a limit learned from a provider rejection tightens the thresholds mid-run.
+    /// Returns <see langword="null"/> when <paramref name="config"/> is not usable.
+    /// </summary>
+    internal static Microsoft.Agents.AI.AIContextProvider? TryCreateProvider(
+        ContextCompactionConfig config,
+        Func<ContextCompactionConfig> liveConfig,
+        ILoggerFactory? loggerFactory = null)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+        ArgumentNullException.ThrowIfNull(liveConfig);
+
+        return config.IsUsable
+            ? new CompactionProvider(ProtectedToolCompactionStrategy.Live(liveConfig), StateKey, loggerFactory)
+            : null;
+    }
+
+    /// <summary>
+    /// Last-resort trim of a single request the provider rejected as too large: excerpts tool results
+    /// in every complete tool-call group, the newest included, until the estimate reaches
+    /// <paramref name="targetTokens"/>. The input list is not modified.
+    /// </summary>
+    internal static async Task<IReadOnlyList<ChatMessage>> TrimToTargetAsync(
+        IReadOnlyList<ChatMessage> messages,
+        long targetTokens,
+        CancellationToken cancellationToken = default)
+    {
+        var strategy = ProtectedToolCompactionStrategy.Emergency((int)Math.Clamp(targetTokens, 0, int.MaxValue));
+        return [.. await CompactionProvider.CompactAsync(strategy, messages, null, cancellationToken)];
+    }
+
     // Working-set targets are soft. Dropping user requests, constraints, summaries or
     // assistant decisions to meet them is unsafe. The final request guard enforces capacity.
-    internal sealed class ProtectedToolCompactionStrategy(ContextCompactionConfig config)
-        : CompactionStrategy(_ => true)
+    internal sealed class ProtectedToolCompactionStrategy : CompactionStrategy
     {
+        private readonly Func<(int Excerpt, int Tight)?> targets;
+        private readonly int protectRecentGroups;
+
+        public ProtectedToolCompactionStrategy(ContextCompactionConfig config)
+            : this(() => (config.EvictAtTokens, config.TruncateAtTokens), protectRecentGroups: 2)
+        {
+        }
+
+        private ProtectedToolCompactionStrategy(Func<(int Excerpt, int Tight)?> targets, int protectRecentGroups)
+            : base(_ => true)
+        {
+            this.targets = targets;
+            this.protectRecentGroups = protectRecentGroups;
+        }
+
+        /// <summary>Layer 1 over settings read before every call; does nothing while they are unusable.</summary>
+        public static ProtectedToolCompactionStrategy Live(Func<ContextCompactionConfig> config) =>
+            new(() => config() is { IsUsable: true } current ? (current.EvictAtTokens, current.TruncateAtTokens) : null,
+                protectRecentGroups: 2);
+
+        /// <summary>Both excerpt sizes against one fixed target, with no recent groups spared.</summary>
+        public static ProtectedToolCompactionStrategy Emergency(int targetTokens) =>
+            new(() => (targetTokens, targetTokens), protectRecentGroups: 0);
+
         protected override ValueTask<bool> CompactCoreAsync(CompactionMessageIndex index,
             ILogger logger, CancellationToken cancellationToken)
         {
-            var changed = CompactTools(2048, config.EvictAtTokens);
-            changed |= CompactTools(512, config.TruncateAtTokens);
+            if (targets() is not { } current)
+                return ValueTask.FromResult(false);
+
+            var changed = CompactTools(2048, current.Excerpt);
+            changed |= CompactTools(512, current.Tight);
             return ValueTask.FromResult(changed);
 
             bool CompactTools(int maxChars, int target)
             {
                 var changedHere = false;
                 var included = index.Groups.Where(g => !g.IsExcluded).ToList();
-                var recent = included.Where(g => g.Kind != CompactionGroupKind.System).TakeLast(2).ToHashSet();
+                var recent = included.Where(g => g.Kind != CompactionGroupKind.System).TakeLast(protectRecentGroups).ToHashSet();
                 foreach (var group in included)
                 {
                     cancellationToken.ThrowIfCancellationRequested();

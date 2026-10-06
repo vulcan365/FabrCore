@@ -12,6 +12,7 @@ internal sealed class FakeChatClient : IChatClient
 {
     private readonly string responseText;
     private readonly Queue<ChatResponse> scripted = new();
+    private readonly Dictionary<int, Exception> failures = [];
     private Exception? responseException;
     private bool cancelResponses;
 
@@ -53,6 +54,13 @@ internal sealed class FakeChatClient : IChatClient
         return client;
     }
 
+    /// <summary>Makes the call at <paramref name="callIndex"/> (zero-based) fail without consuming a scripted response.</summary>
+    public FakeChatClient FailAt(int callIndex, Exception exception)
+    {
+        failures[callIndex] = exception;
+        return this;
+    }
+
     public static ChatResponse Text(string text)
         => new(new ChatMessage(ChatRole.Assistant, text));
 
@@ -81,6 +89,11 @@ internal sealed class FakeChatClient : IChatClient
         if (responseException is not null)
         {
             return Task.FromException<ChatResponse>(responseException);
+        }
+
+        if (failures.TryGetValue(Requests.Count - 1, out var failure))
+        {
+            return Task.FromException<ChatResponse>(failure);
         }
 
         if (cancelResponses)
