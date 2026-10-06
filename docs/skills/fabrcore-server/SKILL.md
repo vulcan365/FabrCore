@@ -464,10 +464,10 @@ below.
       "Model": "string",             // Required: model identifier
       "ApiKeyAlias": "string",       // Required: references an entry in ApiKeys
       "TimeoutSeconds": 120,         // Optional: HTTP timeout (default 120)
-      "MaxOutputTokens": 16384,      // Optional: max tokens in response
+      "MaxOutputTokens": 16384,      // Optional: cap sent on every request; unset sends no cap
       "ReasoningEffort": "none",    // Optional: none | low | medium | high | xhigh
       "ChatApi": "Responses",       // Optional: ChatCompletions (default) | Responses
-      "ContextWindowTokens": 128000, // Optional: total context window — the compaction ladder anchor
+      "ContextWindowTokens": 128000, // Optional: total context window — the compaction ladder anchor, required for context compaction
       "ContextWorkingSetTokens": 64000, // Optional: smaller input budget, capped by window minus output
       "ContextCompactionEnabled": true,   // Optional: layer 1, in-run context compaction (default true)
       "ContextEvictThreshold": 0.5,       // Optional: bound older tool results at this fraction of input budget
@@ -502,7 +502,7 @@ below.
 
 Any OpenAI-compatible endpoint can be used by setting `Provider: "OpenAI"` and a custom `Uri`.
 
-`MaxOutputTokens` and `ReasoningEffort` are model-level defaults for every chat client resolved by configuration name, including direct tool-free `IChatClient.GetResponseAsync` calls. Explicit per-call `ChatOptions` values take precedence.
+`MaxOutputTokens` and `ReasoningEffort` are model-level defaults for every chat client resolved by configuration name, including direct tool-free `IChatClient.GetResponseAsync` calls. Explicit per-call `ChatOptions` values take precedence. Leave `MaxOutputTokens` unset to send no output cap; context compaction then derives its output reserve from `ContextWindowTokens`, which is the only value it requires.
 
 `ChatApi` selects the provider API that chat clients for the model call. The default, `ChatCompletions`, calls `/chat/completions`. `Responses` calls `/responses` and sends `ReasoningEffort` as `reasoning.effort`; use it for models that accept function tools together with reasoning only on the Responses API. Responses calls are stateless: FabrCore sends `store: false`, keeps the conversation in its own history, and passes encrypted reasoning items back to the provider between tool-call turns, so a proxy in front of the provider needs no response state. The endpoint in `Uri` must serve `/responses`. Embeddings and audio clients are unaffected.
 

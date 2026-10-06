@@ -625,6 +625,8 @@ namespace FabrCore.Host
 
                 // Configure Compaction
                 builder.Services.AddSingleton<FabrCore.Sdk.CompactionService>();
+                // Context limits providers state when rejecting an oversized prompt, shared by every agent on the silo.
+                builder.Services.AddSingleton<FabrCore.Sdk.ModelContextLimitRegistry>();
                 logger.LogDebug("CompactionService added");
 
                 // Configure Agent Management Provider (pluggable — default is Orleans grain-backed)

@@ -84,6 +84,16 @@ public sealed record CompactionLadder
             sb.Append($" (turn budget {RunSafety.PerTurnMaxInputTokens})");
         }
 
+        if (Context.IsUsable && Context.OutputReserveIsDerived)
+        {
+            sb.Append($" (output reserve {Context.MaxOutputTokens} derived)");
+        }
+
+        if (Context.WindowIsLearned)
+        {
+            sb.Append($" (window {Context.MaxContextWindowTokens} stated by provider)");
+        }
+
         if (IsOutOfOrder)
         {
             sb.Append(" [OUT OF ORDER]");

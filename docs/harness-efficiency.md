@@ -36,8 +36,11 @@ frequency, request guardrails, background cancellation, history replacement/sess
 loop usage aggregation and lower repeated input in a synthetic 12-tool-call workload. This is
 evidence that the pipeline reduces repeated payloads, not a prediction of production savings.
 
-Configure both `ContextWindowTokens` and `MaxOutputTokens`. Inspect the startup compaction ladder;
-`context:unconfigured` means the in-loop layer is disabled. The sample GraphRAG model now reserves
+Configure `ContextWindowTokens`; it is the one value the in-loop layer requires. `MaxOutputTokens`
+is optional: when it is unset no output cap is sent to the provider and the output reserve is
+derived from the window (one eighth of the window, at least 4096 tokens (or a quarter of a small window) and at most 32768).
+Inspect the startup compaction ladder; `context:unconfigured` means the in-loop layer is disabled,
+and `(output reserve N derived)` shows a derived reserve. The sample GraphRAG model now reserves
 8192 output tokens. The sample default GPT-4o model also reserves 8192 output tokens with its
 [documented 128000-token window](https://developers.openai.com/api/docs/models/gpt-4o).
 Models with unknown window sizes still require an explicit configuration.

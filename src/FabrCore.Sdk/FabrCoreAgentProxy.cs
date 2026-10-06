@@ -182,6 +182,7 @@ namespace FabrCore.Sdk
             public ChatRunSafetyConfig? RunSafetyConfig { get; set; }
             public CompactionLadder? Ladder { get; set; }
             public bool Initialized { get; set; }
+            public int AppliedStatedLimit { get; set; }
         }
 
         private readonly List<ChatHistoryCompactionRegistration> _chatHistoryCompactionRegistrations = new();
@@ -192,6 +193,11 @@ namespace FabrCore.Sdk
         private ProjectionConfig? _projectionConfig;
         private ContextCompactionConfig? _contextCompactionConfig;
         private CompactionLadder? _compactionLadder;
+
+        // What provider rejections have taught this activation, per model configuration.
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, ModelContextLimits> _contextLimits =
+            new(StringComparer.OrdinalIgnoreCase);
+        private ModelContextLimitRegistry? _contextLimitRegistry;
 
         /// <summary>The lazily-resolved history-compaction service, available after compaction has been initialized.</summary>
         protected CompactionService? CompactionServiceInstance => _compactionService;
@@ -303,12 +309,28 @@ namespace FabrCore.Sdk
             var client = await chatClientService.GetChatClient(name, networkTimeoutSeconds);
             var monitor = serviceProvider.GetService<FabrCore.Core.Monitoring.IAgentMessageMonitor>();
             var verifiableExecution = serviceProvider.GetService<FabrCore.Core.VerifiableExecution.IVerifiableExecutionContext>();
-            var context = await BuildContextCompactionConfigAsync(name);
-            return new TokenTrackingChatClient(client, fabrcoreAgentHost.GetHandle(), monitor, verifiableExecution, logger)
+            await BuildContextCompactionConfigAsync(name);
+            var limits = GetContextLimits(name);
+            var tracked = new TokenTrackingChatClient(client, fabrcoreAgentHost.GetHandle(), monitor, verifiableExecution, logger)
             {
-                ContextWindowTokens = context.MaxContextWindowTokens,
-                ReservedOutputTokens = context.MaxOutputTokens
+                ContextWindowTokens = limits.Configured.MaxContextWindowTokens,
+                ReservedOutputTokens = limits.Configured.StatedOutputTokens,
+                Limits = limits
             };
+
+            // Outermost, so a rejected attempt and its retry are each a tracked, guarded call.
+            return new ContextOverflowRecoveryChatClient(tracked, limits, logger);
+        }
+
+        /// <summary>
+        /// The limits handle for a model configuration. The registry behind it is shared across the
+        /// host when registered; otherwise what is learned stays within this activation.
+        /// </summary>
+        private ModelContextLimits GetContextLimits(string chatClientConfigName)
+        {
+            var registry = _contextLimitRegistry ??=
+                serviceProvider.GetService<ModelContextLimitRegistry>() ?? new ModelContextLimitRegistry();
+            return _contextLimits.GetOrAdd(chatClientConfigName, name => new ModelContextLimits(name, registry));
         }
 
 #pragma warning disable MEAI001 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
@@ -600,8 +622,9 @@ namespace FabrCore.Sdk
 
         /// <summary>
         /// Builds the layer 1 context-compaction provider for a model configuration, or returns
-        /// <see langword="null"/> when the model configuration does not supply both a context window and
-        /// an output reserve. Callers add the result to their agent's context providers.
+        /// <see langword="null"/> when the model configuration does not supply a context window (the
+        /// output reserve is derived when no output limit is set). Callers add the result to their
+        /// agent's context providers.
         /// </summary>
         private async Task<AIContextProvider?> TryCreateContextCompactionProviderAsync(
             string chatClientConfigName)
@@ -609,14 +632,17 @@ namespace FabrCore.Sdk
             var contextConfig = await BuildContextCompactionConfigAsync(chatClientConfigName);
             _contextCompactionConfig = contextConfig;
 
-            var provider = ContextCompaction.TryCreateProvider(contextConfig, loggerFactory);
+            // Built over the live limits so a cap learned mid-run tightens the next call's thresholds.
+            var limits = GetContextLimits(chatClientConfigName);
+            var provider = ContextCompaction.TryCreateProvider(
+                limits.Configured, () => limits.Effective(forTrim: true), loggerFactory);
 
             if (provider is null && contextConfig.Enabled)
             {
                 logger.LogWarning(
                     "Context compaction is not configured for '{Handle}' (model config '{ModelConfig}'): ContextWindowTokens={Window}, MaxOutputTokens={Output}, WorkingSetTokens={WorkingSet}, EvictThreshold={Evict}, TruncateThreshold={Truncate}. " +
                     "The agent runs with no in-run context bound — only history compaction, the projection fuse, and the run-safety stop protect it. " +
-                    "Set a positive window and smaller positive output reserve; working sets must be positive and thresholds ordered in (0, 1].",
+                    "Set a positive ContextWindowTokens (MaxOutputTokens is optional but must be smaller than the window when set); working sets must be positive and thresholds ordered in (0, 1].",
                     config.Handle, chatClientConfigName,
                     contextConfig.MaxContextWindowTokens, contextConfig.MaxOutputTokens, contextConfig.WorkingSetTokens,
                     contextConfig.EvictThreshold, contextConfig.TruncateThreshold);
@@ -640,7 +666,10 @@ namespace FabrCore.Sdk
 
         private async Task EnsureCompactionInitializedAsync(ChatHistoryCompactionRegistration registration)
         {
-            if (registration.Initialized)
+            // Resolved once per activation, and again whenever a provider states a different limit
+            // for this model, so history, the fuse and the stop follow a learned cap on the next turn.
+            if (registration.Initialized
+                && registration.AppliedStatedLimit == (GetContextLimits(registration.ChatClientConfigName).StatedLimit ?? 0))
                 return;
 
             _compactionService ??= serviceProvider.GetService<CompactionService>();
@@ -668,6 +697,7 @@ namespace FabrCore.Sdk
             };
 
             registration.Initialized = true;
+            registration.AppliedStatedLimit = GetContextLimits(registration.ChatClientConfigName).StatedLimit ?? 0;
 
             // Keep the legacy fields pointed at the most recently initialized provider
             // for overrides that inspect CompactionChatClientConfigName.
@@ -982,9 +1012,10 @@ namespace FabrCore.Sdk
             var truncateThreshold = ContextCompaction.DefaultTruncateThreshold;
 
             // Model configuration overrides defaults
+            ModelConfiguration? resolvedModel = null;
             try
             {
-                var modelConfig = await chatClientService.GetModelConfigurationAsync(chatClientConfigName);
+                var modelConfig = resolvedModel = await chatClientService.GetModelConfigurationAsync(chatClientConfigName);
                 if (modelConfig.ContextWindowTokens is { } ctxTokens)
                     windowTokens = ctxTokens;
                 if (modelConfig.MaxOutputTokens is { } outTokens)
@@ -1018,15 +1049,31 @@ namespace FabrCore.Sdk
                 && double.TryParse(truncateStr, System.Globalization.CultureInfo.InvariantCulture, out var truncateVal))
                 truncateThreshold = truncateVal;
 
-            return new ContextCompactionConfig
+            // No output limit configured: reserve output space out of the window so layer 1 still
+            // runs. The derived reserve only sizes the trim thresholds — nothing is sent to the
+            // provider, and the hard stops keep using the operator-stated value.
+            var outputReserveIsDerived = false;
+            if (windowTokens > 0 && outputTokens <= 0)
+            {
+                outputTokens = ContextCompaction.DeriveOutputReserve(windowTokens);
+                outputReserveIsDerived = true;
+            }
+
+            var configured = new ContextCompactionConfig
             {
                 Enabled = enabled,
                 MaxContextWindowTokens = windowTokens,
                 MaxOutputTokens = outputTokens,
+                OutputReserveIsDerived = outputReserveIsDerived,
                 WorkingSetTokens = workingSetTokens,
                 EvictThreshold = evictThreshold,
                 TruncateThreshold = truncateThreshold
             };
+
+            // A limit the provider has stated for this model caps the configured window from here on.
+            var limits = GetContextLimits(chatClientConfigName);
+            limits.Configure(resolvedModel, configured);
+            return limits.Effective(forTrim: false);
         }
 
         /// <summary>
@@ -1111,9 +1158,10 @@ namespace FabrCore.Sdk
             var runawayBudgetBehavior = "StopWithDiagnostic";
 
             // The stop is the last rung: anchor it to the real window when we know it, so it sits above
-            // every compaction rung rather than cutting in underneath them.
+            // every compaction rung rather than cutting in underneath them. A derived output reserve
+            // is not subtracted — only an operator-stated limit may tighten a hard stop.
             var maxPromptInputTokens = contextCompaction.MaxContextWindowTokens > 0
-                ? Math.Max(0, contextCompaction.MaxContextWindowTokens - contextCompaction.MaxOutputTokens)
+                ? Math.Max(0, contextCompaction.MaxContextWindowTokens - contextCompaction.StatedOutputTokens)
                 : compactionConfig.Enabled ? compactionConfig.MaxContextTokens : 0;
 
             try
@@ -1166,7 +1214,7 @@ namespace FabrCore.Sdk
 
             // Fuse mode: insurance below the provider hard limit. Legacy mode: inherit from compaction.
             var enabled = fuseMode || compaction.Enabled;
-            var maxContextTokens = fuseMode ? contextCompaction.MaxContextWindowTokens - contextCompaction.MaxOutputTokens : compaction.MaxContextTokens;
+            var maxContextTokens = fuseMode ? contextCompaction.MaxContextWindowTokens - contextCompaction.StatedOutputTokens : compaction.MaxContextTokens;
             var threshold = fuseMode ? DefaultProjectionFuseThreshold : compaction.Threshold;
             var minKeepLastN = 2;
 

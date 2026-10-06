@@ -561,8 +561,11 @@ Transient compaction indices reset per history invocation and are excluded from 
 
 ### Configuration
 
-Set `ContextWindowTokens` and `MaxOutputTokens` on each model. Missing metadata produces
-`context:unconfigured`. `ContextWorkingSetTokens` optionally reduces input context; it is capped
+Set `ContextWindowTokens` on each model; a missing window produces `context:unconfigured`.
+`MaxOutputTokens` is optional. When set, it caps every request for the model and is the output
+reserve. When unset, no cap is sent and the reserve is derived from the window (one eighth,
+4096 to 32768 tokens); a derived reserve moves only the excerpt and history thresholds, never a
+hard stop. `ContextWorkingSetTokens` optionally reduces input context; it is capped
 by the physical window minus output reservation. Token estimates include UTF-8 content,
 instructions, tool definitions and framing.
 
@@ -572,13 +575,19 @@ instructions, tool definitions and framing.
 | `ContextWorkingSetTokens` / `_ContextWorkingSetTokens` | Smaller input working set |
 | `ContextEvictThreshold` / `_ContextEvictThreshold` | Initial tool excerpt threshold (0.5) |
 | `ContextTruncateThreshold` / `_ContextTruncateThreshold` | Tighter tool excerpt threshold (0.8) |
-| `_ContextWindowTokens`, `_ContextMaxOutputTokens` | Per-agent window/output overrides |
+| `_ContextWindowTokens`, `_ContextMaxOutputTokens` | Per-agent window and output-reserve overrides (the reserve is not sent to the provider) |
 | `CompactionEnabled` / `_CompactionEnabled` | Durable history compaction |
 | `CompactionThreshold` / `_CompactionThreshold` | Explicit durable threshold override |
 | `CompactionKeepLastN` / `_CompactionKeepLastN` | Recent-message retention target |
 | `_CompactionModelConfigName` | Separate summarization model alias |
 | `_PerTurnMaxInputTokens`, `_MaxPromptInputTokens` | Cumulative/per-call safety budgets |
 | `_RunawayBudgetBehavior` | Run-safety behavior |
+
+If a provider rejects a request as larger than the model context, tool output in that request
+is excerpted and the call is retried once; a second rejection stops the run with
+`PromptTooLarge`. A limit stated in the rejection caps the configured window for that model
+configuration (the ladder shows `(window N stated by provider)`) until the configuration changes
+or six hours pass. Correct `ContextWindowTokens` to make it permanent.
 
 With usable context configuration, automatic durable compaction uses 70% of the input working
 set; otherwise its fallback threshold is 75%. The old 87% default is retired. Explicit settings
