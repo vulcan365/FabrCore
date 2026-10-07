@@ -32,7 +32,7 @@ answers in Teams.
 | **Identity** | The agent has its own Entra identity. Every user is a verified Entra user mapped to one stable FabrCore principal on every channel. Nothing trusts an identity string a caller typed. | User identity is solid on the two channels (`CanonicalEntra`). The agent's own identity is an ordinary app registration; Entra Agent ID is implemented for outbound token exchange only. The general HTTP API still trusts `x-user-handle` (finding F-02). |
 | **Reach in** | Users and Microsoft orchestrators can call FabrCore agents from where they already work: Copilot, Teams 1:1 and group chats, Copilot Studio, Agent 365. | Copilot and Teams personal chat, and Copilot Studio over A2A, work. Group chats, Agent 365 notifications, MCP exposure, and file attachments do not. |
 | **Reach out** | FabrCore agents can call Microsoft's agents and data as the user: Work IQ, Copilot Studio agents, Microsoft Graph. | Work IQ and Copilot Studio work through `remote-agent`; Graph works through Connections. The user must grant consent in a separate client application, because the channel's sign-in is not connected to Connections (backlog B1). |
-| **Governance** | A tenant administrator can see, configure, enable, and disable the integration without redeploying, and can tell what is applied on each host. | Configuration is file-based and frozen at startup. A cloud server can publish the settings but cannot see whether the channel is on, healthy, or misconfigured. Addressed by the plan's Phase 1. |
+| **Governance** | A tenant administrator can see, configure, enable, and disable the integration without redeploying, and can tell what is applied on each host. | A cloud server can discover the features, enable them by publishing settings, see what each host has applied, and run diagnostics (plan Phase 1, on `develop`). Every setting still needs a restart to take effect, and no cloud server provisions the Microsoft side yet. |
 | **Compliance** | Every turn is attributable, auditable, and subject to the tenant's data policy (Purview), with no credential leaving its protected store. | Administrative changes are audited. Conversation turns are not. No Purview integration exists. One opt-in setting moves a user token into message telemetry. See the control matrix in section 9. |
 
 The single most important missing piece is **B1**: carrying the Teams single sign-on token into
@@ -493,9 +493,10 @@ through the administration API. For Work IQ, an `OnBehalfOf` or `AuthorizationCo
 resource scope from section 7. Deploy the remote agent with a `connectedAgents` blueprint.
 
 **7. Publish the app.** Download the generated package and upload it in the Teams admin center or
-the Microsoft 365 admin center. The package endpoints are served only in Development unless
-`Manifest:EnableAppPackageEndpoint` is set, and they are anonymous; in production fetch the package
-through the administration API once Phase 1 is in place.
+the Microsoft 365 admin center. The `/m365copilot` package endpoints are served only in Development
+unless `Manifest:EnableAppPackageEndpoint` is set, and they are anonymous. In production fetch the
+package with the administration credential from
+`GET /fabrcoreapi/admin/v1/integrations/microsoft365/app-package`.
 
 **8. Connect Copilot Studio.** Add the agent as an A2A agent with the endpoint
 `https://{public-host}/a2a/assistant/message:stream`, OAuth 2.0 authentication, and turn on
@@ -509,9 +510,13 @@ generative orchestration. See [a2a.md](a2a.md) for the full procedure.
 * Keep `TokenValidation:Enabled` true and never set `A2A:Authentication:Mode` to `None`.
 * Treat `fabrcore.cloud-cache.json` as a secret file if a cloud server delivers settings.
 
-**10. Verify.** Chat in Copilot; call the A2A card; confirm that both arrive at the same
-`entra-…:assistant` agent. Read `/fabrcoreapi/admin/v1/access/audit` and confirm administrative
-changes appear. Conversation turns will not appear until B2.
+**10. Verify.** Run `POST /fabrcoreapi/admin/v1/integrations/microsoft365/diagnostics` and read
+`GET …/integrations/microsoft365` and `GET …/integrations/a2a`. Resolve every `fail`, and every
+`warn` you have not chosen deliberately. Then chat in Copilot, call the A2A card, and confirm that
+both arrive at the same `entra-…:assistant` agent. Read `/fabrcoreapi/admin/v1/access/audit` and
+confirm administrative changes appear; conversation turns will not appear until B2. A passing
+diagnostic shows the host can authenticate to Azure Bot Service. Only a real message shows that
+Azure Bot Service can reach the host.
 
 ## 12. Backlog
 
@@ -525,7 +530,7 @@ Ordered by dependency, not by size. "Plan" names the matching item in the
 | B3 | Authenticated caller context for the HTTP APIs | Finding 2 (F-02). | — | F9 |
 | B4 | Remove credentials from messaging and redact credential-bearing args in the monitor | Finding 3. Deprecate `PassUserTokenToAgent` once B1 ships. | B1 | — |
 | B5 | Workload-identity credential provider for Connections | Removes the last reason to store a certificate or secret for outbound calls. | — | F5 |
-| B6 | Capability advertisement, configuration-bound enablement, applied-settings reporting, integrations admin API | Lets a cloud server see and manage the integration. | — | F1–F4 |
+| B6 | Capability advertisement, configuration-bound enablement, applied-settings reporting, integrations admin API. **Done on `develop`.** | Lets a cloud server see and manage the integration. | — | F1–F4 |
 | B7 | Agent 365 notifications to agent events | Reach in. | B2 | — |
 | B8 | MCP exposure of bindings and selected tools | Reach in for clients that do not speak A2A. | B3 | — |
 | B9 | Purview gate | Compliance. | B1, B2 | — |
@@ -578,22 +583,28 @@ silently.
 These do not change what is possible. They change how long it takes to find out why it is not
 working.
 
-* **Start without configuration.** Calling `AddMicrosoft365Copilot()` on a host with no
-  `Microsoft365Copilot` section throws at startup today. It should start with the channel off and
-  say why, so a single host image can be enabled later by configuration alone (plan F2).
-* **Configuration-bound enablement for Connections and remote agents.** Both require a code
-  delegate today, so they cannot be turned on by a cloud server or an environment variable
-  (plan F2).
-* **One diagnostic call.** `POST …/integrations/microsoft365/diagnostics` that checks the
+Done in plan Phase 1, on `develop`:
+
+* **Start without configuration.** `AddMicrosoft365Copilot()` on a host with no
+  `Microsoft365Copilot` section used to throw at startup. It now starts with the channel off and
+  says why, so a single host image can be enabled later by configuration alone (F2).
+* **Configuration-bound enablement for Connections and remote agents.** Both used to need a code
+  delegate. `AddFabrCoreConnections(services, configuration)` and
+  `AddFabrCoreRemoteAgents(services, configuration)` let a cloud server or an environment variable
+  turn them on (F2).
+* **One diagnostic call.** `POST …/integrations/microsoft365/diagnostics` checks the
   configuration, whether the agent type is registered, and whether the host can obtain a Bot
-  Service token, and reports each as a named pass or fail (plan F4). This replaces reading the
+  Service token, and reports each as a named pass or fail (F4). This replaces reading the
   troubleshooting list in the README.
-* **Say what is applied.** Report the channel's effective tenant, client id, auth type, endpoint,
-  and identity strategy through the configuration-state report, so "is it on, and as whom" has an
-  answer that does not involve a shell on the host (plan F3).
-* **Authenticated package download.** The package endpoints are anonymous and development-only. An
-  administration route makes the package available in production to the people who need it
-  (plan F4).
+* **Say what is applied.** The configuration-state report carries the channel's effective tenant,
+  client id, auth type, endpoint, and identity strategy, so "is it on, and as whom" has an answer
+  that does not involve a shell on the host (F3).
+* **Authenticated package download.** The developer package endpoints are anonymous and
+  development-only. `GET …/integrations/microsoft365/app-package` serves the package in production
+  to an authenticated administrator (F4).
+
+Still open:
+
 * **A test host for the channel.** `FabrCore.Host.Testing` stands up A2A without a silo. The
   Copilot channel has no equivalent; tests build the adapter by hand.
 * **One sample for both directions.** A sample that enables the channel, A2A, Connections, and a

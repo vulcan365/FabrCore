@@ -158,6 +158,51 @@ in order and check the manifest hash. DELETE the export afterward. Verification
 does not establish that all cluster records were available. Preserve original
 records/signatures/certificates/attestations; never rewrite them when aggregating.
 
+## Integrations
+
+`/integrations` reports how a host's external channels are configured and whether that
+configuration is safe. It is read-only apart from diagnostics, takes no principal, and never
+returns a credential. Requests carrying `X-FabrCore-Admin-Target`, `x-user`, or `x-user-handle`
+are rejected with 400.
+
+| Method and suffix | Purpose |
+| --- | --- |
+| GET `/integrations/a2a` | A2A configuration, published agents and findings. Served by the host. |
+| GET `/integrations/microsoft365` | Copilot/Teams channel identity, configuration and findings. Served by the add-on. |
+| GET `/integrations/microsoft365/manifest` | Generated Microsoft 365 app manifest |
+| GET `/integrations/microsoft365/app-package` | Uploadable app package (`application/zip`) |
+| POST `/integrations/microsoft365/diagnostics` | Findings plus live checks |
+
+Read `GET /capabilities` first. The `a2a` service is always listed; `microsoft365-copilot` is
+listed when its add-on is installed. Either can be listed with `available: false`, and the status
+route still answers 200 with `enabled: false` and the reason. A 404 on a `microsoft365` route
+means the add-on is not installed. `manifest` and `app-package` return 409 while the channel is
+off.
+
+Every finding is `{ id, status, message }` with status `pass`, `warn`, `fail` or `skipped`. Ids are
+stable; messages may be reworded.
+
+| Integration | Finding ids |
+| --- | --- |
+| A2A | `authentication`, `api-key-query`, `required-scopes`, `principal-strategy`, `publication`, `public-base-url`, `task-store` |
+| Microsoft 365 | `token-validation`, `principal-strategy`, `credential-type`, `turn-state-storage`, `user-credential-forwarding`, `public-host`, `proactive-scopes` |
+| Microsoft 365 diagnostics, in addition | `agent-type-registered`, `bot-service-credential` |
+
+A `fail` means the configuration is unsafe or cannot work: no A2A authentication, an anonymous
+messaging endpoint, a non-Entra principal strategy, or a user token being copied onto agent
+messages. A `warn` works but should be reviewed: a shared principal, a client secret, in-memory
+state, registry-wide publication.
+
+Diagnostics checks that the configured agent type is registered and that the host can obtain an
+Azure Bot Service token. The token request times out after 20 seconds; the token is discarded and
+only the outcome is reported. A failed request reports the exception type and the first line of
+its message. Each run writes a `RemoteAdministration` audit event with resource
+`integrations/microsoft365/diagnostics`. A passing run shows the host can authenticate outbound;
+it does not show that the messaging endpoint is reachable from Microsoft.
+
+A2A API keys are listed by name. A key configured without a name appears as `(unnamed)`, so the
+count is still correct.
+
 ## Release validation
 
 Run Host, SDK, client and Insights suites, then SQL integration against an

@@ -183,7 +183,7 @@ Design notes:
 ### Assumptions about Insights to confirm (Part C)
 
 The module design assumes the following about the existing Insights code. Each is checked against
-`C:\repos\FabrCore-V365` in section 14 and corrected there.
+`C:\repos\FabrCore-V365` in section 15 and corrected there.
 
 1. An Insights tenant is the unit of customer isolation, and it has no Entra tenant id today.
 2. Settings are published per cluster with a shared base and an environment overlay, and a feature
@@ -250,3 +250,46 @@ views that managed provisioning reuses unchanged.
 | Microsoft 365 Agents SDK changes | The addon's configuration bridge depends on the SDK's section names | Pin the version; the bridge already defers to natively configured sections |
 | Entra Agent ID surface changes before I9 | Rework | I9 is last; nothing earlier depends on it |
 | One cluster per tenant is costly for small customers | Pressure to share clusters | F8 addresses several bots per tenant, not several tenants; state the boundary |
+
+## 14. Phase 1 status
+
+Phase 1 is implemented on `develop` and is not yet in a published package. It was verified by the
+Host, Copilot add-on, and Connections test suites, including HTTP tests that run the administration
+routes against a real FabrCore server.
+
+| Item | Status | What shipped | Where |
+| --- | --- | --- | --- |
+| **F1** | Done | `IFabrCoreCapabilityContributor`; an `a2a` service that is always listed; contributed services and heartbeat flags from the Copilot add-on and remote agents, registered even when disabled | `FabrCore.Core/Services/Capabilities`, `FabrCore.Host/Services/ClusterCapabilityFactory.cs`, `CloudServerSyncService.BuildCapabilities` |
+| **F2** | Done | `AddFabrCoreConnections(services, configuration)` and `AddFabrCoreRemoteAgents(services, configuration)`; catalog descriptors for both sections; the Copilot add-on starts off and records why when unconfigured | `ConnectionsExtensions.cs`, `RemoteAgent.cs`, `FabrCoreSettingsCatalog.cs`, `Microsoft365CopilotExtensions.cs` |
+| **F3** | Done | `RuntimeSettingObservation.DefaultValue` and `code-default` resolution; channel and A2A settings in the configuration-state report | `RuntimeConfigurationState.cs`, `BuiltInRuntimeObservations.cs`, `Administration/CopilotHostContributors.cs` |
+| **F4** | Done | `GET integrations/a2a`; `GET integrations/microsoft365`, `/manifest`, `/app-package`; `POST …/diagnostics` | `IntegrationsAdminController.cs`, `A2AIntegrationStatusBuilder.cs`, `Administration/CopilotIntegrationEndpoints.cs` |
+| **F10** | Documentation done | The protocol section, the administration section, the add-on README, the connections guide, and release notes. Reference cloud server support and conformance tests are not started. | `docs/`, `RELEASE_NOTES.md` |
+
+Things a cloud-server implementer should know that were not obvious before the work was done:
+
+* **`Microsoft365Copilot:TokenValidation:Enabled` is reported redacted.** The settings catalog
+  treats any key containing `token` as a secret, so this row has `secret: true` and no values. Its
+  `pendingRestart` flag is still correct. Read the value from `tokenValidationEnabled` on the
+  status route, or from the `token-validation-off` capability feature. A dedicated `Runtime:` fact
+  with a name the catalog does not redact would close the gap; it was left out pending a decision
+  on the name.
+* **`streaming` is advertised only when streaming is on.** The channel lists the feature when
+  `Streaming:Enabled` is true, which is the default, rather than whenever the channel is enabled.
+* **A2A settings that nothing consumes are not claimed as applied.** `A2A:Authentication:Mode`,
+  `A2A:Principal:Strategy`, and `A2A:PublicBaseUrl` have `appliedKnown: false` while A2A is off.
+  `A2A:Enabled` and `A2A:Discovery:AgentTypes` keep their earlier behavior and are always reported
+  as applied.
+* **Diagnostics are audited under the existing category.** Runs are recorded as
+  `RemoteAdministration` events. The dedicated `IntegrationManagement` category is part of F9.
+* **`user-credential-forwarding` is a `fail`, not a `warn`,** when a user token is actually being
+  copied onto messages. It is a `warn` when the setting is on but no sign-on handler exists, since
+  nothing is forwarded yet.
+* **The status route reports option defaults for an unconfigured channel.** `configured: false`
+  is what says that nobody chose them.
+* **Connections is absent, not unavailable, when disabled.** Unlike the Copilot add-on and remote
+  agents, a disabled Connections registers nothing, so the capability document does not list it.
+  A cloud server cannot tell "Connections package installed but off" from "not installed". This
+  matters for I6 and is cheap to change if needed.
+
+Not done in Phase 1, by design: nothing provisions Microsoft objects, nothing is live-reloadable,
+and none of the compliance-plane items (B1, B2, B4, B9) are started.

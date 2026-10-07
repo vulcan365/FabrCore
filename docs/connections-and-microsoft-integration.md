@@ -50,6 +50,52 @@ app.MapFabrCoreConnections();
 app.Run();
 ```
 
+### Enabling by configuration
+
+The delegates above decide in code. To let configuration decide instead, so an environment
+variable or a cloud server can turn the features on, pass the host configuration:
+
+```csharp
+builder.Services.AddFabrCoreConnections(builder.Configuration);
+builder.Services.AddFabrCoreRemoteAgents(builder.Configuration);
+```
+
+```json
+{
+  "FabrCore": {
+    "Connections": {
+      "Enabled": true,
+      "EntraAgentIdEnabled": false,
+      "ClientHandoffEnabled": false,
+      "HandoffAuthority": null,
+      "HandoffAudience": null
+    },
+    "RemoteAgents": { "Enabled": true, "Timeout": "00:02:00" }
+  }
+}
+```
+
+* Both sections are read once, when services are registered. A change needs a restart, and the
+  settings catalog reports both as restart-required.
+* An optional delegate runs after configuration, so code wins:
+  `AddFabrCoreConnections(builder.Configuration, o => o.EntraAgentIdEnabled = false)` keeps Agent ID
+  off whatever is published. This is how a host pins a decision that configuration must not
+  change.
+* A value that cannot be read is an error at startup, not a silent default.
+  `FabrCore:RemoteAgents:Enabled` must be `true` or `false`, and `Timeout` a duration greater than
+  zero and at most ten minutes.
+* The section is `FabrCore:Connections`, **not** top-level `Connections`. The Microsoft 365 Agents
+  SDK owns `Connections`, and the Copilot addon checks whether that section exists to decide
+  whether to supply its own bot connection. The two never overlap.
+* Credentials stay where they were: `FabrCore:ConnectionCredentials:{reference}` in protected host
+  configuration. They are not part of `FabrCore:Connections` and must not be published by a cloud
+  server.
+
+Once registered, with either overload, remote agents advertise themselves to management consoles
+even while off: the capability document lists a `remote-agents` service with `available: false`,
+and the cloud heartbeat carries `remote-agents` and `remote-agents.enabled`. Connections is
+different: disabled, it registers nothing at all and is absent from the capability document.
+
 `FabrCore:DataProtection:Mode` defaults to `Auto`:
 
 | Effective persistence | Automatic protection |
@@ -342,7 +388,8 @@ validated in the target tenant; it is not implied by supporting the exchange.
 ## Cloud administration and encrypted handoffs
 
 Capability discovery advertises `connections`, `connectedAgents`, and the
-separately enabled `entra-agent-id` / `encrypted-client-handoff` features.
+separately enabled `entra-agent-id` / `encrypted-client-handoff` features, and a
+`remote-agents` service with the `work-iq` and `copilot-studio` providers.
 Administration uses the existing privileged outbound cloud command channel:
 
 | Method | Path under `/fabrcoreapi/admin/v1/principals/{principal}/connections` |
