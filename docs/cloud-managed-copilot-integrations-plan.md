@@ -33,6 +33,11 @@ A customer with several Entra tenants gets several cloud-server tenants. A cloud
 have several clusters and environments; they share the tenant link and, by default, one integration
 app per environment (section 3).
 
+This is the target, not the present. An Insights tenant today is a key, a display name, and
+free-text metadata with no Entra tenant id, and Insights users are not bound to tenants
+(section 15.1). The link is a new field, and until managed provisioning verifies it through
+consent it is a value an operator typed.
+
 ## 3. The per-customer integration app
 
 New multi-tenant Azure Bot registrations were retired after 31 July 2025. A bot identity must now
@@ -99,9 +104,13 @@ Several *tenants* on one cluster is not a goal of this plan.
 
 ## 6. Models
 
-Unchanged. A tenant's existing Azure AI Foundry endpoints and keys continue to flow to its hosts as
+Unchanged. Existing Azure AI Foundry endpoints and keys continue to flow to hosts as
 `modelConfigurations` and `apiKeys` in the configuration envelope. The integration only selects a
 model configuration by name through the agent binding.
+
+In Insights these are scoped to a **cluster**, not a tenant, and they reach hosts only after an
+operator applies a deployment to a cluster's configuration (section 15.6). Nothing in this plan
+changes that or depends on it being per tenant.
 
 ## 7. What the cloud server publishes
 
@@ -180,19 +189,25 @@ Design notes:
 | **I9** | Agent ID | Blueprint and agent identity provisioning in place of the app registration | 5 |
 | **I10** | Offboarding | Disable, unpublish, and delete in reverse order; leave nothing that can authenticate | 3 |
 
-### Assumptions about Insights to confirm (Part C)
+### What the Insights code changes about this table
 
-The module design assumes the following about the existing Insights code. Each is checked against
-`C:\repos\FabrCore-V365` in section 15 and corrected there.
+The module was first drafted on seven assumptions about Insights. They were then checked against
+the code (section 15). Four held, three did not, and the differences reshape three components:
 
-1. An Insights tenant is the unit of customer isolation, and it has no Entra tenant id today.
-2. Settings are published per cluster with a shared base and an environment overlay, and a feature
-   module can contribute keys to a publish.
-3. Preview and adopt exist against the host's settings state and preview endpoints.
-4. Each host's heartbeat capabilities and configuration-state report are stored per host instance.
-5. The connect broker can send an administration request to a cluster and return a binary body.
-6. A Connections page already proxies the host's connection administration routes.
-7. Tenant AI Foundry endpoints and keys are stored encrypted and delivered as model configuration.
+| Assumption | Result | Effect on the module |
+| --- | --- | --- |
+| A tenant is the unit of customer isolation and has no Entra tenant id | Half right. It has no Entra tenant id, and it is not really an isolation unit either: users are deployment-wide. | I1 adds the link as new data. Tenant-level authorization for customer administrators does not exist to build on. |
+| Settings publish per cluster with a shared base and an environment overlay, and a module can contribute keys | Right about layering. There is no "contribute keys" call: a publish replaces a whole layer. | I5 reads a layer, edits its `settings`, and republishes with a version check. It must track which keys it owns. |
+| Preview and adopt exist | Right, as browser-side features only. Nothing is stored and there is no server-side preview service. | I5 cannot hand an operator a saved draft. It needs its own review step. |
+| Capabilities and the configuration-state report are stored per host instance | Right, as one raw JSON string per host, latest only. | I8 needs a typed reader. A history of posture does not exist. |
+| The connect broker can target a cluster and return a binary body | Right at the broker. The client the pages use returns text only. | I4 and package download need a byte-returning call. |
+| A Connections page proxies the host's connection routes | Right. It stores nothing and does not do handoffs. | I6 starts from a working proxy. |
+| Tenant Foundry endpoints and keys are stored encrypted and delivered as model configuration | Wrong on scope. They are per cluster, with one deployment-wide management identity. | None. See section 6. |
+
+One thing was not anticipated at all: **the runtime settings catalog already has complete
+Microsoft 365 Copilot, A2A, and agent-binding areas**, so an operator can already type every key in
+section 7 by hand, including the client secret. I5 is therefore not the first way to publish these
+keys. It is a guided, validated way that must coexist with a general form editing the same keys.
 
 ## 10. Data model
 
@@ -201,14 +216,20 @@ on the cloud-server side of this design.
 
 | Entity | Scope | Fields |
 | --- | --- | --- |
-| `MicrosoftIntegration` | One per tenant and environment | Entra tenant id; provisioning mode (`byo`, `managed`); state; integration app client id and object id; service principal object id; application ID URI; credential kind; federated credential id, issuer, and subject; bot resource id; Teams app id and catalog id; consented-by object id and time |
+| `MicrosoftIntegration` | One per tenant | Entra tenant id and whether it was verified by consent; provisioning mode (`byo`, `managed`); state; consented-by object id and time |
+| `MicrosoftIntegrationApp` | One per cluster environment | Integration app client id and object id; service principal object id; application ID URI; credential kind; federated credential id, issuer, and subject; bot resource id; Teams app id and catalog id; the keys this record last published and the configuration version it published them in |
 | `MicrosoftIntegrationBinding` | One per published agent | Binding name; agent type; handle; model configuration name; principal strategy; public host name; A2A route name; manifest name, descriptions, and version; agent identity client id (I9) |
 | `MicrosoftIntegrationConnection` | One per outbound connection | Name; owner mode (`per-user`, `service principal`); provider; authentication mode; resource name, base URL, and scopes; credential **reference name** |
 | `MicrosoftIntegrationHostStatus` | One per host instance | Host instance id; observed time; last status document; last diagnostics report |
 | `MicrosoftIntegrationOperation` | Append-only | Actor; operation; target object id; outcome; correlation id |
 
+The tenant record holds only what is true of the whole customer. The app registration is per
+environment because an Azure Bot resource has one messaging endpoint, so a test environment and a
+production environment cannot share a bot.
+
 `MicrosoftIntegrationHostStatus` is a cache of what the host reported. It is never the source of
-truth for what should be configured, and a missing row means "unknown", not "off".
+truth for what should be configured, and a missing row means "unknown", not "off". Phase 2 does
+not need it: heartbeats already store each host's latest report, and status is read live.
 
 ## 11. Phases
 
@@ -293,3 +314,256 @@ Things a cloud-server implementer should know that were not obvious before the w
 
 Not done in Phase 1, by design: nothing provisions Microsoft objects, nothing is live-reloadable,
 and none of the compliance-plane items (B1, B2, B4, B9) are started.
+
+## 15. Insights as built
+
+The Insights code in `FabrCore-V365` was read at commit `7d851b0` to check what this plan assumed
+about it. Paths are relative to that repository's `src/`. Each statement below was confirmed in
+the code, not taken from Insights documentation, which disagrees with the code in a few places.
+
+### 15.1 Multi-tenancy
+
+* A tenant is the row `insights.Tenant`: `TenantId`, a unique `TenantKey`, `DisplayName`, `Status`,
+  and a free-text `Metadata` column (`FabrCore.Insights/Migrations/M001_BaselineSchema.cs`). **It
+  has no Entra tenant id**, and nothing else in the schema links a tenant to a customer directory.
+* The hierarchy is tenant, cluster, cluster environment, host. Host rows are keyed by the
+  host-reported instance id, which is new on every process start.
+* **Users are not tenant-bound.** `insights.InsightsUser` is keyed by Entra object id for the whole
+  deployment. Operators sign in through single-tenant OpenID Connect against one configured
+  `AzureAd:TenantId` (`FabrCore.Insights.App/Program.cs`), and new users are looked up in that same
+  directory. A customer administrator cannot sign in to Insights today.
+* Scope checks exist (`IInsightsScopeAuthorizer`), reading `insights.InsightsUserScope`. **No code
+  writes that table.** In practice administrators see everything and operators see nothing unless a
+  row is inserted by hand.
+* Data access is Dapper with hand-written SQL, and schema changes are numbered C# migrations
+  (`M001` to `M011`). There are no query filters; scoping is explicit ids plus authorizer calls.
+
+What this corrects: "each Insights tenant maps to one customer Entra tenant" describes a link that
+must be built, and the people who would manage a customer integration are Vulcan365 operators, not
+the customer. The consent step in managed provisioning (I1) can still be completed by a customer
+administrator, because consent is a link they follow rather than a session in Insights.
+
+### 15.2 Settings publish, preview, and adopt
+
+* Published configuration is the append-only table `insights.ConfigDocument`, one row per cluster,
+  environment, and version. The shared layer uses an empty environment id. The body holds models,
+  credentials, a flat `settings` map of strings, and blueprints. The whole body is encrypted at
+  rest with Data Protection.
+* The effective configuration merges the shared layer with the environment overlay: settings merge
+  by key with the environment winning, and an explicit null masks a shared value
+  (`FabrCore.Insights/Services/ConfigurationResolver.cs`). `configurationVersion` is the SHA-256 of
+  the merged document.
+* **A module can publish programmatically.** `IConfigDocumentService.PublishAsync(clusterId,
+  environmentName, bodyJson, actor, comment, ct, expectedVersion, reviewedVersions)` is the call,
+  and the Foundry integration, the gateway, and the configuration assistant already use it. A
+  publish **replaces the whole layer body**; there is no call that contributes a few keys. With
+  `expectedVersion` a concurrent change is rejected; without it the last writer wins.
+* The server rejects the three enrollment key families, malformed keys, and oversized payloads at
+  publish (`CloudConfigurationPolicy`). **Typed validation is in the Blazor app only**
+  (`RuntimeCatalog.Validate`, reached through `ConfigurationDraft`). A direct service or REST
+  publish can store `A2A:Enabled = "yes"`.
+* **Drafts are not stored.** A draft is a JSON object held by the page for the life of the browser
+  circuit. A module cannot leave a pending draft for an operator to review later.
+* **Preview and adopt are page features.** `RuntimeSettingsForm.razor` posts the flat settings of
+  the draft to the selected host at `settings/preview`, keeps the result only while the draft is
+  unchanged, and reads `settings/state` for the live report. Adopt copies one applied value into
+  the open draft. Neither is a server-side service, and nothing is persisted.
+* The runtime settings catalog (`FabrCore.Insights.App/Configuration/RuntimeCatalog.cs`) **already
+  has form areas for A2A, Microsoft 365 Copilot, and Integrations** (agent bindings and connection
+  credentials). It marks everything in them restart-required. It has no entry for
+  `FabrCore:Connections` or `FabrCore:RemoteAgents`, which did not exist as settings until Phase 1.
+* The catalog offers `Microsoft365Copilot:ClientSecret` and A2A API key values as secret fields.
+  A value entered there is delivered in the `settings` map to every host in scope and kept in every
+  later revision. That is the opposite of the rule in section 3.
+
+### 15.3 The Connections page
+
+`FabrCore.Insights.App/Components/Pages/EnvironmentConnections.razor` is a working proxy to the
+connection administration routes on the host, shown when an environment is selected. It lists the
+connections of a principal, reads and saves a profile with `If-Match`, and clears authorization. It
+stores nothing in the Insights database. It does not call the handoff routes, cannot delete a
+profile, and cannot target one host instance. It decides whether to show itself by looking for a
+capability service named `connections`.
+
+### 15.4 Connect broker and command leases
+
+* `IConnectCommandService.EnqueueAndWaitAsync(clusterId, environment, request, actor, ct)` queues a
+  command in `insights.ConnectCommand` and polls until a host answers. It is SQL-backed and safe
+  across replicas. There is no fire-and-forget form.
+* **One host instance can be targeted.** `InsightsConnectRequest.TargetHostInstanceId` restricts
+  which host may lease the command. The target is not checked against the host roster, so a stale
+  instance id simply times out.
+* A command lives 45 seconds and a lease 30. Bodies are capped at 4 MiB each way. Only `GET` is
+  re-leased after a lease expires.
+* The broker is binary-safe. The client the pages use is not:
+  `IInsightsEnvironmentAdminClient.SendAsync` decodes the response body as UTF-8 text. A zip
+  download needs a new call that returns bytes.
+* The broker sets `X-FabrCore-Admin-Actor` itself from the signed-in operator and forwards only
+  `Accept`, `Content-Type`, `If-Match`, and `If-None-Match` from the caller.
+* `/fabrcoreapi/admin/v1` is on the broker allowlist, so the integration routes pass.
+* **Command rows are never deleted**, and request and response bodies are stored unencrypted.
+
+### 15.5 Per-host reports
+
+* Each heartbeat is validated, redacted, and stored whole. `insights.ClusterSilo` keeps the latest
+  payload per host instance in a column named `Capabilities`, which in fact holds the entire
+  heartbeat JSON. `insights.ClusterHeartbeat` keeps the latest per environment.
+* The capability flags are at `$.capabilities` inside that string. There is no typed accessor and
+  no page that lists them.
+* The configuration-state report is kept per host instance, latest only, replaced when the boot id
+  matches and the sequence is higher. There is no history.
+* Rows whose key matches a name heuristic (`apikey`, `secret`, `password`, `connectionstring`,
+  `token`) have their values removed before storage. That includes
+  `Microsoft365Copilot:TokenValidation:Enabled` and `UserAuthorization:PassUserTokenToAgent`.
+* **A pending-restart view already exists** per host, per environment, and as a cluster count, fed
+  by `pendingRestartSettings`. What does not exist is one filtered to the keys of a feature.
+* Reports are kept until an operator purges stale hosts.
+
+### 15.6 AI Foundry endpoints and keys
+
+* A Foundry connection is stored per **cluster** in `insights.ProviderIntegration`, keyed by cluster
+  and provider, with the project endpoint and key encrypted as one document.
+* One deployment-wide management identity, a single row in `insights.FoundryManagement`, is shared
+  by every cluster and tenant.
+* Keys reach hosts only when an operator applies a deployment to a cluster. That writes a model
+  configuration and a matching API key into the configuration document of the cluster, and hosts
+  then receive both in the `configuration` element of the envelope.
+* The gateway, which keeps provider keys in Insights and gives hosts a caller key instead, is off
+  by default and enabled per cluster.
+
+### 15.7 What follows
+
+* Follow the Foundry integration as the template: contracts, a numbered migration, an internal
+  service with revision-checked writes and audit entries, a controller, and a section inside the
+  cluster workspace page rather than a route of its own. The preview host needs a stub for every
+  new service or it stops building.
+* The cluster workspace already uses the section id `integrations` and the label "AI provider
+  integrations" for Foundry. The new section needs a different id and an unambiguous name.
+* Insights has no Microsoft Graph, ARM, or MSAL client library and no consent flow. Its two
+  existing Microsoft calls are hand-written token requests. Managed provisioning starts from that.
+* Insights has one secret abstraction, a cipher for whole JSON documents. Phase 2 stores no secret,
+  so it does not need more.
+
+## 16. Phase 2 proposal: bring your own app registration
+
+**Status: proposed. Nothing in this section is built.**
+
+The customer creates the app registration and the Azure Bot resource themselves, following a
+checklist. Insights records the identifiers, composes and publishes the settings, and shows whether
+each host has applied them and is healthy. It needs no permission in the customer tenant and stores
+no secret.
+
+### 16.1 What an operator does
+
+1. Opens **Microsoft 365** in the cluster workspace, with an environment selected.
+2. Enters the Entra tenant id of the customer, once for the tenant.
+3. For this environment, enters the client id of the app and the public name of the host, picks
+   the agent type and model configuration to publish, and chooses whether to enable A2A.
+4. Reads the checklist of what the customer must have created, with every value to paste already
+   computed: the messaging endpoint URL, the Application ID URI, the scope names, the A2A endpoint
+   and audience.
+5. Reviews the exact keys that will be added, changed, and removed, and publishes.
+6. Sees which hosts are waiting on a restart, and restarts them by whatever means the deployment
+   uses.
+7. Runs diagnostics per host and reads the findings.
+8. Downloads the app package and gives it to the customer administrator.
+
+### 16.2 The five parts
+
+**1. Integration record.** Two tables, added by migration `M012`, holding identifiers only.
+
+| Table | Key | Columns |
+| --- | --- | --- |
+| `insights.MicrosoftIntegration` | `TenantId` | Entra tenant id; mode (`byo`); revision; updated time and actor |
+| `insights.MicrosoftIntegrationApp` | `ClusterId`, `EnvironmentId` | Client id; auth type; public host name; binding name; agent type; handle; model configuration name; manifest name, descriptions, version, and developer details; A2A enabled and route name; the list of keys last published; the configuration version they were published in; revision; updated time and actor |
+
+Neither table has a column that could hold a secret. Both are added to the tenant purge used by
+the test fixture and to the tenant archive.
+
+**2. Settings composer.** A pure function from the two records to a flat map of string settings,
+plus a service that applies it.
+
+* It emits the keys in section 7 for the channel, the binding, and optionally A2A, with
+  `Principal:Strategy` fixed to `CanonicalEntra` on both channels and the A2A audience set to the
+  client id.
+* It **refuses** to emit a client secret, an A2A API key value, or anything under
+  `FabrCore:ConnectionCredentials`, and rejects `AuthType = ClientSecret`. A customer who must use a
+  secret configures it on the host; Insights then records only that the credential is host-managed.
+* It validates before publishing, because a bad channel configuration stops the host from starting:
+  tenant id and client id are GUIDs, the public name is a host name, the agent type exists in the
+  agent catalog of the host, and the model configuration exists in the effective configuration.
+* Applying reads the environment layer, removes the keys the record published last time, writes the
+  new ones into `settings`, and calls `IConfigDocumentService.PublishAsync` with `expectedVersion`.
+  It edits the JSON tree in place, as the Foundry integration does, so fields it does not know
+  survive.
+* A review step returns the added, changed, and removed keys for the operator to confirm. It is
+  held in memory for the page, since drafts are not stored.
+* It detects drift: if a key it owns no longer has the value it published, the page says so and
+  offers to republish. It does not lock the runtime settings form.
+
+**3. Per-host status and diagnostics.** Read live, stored nowhere.
+
+* The host list comes from the stored heartbeats, with a new typed reader for the `m365copilot`,
+  `m365copilot.enabled`, and `a2a` flags.
+* Status calls `GET integrations/microsoft365` and `GET integrations/a2a` for one host instance
+  through `IInsightsEnvironmentAdminClient`, which already supports instance targeting and returns
+  JSON as text.
+* Diagnostics calls `POST integrations/microsoft365/diagnostics` for one host instance, on demand.
+* A host without the flags, or one that answers `404`, is shown as needing a newer FabrCore
+  version, not as broken.
+
+**4. App package download.** A byte-returning method beside `SendAsync`, and one controller action
+that streams `GET integrations/microsoft365/app-package` to the browser as `appPackage.zip`, with
+the same environment authorization as the rest. The page disables the download while a manifest key
+is pending restart, because the package would describe the old manifest.
+
+**5. Pending-restart view.** The existing per-host pending-restart data, filtered to the keys the
+record owns, shown at the top of the page as "published, waiting on a restart on N of M hosts" with
+the keys per host. No new storage.
+
+### 16.3 What it deliberately leaves out
+
+* Creating anything in the customer tenant or in Azure (I1 to I4).
+* Publishing the Teams app to the organization catalog. The administrator uploads the package.
+* Connections, remote agents, and the Copilot Studio link beyond showing the A2A values to paste
+  (I6, I7).
+* Verifying the Entra tenant id. It is shown as entered, not verified.
+* Restarting hosts.
+* Any stored history of status or diagnostics.
+
+### 16.4 Prerequisites
+
+* **A FabrCore release containing Phase 1.** Insights references FabrCore 2.0.1 packages; the
+  integration routes, the flags, and the configuration-bound registrations are on `develop` only.
+  Insights can define its own wire types for the status documents, as it does for the
+  configuration-state report, so it does not have to wait for the package to start.
+* **A customer host that calls `AddMicrosoft365Copilot()`.** Publishing settings cannot install the
+  add-on.
+* **A decision on the existing catalog fields** for the client secret and A2A key values
+  (decision P3 below).
+
+### 16.5 Decisions needed before building
+
+| Id | Decision | Recommendation |
+| --- | --- | --- |
+| **P1** | Record shape: one tenant record plus one app record per environment, or a single per-tenant record | **Tenant plus per-environment.** A bot has one messaging endpoint, so two environments cannot share an app registration. A single per-tenant record would force one environment per tenant. |
+| **P2** | Keys the record owns, in the runtime settings form: locked, or editable with drift detection | **Editable with drift detection** for the first version. Locking touches the general form and its tests for little gain while only operators use it. |
+| **P3** | The catalog fields for `Microsoft365Copilot:ClientSecret` and A2A key values | **Replace with a warning that the value is delivered and cached unencrypted on every host**, and stop offering them once a secret-free path has been proven with a customer. Removing them outright strands anyone using them today. |
+| **P4** | Status and diagnostics: live only, or also stored | **Live only.** Heartbeats already store the at-rest view. Add storage when there is a reason to show history. |
+| **P5** | Where the work lands in the Insights repository | The repository has no `develop` branch and work is on `main`. **A feature branch from `main`**, unless a `develop` branch is wanted to match FabrCore. |
+| **P6** | Whether customer administrators will use this page | **Not in Phase 2.** Insights sign-in is single-tenant and scopes are not assignable. Treat the page as an operator tool and guard it with the administrator policy like the pages beside it. |
+
+### 16.6 Size and tests
+
+About the size of the Foundry model-rates feature, not the Foundry integration: one migration, two
+contracts files, a composer and a service, one controller, one workspace section, one preview stub,
+and a small extension to the environment admin client.
+
+* Unit: the composer output for each option; refusal of secrets and `ClientSecret`; owned-key
+  removal on change; drift detection; the typed heartbeat flag reader.
+* Integration (SQL): record round trip with revision conflicts; apply publishes a new environment
+  revision and preserves unrelated settings; tenant purge and archive include the new tables.
+* Protocol: the package action returns the bytes the broker delivered, with a file name, and
+  refuses an operator without access to the environment.
+* Against a real host: the captured responses in the
+  [cloud server how-to](cloud-server-microsoft-365-copilot.md) are the fixtures.
