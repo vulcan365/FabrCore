@@ -40,6 +40,48 @@ internal static class ClusterCapabilityFactory
                 if (connections.ClientHandoffEnabled) document.Services[^1].Features.Add("encrypted-client-handoff");
             }
         }
+        document.Services.Add(CreateA2A(document.HostVersion, (providers?.GetService(typeof(Microsoft.Extensions.Options.IOptions<A2AOptions>)) as Microsoft.Extensions.Options.IOptions<A2AOptions>)?.Value));
+        AddContributed(document, providers);
         return document;
+    }
+
+    /// <summary>A2A is built into the host, so it is always listed; <c>Available</c> says whether it is on.</summary>
+    internal static ClusterServiceCapability CreateA2A(string hostVersion, A2AOptions? options)
+    {
+        options ??= new A2AOptions();
+        return new()
+        {
+            Name = A2AServiceName, Version = hostVersion, ApiVersion = A2AProtocolVersion,
+            Available = options.Enabled, UnavailableReason = options.Enabled ? null : "A2A:Enabled is false.",
+            Features =
+            [
+                "status", "jsonrpc", "http-json", "streaming", "tasks",
+                "auth-" + options.Authentication.Mode.ToString().ToLowerInvariant(),
+                "principal-" + options.Principal.Strategy.ToString().ToLowerInvariant(),
+                "agent-bindings"
+            ]
+        };
+    }
+
+    internal const string A2AServiceName = "a2a";
+    internal const string A2AProtocolVersion = "1.0";
+
+    private static void AddContributed(ClusterCapabilityDocument document, IServiceProvider? providers)
+    {
+        if (providers?.GetService(typeof(IEnumerable<IFabrCoreCapabilityContributor>)) is not IEnumerable<IFabrCoreCapabilityContributor> contributors) return;
+        foreach (var contributor in contributors)
+        {
+            ClusterServiceCapability[] contributed;
+            // An add-on must never be able to take the capability document down with it.
+            try { contributed = contributor.GetServices()?.ToArray() ?? []; }
+            catch { continue; }
+            foreach (var service in contributed)
+            {
+                // First claim wins: host services are added before contributors run.
+                if (service is null || string.IsNullOrWhiteSpace(service.Name) ||
+                    document.Services.Any(existing => string.Equals(existing.Name, service.Name, StringComparison.OrdinalIgnoreCase))) continue;
+                document.Services.Add(service);
+            }
+        }
     }
 }

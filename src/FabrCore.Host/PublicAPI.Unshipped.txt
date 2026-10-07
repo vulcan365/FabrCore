@@ -132,3 +132,8 @@ override FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation.ToString() 
 static FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation.operator !=(FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation? left, FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation? right) -> bool
 static FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation.operator ==(FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation? left, FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation? right) -> bool
 FabrCore.Host.Configuration.Cloud.RuntimeConfigurationContext.Override(string! key, string? value, string! reason) -> void
+FabrCore.Host.Api.Controllers.IntegrationsAdminController
+FabrCore.Host.Api.Controllers.IntegrationsAdminController.GetA2A(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<FabrCore.Core.CloudServer.A2AIntegrationStatus!>!>!
+FabrCore.Host.Api.Controllers.IntegrationsAdminController.IntegrationsAdminController(System.IServiceProvider! services) -> void
+FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation.DefaultValue.get -> string?
+FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation.DefaultValue.init -> void

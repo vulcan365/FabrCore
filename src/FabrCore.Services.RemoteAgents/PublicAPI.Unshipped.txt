@@ -11,3 +11,5 @@ FabrCore.Services.RemoteAgents.RemoteAgentOptions.Timeout.set -> void
 override FabrCore.Services.RemoteAgents.RemoteAgent.OnInitialize() -> System.Threading.Tasks.Task!
 override FabrCore.Services.RemoteAgents.RemoteAgent.OnMessage(FabrCore.Core.AgentMessage! message) -> System.Threading.Tasks.Task<FabrCore.Core.AgentMessage!>!
 static FabrCore.Services.RemoteAgents.RemoteAgentExtensions.AddFabrCoreRemoteAgents(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<FabrCore.Services.RemoteAgents.RemoteAgentOptions!>! configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+const FabrCore.Services.RemoteAgents.RemoteAgentOptions.SectionName = "FabrCore:RemoteAgents" -> string!
+static FabrCore.Services.RemoteAgents.RemoteAgentExtensions.AddFabrCoreRemoteAgents(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, Microsoft.Extensions.Configuration.IConfiguration! configuration, System.Action<FabrCore.Services.RemoteAgents.RemoteAgentOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

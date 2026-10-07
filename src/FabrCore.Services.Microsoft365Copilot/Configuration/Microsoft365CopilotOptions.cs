@@ -24,7 +24,12 @@ namespace FabrCore.Services.Microsoft365Copilot;
 /// </remarks>
 public sealed class Microsoft365CopilotOptions
 {
-    /// <summary>Master switch. When false the addon registers nothing and maps nothing.</summary>
+    /// <summary>
+    /// Master switch. When false the channel registers no bridge and maps no messaging endpoint;
+    /// only its capability and settings reporters and its administration routes remain, so a
+    /// management console can see that it is installed and why it is off. A host with no
+    /// <c>Microsoft365Copilot</c> configuration at all starts with the channel off.
+    /// </summary>
     public bool Enabled { get; set; } = true;
 
     /// <summary>Entra tenant id of the bot's app registration (SingleTenant apps). Optional for MultiTenant registrations.</summary>

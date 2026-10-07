@@ -218,10 +218,13 @@ internal sealed class RuntimeConfigurationState
             if (resolved is null && resolvedDefaults.TryGetValue(key, out var derivation))
             { resolved = derivation.Value; source = "derived"; sourceId = "FabrCore.Database"; reason = derivation.Reason; }
             observations.TryGetValue(key, out var observation);
+            if (resolved is null && observation?.DefaultValue is { } codeDefault)
+            { resolved = codeDefault; source = "code-default"; sourceId = observation.SourceId; reason = "Built-in default; the key is not set in configuration."; }
             if (resolved is null && observation is null && !hasDesired) continue;
             var known = Started && observation?.AppliedKnown == true;
             var resolvedKnown = true;
-            var observedInput = observationInputs.TryGetValue(key, out var capturedInput) ? capturedInput : startupInputs.GetValueOrDefault(key);
+            // An unset key was consumed as its default, so a matching applied value is not a code override.
+            var observedInput = (observationInputs.TryGetValue(key, out var capturedInput) ? capturedInput : startupInputs.GetValueOrDefault(key)) ?? observation?.DefaultValue;
             if (known && !key.StartsWith("Runtime:", StringComparison.Ordinal) &&
                 !ValuesEqual(key, observedInput, observation!.Value))
             {

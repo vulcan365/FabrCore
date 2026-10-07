@@ -1,10 +1,13 @@
+using System.Globalization;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using FabrCore.Connections;
 using FabrCore.Core;
 using FabrCore.Sdk;
+using FabrCore.Services.Contracts.Capabilities;
 using Microsoft.Agents.CopilotStudio.Client;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -12,6 +15,9 @@ namespace FabrCore.Services.RemoteAgents;
 
 public sealed class RemoteAgentOptions
 {
+    /// <summary>Configuration section read by the configuration-bound registration.</summary>
+    public const string SectionName = "FabrCore:RemoteAgents";
+
     public bool Enabled { get; set; }
     public TimeSpan Timeout { get; set; } = TimeSpan.FromMinutes(2);
 }
@@ -21,13 +27,62 @@ public static class RemoteAgentExtensions
     public static IServiceCollection AddFabrCoreRemoteAgents(this IServiceCollection services, Action<RemoteAgentOptions> configure)
     {
         var options = new RemoteAgentOptions(); configure(options);
+        return Register(services, options);
+    }
+
+    /// <summary>
+    /// Opt-in driven by <c>FabrCore:RemoteAgents:Enabled</c> and <c>:Timeout</c>, so the feature can be
+    /// switched on by configuration alone. <paramref name="configure"/> runs last, so code wins.
+    /// </summary>
+    public static IServiceCollection AddFabrCoreRemoteAgents(this IServiceCollection services, IConfiguration configuration, Action<RemoteAgentOptions>? configure = null)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        var options = new RemoteAgentOptions();
+        // Parsed by hand: this package references the SDK only, and a silently ignored typo here
+        // would leave the feature off with nothing to say why.
+        var section = configuration.GetSection(RemoteAgentOptions.SectionName);
+        if (section[nameof(RemoteAgentOptions.Enabled)] is { Length: > 0 } enabled)
+            options.Enabled = bool.TryParse(enabled, out var value) ? value
+                : throw new InvalidOperationException($"{RemoteAgentOptions.SectionName}:{nameof(RemoteAgentOptions.Enabled)} must be true or false.");
+        if (section[nameof(RemoteAgentOptions.Timeout)] is { Length: > 0 } timeout)
+            options.Timeout = TimeSpan.TryParse(timeout, CultureInfo.InvariantCulture, out var value) ? value
+                : throw new InvalidOperationException($"{RemoteAgentOptions.SectionName}:{nameof(RemoteAgentOptions.Timeout)} must be a duration such as 00:02:00.");
+        configure?.Invoke(options);
+        return Register(services, options);
+    }
+
+    private static IServiceCollection Register(IServiceCollection services, RemoteAgentOptions options)
+    {
         if (options.Enabled)
         {
             if (options.Timeout <= TimeSpan.Zero || options.Timeout > TimeSpan.FromMinutes(10)) throw new ArgumentOutOfRangeException(nameof(options.Timeout));
             services.AddSingleton(options);
         }
+        // Advertised even when off, so a console can tell "installed but disabled" from "not installed".
+        services.AddSingleton<IFabrCoreCapabilityContributor>(new RemoteAgentCapabilities(options.Enabled));
         return services;
     }
+}
+
+internal sealed class RemoteAgentCapabilities(bool enabled) : IFabrCoreCapabilityContributor
+{
+    internal const string ServiceName = "remote-agents";
+
+    public IEnumerable<ClusterServiceCapability> GetServices() =>
+    [
+        new()
+        {
+            Name = ServiceName, Version = typeof(RemoteAgentCapabilities).Assembly.GetName().Version?.ToString(), ApiVersion = "1",
+            Features = ["work-iq", "copilot-studio"], Available = enabled,
+            UnavailableReason = enabled ? null : $"{RemoteAgentOptions.SectionName}:{nameof(RemoteAgentOptions.Enabled)} is false."
+        }
+    ];
+
+    public IReadOnlyDictionary<string, string> GetHeartbeatCapabilities() => new Dictionary<string, string>
+    {
+        [ServiceName] = "1",
+        [ServiceName + ".enabled"] = enabled ? "true" : "false"
+    };
 }
 
 /// <summary>Opt-in remote conversation proxy. Register its assembly with the FabrCore agent registry.</summary>
