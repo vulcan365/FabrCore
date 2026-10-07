@@ -87,9 +87,8 @@ builder.Services.AddFabrCoreRemoteAgents(builder.Configuration);
 * The section is `FabrCore:Connections`, **not** top-level `Connections`. The Microsoft 365 Agents
   SDK owns `Connections`, and the Copilot addon checks whether that section exists to decide
   whether to supply its own bot connection. The two never overlap.
-* Credentials stay where they were: `FabrCore:ConnectionCredentials:{reference}` in protected host
-  configuration. They are not part of `FabrCore:Connections` and must not be published by a cloud
-  server.
+* Credentials stay where they were: `FabrCore:ConnectionCredentials:{reference}`. They are a
+  separate section and are not part of `FabrCore:Connections`.
 
 Once registered, with either overload, remote agents advertise themselves to management consoles
 even while off: the capability document lists a `remote-agents` service with `available: false`,

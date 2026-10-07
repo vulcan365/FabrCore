@@ -331,9 +331,6 @@ public sealed class FabrCoreSettingsCatalogTests
             Assert.AreEqual(SettingsApplyMode.RestartRequired, catalog.GetApplyMode(key), key);
             Assert.IsFalse(FabrCoreSettingsCatalog.IsSecret(key), key);
         }
-
-        // Credentials for connections are host-managed and are deliberately not described.
-        Assert.IsNull(catalog.Find("FabrCore:ConnectionCredentials:mail:Secret"));
     }
 
     [TestMethod]

@@ -347,7 +347,7 @@ missing features.
 | Audit of administration | — | — | `RemoteAdministration` category | — | **Met** for admin routes; in memory unless the integrated database is on |
 | ⚠ HTTP API caller identity | — | — | — | — | **Gap.** Security review finding F-02 is still open: `AgentController`, `BlueprintController`, `StorageController`, `MonitorController`, and others read the caller from `x-user-handle` with no authentication. Anything that can reach `/fabrcoreapi/agent/chat/{handle}` can speak to a user's agent as that user, bypassing both channels' authentication (B3). |
 | ⚠ Credential containment | User token can enter messaging | — | Encrypted at rest; never serialized | Token stays in the handler | **Gap** when `UserAuthorization:PassUserTokenToAgent` is true: the token is written to `AgentMessage.Args`, and `AgentGrain` copies `Args` unredacted into every monitor record (`MonitoredMessage.Args`), which the monitor API serves and the SQL monitor, when enabled, persists (B4). |
-| Secrets in configuration | Client secret supported | API key values in configuration | References only | — | **Partial.** Secret-free auth types exist for the channel; Connections needs a certificate or custom provider (B5). Cloud-delivered settings are cached in plaintext in `fabrcore.cloud-cache.json`. |
+| Secrets in configuration | Client secret supported | API key values in configuration | References only | — | **Partial, by choice.** Keeping secrets in host configuration, and having a cloud server publish them, is an accepted practice. They are then in plaintext on the host, in `fabrcore.json` or in `fabrcore.cloud-cache.json`, and those files must be protected. Secret-free auth types exist for the channel; Connections needs a certificate or a custom provider for that (B5). |
 | Data policy (DLP, sensitivity) | None | None | — | None | **Gap** (B9) |
 | Durable evidence | Monitor and verifiable execution | Same | — | Same | **Partial.** Telemetry, not an audit trail; in memory by default |
 | Tenant isolation | Tenant is part of the principal | Same | Authority is per profile | — | **Met** with `CanonicalEntra`. `EntraObjectId` alone omits the tenant and is unsafe for a multi-tenant bot. |
@@ -442,10 +442,19 @@ registration per customer tenant.
 * Pre-authorize the Teams, Microsoft 365, and Outlook client applications for the sign-on scope.
 * Add the delegated permissions the agents need (for example `WorkIQAgent.Ask`) and grant consent.
 
-**2. Give the registration a credential that is not a secret.** Add a federated identity credential
-that trusts the host's workload identity, and configure the channel with
-`AuthType: "WorkloadIdentity"` or `"FederatedCredentials"`. Use a certificate where federation is
-not available. Do not use a client secret in production.
+**2. Give the registration a credential.** Either works in production:
+
+* A client secret, with `AuthType: "ClientSecret"`. It works on every hosting platform and is what
+  Connections can use today for on-behalf-of. Keep it in host configuration that is not in source
+  control, or have a cloud server publish it. Note its expiry date; an expired secret takes the
+  bot offline.
+* A federated identity credential that trusts the host's workload identity, with
+  `AuthType: "WorkloadIdentity"` or `"FederatedCredentials"`, or a certificate. There is then no
+  secret to store or rotate, but the platform must issue workload identities, and Connections
+  needs a custom credential provider until B5.
+
+The sample configuration below uses a workload identity. For a client secret, set
+`"AuthType": "ClientSecret"` and add `"ClientSecret"`.
 
 **3. Create the Azure Bot resource**, single tenant, with the messaging endpoint
 `https://{public-host}/api/messages`, and enable the Teams channel. For single sign-on, add an OAuth
@@ -529,7 +538,7 @@ Ordered by dependency, not by size. "Plan" names the matching item in the
 | B2 | Audit every channel, A2A, and remote-agent turn | Finding 1. A `ChannelInvocation` audit category with principal, binding, channel, conversation, and outcome; never content. | — | — |
 | B3 | Authenticated caller context for the HTTP APIs | Finding 2 (F-02). | — | F9 |
 | B4 | Remove credentials from messaging and redact credential-bearing args in the monitor | Finding 3. Deprecate `PassUserTokenToAgent` once B1 ships. | B1 | — |
-| B5 | Workload-identity credential provider for Connections | Removes the last reason to store a certificate or secret for outbound calls. | — | F5 |
+| B5 | Workload-identity credential provider for Connections | Lets a deployment that wants no stored secret use Connections. Optional where a client secret is acceptable. | — | F5 |
 | B6 | Capability advertisement, configuration-bound enablement, applied-settings reporting, integrations admin API. **Done on `develop`.** | Lets a cloud server see and manage the integration. | — | F1–F4 |
 | B7 | Agent 365 notifications to agent events | Reach in. | B2 | — |
 | B8 | MCP exposure of bindings and selected tools | Reach in for clients that do not speak A2A. | B3 | — |

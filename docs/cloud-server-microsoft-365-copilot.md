@@ -269,7 +269,10 @@ finding `skipped`.
 * The document `status` is the worst finding. Use it for a row badge.
 * A finding id you do not recognize is still a finding. Show its message with its status.
 * An operator who has decided to accept a `warn` should be able to say so in your product. The
-  host has no notion of accepted risk.
+  host has no notion of accepted risk. `credential-type` is the obvious case: the host reports a
+  client secret as `warn` on every deployment, so where publishing a client secret is the chosen
+  approach, treat that finding as accepted by default instead of showing every host as needing
+  review.
 
 ## 3. Enable and configure
 
@@ -304,20 +307,34 @@ Bot resource, the map is:
 }
 ```
 
+For a customer using a client secret, which is the common case, replace the `AuthType` line with:
+
+```json
+{
+  "Microsoft365Copilot:AuthType": "ClientSecret",
+  "Microsoft365Copilot:ClientSecret": "<the client secret>"
+}
+```
+
 This example is assembled from the keys the host binds, not captured. Its identity values are the
-ones the captured status responses above were produced from. The capture host differed in three
-ways: it used a client secret instead of `WorkloadIdentity`, an explicit agent type instead of a
+ones the captured status responses above were produced from. The capture host used a client
+secret, as in the variant, and differed in two other ways: an explicit agent type instead of a
 binding, and a fixed A2A agent handle instead of a bound A2A agent.
 
 Rules a composer must enforce:
 
 1. **Values are strings.** Booleans are `"true"` and `"false"`. Lists are indexed keys
    (`RequiredScopes:0`).
-2. **No secrets, ever.** The host writes the envelope to `fabrcore.cloud-cache.json` in plaintext on
-   every silo. Refuse to compose `Microsoft365Copilot:ClientSecret`,
-   `A2A:Authentication:ApiKey:Keys:*:Value`, and anything under `FabrCore:ConnectionCredentials`.
-   If the customer's only option is a secret, it goes into the host's own configuration and never
-   through you.
+2. **Secrets may be published, and you then own them.** `Microsoft365Copilot:ClientSecret`,
+   `A2A:Authentication:ApiKey:Keys:{n}:Value`, and `FabrCore:ConnectionCredentials:{ref}:Secret` are
+   ordinary settings to the host. Three things follow. The host writes the whole envelope to
+   `fabrcore.cloud-cache.json` in plaintext on every silo, so that file is secret material. The
+   value stays in every earlier revision you keep, so rotating means deleting the old secret in
+   Entra as well as publishing the new one. And a client secret has an end date: record it and
+   warn before it, because an expired secret takes the bot offline with no change on the host.
+   Never echo a secret back in a review, a diff, an audit entry, or a log; show that it is set,
+   not what it is. A customer who wants you to hold nothing uses `WorkloadIdentity` or
+   `FederatedCredentials` instead.
 3. **Use the same principal strategy on both channels.** `CanonicalEntra` on the channel and on
    A2A, with no prefix, or the same person reaches two different agents.
 4. **A binding replaces the per-channel agent keys.** With `Agent:Binding` set, the binding
@@ -333,9 +350,10 @@ Rules a composer must enforce:
    hosts the keys are stored and ignored. After a restart, confirm with the `connections.admin` and
    `remote-agents.enabled` heartbeat flags.
 7. **An incomplete configuration stops the host from starting.** A `Microsoft365Copilot` section
-   that enables the channel without an agent, or with token validation on and no client id, throws
-   at startup. Validate before publishing: require an agent binding or agent type, a client id, a
-   tenant id, and a secret-free auth type. The host's `POST /fabrcoreapi/admin/v1/settings/preview`
+   that enables the channel without an agent, with token validation on and no client id, or with
+   `AuthType` `ClientSecret` and no secret, throws at startup. Validate before publishing: require
+   an agent binding or agent type, a client id, a tenant id, and a secret whenever the auth type
+   needs one. The host's `POST /fabrcoreapi/admin/v1/settings/preview`
    evaluates configuration rules; it does not run the add-on's startup validation, so a clean
    preview is not proof the host will start. A host that fails to start fetches settings again on
    its next attempt, so publishing a corrected configuration recovers it without access to the
@@ -646,15 +664,16 @@ the full findings.
 | Applied state | `InsightsSiloStatusDto.ConfigurationState`; live `GET /settings/state` | `ConfigurationReportPolicy` nulls values for keys matching `CloudConfigurationPolicy.IsSecret`, which includes `Microsoft365Copilot:TokenValidation:Enabled` and `UserAuthorization:PassUserTokenToAgent`. Read those from the status route. |
 | App package | `IConnectCommandService.EnqueueAndWaitAsync` | `IInsightsEnvironmentAdminClient` decodes the response body as UTF-8 text, which corrupts a zip. A byte-returning call is needed. The 4 MiB body cap is far above the package size. |
 
-Two things in Insights today work against the rules in section 3:
+Two more things about Insights as it is:
 
-* **The runtime settings catalog offers `Microsoft365Copilot:ClientSecret` and A2A API key values
-  as publishable fields.** A value entered there is delivered in the `settings` map and written to
-  the host's plaintext cache. The composer must not emit these, and the form should stop offering
-  them or warn that the value will be stored unencrypted on every host.
+* **The runtime settings catalog already publishes secrets.** It offers
+  `Microsoft365Copilot:ClientSecret`, A2A API key values, and `FabrCore:ConnectionCredentials` as
+  secret fields, delivered in the `settings` map inside the encrypted configuration document. A
+  composer can write the client secret the same way and needs no new storage.
 * **Connect command rows, including response bodies, are never deleted.** Every package download
-  and status response stays in `insights.ConnectCommand`. That is tolerable for status documents,
-  which contain no secrets, and worth a retention job before the feature is used routinely.
+  and status response stays in `insights.ConnectCommand`. The integration routes return no
+  secrets, so this is a growth problem rather than an exposure, and worth a retention job before
+  the feature is used routinely.
 
 ## Checklist
 
@@ -664,7 +683,8 @@ Before calling the integration healthy for a host:
 - [ ] `microsoft365-copilot` is `available` in the capability document
 - [ ] `GET integrations/microsoft365` has no `fail` finding
 - [ ] `principalStrategy` is `CanonicalEntra` on the channel and, if A2A is on, on A2A
-- [ ] `authType` is not `ClientSecret`
+- [ ] `authType` is the one chosen for this customer, and a client secret is not within 30 days of
+      expiry
 - [ ] No integration row in the configuration-state report has `pendingRestart: true`
 - [ ] `Runtime:Microsoft365Copilot:ForwardsUserCredential` is `False`
 - [ ] `POST diagnostics` passes `agent-type-registered` and `bot-service-credential` on every

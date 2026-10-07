@@ -445,11 +445,14 @@ Publish the keys in the `settings` map. The relevant sections are `Microsoft365C
   owns `Connections`, and the Copilot add-on checks whether that section exists to decide whether
   to supply its own bot connection. Publishing `Connections:*` changes the bot's credentials, not
   the Connections feature.
-- **Never publish a secret.** The host caches the envelope in plaintext (see *Cache* below). Do not
-  publish `Microsoft365Copilot:ClientSecret`, A2A API key values, or anything under
-  `FabrCore:ConnectionCredentials`. Use a secret-free `Microsoft365Copilot:AuthType`
-  (`WorkloadIdentity`, `FederatedCredentials`, a managed identity, or a certificate reference) and
-  leave credentials in host-managed configuration.
+- **Secrets can be published, with the same exposure as the model API keys.** A server may publish
+  `Microsoft365Copilot:ClientSecret`, A2A API key values, and
+  `FabrCore:ConnectionCredentials:{reference}:Secret` as ordinary settings. The host caches the
+  envelope in plaintext (see *Cache* below), so they are then on disk on every silo, exactly as
+  `apiKeys` already are. A server that publishes them is responsible for protecting them at rest,
+  for rotation, and for tracking expiry. A deployment that wants no secret in the envelope uses a
+  secret-free `Microsoft365Copilot:AuthType` (`WorkloadIdentity`, `FederatedCredentials`, a managed
+  identity, or a certificate reference) and leaves credentials in host-managed configuration.
 
 ### Observation
 
