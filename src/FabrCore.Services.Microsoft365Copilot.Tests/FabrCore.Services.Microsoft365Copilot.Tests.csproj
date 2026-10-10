@@ -13,10 +13,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="MSTest" Version="4.4.0" />
+    <PackageReference Include="MSTest" Version="4.5.1" />
     <PackageReference Include="Microsoft.Agents.Builder.Testing" Version="1.8.77" />
     <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.12" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
   </ItemGroup>
 
   <ItemGroup>
