@@ -39,7 +39,16 @@ internal sealed class A2ARuntimeSettingsContributor(IOptions<A2AOptions> options
 {
     public IEnumerable<RuntimeSettingObservation> Observe()
     {
-        yield return new("A2A:Enabled", options.Value.Enabled.ToString(), "A2A options pipeline");
-        yield return new("A2A:Discovery:AgentTypes", options.Value.Discovery.AgentTypes.ToString(), "A2A options pipeline");
+        const string source = "A2A options pipeline";
+        var value = options.Value;
+        yield return new("A2A:Enabled", value.Enabled.ToString(), source);
+        yield return new("A2A:Discovery:AgentTypes", value.Discovery.AgentTypes.ToString(), source);
+        // Nothing consumes these while the endpoint is off, so they are not evidence of applied state.
+        var defaults = new A2AOptions();
+        yield return new("A2A:Authentication:Mode", value.Authentication.Mode.ToString(), source, AppliedKnown: value.Enabled)
+        { DefaultValue = defaults.Authentication.Mode.ToString() };
+        yield return new("A2A:Principal:Strategy", value.Principal.Strategy.ToString(), source, AppliedKnown: value.Enabled)
+        { DefaultValue = defaults.Principal.Strategy.ToString() };
+        yield return new("A2A:PublicBaseUrl", value.PublicBaseUrl, source, AppliedKnown: value.Enabled);
     }
 }

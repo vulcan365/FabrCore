@@ -5,6 +5,7 @@ using FabrCore.Host.Configuration;
 using FabrCore.Host.Configuration.Cloud;
 using FabrCore.Host.Services;
 using FabrCore.Host.Services.CloudServer;
+using FabrCore.Services.Contracts.Capabilities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Net;
@@ -479,5 +480,53 @@ public sealed class CloudServerSyncServiceTests
         await harness.Service.StopAsync(stopTimeout.Token);
 
         Assert.AreEqual(1, connectRequests, "Shutdown cancellation must not retry or overlap the active poll.");
+    }
+
+    [TestMethod]
+    public async Task Heartbeat_AdvertisesA2AOnlyWhenEnabled()
+    {
+        var handler = new FakeCloudServerHandler(_ =>
+            Task.FromResult(FakeCloudServerHandler.Json(HttpStatusCode.OK, Envelope("v1"))));
+
+        await using var off = Harness.Create(handler, services: s =>
+            s.AddSingleton(Microsoft.Extensions.Options.Options.Create(new A2AOptions())));
+        Assert.IsFalse(off.Service.BuildCapabilities().ContainsKey("a2a"));
+
+        await using var on = Harness.Create(handler, services: s =>
+            s.AddSingleton(Microsoft.Extensions.Options.Options.Create(new A2AOptions { Enabled = true })));
+        Assert.AreEqual("1.0", on.Service.BuildCapabilities()["a2a"]);
+    }
+
+    [TestMethod]
+    public async Task Heartbeat_AddsContributedFlags_ButHostKeysAlwaysWin()
+    {
+        var handler = new FakeCloudServerHandler(_ =>
+            Task.FromResult(FakeCloudServerHandler.Json(HttpStatusCode.OK, Envelope("v1"))));
+        await using var harness = Harness.Create(handler, services: s =>
+        {
+            s.AddSingleton<IFabrCoreCapabilityContributor>(new FlagContributor(new()
+            {
+                ["host"] = "spoofed",
+                ["addon"] = "1",
+                ["addon.enabled"] = "false"
+            }));
+            s.AddSingleton<IFabrCoreCapabilityContributor>(new FlagContributor(null));
+            s.AddSingleton<IFabrCoreCapabilityContributor>(new FlagContributor(new() { ["addon"] = "second", ["later"] = "1" }));
+        });
+
+        var capabilities = harness.Service.BuildCapabilities();
+
+        Assert.AreNotEqual("spoofed", capabilities["host"], "A contributor must not replace a host key.");
+        Assert.AreEqual("1", capabilities["addon"], "The first contributor to claim a key keeps it.");
+        Assert.AreEqual("false", capabilities["addon.enabled"]);
+        Assert.AreEqual("1", capabilities["later"], "A contributor that throws must not stop the ones after it.");
+    }
+
+    private sealed class FlagContributor(Dictionary<string, string>? flags) : IFabrCoreCapabilityContributor
+    {
+        public IEnumerable<ClusterServiceCapability> GetServices() => [];
+
+        public IReadOnlyDictionary<string, string> GetHeartbeatCapabilities() =>
+            flags ?? throw new InvalidOperationException("contributor failure");
     }
 }

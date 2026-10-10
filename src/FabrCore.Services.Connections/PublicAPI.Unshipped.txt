@@ -27,3 +27,5 @@ FabrCore.Services.Connections.IConnectionPrincipalResolver
 FabrCore.Services.Connections.IConnectionPrincipalResolver.Resolve(System.Security.Claims.ClaimsPrincipal! principal) -> string?
 static FabrCore.Services.Connections.ConnectionsExtensions.AddFabrCoreConnections(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<FabrCore.Services.Connections.ConnectionsOptions!>! configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 static FabrCore.Services.Connections.ConnectionsExtensions.MapFabrCoreConnections(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints) -> Microsoft.AspNetCore.Routing.IEndpointRouteBuilder!
+const FabrCore.Services.Connections.ConnectionsOptions.SectionName = "FabrCore:Connections" -> string!
+static FabrCore.Services.Connections.ConnectionsExtensions.AddFabrCoreConnections(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, Microsoft.Extensions.Configuration.IConfiguration! configuration, System.Action<FabrCore.Services.Connections.ConnectionsOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

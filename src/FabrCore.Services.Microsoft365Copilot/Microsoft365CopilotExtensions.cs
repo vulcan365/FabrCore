@@ -54,13 +54,35 @@ public static class Microsoft365CopilotExtensions
         }
 
         var section = builder.Configuration.GetSection(Microsoft365CopilotDefaults.SectionName);
+        var configured = section.Exists() || configure is not null;
         var options = section.Get<Microsoft365CopilotOptions>() ?? new Microsoft365CopilotOptions();
         configure?.Invoke(options);
         options.UserAuthorizationConfigured = section.GetSection("UserAuthorization:Handlers").Exists()
             || builder.Configuration.GetSection("AgentApplication:UserAuthorization:Handlers").Exists();
 
+        string? disabledReason = null;
+        if (!configured)
+        {
+            // Installed but untouched. Starting with the channel off, rather than failing on the
+            // missing agent type, lets one host image be enabled later by configuration alone.
+            options.Enabled = false;
+            disabledReason = $"No {Microsoft365CopilotDefaults.SectionName} configuration was found and no options were supplied in code.";
+        }
+        else if (!options.Enabled)
+        {
+            disabledReason = $"{Microsoft365CopilotDefaults.SectionName}:Enabled is false.";
+        }
+
+        // Read before the configuration bridge runs: afterwards the section always exists.
+        var nativeServiceConnection = builder.Configuration.GetSection("Connections").Exists();
+
         builder.Services.AddSingleton(Options.Create(options));
-        builder.Services.AddSingleton(new Microsoft365CopilotMarker(options.Enabled));
+        builder.Services.AddSingleton(new Microsoft365CopilotMarker(options.Enabled, configured, disabledReason, nativeServiceConnection));
+
+        // Registered even while the channel is off, so a management console can tell
+        // "installed but disabled" from "not installed" and can see why it is off.
+        builder.Services.AddSingleton<FabrCore.Services.Contracts.Capabilities.IFabrCoreCapabilityContributor, CopilotCapabilityContributor>();
+        builder.Services.AddSingleton<FabrCore.Host.Configuration.Cloud.IFabrCoreRuntimeSettingsContributor, CopilotRuntimeSettingsContributor>();
 
         if (!options.Enabled)
         {
@@ -120,6 +142,8 @@ public static class Microsoft365CopilotExtensions
     /// Maps the Azure Bot Service messaging endpoint (default <c>/api/messages</c>) and, in
     /// development (or when explicitly enabled), the app-package download endpoints under
     /// <c>/m365copilot</c> plus the name-addressed manifest at <c>/manifests/{name}.json</c>.
+    /// The administration routes under <c>/fabrcoreapi/admin/v1/integrations/microsoft365</c> are
+    /// mapped whether or not the channel is on, and require the host's administration policy.
     /// </summary>
     public static WebApplication UseMicrosoft365Copilot(this WebApplication app)
     {
@@ -133,14 +157,18 @@ public static class Microsoft365CopilotExtensions
         var logger = app.Services.GetRequiredService<ILoggerFactory>()
             .CreateLogger("FabrCore.Services.Microsoft365Copilot");
 
+        // The administration routes are mapped whether or not the channel is on, so a management
+        // console always gets an answer it can render.
+        ((Microsoft.AspNetCore.Builder.IApplicationBuilder)app).Properties[mappedKey] = true;
+        CopilotIntegrationEndpoints.Map(app);
+
         if (!marker.Enabled)
         {
-            logger.LogInformation("Microsoft 365 Copilot addon is disabled (Microsoft365Copilot:Enabled = false).");
+            logger.LogInformation("Microsoft 365 Copilot channel is off: {Reason}", marker.DisabledReason);
             return app;
         }
 
         var options = app.Services.GetRequiredService<IOptions<Microsoft365CopilotOptions>>().Value;
-        ((Microsoft.AspNetCore.Builder.IApplicationBuilder)app).Properties[mappedKey] = true;
 
         var messages = app.MapPost(
             options.MessagesEndpoint,
@@ -290,6 +318,14 @@ public static class Microsoft365CopilotExtensions
         }
     }
 
-    /// <summary>Registered by <see cref="AddMicrosoft365Copilot"/> so Use can verify ordering.</summary>
-    internal sealed record Microsoft365CopilotMarker(bool Enabled);
+    /// <summary>
+    /// Registered by <see cref="AddMicrosoft365Copilot"/> so Use can verify ordering, and so the
+    /// administration and reporting components can say why the channel is off.
+    /// </summary>
+    /// <param name="Enabled">Whether the channel serves its messaging endpoint.</param>
+    /// <param name="Configured">False when neither a configuration section nor a code delegate was supplied.</param>
+    /// <param name="DisabledReason">Why the channel is off. Null while it is on.</param>
+    /// <param name="NativeServiceConnection">The host defined the Agents SDK <c>Connections</c> section itself.</param>
+    internal sealed record Microsoft365CopilotMarker(
+        bool Enabled, bool Configured = true, string? DisabledReason = null, bool NativeServiceConnection = false);
 }

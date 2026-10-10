@@ -293,4 +293,96 @@ public sealed class RuntimeConfigurationTests
         Assert.ThrowsExactly<InvalidOperationException>(() => state.Preview(new Dictionary<string, string?> { ["A2A:Enabled"] = "false" }, provider));
         Assert.AreEqual(1, calls);
     }
+
+    [TestMethod]
+    public void UnsetKeyWithADefault_IsReportedAsCodeDefault_NotAsACodeOverride()
+    {
+        var config = new ConfigurationManager();
+        config.AddInMemoryCollection(new Dictionary<string, string?> { ["A2A:Enabled"] = "true" });
+        var state = new RuntimeConfigurationState(config, "test", [], null);
+        var services = new ServiceCollection();
+        services.AddSingleton(Options.Create(new A2AOptions { Enabled = true }));
+        services.AddSingleton<IFabrCoreRuntimeSettingsContributor, A2ARuntimeSettingsContributor>();
+        using var provider = services.BuildServiceProvider();
+        state.MarkStarted(provider);
+
+        var rows = state.Report(provider).Settings.ToDictionary(s => s.Key);
+
+        var mode = rows["A2A:Authentication:Mode"];
+        Assert.AreEqual("code-default", mode.Source);
+        Assert.AreEqual("ApiKey", mode.ResolvedValue);
+        Assert.AreEqual("ApiKey", mode.AppliedValue);
+        Assert.IsTrue(mode.AppliedKnown);
+        Assert.IsFalse(mode.PendingRestart);
+        Assert.AreEqual("code-default", rows["A2A:Principal:Strategy"].Source);
+        Assert.AreEqual("Fixed", rows["A2A:Principal:Strategy"].AppliedValue);
+        // No default exists for the public URL, so an unset value stays unset rather than invented.
+        Assert.IsNull(rows["A2A:PublicBaseUrl"].ResolvedValue);
+        Assert.IsTrue(rows["A2A:PublicBaseUrl"].AppliedKnown);
+    }
+
+    [TestMethod]
+    public void DefaultedKey_ChangedInCode_IsStillReportedAsACodeOverride()
+    {
+        var config = new ConfigurationManager();
+        var state = new RuntimeConfigurationState(config, "test", [], null);
+        var options = new A2AOptions { Enabled = true, PublicBaseUrl = "https://agents.example.com" };
+        options.Authentication.Mode = A2AAuthenticationMode.JwtBearer;
+        var services = new ServiceCollection();
+        services.AddSingleton(Options.Create(options));
+        services.AddSingleton<IFabrCoreRuntimeSettingsContributor, A2ARuntimeSettingsContributor>();
+        using var provider = services.BuildServiceProvider();
+        state.MarkStarted(provider);
+
+        var rows = state.Report(provider).Settings.ToDictionary(s => s.Key);
+
+        Assert.AreEqual("code-or-consumer", rows["A2A:Authentication:Mode"].Source);
+        Assert.AreEqual("JwtBearer", rows["A2A:Authentication:Mode"].AppliedValue);
+        Assert.AreEqual("https://agents.example.com", rows["A2A:PublicBaseUrl"].AppliedValue);
+    }
+
+    [TestMethod]
+    public void A2ASettingsNoConsumerReads_AreNotClaimedAsApplied_WhileA2AIsOff()
+    {
+        var config = new ConfigurationManager();
+        var state = new RuntimeConfigurationState(config, "test", [], null);
+        var services = new ServiceCollection();
+        services.AddSingleton(Options.Create(new A2AOptions()));
+        services.AddSingleton<IFabrCoreRuntimeSettingsContributor, A2ARuntimeSettingsContributor>();
+        using var provider = services.BuildServiceProvider();
+        state.MarkStarted(provider);
+
+        var rows = state.Report(provider).Settings.ToDictionary(s => s.Key);
+
+        Assert.IsTrue(rows["A2A:Enabled"].AppliedKnown);
+        Assert.IsFalse(rows["A2A:Authentication:Mode"].AppliedKnown);
+        Assert.IsNull(rows["A2A:Authentication:Mode"].AppliedValue);
+        Assert.IsFalse(rows["A2A:Principal:Strategy"].AppliedKnown);
+    }
+
+    [TestMethod]
+    public void DefaultedKey_SetByCloudAfterStartup_IsPendingRestart()
+    {
+        const string key = "A2A:Principal:Strategy";
+        using var f = new Fixture();
+        var services = new ServiceCollection().AddSingleton(new FabrCoreSettingsCatalog());
+        services.AddSingleton<IFabrCoreRuntimeSettingsContributor>(
+            new FixedContributor(new RuntimeSettingObservation(key, "Fixed", "test consumer") { DefaultValue = "Fixed" }));
+        using var provider = services.BuildServiceProvider();
+        f.Runtime.MarkStarted(provider);
+
+        f.Cloud.Apply(new() { ConfigurationVersion = "v2", Settings = new() { [key] = "CanonicalEntra" } },
+            new FabrCoreSettingsCatalog(), NullLogger.Instance);
+        var row = f.Runtime.Report(provider).Settings.Single(s => s.Key == key);
+
+        Assert.AreEqual("cloud", row.Source);
+        Assert.AreEqual("CanonicalEntra", row.ResolvedValue);
+        Assert.AreEqual("Fixed", row.AppliedValue);
+        Assert.IsTrue(row.PendingRestart);
+    }
+
+    private sealed class FixedContributor(params RuntimeSettingObservation[] observations) : IFabrCoreRuntimeSettingsContributor
+    {
+        public IEnumerable<RuntimeSettingObservation> Observe() => observations;
+    }
 }

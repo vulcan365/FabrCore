@@ -1,3 +1,52 @@
+# Unreleased
+
+These changes are on `develop` and are not in a published package yet.
+
+## Cloud-managed Microsoft 365 Copilot and A2A integrations
+
+A cloud server can now discover, enable, observe, and diagnose the Microsoft 365 Copilot channel,
+the A2A endpoint, Connections, and remote agents through the open protocol. See the
+[integration guide](docs/microsoft-365-copilot-native-integration.md), the
+[plan](docs/cloud-managed-copilot-integrations-plan.md), and the
+[cloud server how-to](docs/cloud-server-microsoft-365-copilot.md).
+
+- **Capability advertisement.** Add-ons implement `IFabrCoreCapabilityContributor`
+  (`FabrCore.Core`) to add services to `/fabrcoreapi/capabilities` and flags to the cloud
+  heartbeat. The host lists an `a2a` service, the Copilot add-on `microsoft365-copilot`, and remote
+  agents `remote-agents`. The heartbeat gains `a2a`, `m365copilot`, `m365copilot.enabled`,
+  `remote-agents`, and `remote-agents.enabled`.
+- **Configuration-bound enablement.** `AddFabrCoreConnections(services, configuration)` binds
+  `FabrCore:Connections`, and `AddFabrCoreRemoteAgents(services, configuration)` reads
+  `FabrCore:RemoteAgents`. An optional delegate runs last, so code wins. Both sections are in the
+  settings catalog as restart-required.
+- **Applied-settings reporting.** The configuration-state report carries the settings the Copilot
+  channel and A2A actually run with. `RuntimeSettingObservation.DefaultValue` lets a contributor
+  state its default, so an unset key is reported as `code-default` instead of as a code override.
+- **Integrations administration API.** `GET /fabrcoreapi/admin/v1/integrations/a2a` and
+  `/integrations/microsoft365` return configuration and named posture findings.
+  `/integrations/microsoft365/manifest` and `/app-package` serve the generated package to
+  authenticated administrators, and `POST /integrations/microsoft365/diagnostics` checks the agent
+  type and the bot credential. No route returns a credential. Contracts are in
+  `FabrCore.Core.CloudServer`.
+
+### Behavior changes to review
+
+- **The capability document always lists `a2a`.** A2A is part of the host, so the service is
+  present with `available: false` when `A2A:Enabled` is false. A console that treats every listed
+  service as working must start honoring `available`.
+- **`AddMicrosoft365Copilot()` no longer throws on an unconfigured host.** With no
+  `Microsoft365Copilot` section and no delegate, the channel starts off and reports why. A host
+  that relied on that startup failure to catch a missing configuration file should check
+  `GET /integrations/microsoft365` or the `m365copilot.enabled` heartbeat flag instead. A section or
+  delegate that is present but incomplete still fails startup.
+- **`UseMicrosoft365Copilot()` maps administration routes while the channel is off.** They require
+  the `FabrCoreAdmin` policy and return status, never content.
+- **Remote agents register a capability contributor even when disabled.** Nothing else is
+  registered while disabled, and the agent still refuses to run.
+- **A2A reports more settings.** `A2A:Authentication:Mode`, `A2A:Principal:Strategy`, and
+  `A2A:PublicBaseUrl` are in the configuration-state report. While A2A is off they have
+  `appliedKnown: false`.
+
 # FabrCore 2.0.0
 
 These release notes describe the 2.0 release relative to `v1.8.1`, including the final

@@ -190,6 +190,16 @@ public sealed class FabrCoreSettingsCatalog
             "A2A channel configuration. Only the API-key authentication handler observes changes live; " +
             "all other A2A consumers hold a startup snapshot and need a restart.",
             SettingsApplyMode.RestartRequired, IsSection: true),
+        // Optional packages whose sections the host describes so a console can offer them before
+        // the package is enabled. Both read their section once, when services are registered.
+        new("FabrCore:Connections", "section", null,
+            "Connections: Enabled, EntraAgentIdEnabled, ClientHandoffEnabled, HandoffAuthority and HandoffAudience. " +
+            "Read once by AddFabrCoreConnections(services, configuration); credentials are never set here.",
+            SettingsApplyMode.RestartRequired, IsSection: true),
+        new("FabrCore:RemoteAgents", "section", null,
+            "Remote agents for Work IQ and Copilot Studio: Enabled and Timeout. " +
+            "Read once by AddFabrCoreRemoteAgents(services, configuration).",
+            SettingsApplyMode.RestartRequired, IsSection: true),
         new("Microsoft365Copilot", "section", null,
             "Microsoft 365 Copilot channel configuration. No configuration binder is registered for this " +
             "section, so values are frozen at startup.",

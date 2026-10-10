@@ -263,7 +263,7 @@ internal sealed class CloudServerSyncService : BackgroundService
         Timestamp = DateTimeOffset.UtcNow
     };
 
-    private Dictionary<string, string> BuildCapabilities()
+    internal Dictionary<string, string> BuildCapabilities()
     {
         var capabilities = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -313,6 +313,23 @@ internal sealed class CloudServerSyncService : BackgroundService
 
         if (serviceProvider.GetService<FabrCore.Connections.IConnectionService>() is not null)
             capabilities["connections.admin"] = "1";
+
+        if (serviceProvider.GetService<IOptions<A2AOptions>>()?.Value.Enabled == true)
+            capabilities[ClusterCapabilityFactory.A2AServiceName] = ClusterCapabilityFactory.A2AProtocolVersion;
+
+        // Add-on flags go last and never replace a key the host set.
+        foreach (var contributor in serviceProvider.GetServices<FabrCore.Services.Contracts.Capabilities.IFabrCoreCapabilityContributor>())
+        {
+            try
+            {
+                foreach (var (key, value) in contributor.GetHeartbeatCapabilities())
+                    if (!string.IsNullOrWhiteSpace(key) && value is not null) capabilities.TryAdd(key, value);
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "Capability contributor {Contributor} failed; its heartbeat flags were skipped", contributor.GetType().Name);
+            }
+        }
         return capabilities;
     }
 

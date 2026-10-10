@@ -8,6 +8,7 @@ using FabrCore.Host.Security;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Orleans;
@@ -16,6 +17,9 @@ namespace FabrCore.Services.Connections;
 
 public sealed class ConnectionsOptions
 {
+    /// <summary>Configuration section read by the configuration-bound registration.</summary>
+    public const string SectionName = "FabrCore:Connections";
+
     public bool Enabled { get; set; }
     public bool EntraAgentIdEnabled { get; set; }
     public bool ClientHandoffEnabled { get; set; }
@@ -47,6 +51,28 @@ public static class ConnectionsExtensions
     public static IServiceCollection AddFabrCoreConnections(this IServiceCollection services, Action<ConnectionsOptions> configure)
     {
         var options = new ConnectionsOptions(); configure(options);
+        return Register(services, options);
+    }
+
+    /// <summary>
+    /// Opt-in bound from the <c>FabrCore:Connections</c> section, so the feature can be switched on by
+    /// configuration alone. <paramref name="configure"/> runs last, so code wins.
+    /// </summary>
+    /// <remarks>
+    /// The section is deliberately not the top-level <c>Connections</c>: the Microsoft 365 Agents SDK
+    /// owns that name, and the Copilot add-on checks for it to decide whether to supply its own.
+    /// </remarks>
+    public static IServiceCollection AddFabrCoreConnections(this IServiceCollection services, IConfiguration configuration, Action<ConnectionsOptions>? configure = null)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        var options = new ConnectionsOptions();
+        configuration.GetSection(ConnectionsOptions.SectionName).Bind(options);
+        configure?.Invoke(options);
+        return Register(services, options);
+    }
+
+    private static IServiceCollection Register(IServiceCollection services, ConnectionsOptions options)
+    {
         if (!options.Enabled) return services;
         services.AddSingleton(options);
         services.AddSingleton(new ConnectionCapabilities(options.EntraAgentIdEnabled, options.ClientHandoffEnabled));

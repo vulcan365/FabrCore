@@ -56,6 +56,93 @@ public sealed class Microsoft365CopilotExtensionsTests
     }
 
     [TestMethod]
+    public void UnconfiguredAddon_StartsWithTheChannelOff_AndSaysWhy()
+    {
+        var builder = CreateBuilder(new());
+
+        builder.AddMicrosoft365Copilot();
+
+        var marker = (Microsoft365CopilotExtensions.Microsoft365CopilotMarker)builder.Services
+            .Single(d => d.ServiceType == typeof(Microsoft365CopilotExtensions.Microsoft365CopilotMarker)).ImplementationInstance!;
+        Assert.IsFalse(marker.Enabled);
+        Assert.IsFalse(marker.Configured);
+        StringAssert.Contains(marker.DisabledReason, "No Microsoft365Copilot configuration");
+        Assert.IsFalse(builder.Services.Any(d => d.ServiceType == typeof(IAgent)));
+        Assert.IsNull(builder.Configuration["Connections:ServiceConnection:Settings:ClientId"]);
+    }
+
+    [TestMethod]
+    public void DisabledAddon_StillAdvertisesAndReportsItself()
+    {
+        foreach (var configuration in new Dictionary<string, string?>[] { new(), new() { ["Microsoft365Copilot:Enabled"] = "false" } })
+        {
+            var builder = CreateBuilder(configuration);
+
+            builder.AddMicrosoft365Copilot();
+
+            Assert.IsTrue(builder.Services.Any(d =>
+                d.ServiceType == typeof(FabrCore.Services.Contracts.Capabilities.IFabrCoreCapabilityContributor)));
+            Assert.IsTrue(builder.Services.Any(d =>
+                d.ServiceType == typeof(FabrCore.Host.Configuration.Cloud.IFabrCoreRuntimeSettingsContributor)));
+        }
+    }
+
+    [TestMethod]
+    public void ExplicitlyDisabledAddon_RecordsThatItWasConfiguredOff()
+    {
+        var builder = CreateBuilder(new() { ["Microsoft365Copilot:Enabled"] = "false" });
+
+        builder.AddMicrosoft365Copilot();
+
+        var marker = (Microsoft365CopilotExtensions.Microsoft365CopilotMarker)builder.Services
+            .Single(d => d.ServiceType == typeof(Microsoft365CopilotExtensions.Microsoft365CopilotMarker)).ImplementationInstance!;
+        Assert.IsFalse(marker.Enabled);
+        Assert.IsTrue(marker.Configured);
+        Assert.AreEqual("Microsoft365Copilot:Enabled is false.", marker.DisabledReason);
+    }
+
+    [TestMethod]
+    public void CodeDelegateAlone_CountsAsConfiguration_AndIsStillValidated()
+    {
+        // Supplying options in code is a decision to run the channel; an incomplete one must
+        // fail loudly rather than be mistaken for an untouched add-on.
+        var incomplete = CreateBuilder(new());
+        Assert.ThrowsExactly<InvalidOperationException>(() => incomplete.AddMicrosoft365Copilot(o => o.ClientId = "client"));
+
+        var complete = CreateBuilder(new());
+        complete.AddMicrosoft365Copilot(o =>
+        {
+            o.TokenValidation.Enabled = false;
+            o.Agent.AgentType = "chat-agent";
+        });
+        Assert.IsTrue(complete.Services.Any(d => d.ServiceType == typeof(IAgent)));
+    }
+
+    [TestMethod]
+    public void NativeAgentsSdkConnections_AreRecordedBeforeTheBridgeRuns()
+    {
+        var native = CreateBuilder(new()
+        {
+            ["Connections:ServiceConnection:Settings:ClientId"] = "host-owned",
+            ["Microsoft365Copilot:ClientId"] = "client",
+            ["Microsoft365Copilot:Agent:AgentType"] = "chat-agent",
+        });
+        native.AddMicrosoft365Copilot();
+        var synthesized = CreateBuilder(new()
+        {
+            ["Microsoft365Copilot:ClientId"] = "client",
+            ["Microsoft365Copilot:ClientSecret"] = "secret",
+            ["Microsoft365Copilot:Agent:AgentType"] = "chat-agent",
+        });
+        synthesized.AddMicrosoft365Copilot();
+
+        static bool Native(HostApplicationBuilder builder) => ((Microsoft365CopilotExtensions.Microsoft365CopilotMarker)builder.Services
+            .Single(d => d.ServiceType == typeof(Microsoft365CopilotExtensions.Microsoft365CopilotMarker)).ImplementationInstance!).NativeServiceConnection;
+        Assert.IsTrue(Native(native));
+        Assert.IsFalse(Native(synthesized));
+    }
+
+    [TestMethod]
     public void Throws_WhenNoAgentConfigured()
     {
         var builder = CreateBuilder(new()

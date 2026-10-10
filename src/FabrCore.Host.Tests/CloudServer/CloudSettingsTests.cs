@@ -319,6 +319,21 @@ public sealed class FabrCoreSettingsCatalogTests
     }
 
     [TestMethod]
+    public void Connections_and_remote_agents_are_described_and_require_a_restart()
+    {
+        var catalog = new FabrCoreSettingsCatalog();
+
+        // Both packages read their section once at registration, so a console must be able to
+        // offer the keys before the package is enabled and must not promise a live change.
+        foreach (var key in new[] { "FabrCore:Connections:Enabled", "FabrCore:Connections:EntraAgentIdEnabled", "FabrCore:RemoteAgents:Enabled", "FabrCore:RemoteAgents:Timeout" })
+        {
+            Assert.IsNotNull(catalog.Find(key), key);
+            Assert.AreEqual(SettingsApplyMode.RestartRequired, catalog.GetApplyMode(key), key);
+            Assert.IsFalse(FabrCoreSettingsCatalog.IsSecret(key), key);
+        }
+    }
+
+    [TestMethod]
     public void Contributors_extend_the_catalog()
     {
         var catalog = new FabrCoreSettingsCatalog([new TestContributor()]);

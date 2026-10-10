@@ -20,12 +20,13 @@ $newTag = switch ($Bump) {
 Write-Host "Current: $lastTag; proposed: $newTag"
 Write-Host "Packages: $($FabrCoreBuild.Packages -join ', ')"
 if ($DryRun) {
-    Write-Host '[DryRun] Local tags only. Would update main, create and push the tag. No Git state changed.'
+    Write-Host '[DryRun] Local tags only. Would update main, create and push the tag, then switch back to develop. No Git state changed.'
     return
 }
 if ((Read-Host "Create and push $newTag from main? (y/n)") -ne 'y') { return }
 Assert-CleanReleaseTree
 Invoke-CheckedGit @('tag', $newTag)
 Invoke-CheckedGit @('push','origin', $newTag)
-Write-Host "Tag pushed. GitHub Actions will build, test and publish the configured package set."
+Invoke-CheckedGit @('checkout','develop')
+Write-Host "Tag pushed; back on develop. GitHub Actions will build, test and publish the configured package set."
 Write-Host "Release notes: https://github.com/vulcan365/FabrCore/releases/new?tag=$newTag"

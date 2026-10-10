@@ -53,7 +53,15 @@ internal sealed record RuntimeRuleValue(string? Value, string Kind, string Rule,
 
 /// <summary>A component's observation of the options/provider it actually uses. Values are redacted by the reporter.</summary>
 public sealed record RuntimeSettingObservation(string Key, string? Value, string SourceId,
-    bool AppliedKnown = true, bool Secret = false, string? Reason = null);
+    bool AppliedKnown = true, bool Secret = false, string? Reason = null)
+{
+    /// <summary>
+    /// The value the consumer uses when the key is absent from configuration. When the key is unset,
+    /// the report resolves it to this value with source <c>code-default</c> instead of describing an
+    /// untouched default as a code override.
+    /// </summary>
+    public string? DefaultValue { get; init; }
+}
 
 /// <summary>Implement for custom consumers. Observe actual instances; do not construct replacement services to infer state.</summary>
 public interface IFabrCoreRuntimeSettingsContributor

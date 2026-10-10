@@ -471,6 +471,68 @@ it to the same FabrCore agent as a `ui.action` message, mirroring what surface c
   the addon sends the action as a **request** and relays the agent's reply — including `ui.render`
   card replies, so an agent can answer a submit with a fresh card.
 
+## Cloud management and administration
+
+The addon is built to be switched on, inspected, and diagnosed by a management console without a
+shell on the host. A FabrCore cloud server uses the same routes over the outbound administration
+channel; see [the protocol](../../docs/cloud-server-protocol.md#managing-microsoft-365-copilot-and-a2a-integrations).
+
+**It starts off when it has nothing to go on.** Calling `AddMicrosoft365Copilot()` on a host with
+no `Microsoft365Copilot` section and no code delegate no longer fails startup. The channel starts
+off and reports why, so one host image can be enabled later by configuration alone. Supplying a
+section or a delegate is a decision to run the channel, and an incomplete one still fails loudly.
+
+**It advertises itself**, on or off, through `GET /fabrcoreapi/capabilities` as the service
+`microsoft365-copilot` (with `available` and `unavailableReason`) and through the cloud heartbeat
+flags `m365copilot` and `m365copilot.enabled`.
+
+**It reports what is applied.** The configuration-state report (`GET
+/fabrcoreapi/admin/v1/settings/state`) carries the channel's effective `Enabled`, `TenantId`,
+`ClientId`, `AuthType`, `MessagesEndpoint`, `TokenValidation:Enabled`, `Principal:Strategy`,
+`Agent:Binding`, `Proactive:Enabled`, `Streaming:Enabled`, and `Manifest:PublicHostName`, plus two
+facts: `Runtime:Microsoft365Copilot:SingleSignOn` and
+`Runtime:Microsoft365Copilot:ForwardsUserCredential`. While the channel is off, only `Enabled` is
+reported as applied.
+
+**It answers administration routes**, mapped by `UseMicrosoft365Copilot()` whether or not the
+channel is on. All require the host administration credential.
+
+| Route under `/fabrcoreapi/admin/v1/integrations/microsoft365` | Returns |
+|---|---|
+| `GET` (the root) | Identity, configuration, and posture findings |
+| `GET /manifest` | The generated manifest; `409` while the channel is off |
+| `GET /app-package` | The uploadable zip; `409` while the channel is off |
+| `POST /diagnostics` | The findings, whether the agent type is registered, and whether the host can obtain an Azure Bot Service token |
+
+```bash
+curl -H "Authorization: Bearer $FABRCORE_ADMIN_KEY" \
+  https://<host>/fabrcoreapi/admin/v1/integrations/microsoft365
+curl -X POST -H "Authorization: Bearer $FABRCORE_ADMIN_KEY" \
+  https://<host>/fabrcoreapi/admin/v1/integrations/microsoft365/diagnostics
+curl -H "Authorization: Bearer $FABRCORE_ADMIN_KEY" -o appPackage.zip \
+  https://<host>/fabrcoreapi/admin/v1/integrations/microsoft365/app-package
+```
+
+Findings are `pass`, `warn`, `fail`, or `skipped`:
+
+| Finding | `fail` or `warn` when |
+|---|---|
+| `token-validation` | The messaging endpoint accepts anonymous requests |
+| `principal-strategy` | Users are not mapped with `CanonicalEntra`, or channel-id fallback is allowed |
+| `credential-type` | The bot authenticates with a client secret |
+| `turn-state-storage` | Sign-in and turn state are in process memory |
+| `user-credential-forwarding` | `PassUserTokenToAgent` copies the user's token onto agent messages |
+| `public-host` | `Manifest:PublicHostName` is not set |
+| `proactive-scopes` | Proactive delivery is allowed outside personal conversations |
+
+Diagnostics never returns the token it acquires. It waits at most 20 seconds, discards the token,
+and on failure reports the exception type and the first line of its message. A passing run shows
+the host can authenticate to Azure Bot Service. It does not show that Azure Bot Service can reach
+your messaging endpoint.
+
+The administration `app-package` route is the way to fetch the package in production. The
+`/m365copilot` developer endpoints are anonymous and stay off outside Development.
+
 ## Production checklist
 
 - **Durable Agents SDK storage** — sign-in and turn state default to `MemoryStorage`. When running
@@ -490,7 +552,7 @@ it to the same FabrCore agent as a `ui.action` message, mirroring what surface c
 
 | Key | Default | Purpose |
 |-----|---------|---------|
-| `Enabled` | `true` | Master switch for the addon |
+| `Enabled` | `true`; `false` when the host has no `Microsoft365Copilot` configuration at all | Master switch for the channel. Off still leaves the administration routes and capability reporting in place. |
 | `TenantId` / `ClientId` / `ClientSecret` | — | Bot app registration identity |
 | `AuthType` | `ClientSecret` | Outbound auth: secret, certificate, MSI, federated |
 | `MessagesEndpoint` | `/api/messages` | Route for the Azure Bot Service endpoint |
