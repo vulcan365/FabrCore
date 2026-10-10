@@ -256,6 +256,12 @@ production environment cannot share a bot.
 truth for what should be configured, and a missing row means "unknown", not "off". Phase 2 does
 not need it: heartbeats already store each host's latest report, and status is read live.
 
+Phase 2 as built (section 16) is narrower than this table. It has one `MicrosoftIntegration` row
+per tenant, which carries what the first three entities describe for a single environment and a
+single agent, and none of the others. The table above remains the target: the per-environment and
+per-agent split comes back when a tenant needs a second environment or a second agent, and the
+consent fields arrive with managed provisioning.
+
 ## 11. Phases
 
 | Phase | Name | Delivers | Exit criterion |
@@ -270,6 +276,10 @@ not need it: heartbeats already store each host's latest report, and status is r
 Phase 2 comes before managed provisioning on purpose. It needs no standing permission in customer
 tenants, it exercises every host-side contract, and it produces the settings composer and status
 views that managed provisioning reuses unchanged.
+
+Phase 1 is built in FabrCore (section 14) and Phase 2 is built in Insights (section 16). Phase 2's
+exit criterion is not yet met: it has not been run against a real host and a real tenant, and it
+needs a FabrCore release that contains Phase 1.
 
 ## 12. Decisions
 
@@ -474,9 +484,11 @@ capability service named `connections`.
   document already uses it. Phase 2 puts the client secret there, as a setting, so it needs nothing
   more.
 
-## 16. Phase 2 proposal: bring your own app registration
+## 16. Phase 2: bring your own app registration
 
-**Status: proposed. Nothing in this section is built.**
+**Status: built in Insights (`main`, October 2026).** The decisions in 16.5 were taken before the
+work started, and this section describes what was built. The operator documentation is
+`docs/insights-microsoft-365.md` in the Insights repository.
 
 The customer creates the app registration and the Azure Bot resource themselves, following a
 checklist. Insights records the identifiers, composes and publishes the settings, including the
@@ -486,80 +498,93 @@ healthy. It needs no permission in the customer tenant.
 ### 16.1 What an operator does
 
 1. Opens **Microsoft 365** in the cluster workspace, with an environment selected.
-2. Enters the Entra tenant id of the customer, once for the tenant.
-3. For this environment, enters the client id of the app, its client secret and the date the
-   secret expires, and the public name of the host; picks the agent type and model configuration
-   to publish; and chooses whether to enable A2A. A customer using a federated credential leaves
-   the secret empty.
-4. Reads the checklist of what the customer must have created, with every value to paste already
-   computed: the messaging endpoint URL, the Application ID URI, the scope names, the A2A endpoint
-   and audience.
-5. Reviews the exact keys that will be added, changed, and removed, and publishes.
-6. Sees which hosts are waiting on a restart, and restarts them by whatever means the deployment
+2. Enters the Entra tenant id of the customer, the client id of the app, its client secret and the
+   date the secret expires, and the public name of the host; picks the agent type and model
+   configuration to publish; and chooses whether to enable A2A. A customer using a federated
+   credential leaves the secret empty.
+3. Reads the checklist of what the customer must have created, with every value to paste already
+   computed: the messaging endpoint URL, the Application ID URI, the scope name, and the A2A
+   endpoint.
+4. Reviews the exact keys that will be added, changed, and removed, and publishes.
+5. Sees which hosts are waiting on a restart, and restarts them by whatever means the deployment
    uses.
-7. Runs diagnostics per host and reads the findings.
-8. Downloads the app package and gives it to the customer administrator.
+6. Runs diagnostics per host and reads the findings.
+7. Downloads the app package and gives it to the customer administrator.
 
 ### 16.2 The five parts
 
-**1. Integration record.** Two tables, added by migration `M012`, holding identifiers only.
+**1. Integration record.** One table, `insights.MicrosoftIntegration`, added by migration `M012`
+and keyed by `TenantId`. It holds the cluster and environment the integration is published to, a
+revision, the configuration version it last published, the updated time and actor, and a JSON body
+with the settings and the list of keys the record owns. The settings are the Entra tenant id,
+client id, auth type, secret expiry date, public host name, binding name, agent type, handle,
+model configuration name, manifest name, description and developer details, and the A2A switch
+and route name.
 
-| Table | Key | Columns |
-| --- | --- | --- |
-| `insights.MicrosoftIntegration` | `TenantId` | Entra tenant id; mode (`byo`); revision; updated time and actor |
-| `insights.MicrosoftIntegrationApp` | `ClusterId`, `EnvironmentId` | Client id; auth type; secret expiry date; public host name; binding name; agent type; handle; model configuration name; manifest name, descriptions, version, and developer details; A2A enabled and route name; the list of keys last published; the configuration version they were published in; revision; updated time and actor |
+There is one record per tenant (P1), so a tenant publishes one agent to one environment. Another
+environment of the same tenant sees only where the integration lives. Moving it means removing it
+there and publishing it again. If its environment or cluster is removed, the stored values are
+offered so it can be published elsewhere.
 
-The client secret itself is not a column. It is written straight into the `settings` of the
-environment layer when the operator publishes, where the configuration document is already
-encrypted at rest, and the form never reads it back. Both tables are added to the tenant purge used
-by the test fixture and to the tenant archive.
+The client secret itself is not stored in the record. It is written straight into the `settings` of
+the environment layer when the operator publishes, where the configuration document is already
+encrypted at rest, and the form never reads it back. The table is in the tenant purge used by the
+test fixture. It is not in the tenant archive (16.3).
 
-**2. Settings composer.** A pure function from the two records to a flat map of string settings,
-plus a service that applies it.
+**2. Settings composer.** A pure function from the settings to a flat map of string settings, plus
+a service that applies it.
 
 * It emits the keys in section 7 for the channel, the binding, and optionally A2A, with
-  `Principal:Strategy` fixed to `CanonicalEntra` on both channels and the A2A audience set to the
-  client id.
+  `Principal:Strategy` fixed to `CanonicalEntra` on both channels. For A2A it sets the audience to
+  the client id, adds `api://botid-{clientId}` as a second valid audience, requires the
+  `agent.invoke` scope, and takes the first `A2A:Agents` index that no layer already uses.
 * With `AuthType = ClientSecret` it publishes `Microsoft365Copilot:ClientSecret`. An empty secret
   field on a later edit means "keep the published value", so changing a manifest name does not
   require typing the secret again. With a secret-free auth type it publishes no secret and removes
   one it published before.
 * It validates before publishing, because a bad channel configuration stops the host from starting:
-  tenant id and client id are GUIDs, the public name is a host name, a secret is present when the
-  auth type needs one, the agent type exists in the agent catalog of the host, and the model
-  configuration exists in the effective configuration.
+  tenant id and client id are GUIDs, the public name is a host name, the auth type is one the
+  Agents SDK accepts, a secret is present when the auth type needs one, the model configuration
+  exists in the effective configuration, and neither `SharedAgentHandle` nor
+  `AgentPerConversation` is set alongside the binding. The agent type is not checked at publish;
+  the host's diagnostics confirms it.
 * It warns when the recorded secret expiry is within 30 days, and says so on the page from then on.
 * Applying reads the environment layer, removes the keys the record published last time, writes the
   new ones into `settings`, and calls `IConfigDocumentService.PublishAsync` with `expectedVersion`.
   It edits the JSON tree in place, as the Foundry integration does, so fields it does not know
-  survive.
-* A review step returns the added, changed, and removed keys for the operator to confirm. It is
-  held in memory for the page, since drafts are not stored.
-* It detects drift: if a key it owns no longer has the value it published, the page says so and
-  offers to republish. It does not lock the runtime settings form.
+  survive. The record's revision and the layer's version are both checked, and the record is
+  written only after the configuration publish succeeds.
+* A review step returns the added, changed, and removed keys for the operator to confirm, with the
+  secret masked. Nothing is stored between review and publish.
+* The keys the record owns are locked (P2). The runtime settings form shows them read-only with a
+  link to the Microsoft 365 page, and the general configuration publish rejects a body that
+  changes one, whichever editor or API client produced it. Shared defaults are never locked.
+* It still detects drift, for the one path the lock does not cover: restoring an older
+  configuration version. The page names the keys and republishing puts them back.
 
 **3. Per-host status and diagnostics.** Read live, stored nowhere.
 
-* The host list comes from the stored heartbeats, with a new typed reader for the `m365copilot`,
+* The host list comes from the stored heartbeats, with a typed reader for the `m365copilot`,
   `m365copilot.enabled`, and `a2a` flags.
 * Status calls `GET integrations/microsoft365` and `GET integrations/a2a` for one host instance
   through `IInsightsEnvironmentAdminClient`, which already supports instance targeting and returns
   JSON as text.
 * Diagnostics calls `POST integrations/microsoft365/diagnostics` for one host instance, on demand.
 * The host reports a client secret as a `credential-type` warning. When the record says the
-  customer uses a client secret, the page shows that finding as accepted, so a host configured as
-  intended does not look as if it needs review.
-* A host without the flags, or one that answers `404`, is shown as needing a newer FabrCore
-  version, not as broken.
+  customer uses a client secret, the page shows that finding as accepted and does not count it
+  against the host. The host's own report is unchanged.
+* A host whose heartbeat has no `m365copilot` flag is shown as not reporting the add-on, not as
+  broken. A host that reports a client id other than the published one is called out.
 
-**4. App package download.** A byte-returning method beside `SendAsync`, and one controller action
-that streams `GET integrations/microsoft365/app-package` to the browser as `appPackage.zip`, with
-the same environment authorization as the rest. The page disables the download while a manifest key
-is pending restart, because the package would describe the old manifest.
+**4. App package download.** One controller action that sends
+`GET integrations/microsoft365/app-package` to a host through the connect command service, which
+already carries binary bodies, and streams the answer to the browser as `appPackage.zip`, with the
+same environment authorization as the rest. The environment admin client is unchanged. The page
+offers the download only for a connected host that reports the channel on and has no owned key
+pending restart, because the package would otherwise describe the old manifest.
 
 **5. Pending-restart view.** The existing per-host pending-restart data, filtered to the keys the
-record owns, shown at the top of the page as "published, waiting on a restart on N of M hosts" with
-the keys per host. No new storage.
+record owns, shown at the top of the page and per host. No new storage.
 
 ### 16.3 What it deliberately leaves out
 
@@ -570,40 +595,52 @@ the keys per host. No new storage.
 * Verifying the Entra tenant id. It is shown as entered, not verified.
 * Restarting hosts.
 * Any stored history of status or diagnostics.
+* A second environment or a second agent for the same tenant (P1).
+* The tenant archive. An exported tenant carries the published settings in its configuration but
+  not the record; publishing once from the page in the destination adopts them again.
+* Guarding configuration rollback. A rollback that reverts owned keys is reported as drift.
 
 ### 16.4 Prerequisites
 
 * **A FabrCore release containing Phase 1.** Insights references FabrCore 2.0.1 packages; the
   integration routes, the flags, and the configuration-bound registrations are on `develop` only.
-  Insights can define its own wire types for the status documents, as it does for the
-  configuration-state report, so it does not have to wait for the package to start.
+  Insights defines its own wire types for the status documents, as it does for the
+  configuration-state report, so it builds against 2.0.1. The page has nothing to show for a host
+  until that host runs the newer release.
 * **A customer host that calls `AddMicrosoft365Copilot()`.** Publishing settings cannot install the
   add-on.
 
-### 16.5 Decisions needed before building
+### 16.5 Decisions
 
-| Id | Decision | Recommendation |
+| Id | Decision | Outcome |
 | --- | --- | --- |
-| **P1** | Record shape: one tenant record plus one app record per environment, or a single per-tenant record | **Tenant plus per-environment.** A bot has one messaging endpoint, so two environments cannot share an app registration. A single per-tenant record would force one environment per tenant. |
-| **P2** | Keys the record owns, in the runtime settings form: locked, or editable with drift detection | **Editable with drift detection** for the first version. Locking touches the general form and its tests for little gain while only operators use it. |
+| **P1** | Record shape: one tenant record plus one app record per environment, or a single per-tenant record | **Decided, October 2026: one record per tenant.** The recommendation was tenant plus per-environment, because a bot has one messaging endpoint and two environments cannot share an app registration. The simpler shape was chosen; it allows one environment per tenant, and section 10's per-environment table returns when a tenant needs a second. |
+| **P2** | Keys the record owns, in the runtime settings form: locked, or editable with drift detection | **Decided, October 2026: locked in the form**, and enforced on the server. Drift detection stays for configuration rollback. |
 | **P3** | The catalog fields for `Microsoft365Copilot:ClientSecret` and A2A key values | **Decided, 7 October 2026: keep them.** Publishing keys and secrets to clusters is acceptable (D2), and the composer uses the same mechanism. |
 | **P4** | Status and diagnostics: live only, or also stored | **Live only.** Heartbeats already store the at-rest view. Add storage when there is a reason to show history. |
-| **P5** | Where the work lands in the Insights repository | The repository has no `develop` branch and work is on `main`. **A feature branch from `main`**, unless a `develop` branch is wanted to match FabrCore. |
-| **P6** | Whether customer administrators will use this page | **Not in Phase 2.** Insights sign-in is single-tenant and scopes are not assignable. Treat the page as an operator tool and guard it with the administrator policy like the pages beside it. |
+| **P5** | Where the work lands in the Insights repository | **Decided, October 2026: committed to `main`.** The repository has no `develop` branch. |
+| **P6** | Whether customer administrators will use this page | **Not in Phase 2.** Insights sign-in is single-tenant and scopes are not assignable. The page is an operator tool, guarded by the administrator policy like the pages beside it. |
+| **P7** | The host's `credential-type` warning for a client secret | **Decided, October 2026: the host keeps reporting it as a warning; Insights shows it as accepted** when the integration uses a client secret. |
 
 ### 16.6 Size and tests
 
-About the size of the Foundry model-rates feature, not the Foundry integration: one migration, two
-contracts files, a composer and a service, one controller, one workspace section, one preview stub,
-and a small extension to the environment admin client.
+One migration, one contracts file, a composer and a service, one controller, one workspace
+section, a lock in the runtime settings form and its collection editor, a guard in the general
+configuration publish, and one preview stub.
 
 * Unit: the composer output for each option; the secret is published for `ClientSecret`, kept when
-  the field is left empty, and removed on a switch to a secret-free auth type; the secret never
-  appears in a review, an audit entry, or a log; owned-key removal on change; drift detection; the
-  expiry warning; the typed heartbeat flag reader.
-* Integration (SQL): record round trip with revision conflicts; apply publishes a new environment
-  revision and preserves unrelated settings; tenant purge and archive include the new tables.
-* Protocol: the package action returns the bytes the broker delivered, with a file name, and
-  refuses an operator without access to the environment.
-* Against a real host: the captured responses in the
-  [cloud server how-to](cloud-server-microsoft-365-copilot.md) are the fixtures.
+  the field is left empty, and removed on a switch to a secret-free auth type; a replaced secret is
+  reported without either value; owned-key removal on change; drift detection; the typed heartbeat
+  flag reader; how findings, expiry, and pending restarts are shown; the locked fields in the
+  runtime settings form; the page in each state.
+* Integration (SQL): publish writes the settings and keeps the secret out of the record and the
+  audit entry; a republish touches only what changed and an unchanged one creates no configuration
+  version; a stale review is rejected; the general publish rejects a change to an owned key; drift
+  is reported; a second environment of the same tenant is refused; removal; every call authorizes
+  the actor for the environment.
+* Protocol: the package action returns the bytes the host sent, under a file name, from the
+  instance asked; explains why a host could not provide it; and refuses an operator without access
+  to the environment before anything is sent.
+* Against a real host: not yet run. The broker is faked in the tests, and the page was exercised in
+  the preview host, whose integration service is an in-memory stub. The captured responses in the
+  [cloud server how-to](cloud-server-microsoft-365-copilot.md) are the shapes the page reads.
