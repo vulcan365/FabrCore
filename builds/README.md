@@ -85,7 +85,8 @@ projects and caches are removed after the run.
 
 Releases use one tag-triggered `publish-nuget.yml` workflow. Run `Release-Develop.ps1`
 to merge and push develop to main, then run `Release-Major.ps1`, `Release-Minor.ps1`
-or `Release-Patch.ps1` yourself to create the release tag. GitHub builds, runs the
+or `Release-Patch.ps1` yourself to create the release tag; once the tag is pushed
+the script switches you back to develop. GitHub builds, runs the
 offline tests, packs all configured packages once, and pushes them to NuGet.org in
 the same job. Branch pushes and pull requests do not trigger separate validation
 workflows. SQL, package-consumer and scripting integration checks remain available

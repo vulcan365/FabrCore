@@ -263,7 +263,8 @@ Run `Release-Develop.ps1`, then `Release-Major.ps1`, `Release-Minor.ps1` or `Rel
 A single GitHub Actions job builds, tests, packs and publishes NuGet packages from the resulting
 `vX.Y.Z` tag. Ordinary branch pushes do not start separate CI workflows.
 `Release-Major.ps1` calculates the next major version from stable Git tags and requires a clean
-`main` branch; use `-DryRun` to preview the locally known version. `Pack-Local.ps1` skips tests,
+`main` branch; use `-DryRun` to preview the locally known version. After pushing the tag the
+release scripts switch back to `develop`. `Pack-Local.ps1` skips tests,
 and `Push-NuGet.ps1` immediately unlists uploaded packages for prerelease testing. Use the
 tagged release workflow for the public 2.0.0 release.
 
