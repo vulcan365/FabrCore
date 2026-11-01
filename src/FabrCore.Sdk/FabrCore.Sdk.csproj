@@ -36,8 +36,9 @@
 		<PackageReference Include="Azure.Identity" Version="1.21.0" />
 		<PackageReference Include="Azure.AI.OpenAI" Version="2.9.0-beta.1" />
 		<PackageReference Include="ModelContextProtocol" Version="2.2.0" />
-		<PackageReference Include="Microsoft.Agents.AI" Version="1.24.0" />
-		<PackageReference Include="Microsoft.Agents.AI.OpenAi" Version="1.24.0" />
+		<!-- Hold at 1.20 until Azure.AI.OpenAI supports OpenAI 2.14: 1.24 requires it, and Azure's Responses client then throws MissingMethodException at runtime. -->
+		<PackageReference Include="Microsoft.Agents.AI" Version="1.20.0" />
+		<PackageReference Include="Microsoft.Agents.AI.OpenAi" Version="1.20.0" />
 	</ItemGroup>
 
 </Project>
