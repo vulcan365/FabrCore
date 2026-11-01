@@ -407,18 +407,8 @@ FabrCore.Core.CloudServer.IntegrationDiagnosticsReport.ObservedAt.set -> void
 FabrCore.Core.CloudServer.IntegrationDiagnosticsReport.Status.get -> string!
 FabrCore.Core.CloudServer.IntegrationDiagnosticsReport.Status.set -> void
 FabrCore.Core.CloudServer.Microsoft365IntegrationStatus
-FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.AgentBinding.get -> string?
-FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.AgentBinding.set -> void
-FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.AgentHandle.get -> string?
-FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.AgentHandle.set -> void
-FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.AgentType.get -> string?
-FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.AgentType.set -> void
 FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.ApiVersion.get -> string!
 FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.ApiVersion.set -> void
-FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.AuthType.get -> string?
-FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.AuthType.set -> void
-FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.ClientId.get -> string?
-FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.ClientId.set -> void
 FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.Configured.get -> bool
 FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.Configured.set -> void
 FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.DisabledReason.get -> string?
@@ -429,14 +419,6 @@ FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.Findings.get -> System.C
 FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.Findings.set -> void
 FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.ForwardsUserCredential.get -> bool
 FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.ForwardsUserCredential.set -> void
-FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.ManifestId.get -> string?
-FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.ManifestId.set -> void
-FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.ManifestName.get -> string?
-FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.ManifestName.set -> void
-FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.ManifestVersion.get -> string?
-FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.ManifestVersion.set -> void
-FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.MessagesEndpoint.get -> string?
-FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.MessagesEndpoint.set -> void
 FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.Microsoft365IntegrationStatus() -> void
 FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.PrincipalStrategy.get -> string?
 FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.PrincipalStrategy.set -> void
@@ -446,8 +428,6 @@ FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.ProactiveEnabled.get -> 
 FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.ProactiveEnabled.set -> void
 FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.PublicHostName.get -> string?
 FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.PublicHostName.set -> void
-FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.SharedAgentHandle.get -> string?
-FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.SharedAgentHandle.set -> void
 FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.SingleSignOn.get -> bool
 FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.SingleSignOn.set -> void
 FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.Status.get -> string!
@@ -477,3 +457,29 @@ const FabrCore.Core.CloudServer.IntegrationAdministration.RoutePrefix = "/fabrco
 const FabrCore.Core.CloudServer.IntegrationAdministration.Skipped = "skipped" -> string!
 const FabrCore.Core.CloudServer.IntegrationAdministration.Warn = "warn" -> string!
 static FabrCore.Core.CloudServer.IntegrationAdministration.Summarize(System.Collections.Generic.IEnumerable<FabrCore.Core.CloudServer.IntegrationCheck!>! checks) -> string!
+FabrCore.Core.CloudServer.Microsoft365IntegrationAgent
+FabrCore.Core.CloudServer.Microsoft365IntegrationAgent.AuthType.get -> string?
+FabrCore.Core.CloudServer.Microsoft365IntegrationAgent.TenantId.set -> void
+FabrCore.Core.CloudServer.Microsoft365IntegrationAgent.ManifestName.get -> string?
+FabrCore.Core.CloudServer.Microsoft365IntegrationAgent.ManifestId.set -> void
+FabrCore.Core.CloudServer.Microsoft365IntegrationAgent.Name.set -> void
+const FabrCore.Core.CloudServer.IntegrationAdministration.AgentsSegment = "agents" -> string!
+FabrCore.Core.CloudServer.Microsoft365IntegrationAgent.TenantId.get -> string?
+FabrCore.Core.CloudServer.Microsoft365IntegrationAgent.Microsoft365IntegrationAgent() -> void
+FabrCore.Core.CloudServer.Microsoft365IntegrationAgent.ManifestId.get -> string?
+FabrCore.Core.CloudServer.Microsoft365IntegrationAgent.AgentType.get -> string!
+FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.Agents.set -> void
+FabrCore.Core.CloudServer.Microsoft365IntegrationAgent.ClientId.get -> string?
+FabrCore.Core.CloudServer.Microsoft365IntegrationAgent.ManifestName.set -> void
+FabrCore.Core.CloudServer.Microsoft365IntegrationAgent.AgentHandle.set -> void
+FabrCore.Core.CloudServer.Microsoft365IntegrationStatus.Agents.get -> System.Collections.Generic.List<FabrCore.Core.CloudServer.Microsoft365IntegrationAgent!>!
+FabrCore.Core.CloudServer.Microsoft365IntegrationAgent.MessagesEndpoint.set -> void
+FabrCore.Core.CloudServer.Microsoft365IntegrationAgent.AgentType.set -> void
+FabrCore.Core.CloudServer.Microsoft365IntegrationAgent.ManifestVersion.get -> string?
+FabrCore.Core.CloudServer.Microsoft365IntegrationAgent.ClientId.set -> void
+FabrCore.Core.CloudServer.Microsoft365IntegrationAgent.ManifestVersion.set -> void
+FabrCore.Core.CloudServer.Microsoft365IntegrationAgent.AuthType.set -> void
+FabrCore.Core.CloudServer.Microsoft365IntegrationAgent.MessagesEndpoint.get -> string!
+FabrCore.Core.CloudServer.Microsoft365IntegrationAgent.Name.get -> string!
+const FabrCore.Core.CloudServer.IntegrationAdministration.Microsoft365ApiVersion = "2" -> string!
+FabrCore.Core.CloudServer.Microsoft365IntegrationAgent.AgentHandle.get -> string!

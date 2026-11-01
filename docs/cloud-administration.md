@@ -168,16 +168,23 @@ are rejected with 400.
 | Method and suffix | Purpose |
 | --- | --- |
 | GET `/integrations/a2a` | A2A configuration, published agents and findings. Served by the host. |
-| GET `/integrations/microsoft365` | Copilot/Teams channel identity, configuration and findings. Served by the add-on. |
-| GET `/integrations/microsoft365/manifest` | Generated Microsoft 365 app manifest |
-| GET `/integrations/microsoft365/app-package` | Uploadable app package (`application/zip`) |
+| GET `/integrations/microsoft365` | Copilot/Teams channel configuration, the exposed agents and findings. Served by the add-on. |
+| GET `/integrations/microsoft365/agents/{name}/manifest` | Generated Microsoft 365 app manifest of one agent |
+| GET `/integrations/microsoft365/agents/{name}/app-package` | Uploadable app package of one agent (`application/zip`) |
 | POST `/integrations/microsoft365/diagnostics` | Findings plus live checks |
 
 Read `GET /capabilities` first. The `a2a` service is always listed; `microsoft365-copilot` is
 listed when its add-on is installed. Either can be listed with `available: false`, and the status
 route still answers 200 with `enabled: false` and the reason. A 404 on a `microsoft365` route
-means the add-on is not installed. `manifest` and `app-package` return 409 while the channel is
-off.
+means the add-on is not installed.
+
+The Copilot channel exposes zero or more agents, each with its own Azure Bot registration,
+messaging route and app package, because Microsoft allows one bot per app manifest. The status
+document (`apiVersion` `2`) lists them under `agents`: `name`, `messagesEndpoint`, `clientId`,
+`tenantId`, `authType`, `agentType`, `agentHandle`, `manifestId`, `manifestName` and
+`manifestVersion`. `{name}` in the package routes is an agent's `name`. Those routes return 409
+while the channel is off or the agent has no client id, and 404 with `agent-not-found` for a name
+the host does not expose.
 
 Every finding is `{ id, status, message }` with status `pass`, `warn`, `fail` or `skipped`. Ids are
 stable; messages may be reworded.
@@ -193,12 +200,13 @@ messaging endpoint, a non-Entra principal strategy, or a user token being copied
 messages. A `warn` works but should be reviewed: a shared principal, a client secret, in-memory
 state, registry-wide publication.
 
-Diagnostics checks that the configured agent type is registered and that the host can obtain an
-Azure Bot Service token. The token request times out after 20 seconds; the token is discarded and
+Diagnostics checks that every agent's type is registered and that the host can obtain an
+Azure Bot Service token for every agent's bot. Each check keeps one id and names the agent that
+fails. A token request times out after 20 seconds; the token is discarded and
 only the outcome is reported. A failed request reports the exception type and the first line of
 its message. Each run writes a `RemoteAdministration` audit event with resource
 `integrations/microsoft365/diagnostics`. A passing run shows the host can authenticate outbound;
-it does not show that the messaging endpoint is reachable from Microsoft.
+it does not show that the messaging endpoints are reachable from Microsoft.
 
 A2A API keys are listed by name. A key configured without a name appears as `(unnamed)`, so the
 count is still correct.

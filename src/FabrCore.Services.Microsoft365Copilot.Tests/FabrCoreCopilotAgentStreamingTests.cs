@@ -70,6 +70,8 @@ public sealed class FabrCoreCopilotAgentStreamingTests
 
         var copilotOptions = new Microsoft365CopilotOptions
         {
+            TokenValidation = { Enabled = false },
+            Agents = { CopilotTestAgents.Entry(clientId: null) },
             WelcomeMessage = null,
             ErrorMessage = ErrorResponse,
             Streaming = new CopilotStreamingOptions
@@ -84,6 +86,7 @@ public sealed class FabrCoreCopilotAgentStreamingTests
             AgentServiceProxy.Create(replyFactory),
             new StubPrincipalResolver(),
             new StubProvisioner(),
+            CopilotTestAgents.Catalog(copilotOptions),
             ThrowingProxy.Create<IGrainFactory>(),
             Options.Create(copilotOptions),
             NullLogger<FabrCoreCopilotAgent>.Instance);
@@ -125,10 +128,10 @@ public sealed class FabrCoreCopilotAgentStreamingTests
     private sealed class StubProvisioner : ICopilotAgentProvisioner
     {
         public Task<string> EnsureAgentAsync(
+            CopilotAgent agent,
             string principalHandle,
-            string? conversationId,
             CancellationToken cancellationToken)
-            => Task.FromResult("copilot");
+            => Task.FromResult(agent.Handle);
 
         public void Invalidate(string principalHandle, string agentHandle)
         {

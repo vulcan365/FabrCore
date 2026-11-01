@@ -7,7 +7,8 @@ namespace FabrCore.Services.Microsoft365Copilot;
 
 /// <summary>
 /// Configures JWT bearer validation for tokens that Azure Bot Service (and Entra, for the
-/// Microsoft 365 / Teams channels) presents to the <c>/api/messages</c> endpoint.
+/// Microsoft 365 / Teams channels) presents to the messaging routes. The scheme accepts a token
+/// for any exposed agent's bot; <see cref="CopilotAgentRouting"/> then holds each route to its own.
 /// Registered under a dedicated scheme + policy so it never interferes with any authentication
 /// the FabrCore host itself sets up.
 /// </summary>
@@ -22,17 +23,27 @@ internal static class CopilotChannelAuthenticationExtensions
 
     public static IServiceCollection AddCopilotChannelAuthentication(
         this IServiceCollection services,
-        Microsoft365CopilotOptions options)
+        Microsoft365CopilotOptions options,
+        IReadOnlyList<CopilotAgent> agents)
     {
-        var tokenValidation = options.TokenValidation;
+        var audiences = agents
+            .Where(agent => !string.IsNullOrWhiteSpace(agent.ClientId))
+            .Select(agent => agent.ClientId!)
+            .Concat(options.TokenValidation.Audiences)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
-        var audiences = tokenValidation.Audiences.Count > 0
-            ? tokenValidation.Audiences
-            : [options.ClientId!];
+        var tenants = agents
+            .Select(agent => agent.TenantId)
+            .Append(options.TenantId)
+            .Where(tenant => !string.IsNullOrWhiteSpace(tenant))
+            .Select(tenant => tenant!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
-        var issuers = BuildValidIssuers(options);
+        var issuers = BuildValidIssuers(options, tenants);
 
-        var metadataManagers = BuildMetadataManagers(options);
+        var metadataManagers = BuildMetadataManagers(options, tenants);
 
         services.AddAuthentication()
             .AddJwtBearer(Microsoft365CopilotDefaults.AuthenticationScheme, jwt =>
@@ -60,7 +71,7 @@ internal static class CopilotChannelAuthenticationExtensions
         return services;
     }
 
-    private static List<string> BuildValidIssuers(Microsoft365CopilotOptions options)
+    private static List<string> BuildValidIssuers(Microsoft365CopilotOptions options, List<string> tenants)
     {
         var issuers = new List<string>
         {
@@ -71,10 +82,10 @@ internal static class CopilotChannelAuthenticationExtensions
             $"https://login.microsoftonline.com/{MicrosoftServicesTenantId}/v2.0",
         };
 
-        if (!string.IsNullOrWhiteSpace(options.TenantId))
+        foreach (var tenant in tenants)
         {
-            issuers.Add($"https://sts.windows.net/{options.TenantId}/");
-            issuers.Add($"https://login.microsoftonline.com/{options.TenantId}/v2.0");
+            issuers.Add($"https://sts.windows.net/{tenant}/");
+            issuers.Add($"https://login.microsoftonline.com/{tenant}/v2.0");
         }
 
         issuers.AddRange(options.TokenValidation.ValidIssuers);
@@ -82,20 +93,26 @@ internal static class CopilotChannelAuthenticationExtensions
     }
 
     private static ConfigurationManager<OpenIdConnectConfiguration>[] BuildMetadataManagers(
-        Microsoft365CopilotOptions options)
+        Microsoft365CopilotOptions options,
+        List<string> tenants)
     {
         var azureBotServiceUrl = options.TokenValidation.AzureBotServiceOpenIdMetadataUrl
             ?? AzureBotServiceOpenIdMetadataUrl;
 
-        var entraTenant = string.IsNullOrWhiteSpace(options.TenantId) ? "botframework.com" : options.TenantId;
-        var entraUrl = options.TokenValidation.OpenIdMetadataUrl
-            ?? $"https://login.microsoftonline.com/{entraTenant}/v2.0/.well-known/openid-configuration";
+        var managers = new List<ConfigurationManager<OpenIdConnectConfiguration>> { CreateManager(azureBotServiceUrl) };
+        if (options.TokenValidation.OpenIdMetadataUrl is { } entraUrl)
+        {
+            managers.Add(CreateManager(entraUrl));
+        }
+        else
+        {
+            foreach (var tenant in tenants.Count > 0 ? tenants : ["botframework.com"])
+            {
+                managers.Add(CreateManager($"https://login.microsoftonline.com/{tenant}/v2.0/.well-known/openid-configuration"));
+            }
+        }
 
-        return
-        [
-            CreateManager(azureBotServiceUrl),
-            CreateManager(entraUrl),
-        ];
+        return [.. managers];
 
         static ConfigurationManager<OpenIdConnectConfiguration> CreateManager(string url) =>
             new(url, new OpenIdConnectConfigurationRetriever(), new HttpDocumentRetriever());

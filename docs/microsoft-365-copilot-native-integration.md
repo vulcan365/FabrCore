@@ -47,8 +47,9 @@ second consent experience that Teams and Copilot users have no way to reach.
 | Principal (`entra-{tenant}-{object}`) | Entra user (`tid` + `oid`) | `EntraPrincipalHandle.Create` in `FabrCore.Core`; applications map to `app-{tenant}-{object}` |
 | Agent type (`[AgentAlias]`) | — | Code; a class deriving from `FabrCoreAgentProxy` |
 | Agent instance (`principal:handle`) | — | One per user by default; holds that user's threads and state |
-| Agent binding (`AgentBindings:{name}`) | A published agent: one Teams app, one A2A card | Shared provisioning template for both channels |
-| Copilot/Teams channel | Custom engine agent on the Activity Protocol | `FabrCore.Services.Microsoft365Copilot`, `POST /api/messages` |
+| Agent binding (`AgentBindings:{name}`) | A published agent's A2A card | Provisioning template for A2A. The Copilot channel no longer reads it |
+| Copilot agent entry (`Microsoft365Copilot:Agents:{n}`) | A published agent's Teams app: one Azure Bot registration, one app package | Names the agent type and handle; one messaging route per entry |
+| Copilot/Teams channel | Custom engine agents on the Activity Protocol | `FabrCore.Services.Microsoft365Copilot`, one `POST` route per agent (`/api/messages`, `/api/messages/{name}`) |
 | A2A endpoint | Copilot Studio "connected agent" over A2A 1.0 | Built into `FabrCore.Host`, `/a2a/{agent}` |
 | Connection profile | App registration + delegated or application permission grant | `(ownerPrincipal, name)`; metadata only, never secrets |
 | Credential reference | Client secret, certificate, or federated credential | Resolved on the host by `IConnectionCredentialProvider` |
@@ -64,15 +65,20 @@ All four features are optional and independent. Source paths are relative to `sr
 
 ### 3.1 Copilot/Teams channel
 
-`FabrCore.Services.Microsoft365Copilot` hosts the Azure Bot Service messaging endpoint using the
-Microsoft 365 Agents SDK (1.8.77) and bridges each conversation to a FabrCore agent.
+`FabrCore.Services.Microsoft365Copilot` hosts the Azure Bot Service messaging endpoints using the
+Microsoft 365 Agents SDK (1.8.77) and bridges each conversation to a FabrCore agent. It exposes
+zero or more agents, listed in `Microsoft365Copilot:Agents`. Microsoft allows one bot, and one
+custom engine agent, per app manifest, and an Azure Bot resource has one messaging endpoint and
+one app id, so each exposed agent has its own Entra app registration, Azure Bot, messaging route,
+and app package. One host serves them all.
 
 | Capability | Detail | Source |
 | --- | --- | --- |
-| Inbound token validation | Dedicated JWT scheme `Microsoft365CopilotBearer`; audience is the bot's client id; issuers are Bot Framework plus the configured tenant | `Authentication/CopilotChannelAuthenticationExtensions.cs` |
+| Inbound token validation | Dedicated JWT scheme `Microsoft365CopilotBearer`; accepts a token for any configured bot, and each route then requires the audience to be its own agent's client id, else `403`; issuers are Bot Framework plus the configured tenants | `Authentication/CopilotChannelAuthenticationExtensions.cs`, `Authentication/CopilotAgentRouting.cs` |
 | Principal mapping | `EntraObjectId` (default), `TenantAndObjectId`, `UserPrincipalName`, `ChannelUserId`, `CanonicalEntra` | `Bridge/DefaultCopilotPrincipalResolver.cs` |
-| Outbound auth types | `ClientSecret`, `Certificate`, `CertificateSubjectName`, `UserManagedIdentity`, `SystemManagedIdentity`, `FederatedCredentials`, `WorkloadIdentity` | `Configuration/AgentsSdkConfigurationBridge.cs` |
-| Per-user or shared agent | Per-user provisioning from `Agent:*` or a named binding; or one `SharedAgentHandle` | `Bridge/CopilotAgentProvisioner.cs` |
+| Outbound auth types | `ClientSecret`, `Certificate`, `CertificateSubjectName`, `UserManagedIdentity`, `SystemManagedIdentity`, `FederatedCredentials`, `WorkloadIdentity`; one Agents SDK connection per bot, selected by audience | `Configuration/AgentsSdkConfigurationBridge.cs` |
+| Several agents per host | One entry per agent in `Microsoft365Copilot:Agents`, each with its own bot registration, route, and app package; names, routes, client ids, and manifest names must be unique | `Bridge/CopilotAgentCatalog.cs` |
+| Per-user agent | The principal comes from the activity and the handle from the entry. An existing agent is used untouched; a missing one is created from `AgentType` and `Models` only. Plugins, tools, and prompts belong to the agent type or a blueprint | `Bridge/CopilotAgentProvisioner.cs` |
 | Streaming | Informative update plus the completed reply; AI-generated label; optional feedback buttons | `Bridge/FabrCoreCopilotAgent.cs` |
 | Adaptive Cards | `ui.render` out, `Action.Submit` in as `ui.action` | `Bridge/CopilotActivityMapper.cs` |
 | Proactive delivery | Opt-in relay through stored conversation endpoints; personal scope by default | `Bridge/CopilotPrincipalMessageRelay.cs` |
@@ -454,13 +460,17 @@ registration per customer tenant.
   needs a custom credential provider until B5.
 
 The sample configuration below uses a workload identity. For a client secret, set
-`"AuthType": "ClientSecret"` and add `"ClientSecret"`.
+`"AuthType": "ClientSecret"` and add `"ClientSecret"` to the agent's entry.
 
 **3. Create the Azure Bot resource**, single tenant, with the messaging endpoint
-`https://{public-host}/api/messages`, and enable the Teams channel. For single sign-on, add an OAuth
+`https://{public-host}/api/messages`, and enable the Teams channel. A host that publishes several
+agents repeats steps 1 to 3 for each: every agent has its own registration and bot, and its bot's
+messaging endpoint is that agent's route, by default `/api/messages/{name}`. For single sign-on, add an OAuth
 connection setting with the token exchange URL `api://botid-{appId}`.
 
-**4. Configure the host.** One identity strategy and one binding for both channels:
+**4. Configure the host.** One identity strategy for both channels, and the same agent type and
+handle on each. A2A takes them from a binding; the Copilot channel names them on its `Agents`
+entry and does not read `AgentBindings`:
 
 ```json
 {
@@ -469,10 +479,12 @@ connection setting with the token exchange URL `api://botid-{appId}`.
   },
   "Microsoft365Copilot": {
     "TenantId": "<tenant>",
-    "ClientId": "<appId>",
     "AuthType": "WorkloadIdentity",
     "Principal": { "Strategy": "CanonicalEntra" },
-    "Agent": { "Binding": "assistant" },
+    "Agents": [
+      { "Name": "assistant", "Route": "/api/messages", "ClientId": "<appId>",
+        "AgentType": "my-agent", "Handle": "assistant", "Models": "default" }
+    ],
     "Manifest": { "Name": "Contoso Assistant", "PublicHostName": "agents.contoso.com" }
   },
   "A2A": {
@@ -492,6 +504,9 @@ connection setting with the token exchange URL `api://botid-{appId}`.
 }
 ```
 
+The Copilot entry carries no prompt, plugins, or tools. Define them on the agent type or in a
+blueprint so the agent is the same whichever channel reaches it first.
+
 **5. Make state durable.** Enable the integrated SQL database (durable audit, A2A task store,
 monitor). Register a durable Agents SDK `IStorage` before `AddMicrosoft365Copilot()`; the default
 is in memory and loses sign-in state on restart. Configure Data Protection with a certificate so
@@ -505,7 +520,8 @@ resource scope from section 7. Deploy the remote agent with a `connectedAgents` 
 the Microsoft 365 admin center. The `/m365copilot` package endpoints are served only in Development
 unless `Manifest:EnableAppPackageEndpoint` is set, and they are anonymous. In production fetch the
 package with the administration credential from
-`GET /fabrcoreapi/admin/v1/integrations/microsoft365/app-package`.
+`GET /fabrcoreapi/admin/v1/integrations/microsoft365/agents/{name}/app-package`, where `{name}` is
+the entry's `Name` (`assistant` above). There is one package per agent.
 
 **8. Connect Copilot Studio.** Add the agent as an A2A agent with the endpoint
 `https://{public-host}/a2a/assistant/message:stream`, OAuth 2.0 authentication, and turn on
@@ -513,7 +529,8 @@ generative orchestration. See [a2a.md](a2a.md) for the full procedure.
 
 **9. Close the open findings for this deployment.**
 
-* Do not expose the host port. Route only `/api/messages`, `/a2a/*`, and the well-known card paths
+* Do not expose the host port. Route only the agents' messaging routes (`/api/messages` and
+  `/api/messages/*`), `/a2a/*`, and the well-known card paths
   through the public proxy. This is the mitigation for F-02.
 * Leave `UserAuthorization:PassUserTokenToAgent` off.
 * Keep `TokenValidation:Enabled` true and never set `A2A:Authentication:Mode` to `None`.
@@ -551,7 +568,7 @@ Ordered by dependency, not by size. "Plan" names the matching item in the
 | B15 | File attachments | Reach in. | B1, B9 | — |
 | B16 | Incremental streaming relay | Experience. Reintroduces the response-evaluation constraint in the Purview gate. | B9 | — |
 | B17 | Live reload of non-identity channel options | Change a welcome message or a starter without a restart. | B6 | F7 |
-| B18 | Several bots per host | One cluster serving several published agents with separate Teams apps. | B10 | F8 |
+| B18 | Several bots per host. **Done on `develop`, 13 October 2026**, without B10: each agent is an entry in `Microsoft365Copilot:Agents` with its own app registration, Azure Bot, route, and app package. Two limits remain: sign-on handlers are shared, so sign-in works only for the agent whose bot owns the OAuth connection, and proactive endpoints are stored per principal, not per agent. | One cluster serving several published agents with separate Teams apps. | — | F8 |
 | B19 | Audit export to the tenant: Purview Audit or a SIEM | The customer's reviewers read their own tools, not the FabrCore API. | B2 | — |
 
 ### B1 in detail
@@ -602,15 +619,16 @@ Done in plan Phase 1, on `develop`:
   `AddFabrCoreRemoteAgents(services, configuration)` let a cloud server or an environment variable
   turn them on (F2).
 * **One diagnostic call.** `POST …/integrations/microsoft365/diagnostics` checks the
-  configuration, whether the agent type is registered, and whether the host can obtain a Bot
-  Service token, and reports each as a named pass or fail (F4). This replaces reading the
+  configuration, whether every agent's type is registered, and whether the host can obtain a Bot
+  Service token for every bot, and reports each as a named pass or fail (F4). This replaces reading the
   troubleshooting list in the README.
 * **Say what is applied.** The configuration-state report carries the channel's effective tenant,
-  client id, auth type, endpoint, and identity strategy, so "is it on, and as whom" has an answer
+  auth type, and identity strategy, and each agent's name, route, client id, agent type, and
+  handle, so "is it on, and as whom" has an answer
   that does not involve a shell on the host (F3).
 * **Authenticated package download.** The developer package endpoints are anonymous and
-  development-only. `GET …/integrations/microsoft365/app-package` serves the package in production
-  to an authenticated administrator (F4).
+  development-only. `GET …/integrations/microsoft365/agents/{name}/app-package` serves each
+  agent's package in production to an authenticated administrator (F4).
 
 Still open:
 

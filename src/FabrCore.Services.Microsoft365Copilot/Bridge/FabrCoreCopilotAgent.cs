@@ -12,12 +12,17 @@ namespace FabrCore.Services.Microsoft365Copilot;
 
 /// <summary>
 /// The Microsoft 365 Agents SDK application that bridges Copilot/Teams conversations to FabrCore
-/// agents: each inbound message activity is mapped to a FabrCore principal, routed to that
-/// principal's configured agent through <see cref="IFabrCoreAgentService"/>, and the agent's reply
+/// agents: each inbound message activity is mapped to a FabrCore principal, routed to the agent
+/// its messaging route exposes through <see cref="IFabrCoreAgentService"/>, and the agent's reply
 /// is returned to the channel (streamed on streaming-capable channels). Adaptive Card submits —
 /// message activities carrying the payload in <c>Value</c> with empty text — are routed the same
 /// way as surface <c>ui.action</c> messages.
 /// </summary>
+/// <remarks>
+/// One bridge serves every exposed agent. Which one a turn belongs to is read from the turn's
+/// identity (see <see cref="CopilotAgentCatalog.Resolve(System.Security.Claims.ClaimsIdentity?)"/>),
+/// because the Agents SDK builds the bridge from the container for each queued activity.
+/// </remarks>
 public class FabrCoreCopilotAgent : AgentApplication
 {
     // Surface renders are one-way sends racing the agent's direct reply; wait briefly after the
@@ -27,6 +32,7 @@ public class FabrCoreCopilotAgent : AgentApplication
     private readonly IFabrCoreAgentService _agentService;
     private readonly ICopilotPrincipalResolver _principalResolver;
     private readonly ICopilotAgentProvisioner _provisioner;
+    private readonly CopilotAgentCatalog _catalog;
     private readonly IGrainFactory _grainFactory;
     private readonly Microsoft365CopilotOptions _copilotOptions;
     private readonly ILogger<FabrCoreCopilotAgent> _logger;
@@ -37,6 +43,7 @@ public class FabrCoreCopilotAgent : AgentApplication
         IFabrCoreAgentService agentService,
         ICopilotPrincipalResolver principalResolver,
         ICopilotAgentProvisioner provisioner,
+        CopilotAgentCatalog catalog,
         IGrainFactory grainFactory,
         IOptions<Microsoft365CopilotOptions> copilotOptions,
         ILogger<FabrCoreCopilotAgent> logger,
@@ -46,6 +53,7 @@ public class FabrCoreCopilotAgent : AgentApplication
         _agentService = agentService;
         _principalResolver = principalResolver;
         _provisioner = provisioner;
+        _catalog = catalog;
         _grainFactory = grainFactory;
         _copilotOptions = copilotOptions.Value;
         _logger = logger;
@@ -58,7 +66,7 @@ public class FabrCoreCopilotAgent : AgentApplication
 
     private async Task WelcomeAsync(ITurnContext turnContext, ITurnState turnState, CancellationToken cancellationToken)
     {
-        var welcome = _copilotOptions.WelcomeMessage;
+        var welcome = _catalog.Resolve(turnContext.Identity)?.WelcomeMessage;
         if (string.IsNullOrWhiteSpace(welcome) || turnContext.Activity.MembersAdded is null)
         {
             return;
@@ -76,6 +84,18 @@ public class FabrCoreCopilotAgent : AgentApplication
 
     private async Task OnMessageActivityAsync(ITurnContext turnContext, ITurnState turnState, CancellationToken cancellationToken)
     {
+        var agent = _catalog.Resolve(turnContext.Identity);
+        if (agent is null)
+        {
+            // Reached only when a host maps this bridge on a route of its own: every route the
+            // add-on maps names its agent before the turn starts.
+            _logger.LogError(
+                "Copilot activity {ActivityId} could not be matched to an agent in Microsoft365Copilot:Agents.",
+                turnContext.Activity.Id);
+            await turnContext.SendActivityAsync(MessageFactory.Text(_copilotOptions.ErrorMessage), cancellationToken);
+            return;
+        }
+
         var text = turnContext.Activity.Text?.Trim();
         AgentMessage? agentMessage = null;
         if (string.IsNullOrEmpty(text))
@@ -148,11 +168,10 @@ public class FabrCoreCopilotAgent : AgentApplication
             }
         }
 
-        var targetHandle = await _provisioner.EnsureAgentAsync(
-            principalHandle, turnContext.Activity.Conversation?.Id, cancellationToken);
+        var targetHandle = await _provisioner.EnsureAgentAsync(agent, principalHandle, cancellationToken);
 
         agentMessage ??= new AgentMessage { Message = text, Kind = MessageKind.Request };
-        PopulateChannelContext(agentMessage, turnContext, userToken, deliveryEndpointId);
+        PopulateChannelContext(agentMessage, turnContext, agent, userToken, deliveryEndpointId);
 
         // Observe the principal for the duration of the turn: agents deliver ui.render surface
         // messages there (not as the OnMessage reply), and with no observer subscribed they
@@ -310,6 +329,7 @@ public class FabrCoreCopilotAgent : AgentApplication
     private void PopulateChannelContext(
         AgentMessage message,
         ITurnContext turnContext,
+        CopilotAgent agent,
         string? userToken,
         string? deliveryEndpointId)
     {
@@ -317,6 +337,7 @@ public class FabrCoreCopilotAgent : AgentApplication
         message.Channel = Microsoft365CopilotDefaults.ChannelName;
         message.Args ??= new Dictionary<string, string>();
 
+        AddArg(message, Microsoft365CopilotDefaults.ArgAgent, agent.Name);
         AddArg(message, Microsoft365CopilotDefaults.ArgChannelId, activity.ChannelId?.ToString());
         AddArg(message, Microsoft365CopilotDefaults.ArgConversationId, activity.Conversation?.Id);
         AddArg(message, Microsoft365CopilotDefaults.ArgActivityId, activity.Id);

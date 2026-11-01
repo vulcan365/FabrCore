@@ -1,6 +1,6 @@
 # Shared Teams, Microsoft 365 Copilot, and A2A identity
 
-The adapters share principal identity, named agent bindings, and principal-authorized invocation. Azure Bot activities and A2A HTTP requests retain their own authentication and transport lifecycles.
+The adapters share principal identity and principal-authorized invocation, and reach the same agent when they name the same agent type and handle. Azure Bot activities and A2A HTTP requests retain their own authentication and transport lifecycles.
 
 Set `Microsoft365Copilot:Principal:Strategy` and `A2A:Principal:Strategy` to `CanonicalEntra`, with the same prefix (normally empty). A validated delegated Entra token on A2A and the corresponding user on a trusted Teams activity both resolve to:
 
@@ -12,7 +12,7 @@ GUIDs are normalized to lowercase, without truncation or lossy character replace
 
 Application tokens map to `app-{tenant-guid}-{object-guid}`. An API key or an OAuth client-credentials connection identifies the connection/application, not the person chatting with Copilot Studio. It cannot safely recover the user's Teams identity. Do not trust a user ID supplied in message metadata, history, context ID, or an unverified header. For user continuity, the connection must deliver a validated delegated access token with `tid`, `oid`, and `scp` for the A2A API. If the connector cannot do that, a trusted identity integration/custom resolver is still required; ordinary client credentials do not provide user continuity.
 
-Use a named binding to prevent the adapters from provisioning different agent configurations:
+A2A resolves its agent through a named binding in `AgentBindings`. The Microsoft 365 Copilot channel no longer reads `AgentBindings`: each entry of `Microsoft365Copilot:Agents` names its agent type and handle directly. Give the Copilot entry the same `AgentType` and `Handle` as the binding so both adapters reach the same agent:
 
 ```json
 {
@@ -25,7 +25,9 @@ Use a named binding to prevent the adapters from provisioning different agent co
   },
   "Microsoft365Copilot": {
     "Principal": { "Strategy": "CanonicalEntra" },
-    "Agent": { "Binding": "assistant" }
+    "Agents": [
+      { "Name": "assistant", "Route": "/api/messages", "AgentType": "crm-demo-agent", "Handle": "assistant", "Models": "default" }
+    ]
   },
   "A2A": {
     "Enabled": true,
@@ -44,7 +46,11 @@ Use a named binding to prevent the adapters from provisioning different agent co
 }
 ```
 
-The binding owns the handle, type, models, prompt, plugins, tools, and arguments. A2A defaults do not supplement a bound agent's tools or prompt. Bindings require per-principal routing: conversation/context suffixing and shared-agent handles cannot be combined with them. Set bot registration credentials separately, using user secrets or a secret store. Configure the API registration, delegated permission, consent, and connector token flow before enabling the endpoint. See the [sample configuration](../samples/FabrCore.SampleApp/fabrcore.sample.json).
+For A2A, the binding owns the handle, type, models, prompt, plugins, tools, and arguments. A2A defaults do not supplement a bound agent's tools or prompt. Bindings require per-principal routing: conversation/context suffixing and shared-agent handles cannot be combined with them.
+
+The Copilot channel sets none of those. An agent that already exists for the principal under the entry's handle, for example one provisioned by a blueprint, is used untouched; a missing one is created from `AgentType` and `Models` only. An agent first created through Copilot therefore does not get a prompt, plugins, or tools from the binding. Where both channels serve the same agent, define the prompt, plugins, and tools on the agent type or in a blueprint, so the agent is the same whichever channel reaches it first. `Handle` defaults to the entry's `Name`; `Agent:Binding`, `SharedAgentHandle`, and `AgentPerConversation` have been removed from the Copilot configuration.
+
+Set each Copilot agent's bot registration credentials (`ClientId`, `ClientSecret`) on its `Agents` entry, using user secrets or a secret store. Configure the API registration, delegated permission, consent, and connector token flow before enabling the endpoint. See the [sample configuration](../samples/FabrCore.SampleApp/fabrcore.sample.json).
 
 Both adapters invoke `IFabrCoreAgentService.SendAndReceiveMessageAsync`, which now dispatches through the caller's `IPrincipalGrain`. Bare handles receive the principal prefix there; qualified handles are preserved and checked by the existing cross-principal ACL. The sender is stamped from the resolved principal, not from input metadata.
 

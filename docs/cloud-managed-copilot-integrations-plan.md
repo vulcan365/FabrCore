@@ -9,6 +9,11 @@ can do the same.
 Read the [integration guide](microsoft-365-copilot-native-integration.md) first. It defines what
 "native" means, what ships, and the backlog (B1–B19) this plan draws from.
 
+**Update, 13 October 2026.** F8, several bots per host, is built on the host and in Insights, and
+it changed the channel's configuration and administration contract. Section 17 records it. Statements in
+sections 3, 5, 6, 7, 12, and 16 that describe a single bot per host or the single-agent keys are
+marked where they are superseded.
+
 ## 1. Outcome
 
 A customer administrator signs in to the cloud server, connects their Microsoft 365 tenant once,
@@ -48,7 +53,7 @@ One registration plays four roles, deliberately:
 
 | Role | What uses it | Configuration |
 | --- | --- | --- |
-| Bot identity | Azure Bot Service, to deliver activities and accept replies | `Microsoft365Copilot:ClientId`, `TenantId` |
+| Bot identity | Azure Bot Service, to deliver activities and accept replies | `Microsoft365Copilot:Agents:{i}:ClientId`, `TenantId` (was `Microsoft365Copilot:ClientId`; section 17) |
 | Single sign-on API | Teams and Copilot, to issue the user's sign-on token | Application ID URI `api://botid-{appId}` |
 | On-behalf-of client | Connections, to exchange that token for Work IQ, Graph, and Copilot Studio tokens | `ConnectionProfile.ClientId` |
 | A2A token audience | Copilot Studio, to obtain a delegated token for the A2A endpoint | `A2A:Authentication:JwtBearer:Audience`, scope `agent.invoke` |
@@ -61,7 +66,8 @@ Connections (integration guide, B1). Splitting the roles across registrations wo
 Two credentials are supported, and the choice is per customer (decision D2).
 
 **A client secret, published with the settings.** The cloud server publishes
-`Microsoft365Copilot:ClientSecret` in the `settings` map like any other key. This works on every
+`Microsoft365Copilot:ClientSecret` (now `Microsoft365Copilot:Agents:{i}:ClientSecret`, one per
+agent; section 17) in the `settings` map like any other key. This works on every
 hosting platform, needs nothing from the host but the cloud connection, and is what the Insights
 settings catalog already offers. The same applies to A2A API key values and to
 `FabrCore:ConnectionCredentials:{reference}:Secret`, which is what lets Connections perform the
@@ -122,11 +128,17 @@ that, and it also keeps each customer's agent state, model keys, and Data Protec
 Several published agents for the same tenant on one cluster, each with its own Teams app, needs F8.
 Several *tenants* on one cluster is not a goal of this plan.
 
+*Superseded, 13 October 2026.* The single-bot description above no longer holds. F8 is built on
+the host: the add-on binds a list of agents, synthesizes one service connection per bot, accepts
+each bot's audience on its own route only, and maps one messaging endpoint per agent (section 17).
+The recommendation of one cluster per customer tenant stands, for the isolation reasons given.
+
 ## 6. Models
 
 Unchanged. Existing Azure AI Foundry endpoints and keys continue to flow to hosts as
 `modelConfigurations` and `apiKeys` in the configuration envelope. The integration only selects a
-model configuration by name through the agent binding.
+model configuration by name through the agent binding. (Since 13 October 2026 the Copilot channel
+selects it through `Microsoft365Copilot:Agents:{i}:Models`; the binding still does so for A2A.)
 
 In Insights these are scoped to a **cluster**, not a tenant, and they reach hosts only after an
 operator applies a deployment to a cluster's configuration (section 15.6). Nothing in this plan
@@ -136,6 +148,13 @@ changes that or depends on it being per tenant.
 
 The integration is expressed entirely as host settings in the envelope's `settings` map. The three
 rows marked *secret* carry credentials; everything else is an identifier or an option.
+
+*Superseded in part, 13 October 2026.* The Copilot rows of this table are the single-agent keys. A
+host with the multi-agent add-on no longer reads `Microsoft365Copilot:ClientId`, `ClientSecret`,
+or `Agent:Binding`: it ignores them beside an `Agents` list and fails startup when they are all it
+is given. The Copilot channel no longer reads `AgentBindings`. Section 17.2 has the keys that
+replace them, and 17.3 has how both are published while older hosts remain. The A2A, Connections,
+and remote-agent rows are unchanged, and `AgentBindings:{name}:*` is still what A2A reads.
 
 | Keys | Purpose |
 | --- | --- |
@@ -168,7 +187,7 @@ themselves, and they report which keys are waiting.
 | **F5** | Workload-identity credential provider for Connections | The federated credential must work for outbound token exchange, not only for the bot. Not needed by customers who use a client secret. | 3 |
 | **F6** | Connection profiles in the envelope | Provision Work IQ and Copilot Studio connections without a per-host API call | 4 |
 | **F7** | Live reload of non-identity Copilot options | Edit a welcome message or a conversation starter without a restart | 5 |
-| **F8** | Several bots per host | Several published agents per cluster, each with its own Teams app | 5 |
+| **F8** | Several bots per host. **Built on the host, 13 October 2026 (section 17).** | Several published agents per cluster, each with its own Teams app | 5 |
 | **F9** | Fix security finding F-02 (unauthenticated `x-user-handle`), and add an `IntegrationManagement` audit category | F-02 undermines every channel's authentication; integration changes need their own audit trail | 3 |
 | **F10** | Protocol documentation, reference cloud server support, conformance tests | Keep the feature vendor-neutral | 1 (docs), 3 (rest) |
 
@@ -281,11 +300,15 @@ Phase 1 is built in FabrCore (section 14) and Phase 2 is built in Insights (sect
 exit criterion is not yet met: it has not been run against a real host and a real tenant, and it
 needs a FabrCore release that contains Phase 1.
 
+F8 was taken out of Phase 5 and built on the host and in Insights on 13 October 2026
+(section 17). Insights can publish for old and new hosts at once, so the two are upgraded in the
+order given in section 17.3.
+
 ## 12. Decisions
 
 | Id | Decision | Options | Recommendation |
 | --- | --- | --- | --- |
-| **D1** | Cluster topology | One cluster per customer tenant; or one cluster serving several bots | **One per tenant.** It is what the host supports, and it isolates state and keys. Revisit after F8. |
+| **D1** | Cluster topology | One cluster per customer tenant; or one cluster serving several bots | **One per tenant.** It is what the host supports, and it isolates state and keys. Revisit after F8. *13 October 2026: the host now supports several bots (section 17). The decision has not been revisited; several bots serve several agents of one tenant, not several tenants.* |
 | **D2** | Integration app credential | A client secret published with the settings; a federated credential to the host's workload identity; a certificate | **Decided, 7 October 2026: publishing keys and secrets to clusters is acceptable.** A client secret is the default because it works on every platform and for Connections today. A federated credential remains available for customers who want the cloud server to hold nothing. |
 | **D3** | Where the Azure Bot resource lives | The customer's Azure subscription; or a Vulcan365 subscription referencing the customer's single-tenant app | **Vulcan365 subscription when Vulcan365 hosts the cluster; the customer's when they self-host.** Many Microsoft 365 customers have no Azure subscription. The cross-tenant reference must be proven in Phase 0; if it is not supported, the customer's subscription is the only option and I3 needs a role assignment as well as consent. |
 | **D4** | How delegated permissions are consented | The provisioning app writes permission grants; or the administrator follows a second consent link for the integration app | **A second consent link.** Writing grants needs a far broader permission in every customer tenant than managing owned applications does. |
@@ -490,6 +513,13 @@ capability service named `connections`.
 work started, and this section describes what was built. The operator documentation is
 `docs/insights-microsoft-365.md` in the Insights repository.
 
+*Superseded in part, 13 October 2026.* This section describes Phase 2 as first built, against the
+single-agent add-on: one agent per integration, published as `Microsoft365Copilot:ClientId`,
+`ClientSecret`, and `Agent:Binding`, read back from the version 1 status document, and downloaded
+from `integrations/microsoft365/app-package`. Insights has since moved to a list of agents.
+Section 17.3 records what changed and how the single-agent keys are still published for older
+hosts.
+
 The customer creates the app registration and the Azure Bot resource themselves, following a
 checklist. Insights records the identifiers, composes and publishes the settings, including the
 client secret when the customer uses one, and shows whether each host has applied them and is
@@ -644,3 +674,110 @@ configuration publish, and one preview stub.
 * Against a real host: not yet run. The broker is faked in the tests, and the page was exercised in
   the preview host, whose integration service is an in-memory stub. The captured responses in the
   [cloud server how-to](cloud-server-microsoft-365-copilot.md) are the shapes the page reads.
+
+## 17. F8, several bots per host: built on the host and in Insights (13 October 2026)
+
+F8 is implemented in `FabrCore.Services.Microsoft365Copilot` on `develop`, with the contract
+change in `FabrCore.Core.CloudServer`. It is not yet in a published package. It was verified by
+the add-on's test suite, including HTTP tests that run a host exposing two agents.
+
+### 17.1 Why it is a list
+
+Microsoft allows at most one bot, and one custom engine agent, per app manifest, and an Azure Bot
+resource has one messaging endpoint and one app id. So every agent a customer wants listed in
+Microsoft 365 Copilot is its own Entra app registration, its own Azure Bot, and its own app
+package. One host serves them all. Section 3's "one registration plays four roles" now holds per
+agent.
+
+### 17.2 The new shape
+
+The add-on exposes zero or more agents, each an entry in `Microsoft365Copilot:Agents`:
+
+```json
+"Microsoft365Copilot": {
+  "TenantId": "...", "AuthType": "ClientSecret",
+  "Manifest": { "DeveloperName": "...", "PublicHostName": "agents.contoso.com" },
+  "Agents": [
+    { "Name": "assistant", "Route": "/api/messages", "ClientId": "...", "ClientSecret": "...",
+      "AgentType": "chat-agent", "Handle": "assistant", "Models": "default",
+      "Manifest": { "Name": "Assistant", "Description": "..." } },
+    { "Name": "sales", "ClientId": "...", "ClientSecret": "...", "AgentType": "sales-agent" }
+  ]
+}
+```
+
+* **Entry.** `Name` and `AgentType` are required. `Route` defaults to `/api/messages/{Name}`, and
+  one entry may claim `/api/messages`. `Handle` defaults to `Name`, `Models` to `default`. The
+  top-level `TenantId`, `AuthType`, certificate and federation settings, `WelcomeMessage`, and
+  `Manifest` are defaults an entry may override. Names, routes, client ids, and manifest names
+  must be unique; a violation fails startup naming `Microsoft365Copilot:Agents:{n}:…`.
+* **Separation.** One `POST` route per entry. The JWT scheme accepts a token for any configured
+  bot, and each route then requires the token audience to be that entry's client id, else `403`.
+  Outbound, there is one Agents SDK connection per bot.
+* **The entry names an agent and does not configure it.** Plugins, tools, the system prompt, and
+  args are no longer Copilot settings. An agent that already exists for the principal under the
+  entry's handle is used untouched; a missing one is created from `AgentType` and `Models` only.
+  The Copilot channel no longer reads `AgentBindings`. A2A still does.
+* **Removed.** `Microsoft365Copilot:Agent`, `MessagesEndpoint`, `ClientId`, and `ClientSecret` are
+  no longer read. With the channel enabled and no `Agents` section, their presence fails startup.
+  When an `Agents` list is present they are ignored and a startup warning names them, so one
+  published configuration can serve old and new hosts while a cluster is upgraded.
+  `SharedAgentHandle`, `AgentPerConversation`, and `Agent:Binding` are gone. An enabled channel
+  with no agents is valid.
+* **What a cloud server publishes.** `Microsoft365Copilot:Agents:{i}:Name`, `Route`, `ClientId`,
+  `ClientSecret` (*secret*), `AgentType`, `Handle`, `Models`, `Manifest:Name`,
+  `Manifest:Description`, and the other per-agent keys, in place of `AgentBindings:*` with
+  `Microsoft365Copilot:Agent:Binding` and a top-level `ClientId` and `ClientSecret`. The other
+  rows of section 7 are unchanged.
+* **Administration API.** The status document is `apiVersion` `2` and lists the agents under
+  `agents` (`name`, `messagesEndpoint`, `clientId`, `tenantId`, `authType`, `agentType`,
+  `agentHandle`, `manifestId`, `manifestName`, `manifestVersion`) in place of the top-level
+  single-agent fields. The package routes are `integrations/microsoft365/agents/{name}/manifest`
+  and `agents/{name}/app-package`, with `404` `agent-not-found` for an unknown name. The
+  `agent-type-registered` and `bot-service-credential` diagnostics cover every agent and name the
+  one that fails.
+* **Discovery.** The capability gains the `multi-agent` feature, loses `agent-binding`, and
+  reports `apiVersion` `2`. The heartbeat gains `m365copilot.agents`, the number of exposed
+  agents.
+* **Applied settings.** The `ClientId`, `MessagesEndpoint`, and `Agent:Binding` rows are replaced
+  by `Microsoft365Copilot:Agents:{i}:Name`, `Route`, `ClientId`, `AgentType`, and `Handle` per
+  agent.
+
+The [cloud server how-to](cloud-server-microsoft-365-copilot.md) and the
+[protocol](cloud-server-protocol.md#managing-microsoft-365-copilot-and-a2a-integrations) carry the
+detail.
+
+### 17.3 The Insights side, as built (13 October 2026)
+
+Built in Insights alongside the host change.
+
+* **A list of agents.** The Microsoft 365 integration holds a list of agents instead of one.
+* **Composer.** It publishes `Microsoft365Copilot:Agents:{i}:*`, with each agent's secret at
+  `Agents:{i}:ClientSecret`. Agents published over A2A still go through `AgentBindings:{name}` and
+  `A2A:Agents:{n}:Binding`.
+* **Also publish for older hosts.** An option, on by default for integrations created before the
+  change, that additionally publishes the first agent in the single-agent form:
+  `Microsoft365Copilot:ClientId`, `ClientSecret`, `AuthType`, `Agent:Binding`,
+  `AgentBindings:{name}:*`, and `Manifest:Name` and `Description`. An older host serves that one
+  agent and ignores the list; a newer host serves the list and ignores those keys with a warning.
+* **Older hosts are detected** by the missing `m365copilot.agents` heartbeat flag.
+* **Per-agent package download**, from `agents/{name}/app-package`.
+* **Icons.** Insights stores each agent's custom icons in its own database and swaps `color.png`
+  and `outline.png` into the zip when the package is downloaded through it. The host still embeds
+  its default icons.
+
+Rollout order, because an add-on of either version fails startup when given only the other's keys:
+
+1. Upgrade Insights and republish. It keeps emitting the single-agent keys, so hosts on the
+   earlier add-on are unaffected.
+2. Upgrade the hosts. They read the list and ignore the single-agent keys.
+3. Turn "Also publish for older hosts" off.
+
+### 17.4 Known limits
+
+* User authorization (single sign-on) handlers are configured once and shared by every agent. An
+  Azure Bot OAuth connection belongs to one bot registration, so with several agents sign-in works
+  only for the agent whose bot owns it.
+* Proactive conversation endpoints are stored per principal, not per agent.
+* Several bots serve several agents of one tenant. Several tenants on one cluster is still not a
+  goal (section 5).

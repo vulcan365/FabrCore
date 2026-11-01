@@ -5,20 +5,23 @@ namespace FabrCore.Services.Microsoft365Copilot;
 /// <c>Microsoft365Copilot</c> section of fabrcore.json or appsettings.json.
 /// </summary>
 /// <remarks>
-/// Minimal production configuration:
+/// Minimal production configuration, one entry per agent listed in Microsoft 365 Copilot:
 /// <code>
 /// "Microsoft365Copilot": {
 ///   "TenantId": "&lt;entra-tenant-id&gt;",
-///   "ClientId": "&lt;bot-app-registration-client-id&gt;",
-///   "ClientSecret": "&lt;bot-app-registration-secret&gt;",
-///   "Agent": { "AgentType": "chat-agent" }
+///   "Agents": [
+///     { "Name": "assistant", "Route": "/api/messages", "AgentType": "chat-agent",
+///       "ClientId": "&lt;bot-app-registration-client-id&gt;", "ClientSecret": "&lt;secret&gt;" },
+///     { "Name": "sales", "AgentType": "sales-agent",
+///       "ClientId": "&lt;second-bot-client-id&gt;", "ClientSecret": "&lt;secret&gt;" }
+///   ]
 /// }
 /// </code>
 /// Minimal local-dev configuration (Microsoft 365 Agents Playground, no Azure resources):
 /// <code>
 /// "Microsoft365Copilot": {
 ///   "TokenValidation": { "Enabled": false },
-///   "Agent": { "AgentType": "chat-agent" }
+///   "Agents": [ { "Name": "assistant", "Route": "/api/messages", "AgentType": "chat-agent" } ]
 /// }
 /// </code>
 /// </remarks>
@@ -32,17 +35,16 @@ public sealed class Microsoft365CopilotOptions
     /// </summary>
     public bool Enabled { get; set; } = true;
 
-    /// <summary>Entra tenant id of the bot's app registration (SingleTenant apps). Optional for MultiTenant registrations.</summary>
+    /// <summary>
+    /// Entra tenant id of the bot app registrations (SingleTenant apps). Default for every entry
+    /// in <see cref="Agents"/>; an entry may override it.
+    /// </summary>
     public string? TenantId { get; set; }
 
-    /// <summary>Client id (app id) of the Azure Bot's Entra app registration.</summary>
-    public string? ClientId { get; set; }
-
-    /// <summary>Client secret for <c>AuthType = ClientSecret</c>. Prefer certificates or managed identity in production.</summary>
-    public string? ClientSecret { get; set; }
-
     /// <summary>
-    /// How the addon authenticates outbound calls to Azure Bot Service. One of the Agents SDK MSAL auth types:
+    /// How the addon authenticates outbound calls to Azure Bot Service. Default for every entry in
+    /// <see cref="Agents"/>, as are the certificate, federation, and authority settings below.
+    /// One of the Agents SDK MSAL auth types:
     /// <c>ClientSecret</c>, <c>Certificate</c>, <c>CertificateSubjectName</c>, <c>UserManagedIdentity</c>,
     /// <c>SystemManagedIdentity</c>, <c>FederatedCredentials</c>, <c>WorkloadIdentity</c>.
     /// </summary>
@@ -70,9 +72,6 @@ public sealed class Microsoft365CopilotOptions
     /// </summary>
     public string? AuthorityEndpoint { get; set; }
 
-    /// <summary>Route the Azure Bot Service messaging endpoint is mapped at. Default <c>/api/messages</c>.</summary>
-    public string MessagesEndpoint { get; set; } = Microsoft365CopilotDefaults.MessagesEndpoint;
-
     /// <summary>
     /// Message sent when the user (or the agent) is added to a conversation.
     /// Set to an empty string to disable.
@@ -87,8 +86,12 @@ public sealed class Microsoft365CopilotOptions
     /// <summary>Inbound channel-token validation settings.</summary>
     public CopilotTokenValidationOptions TokenValidation { get; set; } = new();
 
-    /// <summary>Which FabrCore agent handles Copilot conversations and how it is provisioned.</summary>
-    public CopilotAgentOptions Agent { get; set; } = new();
+    /// <summary>
+    /// The agents this host exposes, zero or more. Each entry is one agent in the Microsoft 365
+    /// Copilot agent list: its own Azure Bot registration, its own messaging route, and its own
+    /// app package. With no entries the channel is on but serves no messaging endpoint.
+    /// </summary>
+    public List<CopilotAgentEntryOptions> Agents { get; set; } = new();
 
     /// <summary>Response streaming behavior on streaming-capable channels (Teams, M365 Copilot).</summary>
     public CopilotStreamingOptions Streaming { get; set; } = new();
@@ -109,7 +112,10 @@ public sealed class Microsoft365CopilotOptions
     /// </summary>
     public CopilotUserAuthorizationOptions UserAuthorization { get; set; } = new();
 
-    /// <summary>Metadata used to generate the Microsoft 365 app manifest / app package.</summary>
+    /// <summary>
+    /// Metadata used to generate the Microsoft 365 app manifests / app packages. Default for every
+    /// entry in <see cref="Agents"/>; an entry overrides individual values in its own <c>Manifest</c>.
+    /// </summary>
     public CopilotManifestOptions Manifest { get; set; } = new();
 
     /// <summary>
@@ -128,7 +134,10 @@ public sealed class CopilotTokenValidationOptions
     /// </summary>
     public bool Enabled { get; set; } = true;
 
-    /// <summary>Accepted token audiences. Defaults to the configured <c>ClientId</c>.</summary>
+    /// <summary>
+    /// Token audiences accepted on every messaging route, in addition to each agent's own
+    /// <c>ClientId</c>, which is always accepted on that agent's route and on no other.
+    /// </summary>
     public List<string> Audiences { get; set; } = new();
 
     /// <summary>Additional valid issuers, appended to the built-in Bot Framework / Entra issuer list.</summary>
@@ -141,47 +150,130 @@ public sealed class CopilotTokenValidationOptions
     public string? OpenIdMetadataUrl { get; set; }
 }
 
-/// <summary>Selects and provisions the FabrCore agent that answers Copilot conversations.</summary>
-public sealed class CopilotAgentOptions
+/// <summary>
+/// One agent exposed to Microsoft 365 Copilot. Microsoft allows one bot per app manifest and one
+/// messaging endpoint per Azure Bot resource, so each entry carries its own bot registration,
+/// its own route, and its own app package.
+/// </summary>
+/// <remarks>
+/// The entry names the FabrCore agent and nothing more: plugins, tools, and prompts belong to the
+/// agent type or to the blueprint that provisions it. An agent that already exists for the
+/// calling principal under <see cref="Handle"/> is used as it is; a missing one is created from
+/// <see cref="AgentType"/> and <see cref="Models"/> alone.
+/// </remarks>
+public sealed class CopilotAgentEntryOptions
 {
-    /// <summary>Name in the shared AgentBindings section. Owns provisioning settings when set.</summary>
-    public string? Binding { get; set; }
     /// <summary>
-    /// FabrCore agent type alias (the <c>[AgentAlias]</c> value) provisioned for each Microsoft 365
-    /// user. Required unless <see cref="SharedAgentHandle"/> is set.
+    /// Stable name of the entry: letters, digits, <c>-</c> and <c>_</c>. Used in the default
+    /// route, the app-package routes, and the administration API.
     /// </summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Route Azure Bot Service posts to for this agent. Defaults to <c>/api/messages/{Name}</c>.
+    /// One entry may claim the bare <c>/api/messages</c>.
+    /// </summary>
+    public string? Route { get; set; }
+
+    /// <summary>Client id (app id) of this agent's Azure Bot Entra app registration.</summary>
+    public string? ClientId { get; set; }
+
+    /// <summary>Client secret for <c>AuthType = ClientSecret</c>. Prefer certificates or managed identity in production.</summary>
+    public string? ClientSecret { get; set; }
+
+    /// <summary>Entra tenant id of this registration. Defaults to the top-level <c>TenantId</c>.</summary>
+    public string? TenantId { get; set; }
+
+    /// <summary>Outbound credential type. Defaults to the top-level <c>AuthType</c>.</summary>
+    public string? AuthType { get; set; }
+
+    /// <summary>Certificate thumbprint. Defaults to the top-level value.</summary>
+    public string? CertificateThumbprint { get; set; }
+
+    /// <summary>Certificate subject name. Defaults to the top-level value.</summary>
+    public string? CertificateSubjectName { get; set; }
+
+    /// <summary>Certificate store name. Defaults to the top-level value.</summary>
+    public string? CertificateStoreName { get; set; }
+
+    /// <summary>Managed identity client id. Defaults to the top-level value.</summary>
+    public string? FederatedClientId { get; set; }
+
+    /// <summary>Federated token file path. Defaults to the top-level value.</summary>
+    public string? FederatedTokenFile { get; set; }
+
+    /// <summary>Token authority override. Defaults to the top-level value.</summary>
+    public string? AuthorityEndpoint { get; set; }
+
+    /// <summary>FabrCore agent type alias (the <c>[AgentAlias]</c> value) that answers on this route.</summary>
     public string? AgentType { get; set; }
 
-    /// <summary>Handle of the per-user agent instance. Default <c>copilot</c>.</summary>
-    public string Handle { get; set; } = "copilot";
-
     /// <summary>
-    /// Route every Copilot user to one existing shared agent instead of provisioning per-user
-    /// agents. Must be a fully-qualified handle such as <c>system:assistant</c>. Cross-principal
-    /// messaging requires an ACL grant (<c>agent.message.allow</c>) for the mapped principals.
+    /// Handle of the agent under each calling user's principal. Defaults to <see cref="Name"/>.
+    /// The principal itself always comes from the inbound activity.
     /// </summary>
-    public string? SharedAgentHandle { get; set; }
+    public string? Handle { get; set; }
 
-    /// <summary>Model configuration name from fabrcore.json used by provisioned agents. Default <c>default</c>.</summary>
+    /// <summary>Model configuration name used when the agent has to be created. Default <c>default</c>.</summary>
     public string Models { get; set; } = "default";
 
-    /// <summary>System prompt applied to provisioned agents.</summary>
-    public string? SystemPrompt { get; set; }
+    /// <summary>Greeting for this agent. Defaults to the top-level <c>WelcomeMessage</c>.</summary>
+    public string? WelcomeMessage { get; set; }
 
-    /// <summary>Plugin aliases enabled on provisioned agents.</summary>
-    public List<string> Plugins { get; set; } = new();
+    /// <summary>App-manifest values for this agent, layered over the top-level <c>Manifest</c>.</summary>
+    public CopilotAgentManifestOptions Manifest { get; set; } = new();
+}
 
-    /// <summary>Standalone tool aliases enabled on provisioned agents.</summary>
-    public List<string> Tools { get; set; } = new();
+/// <summary>
+/// Per-agent app-manifest overrides. Every value left unset falls back to the top-level
+/// <see cref="CopilotManifestOptions"/>.
+/// </summary>
+public sealed class CopilotAgentManifestOptions
+{
+    /// <summary>Microsoft 365 app id (GUID). Defaults to the agent's <c>ClientId</c>.</summary>
+    public string? Id { get; set; }
 
-    /// <summary>Args passed to provisioned agents (plugin configuration etc.).</summary>
-    public Dictionary<string, string> Args { get; set; } = new();
+    /// <summary>App version (semver).</summary>
+    public string? Version { get; set; }
 
     /// <summary>
-    /// When true each Microsoft 365 conversation gets its own agent instance
-    /// (<c>{Handle}-{conversationId}</c>) instead of one continuous agent per user.
+    /// Short display name (max 30 characters). Defaults to the top-level name when the host
+    /// exposes one agent, and to the entry's <c>Name</c> when it exposes several.
     /// </summary>
-    public bool AgentPerConversation { get; set; }
+    public string? Name { get; set; }
+
+    /// <summary>Full display name.</summary>
+    public string? FullName { get; set; }
+
+    /// <summary>Short description (max 80 characters).</summary>
+    public string? Description { get; set; }
+
+    /// <summary>Full description.</summary>
+    public string? FullDescription { get; set; }
+
+    /// <summary>Developer/company name shown in the store listing.</summary>
+    public string? DeveloperName { get; set; }
+
+    /// <summary>Developer website (https).</summary>
+    public string? WebsiteUrl { get; set; }
+
+    /// <summary>Privacy statement URL (https).</summary>
+    public string? PrivacyUrl { get; set; }
+
+    /// <summary>Terms of use URL (https).</summary>
+    public string? TermsOfUseUrl { get; set; }
+
+    /// <summary>Accent color used behind the outline icon (hex).</summary>
+    public string? AccentColor { get; set; }
+
+    /// <summary>Conversation starters for this agent. Empty means the top-level starters.</summary>
+    public List<CopilotConversationStarter> ConversationStarters { get; set; } = new();
+
+    /// <summary>Path to a 192x192 PNG color icon for this agent.</summary>
+    public string? ColorIconPath { get; set; }
+
+    /// <summary>Path to a 32x32 transparent PNG outline icon for this agent.</summary>
+    public string? OutlineIconPath { get; set; }
 }
 
 /// <summary>Streaming behavior for channels that support it (Teams, Microsoft 365 Copilot).</summary>
@@ -308,7 +400,11 @@ public sealed class CopilotConversationStarter
 /// <summary>Metadata for the generated Microsoft 365 app manifest / package.</summary>
 public sealed class CopilotManifestOptions
 {
-    /// <summary>Microsoft 365 app id (GUID). Defaults to the bot's <c>ClientId</c>.</summary>
+    /// <summary>
+    /// Microsoft 365 app id (GUID). Defaults to the agent's <c>ClientId</c>. Set per agent in
+    /// <c>Agents:{n}:Manifest:Id</c>; the top-level value is not inherited, because two apps
+    /// cannot share an id.
+    /// </summary>
     public string? Id { get; set; }
 
     /// <summary>App version (semver). Default <c>1.0.0</c>.</summary>
@@ -358,9 +454,9 @@ public sealed class CopilotManifestOptions
 
     /// <summary>
     /// Expose developer endpoints that serve the generated manifest and app package
-    /// (<c>/m365copilot/manifest.json</c>, <c>/m365copilot/appPackage.zip</c>, and the
-    /// name-addressed <c>/manifests/{name}.json</c> where <c>{name}</c> is the slug of
-    /// <see cref="Name"/>, for example <c>my-fabrcore-agent</c>).
+    /// (<c>/m365copilot/{agent}/manifest.json</c>, <c>/m365copilot/{agent}/appPackage.zip</c>, and
+    /// the name-addressed <c>/manifests/{name}.json</c> where <c>{name}</c> is the slug of an
+    /// agent's manifest name, for example <c>my-fabrcore-agent</c>).
     /// Defaults to enabled only in the Development environment.
     /// </summary>
     public bool? EnableAppPackageEndpoint { get; set; }

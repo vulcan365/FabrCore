@@ -400,6 +400,7 @@ Heartbeat `capabilities` flags:
 | `a2a` | A2A is enabled | The A2A wire version, `"1.0"` |
 | `m365copilot` | The Copilot add-on is installed | `"1"` |
 | `m365copilot.enabled` | The Copilot add-on is installed | `"true"` or `"false"` |
+| `m365copilot.agents` | The Copilot add-on is installed and takes the `Microsoft365Copilot:Agents` list | The number of agents the channel exposes, for example `"2"`; `"0"` while the channel is off |
 | `remote-agents` | The remote-agents package is registered | `"1"` |
 | `remote-agents.enabled` | The remote-agents package is registered | `"true"` or `"false"` |
 | `connections.admin` | Connections is enabled | `"1"` |
@@ -413,18 +414,27 @@ a key the host set. A server must treat an absent flag as "not installed", not a
 | Service | Listed | `features` |
 |---|---|---|
 | `a2a` | Always; A2A is part of the host | `status`, `jsonrpc`, `http-json`, `streaming`, `tasks`, `auth-{mode}`, `principal-{strategy}`, `agent-bindings` |
-| `microsoft365-copilot` | When the add-on is installed | Always `status`, `app-package`, `diagnostics`. When the channel is on: `activity-protocol`, `adaptive-cards`, `principal-{strategy}`, `streaming` unless streaming is turned off, and `proactive`, `sso`, `agent-binding`, `token-validation-off` when those are configured |
+| `microsoft365-copilot` | When the add-on is installed | Always `status`, `app-package`, `diagnostics`, `multi-agent`. When the channel is on: `activity-protocol`, `adaptive-cards`, `principal-{strategy}`, `streaming` unless streaming is turned off, and `proactive`, `sso`, `token-validation-off` when those are configured |
 | `remote-agents` | When the package is registered | `work-iq`, `copilot-studio` |
 | `connections` | When Connections is enabled | `profiles`, `user-authorization`, `application-credentials`, and `entra-agent-id`, `encrypted-client-handoff` when enabled |
 
 `{mode}` and `{strategy}` are the lower-cased option values, for example `auth-jwtbearer` and
 `principal-canonicalentra`.
 
+The `microsoft365-copilot` service reports `apiVersion` `2`
+(`IntegrationAdministration.Microsoft365ApiVersion`). `multi-agent` means the add-on exposes a
+list of agents, `Microsoft365Copilot:Agents`, each with its own bot registration, messaging route,
+and app package, and no longer reads the single-agent keys of version `1`. A version `1` add-on
+has neither the feature nor the `m365copilot.agents` flag, lists `agent-binding` when a binding is
+configured, and reads only the single-agent keys. Either add-on fails startup when it is given
+only the other's keys, and each ignores the other's keys when its own are present, so a server
+that manages both publishes both shapes during an upgrade (see *Enablement*).
+
 **A listed service is not necessarily on.** `available` is false and `unavailableReason` says why
 when a feature is installed but disabled. A server that lists every service in the document as
 working will show A2A as available on every host. Hide or grey out a service whose `available` is
 false. `token-validation-off` is a warning, not a feature to advertise: it means the messaging
-endpoint accepts anonymous requests.
+endpoints accept anonymous requests.
 
 ### Enablement
 
@@ -435,6 +445,32 @@ Publish the keys in the `settings` map. The relevant sections are `Microsoft365C
   `pendingRestartSettings`; it takes effect when the operator restarts the host.
 - A host with the Copilot add-on installed and no `Microsoft365Copilot` configuration starts with
   the channel off. Publishing the section and restarting turns it on; no code change is needed.
+- **The Copilot channel exposes a list of agents.** Microsoft allows one bot per app manifest, and
+  an Azure Bot resource has one messaging endpoint and one app id, so each agent listed in
+  Microsoft 365 Copilot has its own bot registration. Publish one entry per agent as
+  `Microsoft365Copilot:Agents:{i}:Name`, `Route`, `ClientId`, `ClientSecret`, `AgentType`,
+  `Handle`, `Models`, `Manifest:Name`, `Manifest:Description`, and the other per-agent keys.
+  `Name` and `AgentType` are required. `Route` defaults to `/api/messages/{Name}`, `Handle` to
+  `Name`, and `Models` to `default`; the top-level `TenantId`, `AuthType`, and `Manifest` values
+  are defaults for every entry. Names, routes, client ids, and manifest names must be unique, and
+  a violation fails startup with a message naming the `Microsoft365Copilot:Agents:{i}:…` setting.
+  An enabled channel with no entries is valid and serves no messaging endpoint.
+- **The single-agent Copilot keys are no longer read.** With the channel enabled and no
+  `Microsoft365Copilot:Agents` section, the presence of `Microsoft365Copilot:Agent:*`,
+  `Microsoft365Copilot:MessagesEndpoint`, or a top-level `Microsoft365Copilot:ClientId` or
+  `ClientSecret` fails startup. When an `Agents` list is present they are ignored and a startup
+  warning names them.
+- **One published configuration can serve old and new hosts.** A server may publish the agent
+  list and, beside it, one agent in the single-agent form (`Microsoft365Copilot:ClientId`,
+  `ClientSecret`, `Agent:Binding`, and the `AgentBindings:{name}:*` it names). A host with the
+  `m365copilot.agents` flag serves the list; a host without it serves that one agent. The safe
+  order is: upgrade the server and republish with both shapes, upgrade the hosts, then stop
+  publishing the single-agent keys.
+- The Copilot channel no longer
+  reads `AgentBindings`; A2A still does. An entry names an agent and does not configure it:
+  plugins, tools, the system prompt, and args belong to the agent type or to a blueprint. An agent
+  that already exists for the user under the entry's handle is used untouched, and a missing one
+  is created from `AgentType` and `Models` only.
 - `FabrCore:Connections` and `FabrCore:RemoteAgents` take effect only on hosts that register those
   packages with the configuration-bound overloads (`AddFabrCoreConnections(services,
   configuration)` and `AddFabrCoreRemoteAgents(services, configuration)`). A host that registers
@@ -446,7 +482,7 @@ Publish the keys in the `settings` map. The relevant sections are `Microsoft365C
   to supply its own bot connection. Publishing `Connections:*` changes the bot's credentials, not
   the Connections feature.
 - **Secrets can be published, with the same exposure as the model API keys.** A server may publish
-  `Microsoft365Copilot:ClientSecret`, A2A API key values, and
+  `Microsoft365Copilot:Agents:{i}:ClientSecret`, A2A API key values, and
   `FabrCore:ConnectionCredentials:{reference}:Secret` as ordinary settings. The host caches the
   envelope in plaintext (see *Cache* below), so they are then on disk on every silo, exactly as
   `apiKeys` already are. A server that publishes them is responsible for protecting them at rest,
@@ -462,7 +498,8 @@ settings these features actually run with:
 | Keys | Reported by |
 |---|---|
 | `A2A:Enabled`, `A2A:Discovery:AgentTypes`, `A2A:Authentication:Mode`, `A2A:Principal:Strategy`, `A2A:PublicBaseUrl` | The host |
-| `Microsoft365Copilot:Enabled`, `TenantId`, `ClientId`, `AuthType`, `MessagesEndpoint`, `TokenValidation:Enabled`, `Principal:Strategy`, `Agent:Binding`, `Proactive:Enabled`, `Streaming:Enabled`, `Manifest:PublicHostName` | The Copilot add-on |
+| `Microsoft365Copilot:Enabled`, `TenantId`, `AuthType`, `TokenValidation:Enabled`, `Principal:Strategy`, `Proactive:Enabled`, `Streaming:Enabled`, `Manifest:PublicHostName` | The Copilot add-on |
+| `Microsoft365Copilot:Agents:{i}:Name`, `Route`, `ClientId`, `AgentType`, `Handle`, for each exposed agent, defaults applied | The Copilot add-on |
 | `Runtime:Microsoft365Copilot:SingleSignOn`, `Runtime:Microsoft365Copilot:ForwardsUserCredential` | The Copilot add-on |
 
 Read them with these rules:
@@ -472,7 +509,7 @@ Read them with these rules:
   still means startup code changed the value.
 - While a channel is off, its rows other than `Enabled` have `appliedKnown: false`. Nothing is
   consuming those settings, so the host does not claim they are applied. Do not render them as
-  applied values.
+  applied values. The Copilot add-on reports no `Agents:{i}` rows while its channel is off.
 - `pendingRestart` is true for a row whose resolved value differs from the applied one. This is how
   a server shows that a published change is waiting on a restart.
 - Any key whose name contains `token`, `secret`, `password`, `apikey`, or `connectionstring` is
@@ -488,33 +525,43 @@ Read them with these rules:
 
 All routes are under `/fabrcoreapi/admin/v1/integrations`, use the administration credential, and
 are reachable over the connect channel. Contracts are in `FabrCore.Core.CloudServer`
-(`IntegrationAdministration`, `Microsoft365IntegrationStatus`, `A2AIntegrationStatus`,
-`A2AIntegrationAgent`, `IntegrationCheck`, `IntegrationDiagnosticsReport`).
+(`IntegrationAdministration`, `Microsoft365IntegrationStatus`, `Microsoft365IntegrationAgent`,
+`A2AIntegrationStatus`, `A2AIntegrationAgent`, `IntegrationCheck`, `IntegrationDiagnosticsReport`).
 
 | Method | Path | Served by | Result |
 |---|---|---|---|
 | GET | `/a2a` | Host | A2A configuration, published agents, and findings |
-| GET | `/microsoft365` | Copilot add-on | Channel identity, configuration, and findings |
-| GET | `/microsoft365/manifest` | Copilot add-on | The generated app manifest, `application/json` |
-| GET | `/microsoft365/app-package` | Copilot add-on | The uploadable package, `application/zip` |
+| GET | `/microsoft365` | Copilot add-on | Channel configuration, the exposed agents, and findings |
+| GET | `/microsoft365/agents/{name}/manifest` | Copilot add-on | One agent's generated app manifest, `application/json` |
+| GET | `/microsoft365/agents/{name}/app-package` | Copilot add-on | One agent's uploadable package, `application/zip` |
 | POST | `/microsoft365/diagnostics` | Copilot add-on | Findings plus live checks |
 
 - The status routes answer `200` whether the feature is on or off. `enabled` and, for the channel,
   `configured` and `disabledReason` describe the state. A `404` on a `/microsoft365` route means
   the add-on is not installed on that host.
-- `manifest` and `app-package` answer `409` with `{ "error", "message" }` while the channel is off
-  or cannot describe itself (for example, with no client id).
+- The Microsoft 365 status document has `apiVersion` `2`. Its `agents` array has one item per
+  exposed agent: `name`, `messagesEndpoint`, `clientId`, `tenantId`, `authType`, `agentType`,
+  `agentHandle`, `manifestId`, `manifestName`, and `manifestVersion`, each with its default
+  applied. It replaces the version `1` top-level `clientId`, `authType`, `messagesEndpoint`,
+  `agentBinding`, `agentType`, `agentHandle`, `sharedAgentHandle`, `manifestId`, `manifestName`,
+  and `manifestVersion`. `agents` is empty while the channel is off or has no agents.
+- `{name}` in the package routes is an agent's `name` from that array. There is one package per
+  agent. The routes answer `409` with `{ "error", "message" }` while the channel is off
+  (`channel-disabled`) or the agent cannot describe itself, for example with no client id
+  (`manifest-unavailable`), and `404` with `error: "agent-not-found"` for a name the host does not
+  expose. The version `1` routes `/microsoft365/manifest` and `/microsoft365/app-package` are gone.
 - Each finding and check is `{ id, status, message }`. `status` is `pass`, `warn`, `fail`, or
   `skipped`; the document's own `status` is the worst of them. Key your own text and severity on
   `id`; `message` is operator-readable English and may be reworded. Ignore unknown ids.
 - **No route returns a credential.** A2A API keys are reported by name only. The bot's client
   secret, certificates, and tokens are never included.
-- `diagnostics` acquires an Azure Bot Service token with the configured credential, waits at most
-  20 seconds, discards the token, and reports whether it arrived. A failure reports the exception
-  type and the first line of its message. Every run is recorded as a `RemoteAdministration` audit
-  event.
+- `diagnostics` acquires an Azure Bot Service token with each agent's configured credential, waits
+  at most 20 seconds for each, discards the token, and reports whether it arrived. A failure
+  reports the exception type and the first line of its message. The `agent-type-registered` and
+  `bot-service-credential` checks cover every agent under one id each and name the agent that
+  fails. Every run is recorded as a `RemoteAdministration` audit event.
 - `diagnostics` proves the host can authenticate **outbound**. It does not prove that Microsoft can
-  reach the messaging endpoint. A server that wants that assurance must probe the public URL from
+  reach the messaging endpoints. A server that wants that assurance must probe the public URL from
   its own side.
 - Send no `X-FabrCore-Admin-Target`, `x-user`, or `x-user-handle` header. These routes describe
   the host; a request carrying a target principal is rejected with `400`.
@@ -522,7 +569,8 @@ are reachable over the connect channel. Contracts are in `FabrCore.Core.CloudSer
 Over the connect channel the package arrives as the base64 `body` of the command response, with
 its `Content-Type`. `Content-Disposition` is not among the headers a host returns, so name the
 download yourself. The package is small (a manifest and two icons) and is well inside the default
-body limit.
+body limit. The host embeds default icons; a console may replace `color.png` and `outline.png` in
+the downloaded zip before handing it to an administrator.
 
 ## Host behavior summary (normative for host implementations)
 

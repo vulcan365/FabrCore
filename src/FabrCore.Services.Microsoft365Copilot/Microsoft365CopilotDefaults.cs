@@ -14,10 +14,16 @@ public static class Microsoft365CopilotDefaults
     /// <summary>Authorization policy applied to the messages endpoint.</summary>
     public const string AuthorizationPolicy = "Microsoft365Copilot";
 
-    /// <summary>Default messaging endpoint expected by Azure Bot Service.</summary>
+    /// <summary>
+    /// Messaging endpoint Azure Bot Service posts to by convention. One agent may claim it;
+    /// the others default to <c>/api/messages/{name}</c>.
+    /// </summary>
     public const string MessagesEndpoint = "/api/messages";
 
-    /// <summary>Name of the synthesized Agents SDK service connection.</summary>
+    /// <summary>
+    /// Name of the synthesized Agents SDK service connection of the first agent. Each further
+    /// agent's connection is <c>ServiceConnection-{name}</c>.
+    /// </summary>
     public const string ServiceConnectionName = "ServiceConnection";
 
     /// <summary>Value stamped on <c>AgentMessage.Channel</c> for traffic that arrives through this addon.</summary>
@@ -31,6 +37,8 @@ public static class Microsoft365CopilotDefaults
 
     // Keys stamped onto AgentMessage.Args for every bridged message so FabrCore
     // agents and plugins can see who is talking and from where.
+    /// <summary>Name of the <c>Microsoft365Copilot:Agents</c> entry the message arrived through.</summary>
+    public const string ArgAgent = "Microsoft365Copilot:Agent";
     public const string ArgAadObjectId = "Microsoft365Copilot:AadObjectId";
     public const string ArgTenantId = "Microsoft365Copilot:TenantId";
     public const string ArgUserName = "Microsoft365Copilot:UserName";

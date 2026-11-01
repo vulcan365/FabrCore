@@ -19,7 +19,8 @@ internal static class CopilotIntegrationStatusBuilder
     ];
 
     internal static Microsoft365IntegrationStatus Build(
-        Microsoft365CopilotOptions options, Marker marker, Type? turnStateStorage, bool customPrincipalResolver)
+        Microsoft365CopilotOptions options, IReadOnlyList<CopilotAgent> agents, Marker marker,
+        Type? turnStateStorage, bool customPrincipalResolver)
     {
         var status = new Microsoft365IntegrationStatus
         {
@@ -27,28 +28,34 @@ internal static class CopilotIntegrationStatusBuilder
             Configured = marker.Configured,
             DisabledReason = marker.Enabled ? null : marker.DisabledReason,
             TenantId = options.TenantId,
-            ClientId = options.ClientId,
-            // With a natively configured Agents SDK connection this option is not what authenticates.
-            AuthType = marker.NativeServiceConnection ? null : options.AuthType,
-            MessagesEndpoint = options.MessagesEndpoint,
             TokenValidationEnabled = options.TokenValidation.Enabled,
             PrincipalStrategy = options.Principal.Strategy.ToString(),
-            AgentBinding = options.Agent.Binding,
-            AgentType = options.Agent.AgentType,
-            AgentHandle = options.Agent.Handle,
-            SharedAgentHandle = options.Agent.SharedAgentHandle,
             SingleSignOn = options.UserAuthorizationConfigured,
             ForwardsUserCredential = ForwardsUserCredential(options),
             ProactiveEnabled = options.Proactive.Enabled,
             ProactiveConversationTypes = [.. options.Proactive.AllowedConversationTypes],
             StreamingEnabled = options.Streaming.Enabled,
             PublicHostName = options.Manifest.PublicHostName,
-            ManifestId = options.Manifest.Id ?? options.ClientId,
-            ManifestName = options.Manifest.Name,
-            ManifestVersion = options.Manifest.Version,
-            TurnStateStorage = turnStateStorage?.Name
+            TurnStateStorage = turnStateStorage?.Name,
+            Agents =
+            [
+                .. agents.Select(agent => new Microsoft365IntegrationAgent
+                {
+                    Name = agent.Name,
+                    MessagesEndpoint = agent.Route,
+                    ClientId = agent.ClientId,
+                    TenantId = agent.TenantId,
+                    // With a natively configured Agents SDK connection this option is not what authenticates.
+                    AuthType = marker.NativeServiceConnection ? null : agent.AuthType,
+                    AgentType = agent.AgentType,
+                    AgentHandle = agent.Handle,
+                    ManifestId = agent.Manifest.Id ?? agent.ClientId,
+                    ManifestName = agent.Manifest.Name,
+                    ManifestVersion = agent.Manifest.Version
+                })
+            ]
         };
-        status.Findings = Findings(options, marker, turnStateStorage, customPrincipalResolver);
+        status.Findings = Findings(options, agents, marker, turnStateStorage, customPrincipalResolver);
         status.Status = Summarize(status.Findings);
         return status;
     }
@@ -58,7 +65,8 @@ internal static class CopilotIntegrationStatusBuilder
         options.UserAuthorization.PassUserTokenToAgent && options.UserAuthorizationConfigured;
 
     internal static List<IntegrationCheck> Findings(
-        Microsoft365CopilotOptions options, Marker marker, Type? turnStateStorage, bool customPrincipalResolver)
+        Microsoft365CopilotOptions options, IReadOnlyList<CopilotAgent> agents, Marker marker,
+        Type? turnStateStorage, bool customPrincipalResolver)
     {
         if (!marker.Enabled)
         {
@@ -68,16 +76,12 @@ internal static class CopilotIntegrationStatusBuilder
         return
         [
             options.TokenValidation.Enabled
-                ? Check("token-validation", Pass, "Inbound activities must carry a valid Azure Bot Service token.")
-                : Check("token-validation", Fail, "The messaging endpoint accepts anonymous requests. This is for local development only."),
+                ? Check("token-validation", Pass, "Inbound activities must carry a valid Azure Bot Service token issued for the bot that owns the route.")
+                : Check("token-validation", Fail, "The messaging endpoints accept anonymous requests. This is for local development only."),
             PrincipalStrategy(options, customPrincipalResolver),
             marker.NativeServiceConnection
                 ? Check("credential-type", Skipped, "The host configures the Agents SDK Connections section itself, so the add-on does not choose the credential.")
-                : string.IsNullOrWhiteSpace(options.ClientId)
-                    ? Check("credential-type", Skipped, "No bot identity is configured.")
-                    : string.Equals(options.AuthType, "ClientSecret", StringComparison.OrdinalIgnoreCase)
-                        ? Check("credential-type", Warn, "The bot authenticates with a client secret held in host configuration. Prefer WorkloadIdentity, FederatedCredentials, a managed identity, or a certificate.")
-                        : Check("credential-type", Pass, $"The bot authenticates with {options.AuthType}; no client secret is stored."),
+                : CredentialType(agents),
             turnStateStorage is null
                 ? Check("turn-state-storage", Skipped, "The turn-state store could not be inspected.")
                 : turnStateStorage == typeof(MemoryStorage)
@@ -99,6 +103,21 @@ internal static class CopilotIntegrationStatusBuilder
                     ? Check("proactive-scopes", Pass, "Proactive messages are delivered to personal conversations only.")
                     : Check("proactive-scopes", Warn, "Proactive messages may be delivered to shared conversations, where a message meant for one person is visible to others.")
         ];
+    }
+
+    private static IntegrationCheck CredentialType(IReadOnlyList<CopilotAgent> agents)
+    {
+        const string id = "credential-type";
+        var identified = agents.Where(agent => !string.IsNullOrWhiteSpace(agent.ClientId)).ToList();
+        if (identified.Count == 0)
+            return Check(id, Skipped, "No bot identity is configured.");
+        var secrets = identified
+            .Where(agent => string.Equals(agent.AuthType, "ClientSecret", StringComparison.OrdinalIgnoreCase))
+            .Select(agent => agent.Name)
+            .ToList();
+        return secrets.Count > 0
+            ? Check(id, Warn, $"These agents authenticate with a client secret held in host configuration: {string.Join(", ", secrets)}. Prefer WorkloadIdentity, FederatedCredentials, a managed identity, or a certificate.")
+            : Check(id, Pass, "No agent authenticates with a stored client secret.");
     }
 
     private static IntegrationCheck PrincipalStrategy(Microsoft365CopilotOptions options, bool customResolver)

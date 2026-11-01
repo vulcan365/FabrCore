@@ -7,57 +7,70 @@ using Microsoft.Extensions.Options;
 namespace FabrCore.Services.Microsoft365Copilot;
 
 /// <summary>
-/// Generates the Microsoft 365 app manifest and the uploadable app package (zip) that makes the
-/// agent visible in Microsoft 365 Copilot and Teams. Everything is derived from
-/// <see cref="Microsoft365CopilotOptions"/> — no hand-authored manifest required.
+/// Generates the Microsoft 365 app manifest and the uploadable app package (zip) that makes an
+/// agent visible in Microsoft 365 Copilot and Teams. Microsoft allows one bot per manifest, so
+/// every agent in the <see cref="CopilotAgentCatalog"/> gets its own package. Everything is
+/// derived from <see cref="Microsoft365CopilotOptions"/> — no hand-authored manifest required.
 /// </summary>
 public sealed class CopilotAppPackageBuilder
 {
     private const string ManifestSchemaVersion = "1.25";
 
     private readonly Microsoft365CopilotOptions _options;
+    private readonly CopilotAgentCatalog _catalog;
 
-    public CopilotAppPackageBuilder(IOptions<Microsoft365CopilotOptions> options)
+    public CopilotAppPackageBuilder(IOptions<Microsoft365CopilotOptions> options, CopilotAgentCatalog catalog)
     {
         _options = options.Value;
+        _catalog = catalog;
     }
 
     /// <summary>
-    /// Canonical URL-safe name the manifest is addressable by on the
-    /// <c>/manifests/{name}.json</c> endpoint — a slug of <c>Manifest:Name</c>
+    /// Canonical URL-safe name an agent's manifest is addressable by on the
+    /// <c>/manifests/{name}.json</c> endpoint — a slug of its manifest name
     /// (for example "My FabrCore Agent" → <c>my-fabrcore-agent</c>).
     /// </summary>
-    public string ManifestName => Slugify(_options.Manifest.Name);
+    public string ManifestName(CopilotAgent agent) => Slugify(agent.Manifest.Name);
 
     /// <summary>
-    /// Whether <paramref name="name"/> addresses this app's manifest. Accepts any value that
-    /// slugs to <see cref="ManifestName"/> (so the raw display name and case variants match)
-    /// as well as the Microsoft 365 app id (<c>Manifest:Id</c>, falling back to <c>ClientId</c>).
+    /// The agent whose manifest <paramref name="name"/> addresses, or null. Accepts any value
+    /// that slugs to an agent's <see cref="ManifestName"/> (so the raw display name and case
+    /// variants match) as well as its Microsoft 365 app id (<c>Manifest:Id</c>, falling back to
+    /// <c>ClientId</c>).
     /// </summary>
-    public bool MatchesManifestName(string? name)
+    public CopilotAgent? FindByManifestName(string? name)
     {
         if (string.IsNullOrWhiteSpace(name))
         {
-            return false;
+            return null;
         }
 
         var candidate = name.Trim();
-        if (Slugify(candidate) == ManifestName)
+        var slug = Slugify(candidate);
+        foreach (var agent in _catalog.Agents)
         {
-            return true;
+            if (slug == ManifestName(agent))
+            {
+                return agent;
+            }
+
+            var appId = agent.Manifest.Id ?? agent.ClientId;
+            if (appId is not null && string.Equals(candidate, appId, StringComparison.OrdinalIgnoreCase))
+            {
+                return agent;
+            }
         }
 
-        var appId = _options.Manifest.Id ?? _options.ClientId;
-        return appId is not null && string.Equals(candidate, appId, StringComparison.OrdinalIgnoreCase);
+        return null;
     }
 
-    /// <summary>Builds the manifest.json for the custom engine agent.</summary>
-    public string BuildManifestJson()
+    /// <summary>Builds the manifest.json for one custom engine agent.</summary>
+    public string BuildManifestJson(CopilotAgent agent)
     {
-        var manifest = _options.Manifest;
-        var botId = _options.ClientId
+        var manifest = agent.Manifest;
+        var botId = agent.ClientId
             ?? throw new InvalidOperationException(
-                "Microsoft365Copilot:ClientId must be configured to generate an app manifest.");
+                $"Microsoft365Copilot: agent '{agent.Name}' needs a ClientId to generate an app manifest.");
         var appId = manifest.Id ?? botId;
 
         var validDomains = new JsonArray();
@@ -96,7 +109,7 @@ public sealed class CopilotAppPackageBuilder
                 ["outline"] = "outline.png",
             },
             ["accentColor"] = manifest.AccentColor,
-            ["bots"] = new JsonArray(BuildBotEntry(botId)),
+            ["bots"] = new JsonArray(BuildBotEntry(botId, manifest)),
             ["copilotAgents"] = new JsonObject
             {
                 ["customEngineAgents"] = new JsonArray(new JsonObject
@@ -124,21 +137,21 @@ public sealed class CopilotAppPackageBuilder
         return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
     }
 
-    /// <summary>Builds the uploadable app package: manifest.json + color.png + outline.png.</summary>
-    public byte[] BuildPackageZip()
+    /// <summary>Builds one agent's uploadable app package: manifest.json + color.png + outline.png.</summary>
+    public byte[] BuildPackageZip(CopilotAgent agent)
     {
         using var buffer = new MemoryStream();
         using (var zip = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
         {
-            AddEntry(zip, "manifest.json", Encoding.UTF8.GetBytes(BuildManifestJson()));
-            AddEntry(zip, "color.png", LoadIcon(_options.Manifest.ColorIconPath, DefaultIcons.Color));
-            AddEntry(zip, "outline.png", LoadIcon(_options.Manifest.OutlineIconPath, DefaultIcons.Outline));
+            AddEntry(zip, "manifest.json", Encoding.UTF8.GetBytes(BuildManifestJson(agent)));
+            AddEntry(zip, "color.png", LoadIcon(agent.Manifest.ColorIconPath, DefaultIcons.Color));
+            AddEntry(zip, "outline.png", LoadIcon(agent.Manifest.OutlineIconPath, DefaultIcons.Outline));
         }
 
         return buffer.ToArray();
     }
 
-    private JsonObject BuildBotEntry(string botId)
+    private static JsonObject BuildBotEntry(string botId, CopilotManifestOptions manifest)
     {
         var bot = new JsonObject
         {
@@ -148,10 +161,10 @@ public sealed class CopilotAppPackageBuilder
             ["isNotificationOnly"] = false,
         };
 
-        if (_options.Manifest.ConversationStarters.Count > 0)
+        if (manifest.ConversationStarters.Count > 0)
         {
             var commands = new JsonArray();
-            foreach (var starter in _options.Manifest.ConversationStarters.Take(10))
+            foreach (var starter in manifest.ConversationStarters.Take(10))
             {
                 commands.Add(new JsonObject
                 {
@@ -181,7 +194,7 @@ public sealed class CopilotAppPackageBuilder
         => string.IsNullOrWhiteSpace(path) ? fallback : File.ReadAllBytes(path);
 
     /// <summary>Lowercase ASCII letters and digits; every other run of characters becomes one dash.</summary>
-    private static string Slugify(string value)
+    internal static string Slugify(string value)
     {
         var builder = new StringBuilder(value.Length);
         var lastWasDash = false;

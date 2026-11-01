@@ -9,6 +9,12 @@ public static class IntegrationAdministration
 {
     public const string ApiVersion = "1";
 
+    /// <summary>
+    /// Version of the Microsoft 365 documents. "2" reports the exposed agents as a list, each
+    /// with its own bot registration, route, and app package; "1" described a single agent.
+    /// </summary>
+    public const string Microsoft365ApiVersion = "2";
+
     /// <summary>Route prefix, relative to the host root.</summary>
     public const string RoutePrefix = "/fabrcoreapi/admin/v1/integrations";
 
@@ -20,6 +26,12 @@ public static class IntegrationAdministration
 
     public const string Microsoft365Route = RoutePrefix + "/" + Microsoft365;
     public const string A2ARoute = RoutePrefix + "/" + A2A;
+
+    /// <summary>
+    /// Segment the per-agent Microsoft 365 routes hang off:
+    /// <c>agents/{name}/manifest</c> and <c>agents/{name}/app-package</c>.
+    /// </summary>
+    public const string AgentsSegment = "agents";
 
     public const string ManifestSegment = "manifest";
     public const string AppPackageSegment = "app-package";
@@ -89,9 +101,9 @@ public sealed class IntegrationDiagnosticsReport
 /// </summary>
 public sealed class Microsoft365IntegrationStatus
 {
-    public string ApiVersion { get; set; } = IntegrationAdministration.ApiVersion;
+    public string ApiVersion { get; set; } = IntegrationAdministration.Microsoft365ApiVersion;
 
-    /// <summary>Whether the channel is serving its messaging endpoint.</summary>
+    /// <summary>Whether the channel is serving its messaging endpoints.</summary>
     public bool Enabled { get; set; }
 
     /// <summary>Whether any configuration was supplied. False means the add-on is installed but untouched.</summary>
@@ -100,27 +112,13 @@ public sealed class Microsoft365IntegrationStatus
     /// <summary>Why the channel is off. Null while it is on.</summary>
     public string? DisabledReason { get; set; }
 
+    /// <summary>Default Entra tenant of the bot registrations. An agent may name its own.</summary>
     public string? TenantId { get; set; }
-
-    /// <summary>Client id of the bot's app registration.</summary>
-    public string? ClientId { get; set; }
-
-    /// <summary>How the host authenticates to Azure Bot Service, for example <c>WorkloadIdentity</c>.</summary>
-    public string? AuthType { get; set; }
-
-    public string? MessagesEndpoint { get; set; }
 
     /// <summary>Whether inbound activities must carry a valid Azure Bot Service token.</summary>
     public bool TokenValidationEnabled { get; set; }
 
     public string? PrincipalStrategy { get; set; }
-
-    /// <summary>Named entry in <c>AgentBindings</c>, when the channel uses one.</summary>
-    public string? AgentBinding { get; set; }
-
-    public string? AgentType { get; set; }
-    public string? AgentHandle { get; set; }
-    public string? SharedAgentHandle { get; set; }
 
     /// <summary>Whether a user-authorization handler is configured.</summary>
     public bool SingleSignOn { get; set; }
@@ -133,19 +131,51 @@ public sealed class Microsoft365IntegrationStatus
     public bool StreamingEnabled { get; set; }
     public string? PublicHostName { get; set; }
 
-    /// <summary>Microsoft 365 app id written to the manifest.</summary>
-    public string? ManifestId { get; set; }
-
-    public string? ManifestName { get; set; }
-    public string? ManifestVersion { get; set; }
-
     /// <summary>Type name of the Agents SDK turn-state store in use.</summary>
     public string? TurnStateStorage { get; set; }
 
     /// <summary>Worst status across <see cref="Findings"/>.</summary>
     public string Status { get; set; } = IntegrationAdministration.Skipped;
 
+    /// <summary>The agents the channel exposes. Empty while the channel is off or has none configured.</summary>
+    public List<Microsoft365IntegrationAgent> Agents { get; set; } = [];
+
     public List<IntegrationCheck> Findings { get; set; } = [];
+}
+
+/// <summary>
+/// One agent exposed to Microsoft 365 Copilot: one Azure Bot registration, one messaging route,
+/// one app package.
+/// </summary>
+public sealed class Microsoft365IntegrationAgent
+{
+    /// <summary>Name of the configuration entry, for example <c>sales</c>. Addresses the per-agent routes.</summary>
+    public string Name { get; set; } = "";
+
+    /// <summary>Path Azure Bot Service posts to, for example <c>/api/messages/sales</c>.</summary>
+    public string MessagesEndpoint { get; set; } = "";
+
+    /// <summary>Client id of this agent's bot registration.</summary>
+    public string? ClientId { get; set; }
+
+    public string? TenantId { get; set; }
+
+    /// <summary>
+    /// How the host authenticates to Azure Bot Service as this bot, for example
+    /// <c>WorkloadIdentity</c>. Null when the host configures the Agents SDK connections itself.
+    /// </summary>
+    public string? AuthType { get; set; }
+
+    public string AgentType { get; set; } = "";
+
+    /// <summary>Handle of the agent under each calling user's principal.</summary>
+    public string AgentHandle { get; set; } = "";
+
+    /// <summary>Microsoft 365 app id written to the manifest.</summary>
+    public string? ManifestId { get; set; }
+
+    public string? ManifestName { get; set; }
+    public string? ManifestVersion { get; set; }
 }
 
 /// <summary>

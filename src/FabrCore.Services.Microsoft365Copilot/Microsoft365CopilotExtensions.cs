@@ -27,7 +27,8 @@ namespace FabrCore.Services.Microsoft365Copilot;
 /// app.Run();
 /// </code>
 /// Configuration comes from the <c>Microsoft365Copilot</c> section of fabrcore.json or
-/// appsettings.json. No changes to FabrCore.Host are required.
+/// appsettings.json; its <c>Agents</c> list names the agents to expose, each on its own route with
+/// its own Azure Bot registration. No changes to FabrCore.Host are required.
 /// </summary>
 public static class Microsoft365CopilotExtensions
 {
@@ -63,8 +64,8 @@ public static class Microsoft365CopilotExtensions
         string? disabledReason = null;
         if (!configured)
         {
-            // Installed but untouched. Starting with the channel off, rather than failing on the
-            // missing agent type, lets one host image be enabled later by configuration alone.
+            // Installed but untouched. Starting with the channel off lets one host image be
+            // enabled later by configuration alone.
             options.Enabled = false;
             disabledReason = $"No {Microsoft365CopilotDefaults.SectionName} configuration was found and no options were supplied in code.";
         }
@@ -76,8 +77,18 @@ public static class Microsoft365CopilotExtensions
         // Read before the configuration bridge runs: afterwards the section always exists.
         var nativeServiceConnection = builder.Configuration.GetSection("Connections").Exists();
 
+        var ignoredLegacyKeys = options.Enabled ? CheckLegacyConfiguration(section) : [];
+
+        // Resolved once: every channel setting needs a restart to change. Nothing is exposed
+        // while the channel is off, so nothing is validated either.
+        var agents = options.Enabled ? CopilotAgentCatalog.Resolve(options) : [];
+
         builder.Services.AddSingleton(Options.Create(options));
-        builder.Services.AddSingleton(new Microsoft365CopilotMarker(options.Enabled, configured, disabledReason, nativeServiceConnection));
+        builder.Services.AddSingleton(new CopilotAgentCatalog(agents));
+        builder.Services.AddSingleton(new Microsoft365CopilotMarker(options.Enabled, configured, disabledReason, nativeServiceConnection)
+        {
+            IgnoredLegacyKeys = ignoredLegacyKeys
+        });
 
         // Registered even while the channel is off, so a management console can tell
         // "installed but disabled" from "not installed" and can see why it is off.
@@ -89,24 +100,11 @@ public static class Microsoft365CopilotExtensions
             return builder;
         }
 
-        if (!string.IsNullOrWhiteSpace(options.Agent.Binding))
-        {
-            var binding = FabrCore.Host.Configuration.ChannelAgentBinding.Read(builder.Configuration, options.Agent.Binding);
-            if (!string.IsNullOrWhiteSpace(options.Agent.SharedAgentHandle) || options.Agent.AgentPerConversation)
-                throw new InvalidOperationException("Microsoft365Copilot: a shared binding requires per-principal routing without SharedAgentHandle or AgentPerConversation.");
-            options.Agent.Handle = binding.Handle;
-            options.Agent.AgentType = binding.AgentType;
-            options.Agent.Models = binding.Models;
-            options.Agent.SystemPrompt = binding.SystemPrompt;
-            options.Agent.Plugins = binding.Plugins;
-            options.Agent.Tools = binding.Tools;
-            options.Agent.Args = binding.Args;
-        }
-        Validate(options, builder.Configuration);
+        Validate(options, agents, builder.Configuration);
 
         // Feed the Microsoft 365 Agents SDK the configuration shape it expects
         // (Connections / ConnectionsMap / AgentApplication) from our single section.
-        AgentsSdkConfigurationBridge.Inject(builder.Configuration, options, section);
+        AgentsSdkConfigurationBridge.Inject(builder.Configuration, agents, section);
 
         builder.Services.AddHttpClient();
 
@@ -132,16 +130,17 @@ public static class Microsoft365CopilotExtensions
 
         if (options.TokenValidation.Enabled)
         {
-            builder.Services.AddCopilotChannelAuthentication(options);
+            builder.Services.AddCopilotChannelAuthentication(options, agents);
         }
 
         return builder;
     }
 
     /// <summary>
-    /// Maps the Azure Bot Service messaging endpoint (default <c>/api/messages</c>) and, in
-    /// development (or when explicitly enabled), the app-package download endpoints under
-    /// <c>/m365copilot</c> plus the name-addressed manifest at <c>/manifests/{name}.json</c>.
+    /// Maps one Azure Bot Service messaging endpoint per configured agent (default
+    /// <c>/api/messages/{name}</c>) and, in development (or when explicitly enabled), the
+    /// app-package download endpoints under <c>/m365copilot/{agent}</c> plus the name-addressed
+    /// manifest at <c>/manifests/{name}.json</c>.
     /// The administration routes under <c>/fabrcoreapi/admin/v1/integrations/microsoft365</c> are
     /// mapped whether or not the channel is on, and require the host's administration policy.
     /// </summary>
@@ -170,39 +169,82 @@ public static class Microsoft365CopilotExtensions
 
         var options = app.Services.GetRequiredService<IOptions<Microsoft365CopilotOptions>>().Value;
 
-        var messages = app.MapPost(
-            options.MessagesEndpoint,
-            (HttpRequest request, HttpResponse response, IAgentHttpAdapter adapter, IAgent agent, CancellationToken cancellationToken)
-                => adapter.ProcessAsync(request, response, agent, cancellationToken));
+        var catalog = app.Services.GetRequiredService<CopilotAgentCatalog>();
 
-        if (options.TokenValidation.Enabled)
+        if (marker.IgnoredLegacyKeys.Count > 0)
         {
-            messages.RequireAuthorization(Microsoft365CopilotDefaults.AuthorizationPolicy);
-        }
-        else
-        {
-            messages.AllowAnonymous();
             logger.LogWarning(
-                "Microsoft 365 Copilot messages endpoint {Endpoint} accepts ANONYMOUS requests " +
-                "(Microsoft365Copilot:TokenValidation:Enabled = false). Local development only.",
-                options.MessagesEndpoint);
+                "Microsoft365Copilot: {Keys} are single-agent settings this add-on no longer reads. " +
+                "They are ignored because Microsoft365Copilot:Agents is present; remove them once no older host shares this configuration.",
+                string.Join(", ", marker.IgnoredLegacyKeys));
+        }
+
+        if (catalog.Agents.Count == 0)
+        {
+            logger.LogWarning(
+                "Microsoft 365 Copilot channel is on but {Section}:Agents is empty, so no messaging endpoint is mapped.",
+                Microsoft365CopilotDefaults.SectionName);
+            return app;
+        }
+
+        foreach (var agent in catalog.Agents)
+        {
+            // The bridge is resolved by its own type: a host may register an IAgent of its own.
+            var messages = app.MapPost(
+                agent.Route,
+                (HttpContext context, IAgentHttpAdapter adapter, FabrCoreCopilotAgent bridge, CancellationToken cancellationToken) =>
+                {
+                    if (!CopilotAgentRouting.TryBind(context, agent, options))
+                    {
+                        logger.LogWarning(
+                            "Rejected an activity on {Endpoint}: its token was not issued for the bot of agent {Agent}.",
+                            agent.Route, agent.Name);
+                        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                        return Task.CompletedTask;
+                    }
+
+                    return adapter.ProcessAsync(context.Request, context.Response, bridge, cancellationToken);
+                });
+
+            if (options.TokenValidation.Enabled)
+            {
+                messages.RequireAuthorization(Microsoft365CopilotDefaults.AuthorizationPolicy);
+            }
+            else
+            {
+                messages.AllowAnonymous();
+                logger.LogWarning(
+                    "Microsoft 365 Copilot messages endpoint {Endpoint} accepts ANONYMOUS requests " +
+                    "(Microsoft365Copilot:TokenValidation:Enabled = false). Local development only.",
+                    agent.Route);
+            }
+
+            logger.LogInformation(
+                "Microsoft 365 Copilot agent {Agent} ready: endpoint {Endpoint}, bot {ClientId}, agent type {AgentType} (per user, handle '{Handle}').",
+                agent.Name, agent.Route, agent.ClientId ?? "(none)", agent.AgentType, agent.Handle);
+        }
+
+        if (options.UserAuthorizationConfigured && catalog.Agents.Count > 1)
+        {
+            logger.LogWarning(
+                "Microsoft 365 Copilot user authorization is configured once and shared by all {Count} agents. " +
+                "Its Azure Bot OAuth connection belongs to one bot registration, so sign-in works only for the agent that owns it.",
+                catalog.Agents.Count);
         }
 
         if (options.Manifest.EnableAppPackageEndpoint ?? app.Environment.IsDevelopment())
         {
             MapAppPackageEndpoints(app);
-            var manifestName = app.Services.GetRequiredService<CopilotAppPackageBuilder>().ManifestName;
             logger.LogInformation(
-                "Microsoft 365 app package available at {PackageRoute} (manifest at {ManifestRoute} and {NamedManifestRoute}).",
-                Microsoft365CopilotDefaults.AppPackageRoutePrefix + "/appPackage.zip",
-                Microsoft365CopilotDefaults.AppPackageRoutePrefix + "/manifest.json",
-                $"{Microsoft365CopilotDefaults.ManifestsRoutePrefix}/{manifestName}.json");
+                "Microsoft 365 app packages available at {PackageRoute} (manifests at {ManifestRoute} and {NamedManifestRoute}).",
+                Microsoft365CopilotDefaults.AppPackageRoutePrefix + "/{agent}/appPackage.zip",
+                Microsoft365CopilotDefaults.AppPackageRoutePrefix + "/{agent}/manifest.json",
+                Microsoft365CopilotDefaults.ManifestsRoutePrefix + "/{name}.json");
         }
 
         logger.LogInformation(
-            "Microsoft 365 Copilot channel ready: endpoint {Endpoint}, agent {Agent}, token validation {TokenValidation}, user SSO {Sso}.",
-            options.MessagesEndpoint,
-            options.Agent.SharedAgentHandle ?? $"{options.Agent.AgentType} (per user, handle '{options.Agent.Handle}')",
+            "Microsoft 365 Copilot channel ready: {Count} agent(s), token validation {TokenValidation}, user SSO {Sso}.",
+            catalog.Agents.Count,
             options.TokenValidation.Enabled ? "on" : "OFF",
             options.UserAuthorizationConfigured ? "on" : "off");
 
@@ -212,15 +254,19 @@ public static class Microsoft365CopilotExtensions
     private static void MapAppPackageEndpoints(WebApplication app)
     {
         app.MapGet(
-                Microsoft365CopilotDefaults.AppPackageRoutePrefix + "/manifest.json",
-                (HttpContext context, CopilotAppPackageBuilder packageBuilder)
-                    => BuildPackageResult(context, () => Results.Text(packageBuilder.BuildManifestJson(), "application/json")))
+                Microsoft365CopilotDefaults.AppPackageRoutePrefix + "/{agent}/manifest.json",
+                (string agent, HttpContext context, CopilotAgentCatalog catalog, CopilotAppPackageBuilder packageBuilder)
+                    => catalog.Find(agent) is { } found
+                        ? BuildPackageResult(context, () => Results.Text(packageBuilder.BuildManifestJson(found), "application/json"))
+                        : Results.NotFound())
             .AllowAnonymous();
 
         app.MapGet(
-                Microsoft365CopilotDefaults.AppPackageRoutePrefix + "/appPackage.zip",
-                (HttpContext context, CopilotAppPackageBuilder packageBuilder)
-                    => BuildPackageResult(context, () => Results.File(packageBuilder.BuildPackageZip(), "application/zip", "appPackage.zip")))
+                Microsoft365CopilotDefaults.AppPackageRoutePrefix + "/{agent}/appPackage.zip",
+                (string agent, HttpContext context, CopilotAgentCatalog catalog, CopilotAppPackageBuilder packageBuilder)
+                    => catalog.Find(agent) is { } found
+                        ? BuildPackageResult(context, () => Results.File(packageBuilder.BuildPackageZip(found), "application/zip", "appPackage.zip"))
+                        : Results.NotFound())
             .AllowAnonymous();
 
         // Name-addressed manifest for tooling that fetches manifests by app name
@@ -228,8 +274,8 @@ public static class Microsoft365CopilotExtensions
         app.MapGet(
                 Microsoft365CopilotDefaults.ManifestsRoutePrefix + "/{name}.json",
                 (string name, HttpContext context, CopilotAppPackageBuilder packageBuilder)
-                    => packageBuilder.MatchesManifestName(name)
-                        ? BuildPackageResult(context, () => Results.Text(packageBuilder.BuildManifestJson(), "application/json"))
+                    => packageBuilder.FindByManifestName(name) is { } found
+                        ? BuildPackageResult(context, () => Results.Text(packageBuilder.BuildManifestJson(found), "application/json"))
                         : Results.NotFound())
             .AllowAnonymous();
 
@@ -249,24 +295,32 @@ public static class Microsoft365CopilotExtensions
         }
     }
 
-    private static void Validate(Microsoft365CopilotOptions options, IConfiguration configuration)
+    /// <summary>
+    /// Looks for the single-agent settings this add-on used to read. On their own they are
+    /// refused rather than ignored: a host that quietly dropped its agent's plugins and tools
+    /// would still answer, wrongly. Beside an <c>Agents</c> list they are tolerated and reported,
+    /// so one published configuration can serve old and new hosts while a cluster is upgraded.
+    /// </summary>
+    private static IReadOnlyList<string> CheckLegacyConfiguration(IConfigurationSection section)
     {
-        if (string.IsNullOrWhiteSpace(options.Agent.AgentType)
-            && string.IsNullOrWhiteSpace(options.Agent.SharedAgentHandle))
+        string[] legacy = ["Agent", "MessagesEndpoint", "ClientId", "ClientSecret"];
+        var found = legacy.Where(key => section.GetSection(key).Exists()).ToList();
+        if (found.Count == 0 || section.GetSection("Agents").Exists())
         {
-            throw new InvalidOperationException(
-                "Microsoft365Copilot: configure Agent:AgentType (a FabrCore [AgentAlias] value) " +
-                "or Agent:SharedAgentHandle so inbound Copilot messages have a FabrCore agent to route to.");
+            return found;
         }
 
-        if (!string.IsNullOrWhiteSpace(options.Agent.SharedAgentHandle)
-            && !options.Agent.SharedAgentHandle.Contains(':'))
-        {
-            throw new InvalidOperationException(
-                "Microsoft365Copilot: Agent:SharedAgentHandle must be fully qualified " +
-                "(\"principalHandle:agentHandle\", e.g. \"system:assistant\").");
-        }
+        throw new InvalidOperationException(
+            $"Microsoft365Copilot: {string.Join(", ", found.Select(key => "'" + key + "'"))} " +
+            "is no longer read. Agents are now listed in Microsoft365Copilot:Agents, one entry per Azure Bot " +
+            "registration: { \"Name\", \"Route\", \"ClientId\", \"ClientSecret\", \"AgentType\", \"Handle\" }. " +
+            "Plugins, tools, system prompt, and args are no longer set here; define them on the agent type or in the " +
+            "blueprint that provisions the agent. SharedAgentHandle, AgentPerConversation, and Agent:Binding are gone.");
+    }
 
+    private static void Validate(
+        Microsoft365CopilotOptions options, IReadOnlyList<CopilotAgent> agents, IConfiguration configuration)
+    {
         if (options.Principal.Prefix?.Contains(':') == true)
         {
             throw new InvalidOperationException(
@@ -296,24 +350,27 @@ public static class Microsoft365CopilotExtensions
 
         if (options.TokenValidation.Enabled)
         {
-            if (string.IsNullOrWhiteSpace(options.ClientId) && options.TokenValidation.Audiences.Count == 0)
-            {
-                throw new InvalidOperationException(
-                    "Microsoft365Copilot: ClientId is required when TokenValidation is enabled " +
-                    "(it is the expected token audience). For local development against the " +
-                    "Agents Playground set Microsoft365Copilot:TokenValidation:Enabled = false.");
-            }
-
-            // Outbound credentials are only required when we synthesize the connection ourselves;
+            // Outbound credentials are only required when we synthesize the connections ourselves;
             // hosts may configure the Agents SDK "Connections" section natively instead.
             var synthesizesConnection = !configuration.GetSection("Connections").Exists();
-            if (synthesizesConnection
-                && string.Equals(options.AuthType, "ClientSecret", StringComparison.OrdinalIgnoreCase)
-                && string.IsNullOrWhiteSpace(options.ClientSecret))
+            foreach (var agent in agents)
             {
-                throw new InvalidOperationException(
-                    "Microsoft365Copilot: ClientSecret is required for AuthType 'ClientSecret' when token " +
-                    "validation is enabled. Use certificate or managed-identity AuthType values to avoid secrets.");
+                if (string.IsNullOrWhiteSpace(agent.ClientId))
+                {
+                    throw new InvalidOperationException(
+                        $"Microsoft365Copilot: agent '{agent.Name}' needs a ClientId when TokenValidation is enabled " +
+                        "(it is the token audience its route accepts). For local development against the " +
+                        "Agents Playground set Microsoft365Copilot:TokenValidation:Enabled = false.");
+                }
+
+                if (synthesizesConnection
+                    && string.Equals(agent.AuthType, "ClientSecret", StringComparison.OrdinalIgnoreCase)
+                    && string.IsNullOrWhiteSpace(agent.ClientSecret))
+                {
+                    throw new InvalidOperationException(
+                        $"Microsoft365Copilot: agent '{agent.Name}' needs a ClientSecret for AuthType 'ClientSecret' when token " +
+                        "validation is enabled. Use certificate or managed-identity AuthType values to avoid secrets.");
+                }
             }
         }
     }
@@ -322,10 +379,14 @@ public static class Microsoft365CopilotExtensions
     /// Registered by <see cref="AddMicrosoft365Copilot"/> so Use can verify ordering, and so the
     /// administration and reporting components can say why the channel is off.
     /// </summary>
-    /// <param name="Enabled">Whether the channel serves its messaging endpoint.</param>
+    /// <param name="Enabled">Whether the channel serves its messaging endpoints.</param>
     /// <param name="Configured">False when neither a configuration section nor a code delegate was supplied.</param>
     /// <param name="DisabledReason">Why the channel is off. Null while it is on.</param>
     /// <param name="NativeServiceConnection">The host defined the Agents SDK <c>Connections</c> section itself.</param>
     internal sealed record Microsoft365CopilotMarker(
-        bool Enabled, bool Configured = true, string? DisabledReason = null, bool NativeServiceConnection = false);
+        bool Enabled, bool Configured = true, string? DisabledReason = null, bool NativeServiceConnection = false)
+    {
+        /// <summary>Single-agent settings found beside an <c>Agents</c> list, and so not read.</summary>
+        public IReadOnlyList<string> IgnoredLegacyKeys { get; init; } = [];
+    }
 }

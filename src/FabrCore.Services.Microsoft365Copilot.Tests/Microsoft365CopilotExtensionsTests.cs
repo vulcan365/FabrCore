@@ -11,6 +11,9 @@ namespace FabrCore.Services.Microsoft365Copilot.Tests;
 [TestClass]
 public sealed class Microsoft365CopilotExtensionsTests
 {
+    private const string Agent0 = "Microsoft365Copilot:Agents:0:";
+    private const string Agent1 = "Microsoft365Copilot:Agents:1:";
+
     private static HostApplicationBuilder CreateBuilder(Dictionary<string, string?> configuration)
     {
         var builder = Microsoft.Extensions.Hosting.Host.CreateEmptyApplicationBuilder(new HostApplicationBuilderSettings());
@@ -18,14 +21,22 @@ public sealed class Microsoft365CopilotExtensionsTests
         return builder;
     }
 
+    private static Dictionary<string, string?> LocalDevelopment() => new()
+    {
+        ["Microsoft365Copilot:TokenValidation:Enabled"] = "false",
+        [Agent0 + "Name"] = "assistant",
+        [Agent0 + "AgentType"] = "chat-agent",
+    };
+
     [TestMethod]
     public void RegistersBridgeAndAdapter()
     {
         var builder = CreateBuilder(new()
         {
-            ["Microsoft365Copilot:ClientId"] = "11111111-2222-3333-4444-555555555555",
-            ["Microsoft365Copilot:ClientSecret"] = "secret",
-            ["Microsoft365Copilot:Agent:AgentType"] = "chat-agent",
+            [Agent0 + "Name"] = "assistant",
+            [Agent0 + "ClientId"] = CopilotTestAgents.ClientId,
+            [Agent0 + "ClientSecret"] = "secret",
+            [Agent0 + "AgentType"] = "chat-agent",
         });
 
         builder.AddMicrosoft365Copilot();
@@ -37,8 +48,48 @@ public sealed class Microsoft365CopilotExtensionsTests
         Assert.IsTrue(builder.Services.Any(d => d.ServiceType == typeof(CopilotAppPackageBuilder)));
 
         // Agents SDK configuration was synthesized from the Microsoft365Copilot section.
-        Assert.AreEqual("11111111-2222-3333-4444-555555555555",
+        Assert.AreEqual(CopilotTestAgents.ClientId,
             builder.Configuration["Connections:ServiceConnection:Settings:ClientId"]);
+    }
+
+    [TestMethod]
+    public void SeveralAgents_EachGetACatalogEntryAndAConnection()
+    {
+        var builder = CreateBuilder(new()
+        {
+            ["Microsoft365Copilot:TenantId"] = "tenant",
+            [Agent0 + "Name"] = "assistant",
+            [Agent0 + "Route"] = "/api/messages",
+            [Agent0 + "ClientId"] = CopilotTestAgents.ClientId,
+            [Agent0 + "ClientSecret"] = "secret-a",
+            [Agent0 + "AgentType"] = "chat-agent",
+            [Agent1 + "Name"] = "sales",
+            [Agent1 + "ClientId"] = CopilotTestAgents.SecondClientId,
+            [Agent1 + "ClientSecret"] = "secret-b",
+            [Agent1 + "AgentType"] = "sales-agent",
+            [Agent1 + "Handle"] = "sales-desk",
+        });
+
+        builder.AddMicrosoft365Copilot();
+
+        using var provider = builder.Services.BuildServiceProvider();
+        var catalog = provider.GetRequiredService<CopilotAgentCatalog>();
+        CollectionAssert.AreEqual(new[] { "/api/messages", "/api/messages/sales" }, catalog.Agents.Select(a => a.Route).ToArray());
+        Assert.AreEqual("sales-desk", catalog.Find("sales")!.Handle);
+        Assert.AreEqual("secret-b", builder.Configuration["Connections:ServiceConnection-sales:Settings:ClientSecret"]);
+        Assert.AreEqual(CopilotTestAgents.SecondClientId, builder.Configuration["ConnectionsMap:1:Audience"]);
+    }
+
+    [TestMethod]
+    public void EnabledWithNoAgents_StartsAndExposesNothing()
+    {
+        var builder = CreateBuilder(new() { ["Microsoft365Copilot:Enabled"] = "true" });
+
+        builder.AddMicrosoft365Copilot();
+
+        using var provider = builder.Services.BuildServiceProvider();
+        Assert.IsEmpty(provider.GetRequiredService<CopilotAgentCatalog>().Agents);
+        Assert.IsNull(builder.Configuration["Connections:ServiceConnection:Settings:ClientId"]);
     }
 
     [TestMethod]
@@ -53,6 +104,22 @@ public sealed class Microsoft365CopilotExtensionsTests
 
         Assert.IsFalse(builder.Services.Any(d => d.ServiceType == typeof(IAgent)));
         Assert.IsNull(builder.Configuration["Connections:ServiceConnection:Settings:ClientId"]);
+    }
+
+    [TestMethod]
+    public void DisabledAddon_DoesNotValidateWhatItWillNotServe()
+    {
+        var builder = CreateBuilder(new()
+        {
+            ["Microsoft365Copilot:Enabled"] = "false",
+            ["Microsoft365Copilot:Agent:AgentType"] = "chat-agent",
+            [Agent0 + "Name"] = "not a valid name",
+        });
+
+        builder.AddMicrosoft365Copilot();
+
+        using var provider = builder.Services.BuildServiceProvider();
+        Assert.IsEmpty(provider.GetRequiredService<CopilotAgentCatalog>().Agents);
     }
 
     [TestMethod]
@@ -107,13 +174,14 @@ public sealed class Microsoft365CopilotExtensionsTests
         // Supplying options in code is a decision to run the channel; an incomplete one must
         // fail loudly rather than be mistaken for an untouched add-on.
         var incomplete = CreateBuilder(new());
-        Assert.ThrowsExactly<InvalidOperationException>(() => incomplete.AddMicrosoft365Copilot(o => o.ClientId = "client"));
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            incomplete.AddMicrosoft365Copilot(o => o.Agents.Add(new CopilotAgentEntryOptions { Name = "assistant" })));
 
         var complete = CreateBuilder(new());
         complete.AddMicrosoft365Copilot(o =>
         {
             o.TokenValidation.Enabled = false;
-            o.Agent.AgentType = "chat-agent";
+            o.Agents.Add(CopilotTestAgents.Entry(clientId: null));
         });
         Assert.IsTrue(complete.Services.Any(d => d.ServiceType == typeof(IAgent)));
     }
@@ -124,15 +192,17 @@ public sealed class Microsoft365CopilotExtensionsTests
         var native = CreateBuilder(new()
         {
             ["Connections:ServiceConnection:Settings:ClientId"] = "host-owned",
-            ["Microsoft365Copilot:ClientId"] = "client",
-            ["Microsoft365Copilot:Agent:AgentType"] = "chat-agent",
+            [Agent0 + "Name"] = "assistant",
+            [Agent0 + "ClientId"] = "client",
+            [Agent0 + "AgentType"] = "chat-agent",
         });
         native.AddMicrosoft365Copilot();
         var synthesized = CreateBuilder(new()
         {
-            ["Microsoft365Copilot:ClientId"] = "client",
-            ["Microsoft365Copilot:ClientSecret"] = "secret",
-            ["Microsoft365Copilot:Agent:AgentType"] = "chat-agent",
+            [Agent0 + "Name"] = "assistant",
+            [Agent0 + "ClientId"] = "client",
+            [Agent0 + "ClientSecret"] = "secret",
+            [Agent0 + "AgentType"] = "chat-agent",
         });
         synthesized.AddMicrosoft365Copilot();
 
@@ -143,15 +213,40 @@ public sealed class Microsoft365CopilotExtensionsTests
     }
 
     [TestMethod]
-    public void Throws_WhenNoAgentConfigured()
+    [DataRow("Microsoft365Copilot:Agent:AgentType", "chat-agent", "'Agent'")]
+    [DataRow("Microsoft365Copilot:Agent:Binding", "assistant", "'Agent'")]
+    [DataRow("Microsoft365Copilot:MessagesEndpoint", "/api/messages", "'MessagesEndpoint'")]
+    [DataRow("Microsoft365Copilot:ClientId", "client", "'ClientId'")]
+    public void Throws_OnTheSingleAgentSettingsItNoLongerReads(string key, string value, string named)
     {
-        var builder = CreateBuilder(new()
+        var configuration = new Dictionary<string, string?>
         {
-            ["Microsoft365Copilot:ClientId"] = "client",
-            ["Microsoft365Copilot:ClientSecret"] = "secret",
-        });
+            ["Microsoft365Copilot:TokenValidation:Enabled"] = "false",
+            [key] = value,
+        };
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => builder.AddMicrosoft365Copilot());
+        var error = Assert.ThrowsExactly<InvalidOperationException>(() => CreateBuilder(configuration).AddMicrosoft365Copilot());
+
+        StringAssert.Contains(error.Message, named);
+        StringAssert.Contains(error.Message, "Microsoft365Copilot:Agents");
+    }
+
+    [TestMethod]
+    public void SingleAgentSettings_BesideAnAgentsList_AreIgnoredAndRecorded()
+    {
+        // What a management console publishes while a cluster still has hosts on the older add-on.
+        var configuration = LocalDevelopment();
+        configuration["Microsoft365Copilot:ClientId"] = "legacy-client";
+        configuration["Microsoft365Copilot:Agent:Binding"] = "assistant";
+        var builder = CreateBuilder(configuration);
+
+        builder.AddMicrosoft365Copilot();
+
+        var marker = (Microsoft365CopilotExtensions.Microsoft365CopilotMarker)builder.Services
+            .Single(d => d.ServiceType == typeof(Microsoft365CopilotExtensions.Microsoft365CopilotMarker)).ImplementationInstance!;
+        CollectionAssert.AreEquivalent(new[] { "Agent", "ClientId" }, marker.IgnoredLegacyKeys.ToArray());
+        using var provider = builder.Services.BuildServiceProvider();
+        Assert.IsNull(provider.GetRequiredService<CopilotAgentCatalog>().Agents.Single().ClientId, "The legacy client id is not adopted.");
     }
 
     [TestMethod]
@@ -159,20 +254,34 @@ public sealed class Microsoft365CopilotExtensionsTests
     {
         var builder = CreateBuilder(new()
         {
-            ["Microsoft365Copilot:Agent:AgentType"] = "chat-agent",
+            [Agent0 + "Name"] = "assistant",
+            [Agent0 + "AgentType"] = "chat-agent",
         });
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => builder.AddMicrosoft365Copilot());
+        var error = Assert.ThrowsExactly<InvalidOperationException>(() => builder.AddMicrosoft365Copilot());
+
+        StringAssert.Contains(error.Message, "'assistant' needs a ClientId");
+    }
+
+    [TestMethod]
+    public void Throws_WhenASecretCredentialHasNoSecret()
+    {
+        var builder = CreateBuilder(new()
+        {
+            [Agent0 + "Name"] = "assistant",
+            [Agent0 + "ClientId"] = "client",
+            [Agent0 + "AgentType"] = "chat-agent",
+        });
+
+        var error = Assert.ThrowsExactly<InvalidOperationException>(() => builder.AddMicrosoft365Copilot());
+
+        StringAssert.Contains(error.Message, "'assistant' needs a ClientSecret");
     }
 
     [TestMethod]
     public void AllowsMissingCredentials_ForLocalDevelopment()
     {
-        var builder = CreateBuilder(new()
-        {
-            ["Microsoft365Copilot:TokenValidation:Enabled"] = "false",
-            ["Microsoft365Copilot:Agent:AgentType"] = "chat-agent",
-        });
+        var builder = CreateBuilder(LocalDevelopment());
 
         builder.AddMicrosoft365Copilot();
 
@@ -182,50 +291,28 @@ public sealed class Microsoft365CopilotExtensionsTests
     [TestMethod]
     public void CodeOverride_WinsOverConfiguration()
     {
-        var builder = CreateBuilder(new()
-        {
-            ["Microsoft365Copilot:TokenValidation:Enabled"] = "false",
-            ["Microsoft365Copilot:Agent:AgentType"] = "chat-agent",
-            ["Microsoft365Copilot:Agent:Handle"] = "from-config",
-        });
+        var configuration = LocalDevelopment();
+        configuration[Agent0 + "Handle"] = "from-config";
+        var builder = CreateBuilder(configuration);
 
-        builder.AddMicrosoft365Copilot(o => o.Agent.Handle = "from-code");
+        builder.AddMicrosoft365Copilot(o => o.Agents[0].Handle = "from-code");
 
         using var provider = builder.Services.BuildServiceProvider();
-        var options = provider.GetRequiredService<IOptions<Microsoft365CopilotOptions>>().Value;
-        Assert.AreEqual("from-code", options.Agent.Handle);
-    }
-
-    [TestMethod]
-    public void SharedAgentHandle_MustBeFullyQualified()
-    {
-        var builder = CreateBuilder(new()
-        {
-            ["Microsoft365Copilot:TokenValidation:Enabled"] = "false",
-            ["Microsoft365Copilot:Agent:SharedAgentHandle"] = "not-qualified",
-        });
-
-        Assert.ThrowsExactly<InvalidOperationException>(() => builder.AddMicrosoft365Copilot());
+        Assert.AreEqual("from-code", provider.GetRequiredService<IOptions<Microsoft365CopilotOptions>>().Value.Agents[0].Handle);
+        Assert.AreEqual("from-code", provider.GetRequiredService<CopilotAgentCatalog>().Agents[0].Handle);
     }
 
     [TestMethod]
     public void ProactiveRelay_IsOptInAndUsesGenericRelayContract()
     {
-        var disabled = CreateBuilder(new()
-        {
-            ["Microsoft365Copilot:TokenValidation:Enabled"] = "false",
-            ["Microsoft365Copilot:Agent:AgentType"] = "chat-agent"
-        });
+        var disabled = CreateBuilder(LocalDevelopment());
         disabled.AddMicrosoft365Copilot();
         Assert.IsFalse(disabled.Services.Any(descriptor =>
             descriptor.ServiceType == typeof(IPrincipalMessageRelay)));
 
-        var enabled = CreateBuilder(new()
-        {
-            ["Microsoft365Copilot:TokenValidation:Enabled"] = "false",
-            ["Microsoft365Copilot:Agent:AgentType"] = "chat-agent",
-            ["Microsoft365Copilot:Proactive:Enabled"] = "true"
-        });
+        var configuration = LocalDevelopment();
+        configuration["Microsoft365Copilot:Proactive:Enabled"] = "true";
+        var enabled = CreateBuilder(configuration);
         enabled.AddMicrosoft365Copilot();
 
         Assert.IsTrue(enabled.Services.Any(descriptor =>
