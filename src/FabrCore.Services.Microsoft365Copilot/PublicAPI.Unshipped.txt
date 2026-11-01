@@ -1,1 +1,132 @@
 #nullable enable
+FabrCore.Services.Microsoft365Copilot.CopilotAgent
+FabrCore.Services.Microsoft365Copilot.CopilotAgent.AgentType.get -> string!
+FabrCore.Services.Microsoft365Copilot.CopilotAgent.AuthType.get -> string!
+FabrCore.Services.Microsoft365Copilot.CopilotAgent.ClientId.get -> string?
+FabrCore.Services.Microsoft365Copilot.CopilotAgent.ConnectionName.get -> string!
+FabrCore.Services.Microsoft365Copilot.CopilotAgent.Handle.get -> string!
+FabrCore.Services.Microsoft365Copilot.CopilotAgent.Manifest.get -> FabrCore.Services.Microsoft365Copilot.CopilotManifestOptions!
+FabrCore.Services.Microsoft365Copilot.CopilotAgent.Models.get -> string!
+FabrCore.Services.Microsoft365Copilot.CopilotAgent.Name.get -> string!
+FabrCore.Services.Microsoft365Copilot.CopilotAgent.Route.get -> string!
+FabrCore.Services.Microsoft365Copilot.CopilotAgent.TenantId.get -> string?
+FabrCore.Services.Microsoft365Copilot.CopilotAgent.WelcomeMessage.get -> string?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentCatalog
+FabrCore.Services.Microsoft365Copilot.CopilotAgentCatalog.Agents.get -> System.Collections.Generic.IReadOnlyList<FabrCore.Services.Microsoft365Copilot.CopilotAgent!>!
+FabrCore.Services.Microsoft365Copilot.CopilotAgentCatalog.CopilotAgentCatalog(Microsoft.Extensions.Options.IOptions<FabrCore.Services.Microsoft365Copilot.Microsoft365CopilotOptions!>! options) -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentCatalog.Find(string? name) -> FabrCore.Services.Microsoft365Copilot.CopilotAgent?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentCatalog.FindByClientId(string? clientId) -> FabrCore.Services.Microsoft365Copilot.CopilotAgent?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentCatalog.Resolve(System.Security.Claims.ClaimsIdentity? identity) -> FabrCore.Services.Microsoft365Copilot.CopilotAgent?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.AgentType.get -> string?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.AgentType.set -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.AuthType.get -> string?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.AuthType.set -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.AuthorityEndpoint.get -> string?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.AuthorityEndpoint.set -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.CertificateStoreName.get -> string?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.CertificateStoreName.set -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.CertificateSubjectName.get -> string?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.CertificateSubjectName.set -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.CertificateThumbprint.get -> string?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.CertificateThumbprint.set -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.ClientId.get -> string?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.ClientId.set -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.ClientSecret.get -> string?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.ClientSecret.set -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.CopilotAgentEntryOptions() -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.FederatedClientId.get -> string?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.FederatedClientId.set -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.FederatedTokenFile.get -> string?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.FederatedTokenFile.set -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.Handle.get -> string?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.Handle.set -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.Manifest.get -> FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions!
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.Manifest.set -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.Models.get -> string!
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.Models.set -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.Name.get -> string!
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.Name.set -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.Route.get -> string?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.Route.set -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.TenantId.get -> string?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.TenantId.set -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.WelcomeMessage.get -> string?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions.WelcomeMessage.set -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions
+FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions.AccentColor.get -> string?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions.AccentColor.set -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions.ColorIconPath.get -> string?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions.ColorIconPath.set -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions.ConversationStarters.get -> System.Collections.Generic.List<FabrCore.Services.Microsoft365Copilot.CopilotConversationStarter!>!
+FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions.ConversationStarters.set -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions.CopilotAgentManifestOptions() -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions.Description.get -> string?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions.Description.set -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions.DeveloperName.get -> string?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions.DeveloperName.set -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions.FullDescription.get -> string?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions.FullDescription.set -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions.FullName.get -> string?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions.FullName.set -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions.Id.get -> string?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions.Id.set -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions.Name.get -> string?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions.Name.set -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions.OutlineIconPath.get -> string?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions.OutlineIconPath.set -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions.PrivacyUrl.get -> string?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions.PrivacyUrl.set -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions.TermsOfUseUrl.get -> string?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions.TermsOfUseUrl.set -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions.Version.get -> string?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions.Version.set -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions.WebsiteUrl.get -> string?
+FabrCore.Services.Microsoft365Copilot.CopilotAgentManifestOptions.WebsiteUrl.set -> void
+*REMOVED*FabrCore.Services.Microsoft365Copilot.CopilotAgentOptions
+*REMOVED*FabrCore.Services.Microsoft365Copilot.CopilotAgentOptions.AgentPerConversation.get -> bool
+*REMOVED*FabrCore.Services.Microsoft365Copilot.CopilotAgentOptions.AgentPerConversation.set -> void
+*REMOVED*FabrCore.Services.Microsoft365Copilot.CopilotAgentOptions.AgentType.get -> string?
+*REMOVED*FabrCore.Services.Microsoft365Copilot.CopilotAgentOptions.AgentType.set -> void
+*REMOVED*FabrCore.Services.Microsoft365Copilot.CopilotAgentOptions.Args.get -> System.Collections.Generic.Dictionary<string!, string!>!
+*REMOVED*FabrCore.Services.Microsoft365Copilot.CopilotAgentOptions.Args.set -> void
+*REMOVED*FabrCore.Services.Microsoft365Copilot.CopilotAgentOptions.Binding.get -> string?
+*REMOVED*FabrCore.Services.Microsoft365Copilot.CopilotAgentOptions.Binding.set -> void
+*REMOVED*FabrCore.Services.Microsoft365Copilot.CopilotAgentOptions.CopilotAgentOptions() -> void
+*REMOVED*FabrCore.Services.Microsoft365Copilot.CopilotAgentOptions.Handle.get -> string!
+*REMOVED*FabrCore.Services.Microsoft365Copilot.CopilotAgentOptions.Handle.set -> void
+*REMOVED*FabrCore.Services.Microsoft365Copilot.CopilotAgentOptions.Models.get -> string!
+*REMOVED*FabrCore.Services.Microsoft365Copilot.CopilotAgentOptions.Models.set -> void
+*REMOVED*FabrCore.Services.Microsoft365Copilot.CopilotAgentOptions.Plugins.get -> System.Collections.Generic.List<string!>!
+*REMOVED*FabrCore.Services.Microsoft365Copilot.CopilotAgentOptions.Plugins.set -> void
+*REMOVED*FabrCore.Services.Microsoft365Copilot.CopilotAgentOptions.SharedAgentHandle.get -> string?
+*REMOVED*FabrCore.Services.Microsoft365Copilot.CopilotAgentOptions.SharedAgentHandle.set -> void
+*REMOVED*FabrCore.Services.Microsoft365Copilot.CopilotAgentOptions.SystemPrompt.get -> string?
+*REMOVED*FabrCore.Services.Microsoft365Copilot.CopilotAgentOptions.SystemPrompt.set -> void
+*REMOVED*FabrCore.Services.Microsoft365Copilot.CopilotAgentOptions.Tools.get -> System.Collections.Generic.List<string!>!
+*REMOVED*FabrCore.Services.Microsoft365Copilot.CopilotAgentOptions.Tools.set -> void
+*REMOVED*FabrCore.Services.Microsoft365Copilot.CopilotAppPackageBuilder.BuildManifestJson() -> string!
+FabrCore.Services.Microsoft365Copilot.CopilotAppPackageBuilder.BuildManifestJson(FabrCore.Services.Microsoft365Copilot.CopilotAgent! agent) -> string!
+*REMOVED*FabrCore.Services.Microsoft365Copilot.CopilotAppPackageBuilder.BuildPackageZip() -> byte[]!
+FabrCore.Services.Microsoft365Copilot.CopilotAppPackageBuilder.BuildPackageZip(FabrCore.Services.Microsoft365Copilot.CopilotAgent! agent) -> byte[]!
+*REMOVED*FabrCore.Services.Microsoft365Copilot.CopilotAppPackageBuilder.CopilotAppPackageBuilder(Microsoft.Extensions.Options.IOptions<FabrCore.Services.Microsoft365Copilot.Microsoft365CopilotOptions!>! options) -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAppPackageBuilder.CopilotAppPackageBuilder(Microsoft.Extensions.Options.IOptions<FabrCore.Services.Microsoft365Copilot.Microsoft365CopilotOptions!>! options, FabrCore.Services.Microsoft365Copilot.CopilotAgentCatalog! catalog) -> void
+FabrCore.Services.Microsoft365Copilot.CopilotAppPackageBuilder.FindByManifestName(string? name) -> FabrCore.Services.Microsoft365Copilot.CopilotAgent?
+FabrCore.Services.Microsoft365Copilot.CopilotAppPackageBuilder.ManifestName(FabrCore.Services.Microsoft365Copilot.CopilotAgent! agent) -> string!
+*REMOVED*FabrCore.Services.Microsoft365Copilot.CopilotAppPackageBuilder.ManifestName.get -> string!
+*REMOVED*FabrCore.Services.Microsoft365Copilot.CopilotAppPackageBuilder.MatchesManifestName(string? name) -> bool
+FabrCore.Services.Microsoft365Copilot.FabrCoreCopilotAgent.FabrCoreCopilotAgent(Microsoft.Agents.Builder.App.AgentApplicationOptions! options, FabrCore.Host.Services.IFabrCoreAgentService! agentService, FabrCore.Services.Microsoft365Copilot.ICopilotPrincipalResolver! principalResolver, FabrCore.Services.Microsoft365Copilot.ICopilotAgentProvisioner! provisioner, FabrCore.Services.Microsoft365Copilot.CopilotAgentCatalog! catalog, Orleans.IGrainFactory! grainFactory, Microsoft.Extensions.Options.IOptions<FabrCore.Services.Microsoft365Copilot.Microsoft365CopilotOptions!>! copilotOptions, Microsoft.Extensions.Logging.ILogger<FabrCore.Services.Microsoft365Copilot.FabrCoreCopilotAgent!>! logger, FabrCore.Services.Microsoft365Copilot.ICopilotConversationContextWriter? conversationContextWriter = null) -> void
+*REMOVED*FabrCore.Services.Microsoft365Copilot.FabrCoreCopilotAgent.FabrCoreCopilotAgent(Microsoft.Agents.Builder.App.AgentApplicationOptions! options, FabrCore.Host.Services.IFabrCoreAgentService! agentService, FabrCore.Services.Microsoft365Copilot.ICopilotPrincipalResolver! principalResolver, FabrCore.Services.Microsoft365Copilot.ICopilotAgentProvisioner! provisioner, Orleans.IGrainFactory! grainFactory, Microsoft.Extensions.Options.IOptions<FabrCore.Services.Microsoft365Copilot.Microsoft365CopilotOptions!>! copilotOptions, Microsoft.Extensions.Logging.ILogger<FabrCore.Services.Microsoft365Copilot.FabrCoreCopilotAgent!>! logger, FabrCore.Services.Microsoft365Copilot.ICopilotConversationContextWriter? conversationContextWriter = null) -> void
+FabrCore.Services.Microsoft365Copilot.ICopilotAgentProvisioner.EnsureAgentAsync(FabrCore.Services.Microsoft365Copilot.CopilotAgent! agent, string! principalHandle, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<string!>!
+*REMOVED*FabrCore.Services.Microsoft365Copilot.ICopilotAgentProvisioner.EnsureAgentAsync(string! principalHandle, string? conversationId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<string!>!
+*REMOVED*FabrCore.Services.Microsoft365Copilot.Microsoft365CopilotOptions.Agent.get -> FabrCore.Services.Microsoft365Copilot.CopilotAgentOptions!
+*REMOVED*FabrCore.Services.Microsoft365Copilot.Microsoft365CopilotOptions.Agent.set -> void
+FabrCore.Services.Microsoft365Copilot.Microsoft365CopilotOptions.Agents.get -> System.Collections.Generic.List<FabrCore.Services.Microsoft365Copilot.CopilotAgentEntryOptions!>!
+FabrCore.Services.Microsoft365Copilot.Microsoft365CopilotOptions.Agents.set -> void
+*REMOVED*FabrCore.Services.Microsoft365Copilot.Microsoft365CopilotOptions.ClientId.get -> string?
+*REMOVED*FabrCore.Services.Microsoft365Copilot.Microsoft365CopilotOptions.ClientId.set -> void
+*REMOVED*FabrCore.Services.Microsoft365Copilot.Microsoft365CopilotOptions.ClientSecret.get -> string?
+*REMOVED*FabrCore.Services.Microsoft365Copilot.Microsoft365CopilotOptions.ClientSecret.set -> void
+*REMOVED*FabrCore.Services.Microsoft365Copilot.Microsoft365CopilotOptions.MessagesEndpoint.get -> string!
+*REMOVED*FabrCore.Services.Microsoft365Copilot.Microsoft365CopilotOptions.MessagesEndpoint.set -> void
+const FabrCore.Services.Microsoft365Copilot.Microsoft365CopilotDefaults.ArgAgent = "Microsoft365Copilot:Agent" -> string!

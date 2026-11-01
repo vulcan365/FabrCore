@@ -1,16 +1,18 @@
 # FabrCore.Services.Microsoft365Copilot
 
 For the same user to reach the same agent through Teams and A2A, use the shared
-[`CanonicalEntra` identity and named agent binding](../../docs/channel-agent-identity.md).
+[`CanonicalEntra` identity and the same agent handle on both channels](../../docs/channel-agent-identity.md).
 The app package targets manifest 1.25. A2A targets specification release 1.0.1.
 
 A FabrCore server addon that makes your FabrCore agents available in **Microsoft 365 Copilot**
 and **Microsoft Teams** as a [custom engine agent](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/overview-custom-engine-agent).
 
-It hosts the Azure Bot Service messaging endpoint (`/api/messages`) with the
+It hosts one Azure Bot Service messaging endpoint per exposed agent (`/api/messages` by
+convention) with the
 [Microsoft 365 Agents SDK](https://learn.microsoft.com/en-us/microsoft-365/agents-sdk/), validates
 channel and Entra user identity, and bridges every Copilot conversation to a FabrCore agent —
-without any changes to `FabrCore.Host` or your agents.
+without any changes to `FabrCore.Host` or your agents. One host can expose any number of agents;
+see [Exposing several agents](#exposing-several-agents).
 
 ```
 Microsoft 365 Copilot / Teams
@@ -146,9 +148,15 @@ az bot msteams create -g my-agents-rg -n my-fabrcore-agent
   ],
   "Microsoft365Copilot": {
     "TenantId": "<TENANT_ID>",
-    "ClientId": "<APP_ID>",
-    "ClientSecret": "<SECRET>",
-    "Agent": { "AgentType": "chat-agent", "SystemPrompt": "You are a helpful assistant." },
+    "Agents": [
+      {
+        "Name": "assistant",
+        "Route": "/api/messages",
+        "ClientId": "<APP_ID>",
+        "ClientSecret": "<SECRET>",
+        "AgentType": "chat-agent"
+      }
+    ],
     "Manifest": {
       "Name": "My FabrCore Agent",
       "Description": "A FabrCore agent in Microsoft 365 Copilot.",
@@ -162,7 +170,7 @@ az bot msteams create -g my-agents-rg -n my-fabrcore-agent
 
 ```bash
 dotnet run --urls http://localhost:5000
-curl -o appPackage.zip http://localhost:5000/m365copilot/appPackage.zip
+curl -o appPackage.zip http://localhost:5000/m365copilot/assistant/appPackage.zip
 ```
 
 **7. Upload the app:** Teams → *Apps → Manage your apps → Upload an app → Upload a custom app* →
@@ -179,9 +187,12 @@ If something doesn't click:
 - **Agent not in the list** — allow a few minutes after upload; confirm your user has the Copilot
   license and the app shows under *Manage your apps* in Teams.
 - **No reply** — check the server console: the bot's messaging endpoint must exactly match the
-  tunnel URL + `/api/messages`, and `TenantId`/`ClientId`/`ClientSecret` must match step 2.
+  tunnel URL + the agent's `Route` (`/api/messages` here), and `TenantId` and the agent's
+  `ClientId`/`ClientSecret` must match step 2.
 - **401s in the log** — token validation is on (good) but the `ClientId`/`TenantId` don't match
   the tokens Azure Bot Service is sending.
+- **403s in the log** — the token is valid but was issued for a different bot than the one that
+  owns the route. Check the Azure Bot's messaging endpoint points at this agent's `Route`.
 
 ## Adding the addon to an existing FabrCore server
 
@@ -198,7 +209,7 @@ builder.AddMicrosoft365Copilot();          // ← the addon
 
 var app = builder.Build();
 app.UseFabrCoreServer();
-app.UseMicrosoft365Copilot();              // ← maps /api/messages
+app.UseMicrosoft365Copilot();              // ← maps one messaging route per agent
 app.Run();
 ```
 
@@ -208,13 +219,16 @@ app.Run();
 {
   "Microsoft365Copilot": {
     "TenantId": "<entra-tenant-id>",
-    "ClientId": "<bot-app-registration-client-id>",
-    "ClientSecret": "<bot-app-registration-secret>",
-    "Agent": {
-      "AgentType": "chat-agent",
-      "SystemPrompt": "You are a helpful assistant.",
-      "Models": "default"
-    },
+    "Agents": [
+      {
+        "Name": "assistant",
+        "Route": "/api/messages",
+        "ClientId": "<bot-app-registration-client-id>",
+        "ClientSecret": "<bot-app-registration-secret>",
+        "AgentType": "chat-agent",
+        "Models": "default"
+      }
+    ],
     "Manifest": {
       "Name": "My FabrCore Agent",
       "Description": "Answers questions using my FabrCore agents.",
@@ -224,22 +238,117 @@ app.Run();
 }
 ```
 
-`Agent:AgentType` is any discovered `[AgentAlias]`. The application assembly and referenced
+Each entry of `Agents` is one agent in the Copilot agent list. `AgentType` is any discovered
+`[AgentAlias]`. The application assembly and referenced
 FabrCore project/package dependencies are discovered automatically; `AdditionalAssemblies` is
 only needed for an assembly outside the application dependency graph. Each Microsoft 365 user automatically gets their own
 agent instance (principal handle = their Entra object id), with isolated chat history and state.
 
-**3. Create the Azure resources** (once — see [Azure setup](#azure-setup) below).
+The entry names the agent and nothing more. Plugins, tools, the system prompt, and args are not
+set here: define them on the agent type or in the blueprint that provisions the agent. An agent
+that already exists for the user under the entry's `Handle` is used as it is; a missing one is
+created from `AgentType` and `Models` alone.
+
+**3. Create the Azure resources** (once per agent — see [Azure setup](#azure-setup) below).
 
 **4. Upload the app package.** Run the server in Development and download
-`https://localhost:<port>/m365copilot/appPackage.zip` — a ready-to-upload zip generated from your
-configuration. The manifest alone is also served at `/m365copilot/manifest.json` and, addressed by
-app name, at `/manifests/{name}.json` — `{name}` is the URL slug of `Manifest:Name` (for the
-config above: `/manifests/my-fabrcore-agent.json`; the app id works too). The startup log prints
-the exact URL. Upload it in Teams (*Apps → Manage your apps → Upload a custom app*) or the
+`https://localhost:<port>/m365copilot/{agent}/appPackage.zip`, where `{agent}` is the entry's
+`Name` (`assistant` above) — a ready-to-upload zip generated from your
+configuration. The manifest alone is also served at `/m365copilot/{agent}/manifest.json` and,
+addressed by app name, at `/manifests/{name}.json` — `{name}` is the URL slug of the agent's
+`Manifest:Name` (for the config above: `/manifests/my-fabrcore-agent.json`; the app id works
+too), searched across all agents. The startup log prints
+the route templates. Upload it in Teams (*Apps → Manage your apps → Upload a custom app*) or the
 [Microsoft 365 admin center](https://admin.microsoft.com) (*Settings → Integrated apps → Upload
 custom apps*) for the whole org. The agent then appears in Teams chat and in the Microsoft 365
 Copilot side panel.
+
+## Exposing several agents
+
+Microsoft allows at most one bot, and one custom engine agent, per app manifest, and an Azure Bot
+resource has one messaging endpoint and one app id. So every agent you want listed in Microsoft 365
+Copilot needs its own Entra app registration, its own Azure Bot, and its own app package. One
+FabrCore host serves them all: add an entry to `Agents` for each.
+
+```json
+"Microsoft365Copilot": {
+  "TenantId": "<entra-tenant-id>",
+  "AuthType": "ClientSecret",
+  "Manifest": { "DeveloperName": "Contoso", "PublicHostName": "agents.contoso.com" },
+  "Agents": [
+    {
+      "Name": "assistant",
+      "Route": "/api/messages",
+      "ClientId": "<first-bot-client-id>",
+      "ClientSecret": "<secret>",
+      "AgentType": "chat-agent",
+      "Handle": "assistant",
+      "Models": "default",
+      "Manifest": { "Name": "Assistant", "Description": "General-purpose assistant." }
+    },
+    {
+      "Name": "sales",
+      "ClientId": "<second-bot-client-id>",
+      "ClientSecret": "<secret>",
+      "AgentType": "sales-agent"
+    }
+  ]
+}
+```
+
+- **Routes.** Each entry gets one `POST` route. `Route` defaults to `/api/messages/{Name}`
+  (`/api/messages/sales` above); one entry may claim the bare `/api/messages`. A route is a fixed
+  path, not a template. Point each Azure Bot's messaging endpoint at its own agent's route.
+- **Defaults.** `TenantId`, `AuthType`, the certificate and federation settings,
+  `AuthorityEndpoint`, `WelcomeMessage`, and `Manifest` at the top level are defaults for every
+  entry; an entry overrides any of them. `Handle` defaults to the entry's `Name`. `Manifest:Name`
+  defaults to the top-level name when there is one agent and to the entry's `Name` when there are
+  several. `Manifest:Id` defaults to the agent's `ClientId`.
+- **Uniqueness.** Names, routes, client ids, and manifest names must each be unique. A violation
+  fails startup with a message naming the setting, for example
+  `Microsoft365Copilot:Agents:1:Route`.
+- **Separation.** The channel accepts a token issued for any configured bot, and each route then
+  requires the token's audience to be that entry's `ClientId` (or one of the host-wide
+  `TokenValidation:Audiences`). A token for one bot presented on another agent's route gets `403`.
+  Outbound, each bot has its own Agents SDK connection (`ServiceConnection` for the first entry,
+  `ServiceConnection-{Name}` for the others), selected by audience, so every agent replies under
+  its own credential.
+- **Identity.** The principal still comes from the inbound activity (see
+  [How users map to FabrCore principals](#how-users-map-to-fabrcore-principals)); the agent handle
+  is fixed per entry. Each bridged message carries the entry name in
+  `Args["Microsoft365Copilot:Agent"]`.
+- **No agents.** An enabled channel with an empty `Agents` list is valid. No messaging endpoint
+  is mapped and a warning is logged.
+
+Two limits apply when a host exposes more than one agent:
+
+- **Sign-in is shared.** User authorization handlers are configured once for the host. An Azure
+  Bot OAuth connection belongs to one bot registration, so sign-in works only for the agent whose
+  bot owns that connection. The host logs a warning at startup when this applies.
+- **Proactive endpoints are stored per principal, not per agent.** See
+  [Proactive messages](#proactive-messages-opt-in).
+
+### Migrating from the single-agent configuration
+
+Earlier versions exposed one agent through `Microsoft365Copilot:Agent`, `MessagesEndpoint`, and a
+top-level `ClientId` and `ClientSecret`. With the channel enabled and no `Agents` section, the
+presence of any of those four keys now fails startup with a message pointing at
+`Microsoft365Copilot:Agents`, so a host does not keep answering without the plugins and tools it
+used to configure here.
+
+When an `Agents` list is present, the four keys are ignored and a startup warning names them. This
+is so one configuration can serve old and new hosts while a cluster is upgraded: an older host
+reads the single-agent keys and ignores `Agents`, a newer one does the reverse. Remove the old
+keys once no older host shares the configuration.
+
+| Before | Now |
+|---|---|
+| `ClientId`, `ClientSecret` | `Agents:{n}:ClientId`, `Agents:{n}:ClientSecret` |
+| `MessagesEndpoint` | `Agents:{n}:Route` |
+| `Agent:AgentType`, `Agent:Handle`, `Agent:Models` | `Agents:{n}:AgentType`, `Handle`, `Models`. `Handle` now defaults to the entry's `Name`, not `copilot`; set `"Handle": "copilot"` to keep reaching existing per-user agents |
+| `Agent:SystemPrompt`, `Plugins`, `Tools`, `Args` | Removed. Define them on the agent type or in a blueprint |
+| `Agent:Binding` | Removed. The Copilot channel no longer reads `AgentBindings` (A2A still does) |
+| `Agent:SharedAgentHandle`, `Agent:AgentPerConversation` | Removed |
 
 ## Local development — no Azure required
 
@@ -250,7 +359,7 @@ Test the full bridge locally with the
 {
   "Microsoft365Copilot": {
     "TokenValidation": { "Enabled": false },
-    "Agent": { "AgentType": "chat-agent" }
+    "Agents": [ { "Name": "assistant", "Route": "/api/messages", "AgentType": "chat-agent" } ]
   }
 }
 ```
@@ -273,13 +382,15 @@ az bot update -n <bot-name> -g <rg> --endpoint "https://<tunnel-host>/api/messag
 
 ## Azure setup
 
-One Entra app registration + one Azure Bot resource, pointed at your public `/api/messages`:
+One Entra app registration + one Azure Bot resource per agent, pointed at that agent's public
+route (`/api/messages` for the entry that claims it, `/api/messages/{Name}` otherwise). Repeat
+these steps for each entry in `Agents`:
 
 ```bash
 # 1. App registration (SingleTenant shown; also supported: MultiTenant, managed identity, federated credentials)
 az ad app create --display-name "MyFabrCoreAgent" --sign-in-audience AzureADMyOrg
 APP_ID=<appId from output>
-az ad app credential reset --id $APP_ID    # → ClientSecret for fabrcore.json
+az ad app credential reset --id $APP_ID    # → the agent's ClientSecret for fabrcore.json
 
 # 2. Azure Bot resource wired to your endpoint
 az bot create --resource-group <rg> --name <bot-name> --app-type SingleTenant \
@@ -291,9 +402,10 @@ az bot msteams create --name <bot-name> --resource-group <rg>
 ```
 
 Your FabrCore host can run **anywhere** — Azure, on-prem, another cloud — it only needs a public
-HTTPS route to `/api/messages`.
+HTTPS route to each agent's messaging route.
 
-Supported outbound auth types (`Microsoft365Copilot:AuthType`): `ClientSecret`, `Certificate`,
+Supported outbound auth types (`Microsoft365Copilot:AuthType`, or `AuthType` on an `Agents`
+entry): `ClientSecret`, `Certificate`,
 `CertificateSubjectName`, `UserManagedIdentity`, `SystemManagedIdentity`, `FederatedCredentials`,
 `WorkloadIdentity`. Prefer certificates or managed identity in production.
 
@@ -336,6 +448,10 @@ With `PassUserTokenToAgent: true`, agents and plugins receive the user's access 
 through FabrCore messaging and any configured monitors. The generated manifest automatically gains
 the `webApplicationInfo` SSO section when handlers are configured.
 
+Handlers are configured once and shared by every agent. With several agents, sign-in works only
+for the agent whose bot owns the Azure Bot OAuth connection. `ServiceConnection` is the
+connection of the first entry in `Agents`; the others are named `ServiceConnection-{Name}`.
+
 ## How users map to FabrCore principals
 
 | `Principal:Strategy`  | Principal handle                            | Use when |
@@ -347,7 +463,8 @@ the `webApplicationInfo` SSO section when handlers are configured.
 
 `Principal:Prefix` (e.g. `"m365-"`) namespaces the handles. Handles are sanitized (lowercased,
 `:` and other separators stripped) before use. Every bridged message also carries the raw identity
-in `Args` (`Microsoft365Copilot:AadObjectId`, `:TenantId`, `:UserName`, `:ConversationId`, ...).
+in `Args` (`Microsoft365Copilot:AadObjectId`, `:TenantId`, `:UserName`, `:ConversationId`, ...),
+along with `Microsoft365Copilot:Agent`, the name of the `Agents` entry the message arrived through.
 
 To customize mapping entirely, register your own resolver **before** `AddMicrosoft365Copilot()`:
 
@@ -355,10 +472,8 @@ To customize mapping entirely, register your own resolver **before** `AddMicroso
 builder.Services.AddSingleton<ICopilotPrincipalResolver, MyDirectoryBackedResolver>();
 ```
 
-**Shared agent instead of per-user agents:** set `Agent:SharedAgentHandle` (e.g.
-`"system:helpdesk"`). All users then talk to one agent. Cross-principal messaging is subject to
-FabrCore ACL — grant `agent.message.allow` on the shared agent to the mapped principals (see the
-fabrcore-acl skill).
+Agents are always per user: the principal comes from the inbound activity and the handle from the
+`Agents` entry. Routing every user to one shared agent (`SharedAgentHandle`) has been removed.
 
 ## Streaming
 
@@ -395,7 +510,8 @@ On every eligible inbound turn, the addon stores a versioned conversation endpoi
 `m365copilot:proactive:endpoints:v1` and stamps its stable id into
 `AgentMessage.Args["Microsoft365Copilot:DeliveryEndpointId"]`. It retains up to eight endpoints per
 principal. Personal scope is the safe default; group or channel conversation types must be added
-deliberately.
+deliberately. Endpoints are stored per principal, not per agent, so on a host that exposes several
+agents a user's stored endpoints are not separated by agent.
 
 Plain text and valid Adaptive Cards are supported. System messages, blank content, `ui.action`,
 other `ui.*` payloads, and targets for another channel are not sent. The provider uses four bounded
@@ -484,25 +600,31 @@ section or a delegate is a decision to run the channel, and an incomplete one st
 
 **It advertises itself**, on or off, through `GET /fabrcoreapi/capabilities` as the service
 `microsoft365-copilot` (with `available` and `unavailableReason`) and through the cloud heartbeat
-flags `m365copilot` and `m365copilot.enabled`.
+flags `m365copilot`, `m365copilot.enabled`, and `m365copilot.agents` (the number of exposed
+agents). The capability's `apiVersion` is `2` and its features include `multi-agent`.
 
 **It reports what is applied.** The configuration-state report (`GET
 /fabrcoreapi/admin/v1/settings/state`) carries the channel's effective `Enabled`, `TenantId`,
-`ClientId`, `AuthType`, `MessagesEndpoint`, `TokenValidation:Enabled`, `Principal:Strategy`,
-`Agent:Binding`, `Proactive:Enabled`, `Streaming:Enabled`, and `Manifest:PublicHostName`, plus two
+`AuthType`, `TokenValidation:Enabled`, `Principal:Strategy`, `Proactive:Enabled`,
+`Streaming:Enabled`, and `Manifest:PublicHostName`; for each agent, `Agents:{i}:Name`, `Route`,
+`ClientId`, `AgentType`, and `Handle` with defaults applied; plus two
 facts: `Runtime:Microsoft365Copilot:SingleSignOn` and
 `Runtime:Microsoft365Copilot:ForwardsUserCredential`. While the channel is off, only `Enabled` is
-reported as applied.
+reported as applied, and there are no agent rows.
 
 **It answers administration routes**, mapped by `UseMicrosoft365Copilot()` whether or not the
 channel is on. All require the host administration credential.
 
 | Route under `/fabrcoreapi/admin/v1/integrations/microsoft365` | Returns |
 |---|---|
-| `GET` (the root) | Identity, configuration, and posture findings |
-| `GET /manifest` | The generated manifest; `409` while the channel is off |
-| `GET /app-package` | The uploadable zip; `409` while the channel is off |
-| `POST /diagnostics` | The findings, whether the agent type is registered, and whether the host can obtain an Azure Bot Service token |
+| `GET` (the root) | Configuration, the `agents` list, and posture findings. `apiVersion` is `2` |
+| `GET /agents/{name}/manifest` | The generated manifest of one agent; `404` `agent-not-found` for an unknown name, `409` while the channel is off or the agent has no `ClientId` |
+| `GET /agents/{name}/app-package` | The uploadable zip of one agent; same `404` and `409` |
+| `POST /diagnostics` | The findings, whether every agent type is registered, and whether the host can obtain an Azure Bot Service token for every bot |
+
+The status document lists each exposed agent under `agents` with `name`, `messagesEndpoint`,
+`clientId`, `tenantId`, `authType`, `agentType`, `agentHandle`, `manifestId`, `manifestName`, and
+`manifestVersion`. `{name}` in the package routes is the entry's `Name`.
 
 ```bash
 curl -H "Authorization: Bearer $FABRCORE_ADMIN_KEY" \
@@ -510,28 +632,30 @@ curl -H "Authorization: Bearer $FABRCORE_ADMIN_KEY" \
 curl -X POST -H "Authorization: Bearer $FABRCORE_ADMIN_KEY" \
   https://<host>/fabrcoreapi/admin/v1/integrations/microsoft365/diagnostics
 curl -H "Authorization: Bearer $FABRCORE_ADMIN_KEY" -o appPackage.zip \
-  https://<host>/fabrcoreapi/admin/v1/integrations/microsoft365/app-package
+  https://<host>/fabrcoreapi/admin/v1/integrations/microsoft365/agents/assistant/app-package
 ```
 
 Findings are `pass`, `warn`, `fail`, or `skipped`:
 
 | Finding | `fail` or `warn` when |
 |---|---|
-| `token-validation` | The messaging endpoint accepts anonymous requests |
+| `token-validation` | The messaging endpoints accept anonymous requests |
 | `principal-strategy` | Users are not mapped with `CanonicalEntra`, or channel-id fallback is allowed |
-| `credential-type` | The bot authenticates with a client secret |
+| `credential-type` | Any agent's bot authenticates with a client secret; the message names them |
 | `turn-state-storage` | Sign-in and turn state are in process memory |
 | `user-credential-forwarding` | `PassUserTokenToAgent` copies the user's token onto agent messages |
 | `public-host` | `Manifest:PublicHostName` is not set |
 | `proactive-scopes` | Proactive delivery is allowed outside personal conversations |
 
 Diagnostics never returns the token it acquires. It waits at most 20 seconds, discards the token,
-and on failure reports the exception type and the first line of its message. A passing run shows
+and on failure reports the exception type and the first line of its message. The
+`agent-type-registered` and `bot-service-credential` checks cover every agent and name the one
+that fails. A passing run shows
 the host can authenticate to Azure Bot Service. It does not show that Azure Bot Service can reach
-your messaging endpoint.
+your messaging endpoints.
 
-The administration `app-package` route is the way to fetch the package in production. The
-`/m365copilot` developer endpoints are anonymous and stay off outside Development.
+The administration `agents/{name}/app-package` route is the way to fetch a package in production.
+The `/m365copilot` developer endpoints are anonymous and stay off outside Development.
 
 ## Production checklist
 
@@ -539,32 +663,39 @@ The administration `app-package` route is the way to fetch the package in produc
   multiple instances or using SSO, register a durable `IStorage`
   (e.g. `Microsoft.Agents.Storage.Blobs`) *before* `AddMicrosoft365Copilot()`:
   `builder.Services.AddSingleton<IStorage>(new BlobsStorage(...));`
-- **Secrets** — keep `ClientSecret` out of source control (`fabrcore.json` is git-ignored in this
+- **Secrets** — keep each agent's `ClientSecret` out of source control (`fabrcore.json` is git-ignored in this
   repo; better: user-secrets, Key Vault, or a secret-free `AuthType`).
 - **Token validation on** — `TokenValidation:Enabled` must be `true` (default) anywhere reachable
   from the internet.
 - **Orleans persistence** — use SQL/Azure clustering so per-user agents survive restarts
   (see the fabrcore-server skill).
 - **Icons** — replace the generated placeholder icons via `Manifest:ColorIconPath` /
-  `Manifest:OutlineIconPath` before publishing.
+  `Manifest:OutlineIconPath` before publishing. Both can be set per agent in
+  `Agents:{n}:Manifest`. A management console may instead replace the icons in the zip it
+  downloads.
 
 ## Configuration reference (`Microsoft365Copilot` section)
 
 | Key | Default | Purpose |
 |-----|---------|---------|
 | `Enabled` | `true`; `false` when the host has no `Microsoft365Copilot` configuration at all | Master switch for the channel. Off still leaves the administration routes and capability reporting in place. |
-| `TenantId` / `ClientId` / `ClientSecret` | — | Bot app registration identity |
-| `AuthType` | `ClientSecret` | Outbound auth: secret, certificate, MSI, federated |
-| `MessagesEndpoint` | `/api/messages` | Route for the Azure Bot Service endpoint |
-| `WelcomeMessage` | greeting | Sent when a user joins; empty string disables |
+| `TenantId` | — | Entra tenant of the bot app registrations. Default for every agent |
+| `AuthType` | `ClientSecret` | Outbound auth: secret, certificate, MSI, federated. Default for every agent |
+| `CertificateThumbprint` / `CertificateSubjectName` / `CertificateStoreName` / `FederatedClientId` / `FederatedTokenFile` / `AuthorityEndpoint` | — | Inputs for the chosen `AuthType`. Defaults for every agent |
+| `WelcomeMessage` | greeting | Sent when a user joins; empty string disables. Default for every agent |
 | `ErrorMessage` | generic | Shown when the FabrCore agent fails |
 | `TokenValidation:Enabled` | `true` | Inbound channel JWT validation (off = local dev only) |
-| `TokenValidation:Audiences` / `ValidIssuers` | ClientId / built-ins | Extra validation inputs |
-| `Agent:AgentType` | — | FabrCore `[AgentAlias]` provisioned per user (**required** unless shared) |
-| `Agent:Handle` | `copilot` | Handle of the per-user agent instance |
-| `Agent:SharedAgentHandle` | — | Route everyone to one existing agent (`principal:agent`) |
-| `Agent:Models` / `SystemPrompt` / `Plugins` / `Tools` / `Args` | — | Provisioning template |
-| `Agent:AgentPerConversation` | `false` | New agent instance per Copilot conversation |
+| `TokenValidation:Audiences` / `ValidIssuers` | — / built-ins | Audiences accepted on every route in addition to each agent's own `ClientId`; extra issuers |
+| `Agents` | empty | The agents to expose, zero or more. One entry per Azure Bot registration |
+| `Agents:{n}:Name` | — | **Required.** Letters, digits, `-`, `_`. Used in the default route, the package routes, and the administration API |
+| `Agents:{n}:Route` | `/api/messages/{Name}` | Fixed path Azure Bot Service posts to. One entry may claim `/api/messages` |
+| `Agents:{n}:ClientId` / `ClientSecret` | — | This agent's bot app registration. `ClientId` is required when token validation is on |
+| `Agents:{n}:TenantId` / `AuthType` / certificate and federation settings / `AuthorityEndpoint` | top-level value | Per-agent overrides |
+| `Agents:{n}:AgentType` | — | **Required.** FabrCore `[AgentAlias]` that answers on this route |
+| `Agents:{n}:Handle` | the entry's `Name` | Handle of the agent under each user's principal. Bare, no `:` |
+| `Agents:{n}:Models` | `default` | Model configuration used when the agent has to be created |
+| `Agents:{n}:WelcomeMessage` | top-level value | Greeting for this agent; empty string disables it |
+| `Agents:{n}:Manifest:*` | top-level `Manifest` | Per-agent manifest overrides. `Name` defaults to the top-level name with one agent and to the entry's `Name` with several; `Id` defaults to the agent's `ClientId` |
 | `Streaming:Enabled` | `true` | Use channel streaming when available |
 | `Streaming:InformativeUpdate` | "Working on it..." | Status text while the agent thinks |
 | `Streaming:EnableGeneratedByAILabel` | `true` | "AI generated" label on replies |
@@ -577,8 +708,13 @@ The administration `app-package` route is the way to fetch the package in produc
 | `Principal:Strategy` / `Prefix` / `AllowChannelIdFallback` | `EntraObjectId` | User → principal mapping |
 | `UserAuthorization:Handlers:*` | — | Agents SDK SSO handlers (verbatim passthrough) |
 | `UserAuthorization:PassUserTokenToAgent` | `false` | Stamp the user's token on agent messages |
-| `Manifest:*` | sensible defaults | App name, developer info, icons, conversation starters |
-| `Manifest:EnableAppPackageEndpoint` | dev-only | Serve `/m365copilot/appPackage.zip` and `/manifests/{name}.json` |
+| `Manifest:*` | sensible defaults | App name, developer info, icons, conversation starters. Defaults for every agent |
+| `Manifest:EnableAppPackageEndpoint` | dev-only | Serve `/m365copilot/{agent}/manifest.json`, `/m365copilot/{agent}/appPackage.zip`, and `/manifests/{name}.json` |
+
+The single-agent keys `Agent`, `MessagesEndpoint`, `ClientId`, and `ClientSecret` directly under
+`Microsoft365Copilot` are no longer read. Without an `Agents` section they fail startup; beside
+one they are ignored with a warning. See
+[Migrating from the single-agent configuration](#migrating-from-the-single-agent-configuration).
 
 **Escape hatch:** if you define the Agents SDK's native `Connections`, `ConnectionsMap`, or
 `AgentApplication` sections yourself, the addon leaves them untouched and only supplies what's

@@ -43,11 +43,12 @@ internal static class CopilotIntegrationEndpoints
 
         group.MapGet("", (IServiceProvider services) => Results.Ok(BuildStatus(services)));
 
-        group.MapGet("/" + ManifestSegment, (IServiceProvider services) =>
-            Package(services, builder => Results.Text(builder.BuildManifestJson(), "application/json")));
+        // One package per agent: Microsoft allows a single bot in an app manifest.
+        group.MapGet($"/{AgentsSegment}/{{name}}/{ManifestSegment}", (string name, IServiceProvider services) =>
+            Package(services, name, (builder, agent) => Results.Text(builder.BuildManifestJson(agent), "application/json")));
 
-        group.MapGet("/" + AppPackageSegment, (IServiceProvider services) =>
-            Package(services, builder => Results.File(builder.BuildPackageZip(), "application/zip", "appPackage.zip")));
+        group.MapGet($"/{AgentsSegment}/{{name}}/{AppPackageSegment}", (string name, IServiceProvider services) =>
+            Package(services, name, (builder, agent) => Results.File(builder.BuildPackageZip(agent), "application/zip", "appPackage.zip")));
 
         group.MapPost("/" + DiagnosticsSegment, async (HttpContext http, IServiceProvider services, CancellationToken cancellationToken) =>
         {
@@ -80,17 +81,22 @@ internal static class CopilotIntegrationEndpoints
         // Neither service is registered while the channel is off.
         var storage = marker.Enabled ? services.GetService<IStorage>()?.GetType() : null;
         var customResolver = marker.Enabled && services.GetService<ICopilotPrincipalResolver>() is not null and not DefaultCopilotPrincipalResolver;
-        return CopilotIntegrationStatusBuilder.Build(options, marker, storage, customResolver);
+        var agents = services.GetRequiredService<CopilotAgentCatalog>().Agents;
+        return CopilotIntegrationStatusBuilder.Build(options, agents, marker, storage, customResolver);
     }
 
-    private static IResult Package(IServiceProvider services, Func<CopilotAppPackageBuilder, IResult> build)
+    private static IResult Package(IServiceProvider services, string name, Func<CopilotAppPackageBuilder, CopilotAgent, IResult> build)
     {
         var marker = services.GetRequiredService<Marker>();
         if (!marker.Enabled)
             return Conflict("channel-disabled", marker.DisabledReason ?? "The Microsoft 365 Copilot channel is off on this host.");
+        var agent = services.GetRequiredService<CopilotAgentCatalog>().Find(name);
+        if (agent is null)
+            return Results.Json(new { error = "agent-not-found", message = $"This host exposes no Microsoft 365 Copilot agent named '{name}'." },
+                statusCode: StatusCodes.Status404NotFound);
         try
         {
-            return build(services.GetRequiredService<CopilotAppPackageBuilder>());
+            return build(services.GetRequiredService<CopilotAppPackageBuilder>(), agent);
         }
         catch (InvalidOperationException ex)
         {
@@ -105,10 +111,10 @@ internal static class CopilotIntegrationEndpoints
     internal static async Task<IntegrationDiagnosticsReport> RunDiagnosticsAsync(IServiceProvider services, CancellationToken cancellationToken)
     {
         var marker = services.GetRequiredService<Marker>();
-        var options = services.GetRequiredService<IOptions<Microsoft365CopilotOptions>>().Value;
+        var agents = services.GetRequiredService<CopilotAgentCatalog>().Agents;
         var checks = BuildStatus(services).Findings;
-        checks.Add(AgentTypeCheck(options, marker, services.GetService<IFabrCoreRegistry>()));
-        checks.Add(await BotServiceCredentialCheckAsync(options, marker, services.GetService<IConnections>(), cancellationToken));
+        checks.Add(AgentTypeCheck(agents, marker, services.GetService<IFabrCoreRegistry>()));
+        checks.Add(await BotServiceCredentialCheckAsync(agents, marker, services.GetService<IConnections>(), cancellationToken));
         return new IntegrationDiagnosticsReport
         {
             Integration = Microsoft365,
@@ -118,50 +124,74 @@ internal static class CopilotIntegrationEndpoints
         };
     }
 
-    internal static IntegrationCheck AgentTypeCheck(Microsoft365CopilotOptions options, Marker marker, IFabrCoreRegistry? registry)
+    internal static IntegrationCheck AgentTypeCheck(IReadOnlyList<CopilotAgent> agents, Marker marker, IFabrCoreRegistry? registry)
     {
         const string id = "agent-type-registered";
         if (!marker.Enabled)
             return Check(id, Skipped, "The Microsoft 365 Copilot channel is off on this host.");
-        if (!string.IsNullOrWhiteSpace(options.Agent.SharedAgentHandle))
-            return Check(id, Skipped, $"Conversations route to the existing agent '{options.Agent.SharedAgentHandle}'; no agent type is provisioned.");
+        if (agents.Count == 0)
+            return Check(id, Skipped, "No agent is configured in Microsoft365Copilot:Agents.");
         if (registry is null)
             return Check(id, Skipped, "The agent registry is not available on this host.");
-        return registry.FindAgentType(options.Agent.AgentType!) is not null
-            ? Check(id, Pass, $"Agent type '{options.Agent.AgentType}' is registered.")
-            : Check(id, Fail, $"Agent type '{options.Agent.AgentType}' is not registered on this host. Check its [AgentAlias] and that its assembly is loaded.");
+        var missing = agents
+            .Where(agent => registry.FindAgentType(agent.AgentType) is null)
+            .Select(agent => $"'{agent.AgentType}' ({agent.Name})")
+            .ToList();
+        return missing.Count == 0
+            ? Check(id, Pass, agents.Count == 1
+                ? $"Agent type '{agents[0].AgentType}' is registered."
+                : $"All {agents.Count} agent types are registered.")
+            : Check(id, Fail, $"Not registered on this host: {string.Join(", ", missing)}. Check each [AgentAlias] and that its assembly is loaded.");
     }
 
-    private static Task<IntegrationCheck> BotServiceCredentialCheckAsync(
-        Microsoft365CopilotOptions options, Marker marker, IConnections? connections, CancellationToken cancellationToken)
+    /// <summary>
+    /// Tests every bot's credential and reports the first that fails, naming the agent, so one
+    /// check id keeps covering the whole channel however many agents it exposes.
+    /// </summary>
+    private static async Task<IntegrationCheck> BotServiceCredentialCheckAsync(
+        IReadOnlyList<CopilotAgent> agents, Marker marker, IConnections? connections, CancellationToken cancellationToken)
     {
         const string id = BotServiceCredentialCheckId;
         if (!marker.Enabled)
-            return Task.FromResult(Check(id, Skipped, "The Microsoft 365 Copilot channel is off on this host."));
+            return Check(id, Skipped, "The Microsoft 365 Copilot channel is off on this host.");
         if (connections is null)
-            return Task.FromResult(Check(id, Skipped, "The Agents SDK connection service is not available on this host."));
-        if (!marker.NativeServiceConnection && string.IsNullOrWhiteSpace(options.ClientId))
-            return Task.FromResult(Check(id, Skipped, "No bot identity is configured, so there is no credential to test."));
+            return Check(id, Skipped, "The Agents SDK connection service is not available on this host.");
+        var identified = agents.Where(agent => !string.IsNullOrWhiteSpace(agent.ClientId)).ToList();
+        if (identified.Count == 0)
+            return Check(id, Skipped, "No bot identity is configured, so there is no credential to test.");
 
-        IAccessTokenProvider provider;
-        try
+        var tested = 0;
+        foreach (var agent in identified)
         {
-            provider = connections.GetConnection(Microsoft365CopilotDefaults.ServiceConnectionName);
-        }
-        catch (Exception) when (marker.NativeServiceConnection)
-        {
-            return Task.FromResult(Check(id, Skipped,
-                $"The host configures the Agents SDK Connections section itself and has no connection named '{Microsoft365CopilotDefaults.ServiceConnectionName}'."));
-        }
-        catch (Exception ex)
-        {
-            return Task.FromResult(Check(id, Fail, Describe(ex)));
+            IAccessTokenProvider provider;
+            try
+            {
+                provider = connections.GetConnection(agent.ConnectionName);
+            }
+            catch (Exception) when (marker.NativeServiceConnection)
+            {
+                // The host named its connections itself; there is nothing of ours to look up.
+                continue;
+            }
+            catch (Exception ex)
+            {
+                return Check(id, Fail, $"Agent '{agent.Name}': {Describe(ex)}");
+            }
+
+            // forceRefresh: a cached token would pass after the credential behind it stopped working.
+            var result = await CredentialCheckAsync(
+                () => provider.GetAccessTokenAsync(BotServiceResource, [BotServiceResource + "/.default"], forceRefresh: true),
+                CredentialTimeout, cancellationToken);
+            if (result.Status != Pass)
+                return Check(id, result.Status, $"Agent '{agent.Name}': {result.Message}");
+            tested++;
         }
 
-        // forceRefresh: a cached token would pass after the credential behind it stopped working.
-        return CredentialCheckAsync(
-            () => provider.GetAccessTokenAsync(BotServiceResource, [BotServiceResource + "/.default"], forceRefresh: true),
-            CredentialTimeout, cancellationToken);
+        if (tested == 0)
+            return Check(id, Skipped, "The host configures the Agents SDK Connections section itself and names its connections differently, so there is no credential to test here.");
+        return tested == 1
+            ? Check(id, Pass, "The host acquired a Bot Service token with the configured credential. The token was discarded.")
+            : Check(id, Pass, $"The host acquired a Bot Service token for each of {tested} agents. The tokens were discarded.");
     }
 
     internal const string BotServiceCredentialCheckId = "bot-service-credential";

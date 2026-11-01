@@ -68,15 +68,24 @@ the SDK verbatim (`AgentApplication:UserAuthorization:Handlers`):
 - `AzureBotOAuthConnectionName` — the OAuth connection from step 2.
 - `OBOConnectionName` + `OBOScopes` — optional: when both are set the SDK performs the
   on-behalf-of exchange automatically, so the turn token is already a Graph (or your-API) token.
-  `ServiceConnection` is the connection the addon synthesizes from
-  `TenantId`/`ClientId`/`ClientSecret`.
+  `ServiceConnection` is the connection the addon synthesizes for the first entry in
+  `Microsoft365Copilot:Agents` (from its `ClientId`/`ClientSecret` and the tenant). Further
+  entries get `ServiceConnection-{Name}`.
 - `PassUserTokenToAgent` (addon-specific) — stamps the token onto
   `AgentMessage.Args["Microsoft365Copilot:UserToken"]` for every bridged message.
 
 The generated app manifest automatically gains `webApplicationInfo`
-(`id` = ClientId, `resource` = `api://botid-{clientId}`) and `token.botframework.com` in
+(`id` = the agent's ClientId, `resource` = `api://botid-{clientId}`) and `token.botframework.com` in
 `validDomains` whenever handlers are configured — re-download and re-upload the app package after
 enabling SSO.
+
+### Hosts that expose several agents
+
+`UserAuthorization` is configured once and shared by every agent on the host. An Azure Bot OAuth
+connection belongs to one bot registration, so sign-in works only for the agent whose bot owns
+the connection named in `AzureBotOAuthConnectionName`. The host logs a warning at startup when
+handlers are configured and more than one agent is exposed. Do the app registration and OAuth
+connection steps above on the bot of the agent that needs sign-in.
 
 ## 4. Consuming the token in a FabrCore agent/plugin
 

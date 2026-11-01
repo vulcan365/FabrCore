@@ -2,6 +2,127 @@
 
 These changes are on `develop` and are not in a published package yet.
 
+## BREAKING: the Microsoft 365 Copilot add-on exposes a list of agents
+
+`FabrCore.Services.Microsoft365Copilot` used to expose one agent. It now exposes zero or more, each
+listed separately in Microsoft 365 Copilot. Microsoft allows at most one bot, and one custom engine
+agent, per app manifest, and an Azure Bot resource has one messaging endpoint and one app id, so
+each agent has its own Entra app registration, Azure Bot, and app package. One host serves them
+all. See the [add-on README](src/FabrCore.Services.Microsoft365Copilot/README.md#exposing-several-agents)
+and the [cloud server how-to](docs/cloud-server-microsoft-365-copilot.md).
+
+**This is a breaking configuration change. A host on the old configuration alone does not
+start.** With the channel enabled and no `Microsoft365Copilot:Agents` section, the presence of
+`Microsoft365Copilot:Agent`, `:MessagesEndpoint`, `:ClientId`, or `:ClientSecret` fails startup
+with a message pointing at `Microsoft365Copilot:Agents`, so a host cannot keep answering without
+the plugins and tools it used to configure there. When an `Agents` list is present, those four
+keys are ignored and a startup warning names them. That lets one published configuration serve
+old and new hosts while a cluster is upgraded; remove the old keys once no older host shares the
+configuration.
+
+Before:
+
+```json
+"Microsoft365Copilot": {
+  "TenantId": "<tenant-id>",
+  "ClientId": "<bot-client-id>",
+  "ClientSecret": "<secret>",
+  "MessagesEndpoint": "/api/messages",
+  "Agent": {
+    "AgentType": "chat-agent",
+    "Handle": "copilot",
+    "Models": "default",
+    "SystemPrompt": "You are a helpful assistant.",
+    "Plugins": [ "crm" ]
+  }
+}
+```
+
+After:
+
+```json
+"Microsoft365Copilot": {
+  "TenantId": "<tenant-id>",
+  "Agents": [
+    {
+      "Name": "assistant",
+      "Route": "/api/messages",
+      "ClientId": "<bot-client-id>",
+      "ClientSecret": "<secret>",
+      "AgentType": "chat-agent",
+      "Handle": "copilot",
+      "Models": "default"
+    }
+  ]
+}
+```
+
+Migrating:
+
+- **Move the bot identity and the route into an entry.** `ClientId` and `ClientSecret` become
+  `Agents:{n}:ClientId` and `ClientSecret`; `MessagesEndpoint` becomes `Agents:{n}:Route`. `Route`
+  defaults to `/api/messages/{Name}`, so set `"Route": "/api/messages"` on the entry whose Azure
+  Bot already points there. `TenantId`, `AuthType`, the certificate and federation settings,
+  `AuthorityEndpoint`, `WelcomeMessage`, and `Manifest` stay at the top level as defaults, and an
+  entry may override them.
+- **Keep the handle.** `Handle` now defaults to the entry's `Name`, not to `copilot`. A host that
+  relied on the old default must set `"Handle": "copilot"`, or its users reach new agents.
+- **Move plugins, tools, the system prompt, and args out.** `Agent:Plugins`, `Tools`,
+  `SystemPrompt`, and `Args` are gone. Define them on the agent type or in the blueprint that
+  provisions the agent. An agent that already exists for the user under the entry's handle is used
+  untouched; a missing one is created from `AgentType` and `Models` only.
+- **`Agent:Binding` is gone.** The Copilot channel no longer reads `AgentBindings`. A2A still does.
+  Put the binding's agent type and handle on the entry.
+- **`SharedAgentHandle` and `AgentPerConversation` are gone.** Agents are per user, under the
+  handle the entry names.
+- **Each entry needs** a `Name` (letters, digits, `-`, `_`) and an `AgentType`. Names, routes,
+  client ids, and manifest names must be unique; a violation fails startup with a message naming
+  `Microsoft365Copilot:Agents:{n}:...`. An enabled channel with no entries is valid and maps no
+  messaging endpoint.
+
+What else changed:
+
+- **Routing and separation.** One `POST` route per entry. The channel accepts a token issued for
+  any configured bot, and each route then requires the token audience to be that entry's
+  `ClientId` or one of the host-wide `TokenValidation:Audiences`, answering `403` otherwise.
+  Outbound, each bot has its own Agents SDK connection: `ServiceConnection` for the first entry,
+  `ServiceConnection-{Name}` for the rest.
+- **App packages are per agent.** The developer routes are `/m365copilot/{agent}/manifest.json`
+  and `/m365copilot/{agent}/appPackage.zip`; `/manifests/{name}.json` searches all agents. An
+  entry's `Manifest` overrides the top-level one. `Manifest:Name` defaults to the top-level name
+  with one agent and to the entry's `Name` with several; `Manifest:Id` defaults to the agent's
+  `ClientId`.
+- **Administration API, version 2.** The status document at
+  `/fabrcoreapi/admin/v1/integrations/microsoft365` reports `apiVersion` `"2"`
+  (`IntegrationAdministration.Microsoft365ApiVersion`). Its top-level `clientId`, `authType`,
+  `messagesEndpoint`, `agentBinding`, `agentType`, `agentHandle`, `sharedAgentHandle`,
+  `manifestId`, `manifestName`, and `manifestVersion` are replaced by `agents`, a list of
+  `Microsoft365IntegrationAgent`. The package routes are now
+  `/integrations/microsoft365/agents/{name}/manifest` and `/agents/{name}/app-package`, with `404`
+  `agent-not-found` for an unknown name. The `agent-type-registered` and `bot-service-credential`
+  diagnostics cover every agent and name the one that fails.
+- **Capabilities.** The `microsoft365-copilot` service reports `ApiVersion` `"2"`, gains the
+  `multi-agent` feature, and loses `agent-binding`. The heartbeat gains `m365copilot.agents`, the
+  number of exposed agents.
+- **Applied-settings report.** The `Microsoft365Copilot:ClientId`, `:MessagesEndpoint`, and
+  `:Agent:Binding` rows are gone. Each agent adds `Microsoft365Copilot:Agents:{i}:Name`, `Route`,
+  `ClientId`, `AgentType`, and `Handle`.
+- **Messages.** Bridged messages carry `Args["Microsoft365Copilot:Agent"]`, the name of the entry
+  they arrived through.
+- **A cloud server publishes** `Microsoft365Copilot:Agents:{i}:*` instead of `AgentBindings:*` with
+  `Microsoft365Copilot:Agent:Binding` and a top-level `ClientId` and `ClientSecret`. During an
+  upgrade it can publish both: a new host reads the list and ignores the single-agent keys with a
+  warning, and an older host reads the single-agent keys and ignores the list. A host older than
+  the list has no `m365copilot.agents` heartbeat flag. Upgrade the cloud server first and
+  republish, then upgrade the hosts, then stop publishing the single-agent keys.
+
+Known limits with several agents:
+
+- User authorization (SSO) handlers are configured once and shared. An Azure Bot OAuth connection
+  belongs to one bot registration, so sign-in works only for the agent whose bot owns it. The host
+  logs a warning at startup.
+- Proactive conversation endpoints are stored per principal, not per agent.
+
 ## Cloud-managed Microsoft 365 Copilot and A2A integrations
 
 A cloud server can now discover, enable, observe, and diagnose the Microsoft 365 Copilot channel,
@@ -24,9 +145,9 @@ the A2A endpoint, Connections, and remote agents through the open protocol. See 
   state its default, so an unset key is reported as `code-default` instead of as a code override.
 - **Integrations administration API.** `GET /fabrcoreapi/admin/v1/integrations/a2a` and
   `/integrations/microsoft365` return configuration and named posture findings.
-  `/integrations/microsoft365/manifest` and `/app-package` serve the generated package to
-  authenticated administrators, and `POST /integrations/microsoft365/diagnostics` checks the agent
-  type and the bot credential. No route returns a credential. Contracts are in
+  `/integrations/microsoft365/agents/{name}/manifest` and `/agents/{name}/app-package` serve each
+  agent's generated package to authenticated administrators, and
+  `POST /integrations/microsoft365/diagnostics` checks the agent types and the bot credentials. No route returns a credential. Contracts are in
   `FabrCore.Core.CloudServer`.
 
 ### Behavior changes to review

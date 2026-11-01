@@ -15,10 +15,14 @@
   ],
   "Microsoft365Copilot": {
     "TokenValidation": { "Enabled": false },
-    "Agent": {
-      "AgentType": "replace-with-your-agent-alias",
-      "Handle": "copilot",
-      "Models": "default"
-    }
+    "Agents": [
+      {
+        "Name": "assistant",
+        "Route": "/api/messages",
+        "AgentType": "replace-with-your-agent-alias",
+        "Handle": "copilot",
+        "Models": "default"
+      }
+    ]
   }
 }

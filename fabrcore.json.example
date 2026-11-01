@@ -59,13 +59,16 @@
   },
   "Microsoft365Copilot": {
     "TenantId": "your-entra-tenant-id",
-    "ClientId": "your-bot-app-registration-client-id",
-    "ClientSecret": "your-bot-app-registration-secret",
-    "Agent": {
-      "AgentType": "chat-agent",
-      "SystemPrompt": "You are a helpful assistant.",
-      "Models": "default"
-    },
+    "Agents": [
+      {
+        "Name": "assistant",
+        "Route": "/api/messages",
+        "ClientId": "your-bot-app-registration-client-id",
+        "ClientSecret": "your-bot-app-registration-secret",
+        "AgentType": "chat-agent",
+        "Models": "default"
+      }
+    ],
     "Proactive": {
       "Enabled": false,
       "AllowedConversationTypes": [ "personal" ]

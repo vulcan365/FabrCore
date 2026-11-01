@@ -24,6 +24,6 @@ builder.AddMicrosoft365Copilot();
 var app = builder.Build();
 
 app.UseFabrCoreServer();
-app.UseMicrosoft365Copilot();   // maps POST /api/messages (+ dev app-package endpoints)
+app.UseMicrosoft365Copilot();   // maps one POST route per Agents entry (+ dev app-package endpoints)
 
 app.Run();

@@ -7,21 +7,31 @@ namespace FabrCore.Services.Microsoft365Copilot.Tests;
 [TestClass]
 public sealed class CopilotAppPackageBuilderTests
 {
-    private static CopilotAppPackageBuilder CreateBuilder(Action<Microsoft365CopilotOptions>? configure = null)
+    /// <summary>One configured agent, with the builder that packages it.</summary>
+    private sealed record Packaged(CopilotAppPackageBuilder Builder, CopilotAgent Agent)
     {
-        var options = new Microsoft365CopilotOptions
+        public string ManifestJson() => Builder.BuildManifestJson(Agent);
+        public byte[] Zip() => Builder.BuildPackageZip(Agent);
+        public string ManifestName => Builder.ManifestName(Agent);
+        public bool Matches(string? name) => Builder.FindByManifestName(name) is not null;
+    }
+
+    private static Packaged CreateBuilder(Action<Microsoft365CopilotOptions>? configure = null)
+    {
+        var options = CopilotTestAgents.Single(o =>
         {
-            ClientId = "11111111-2222-3333-4444-555555555555",
-            Manifest = { Name = "Test Agent", PublicHostName = "agents.contoso.com" },
-        };
+            o.Manifest.Name = "Test Agent";
+            o.Manifest.PublicHostName = "agents.contoso.com";
+        });
         configure?.Invoke(options);
-        return new CopilotAppPackageBuilder(Options.Create(options));
+        var catalog = CopilotTestAgents.Catalog(options);
+        return new Packaged(new CopilotAppPackageBuilder(Options.Create(options), catalog), catalog.Agents[0]);
     }
 
     [TestMethod]
     public void Manifest_DeclaresCustomEngineAgent_BoundToBot()
     {
-        var manifest = JsonDocument.Parse(CreateBuilder().BuildManifestJson()).RootElement;
+        var manifest = JsonDocument.Parse(CreateBuilder().ManifestJson()).RootElement;
 
         var bot = manifest.GetProperty("bots")[0];
         Assert.AreEqual("11111111-2222-3333-4444-555555555555", bot.GetProperty("botId").GetString());
@@ -44,7 +54,7 @@ public sealed class CopilotAppPackageBuilderTests
     public void Manifest_NormalizesPublicHostName_FromUrl()
     {
         var builder = CreateBuilder(o => o.Manifest.PublicHostName = "https://surfaceapp.fabrcore.ai/some/path");
-        var manifest = JsonDocument.Parse(builder.BuildManifestJson()).RootElement;
+        var manifest = JsonDocument.Parse(builder.ManifestJson()).RootElement;
 
         Assert.AreEqual("surfaceapp.fabrcore.ai", manifest.GetProperty("validDomains")[0].GetString());
     }
@@ -53,7 +63,7 @@ public sealed class CopilotAppPackageBuilderTests
     public void Manifest_NormalizesPublicHostName_FromHostWithPort()
     {
         var builder = CreateBuilder(o => o.Manifest.PublicHostName = "surfaceapp.fabrcore.ai:443");
-        var manifest = JsonDocument.Parse(builder.BuildManifestJson()).RootElement;
+        var manifest = JsonDocument.Parse(builder.ManifestJson()).RootElement;
 
         Assert.AreEqual("surfaceapp.fabrcore.ai", manifest.GetProperty("validDomains")[0].GetString());
     }
@@ -61,7 +71,7 @@ public sealed class CopilotAppPackageBuilderTests
     [TestMethod]
     public void Manifest_OmitsSsoSection_WithoutUserAuthorization()
     {
-        var manifest = JsonDocument.Parse(CreateBuilder().BuildManifestJson()).RootElement;
+        var manifest = JsonDocument.Parse(CreateBuilder().ManifestJson()).RootElement;
 
         Assert.IsFalse(manifest.TryGetProperty("webApplicationInfo", out _));
     }
@@ -70,7 +80,7 @@ public sealed class CopilotAppPackageBuilderTests
     public void Manifest_AddsSsoSection_WhenUserAuthorizationConfigured()
     {
         var builder = CreateBuilder(o => o.UserAuthorizationConfigured = true);
-        var manifest = JsonDocument.Parse(builder.BuildManifestJson()).RootElement;
+        var manifest = JsonDocument.Parse(builder.ManifestJson()).RootElement;
 
         var sso = manifest.GetProperty("webApplicationInfo");
         Assert.AreEqual("api://botid-11111111-2222-3333-4444-555555555555", sso.GetProperty("resource").GetString());
@@ -84,7 +94,7 @@ public sealed class CopilotAppPackageBuilderTests
     {
         var builder = CreateBuilder(o => o.Manifest.ConversationStarters.Add(
             new CopilotConversationStarter { Title = "Status", Description = "What is my order status?" }));
-        var manifest = JsonDocument.Parse(builder.BuildManifestJson()).RootElement;
+        var manifest = JsonDocument.Parse(builder.ManifestJson()).RootElement;
 
         var command = manifest.GetProperty("bots")[0].GetProperty("commandLists")[0].GetProperty("commands")[0];
         Assert.AreEqual("Status", command.GetProperty("title").GetString());
@@ -93,7 +103,7 @@ public sealed class CopilotAppPackageBuilderTests
     [TestMethod]
     public void Package_ContainsManifestAndIcons()
     {
-        var zipBytes = CreateBuilder().BuildPackageZip();
+        var zipBytes = CreateBuilder().Zip();
 
         using var zip = new ZipArchive(new MemoryStream(zipBytes), ZipArchiveMode.Read);
         var names = zip.Entries.Select(e => e.Name).ToList();
@@ -112,9 +122,52 @@ public sealed class CopilotAppPackageBuilderTests
     [TestMethod]
     public void Manifest_Throws_WithoutClientId()
     {
-        var builder = new CopilotAppPackageBuilder(Options.Create(new Microsoft365CopilotOptions()));
+        var builder = CreateBuilder(o =>
+        {
+            o.TokenValidation.Enabled = false;
+            o.Agents[0].ClientId = null;
+        });
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => builder.BuildManifestJson());
+        var error = Assert.ThrowsExactly<InvalidOperationException>(() => builder.ManifestJson());
+
+        StringAssert.Contains(error.Message, "'assistant' needs a ClientId");
+    }
+
+    [TestMethod]
+    public void EachAgent_GetsItsOwnPackage_BoundToItsOwnBot()
+    {
+        var options = new Microsoft365CopilotOptions
+        {
+            Manifest = { DeveloperName = "Contoso", PublicHostName = "agents.contoso.com" },
+            Agents =
+            {
+                CopilotTestAgents.Entry("assistant", CopilotTestAgents.ClientId),
+                CopilotTestAgents.Entry("sales", CopilotTestAgents.SecondClientId),
+            },
+        };
+        options.Agents[1].Manifest.Name = "Sales Desk";
+        options.Agents[1].Manifest.ConversationStarters.Add(new CopilotConversationStarter { Title = "Pipeline", Description = "Show my pipeline" });
+        var catalog = CopilotTestAgents.Catalog(options);
+        var builder = new CopilotAppPackageBuilder(Options.Create(options), catalog);
+
+        var assistant = JsonDocument.Parse(builder.BuildManifestJson(catalog.Agents[0])).RootElement;
+        var sales = JsonDocument.Parse(builder.BuildManifestJson(catalog.Agents[1])).RootElement;
+
+        Assert.AreEqual(CopilotTestAgents.ClientId, assistant.GetProperty("id").GetString());
+        Assert.AreEqual(CopilotTestAgents.ClientId, assistant.GetProperty("bots")[0].GetProperty("botId").GetString());
+        Assert.IsFalse(assistant.GetProperty("bots")[0].TryGetProperty("commandLists", out _));
+
+        Assert.AreEqual(CopilotTestAgents.SecondClientId, sales.GetProperty("id").GetString());
+        Assert.AreEqual(CopilotTestAgents.SecondClientId, sales.GetProperty("bots")[0].GetProperty("botId").GetString());
+        Assert.AreEqual(CopilotTestAgents.SecondClientId,
+            sales.GetProperty("copilotAgents").GetProperty("customEngineAgents")[0].GetProperty("id").GetString());
+        Assert.AreEqual("Sales Desk", sales.GetProperty("name").GetProperty("short").GetString());
+        Assert.AreEqual("Contoso", sales.GetProperty("developer").GetProperty("name").GetString());
+        Assert.AreEqual("Pipeline", sales.GetProperty("bots")[0].GetProperty("commandLists")[0].GetProperty("commands")[0].GetProperty("title").GetString());
+
+        Assert.AreEqual("sales", builder.FindByManifestName("sales-desk")!.Name);
+        Assert.AreEqual("sales", builder.FindByManifestName(CopilotTestAgents.SecondClientId)!.Name);
+        Assert.AreEqual("assistant", builder.FindByManifestName("assistant")!.Name);
     }
 
     [TestMethod]
@@ -131,14 +184,14 @@ public sealed class CopilotAppPackageBuilderTests
     {
         var builder = CreateBuilder();
 
-        Assert.IsTrue(builder.MatchesManifestName("test-agent"));
-        Assert.IsTrue(builder.MatchesManifestName("Test Agent"));
-        Assert.IsTrue(builder.MatchesManifestName("TEST-AGENT"));
-        Assert.IsTrue(builder.MatchesManifestName("11111111-2222-3333-4444-555555555555"));
+        Assert.IsTrue(builder.Matches("test-agent"));
+        Assert.IsTrue(builder.Matches("Test Agent"));
+        Assert.IsTrue(builder.Matches("TEST-AGENT"));
+        Assert.IsTrue(builder.Matches("11111111-2222-3333-4444-555555555555"));
 
-        Assert.IsFalse(builder.MatchesManifestName("other-agent"));
-        Assert.IsFalse(builder.MatchesManifestName(""));
-        Assert.IsFalse(builder.MatchesManifestName(null));
+        Assert.IsFalse(builder.Matches("other-agent"));
+        Assert.IsFalse(builder.Matches(""));
+        Assert.IsFalse(builder.Matches(null));
     }
 
     [TestMethod]
@@ -146,7 +199,9 @@ public sealed class CopilotAppPackageBuilderTests
     {
         var builder = CreateBuilder(o => o.Manifest.Id = "99999999-8888-7777-6666-555555555555");
 
-        Assert.IsTrue(builder.MatchesManifestName("99999999-8888-7777-6666-555555555555"));
-        Assert.IsFalse(builder.MatchesManifestName("11111111-2222-3333-4444-555555555555"));
+        Assert.IsTrue(builder.Matches("99999999-8888-7777-6666-555555555555"));
+        Assert.IsFalse(builder.Matches("11111111-2222-3333-4444-555555555555"));
+        Assert.AreEqual("99999999-8888-7777-6666-555555555555",
+            JsonDocument.Parse(builder.ManifestJson()).RootElement.GetProperty("id").GetString());
     }
 }

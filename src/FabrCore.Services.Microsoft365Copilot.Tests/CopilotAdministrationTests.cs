@@ -20,15 +20,30 @@ public sealed class CopilotAdministrationTests
         var options = new Microsoft365CopilotOptions
         {
             TenantId = "11111111-1111-1111-1111-111111111111",
-            ClientId = "22222222-2222-2222-2222-222222222222",
             AuthType = "WorkloadIdentity",
+            Agents =
+            {
+                new CopilotAgentEntryOptions
+                {
+                    Name = "assistant", Route = "/api/messages", AgentType = "crm-agent",
+                    ClientId = "22222222-2222-2222-2222-222222222222",
+                },
+            },
         };
         options.Principal.Strategy = CopilotPrincipalStrategy.CanonicalEntra;
-        options.Agent.Binding = "assistant";
-        options.Agent.AgentType = "crm-agent";
         options.Manifest.PublicHostName = "agents.contoso.com";
         return options;
     }
+
+    private static Microsoft365IntegrationStatus Build(
+        Microsoft365CopilotOptions options, Marker marker, Type? storage, bool customPrincipalResolver) =>
+        CopilotIntegrationStatusBuilder.Build(options, CopilotTestAgents.Resolve(options), marker, storage, customPrincipalResolver);
+
+    private static CopilotCapabilityContributor Capabilities(Microsoft365CopilotOptions options, Marker marker) =>
+        new(Options.Create(options), CopilotTestAgents.Catalog(options), marker);
+
+    private static CopilotRuntimeSettingsContributor Settings(Microsoft365CopilotOptions options, Marker marker) =>
+        new(Options.Create(options), CopilotTestAgents.Catalog(options), marker);
 
     private static string StatusOf(IEnumerable<IntegrationCheck> checks, string id) => checks.Single(c => c.Id == id).Status;
 
@@ -37,7 +52,7 @@ public sealed class CopilotAdministrationTests
     [TestMethod]
     public void ChannelOff_ReportsWhy_AndSkipsEveryFinding()
     {
-        var status = CopilotIntegrationStatusBuilder.Build(new Microsoft365CopilotOptions(), Unconfigured, null, false);
+        var status = Build(new Microsoft365CopilotOptions(), Unconfigured, null, false);
 
         Assert.IsFalse(status.Enabled);
         Assert.IsFalse(status.Configured);
@@ -50,14 +65,20 @@ public sealed class CopilotAdministrationTests
     [TestMethod]
     public void ProductionConfiguration_Passes()
     {
-        var status = CopilotIntegrationStatusBuilder.Build(ProductionOptions(), On, typeof(DurableStorage), false);
+        var status = Build(ProductionOptions(), On, typeof(DurableStorage), false);
 
         Assert.AreEqual(IntegrationAdministration.Pass, status.Status);
         Assert.IsNull(status.DisabledReason);
-        Assert.AreEqual("WorkloadIdentity", status.AuthType);
         Assert.AreEqual("CanonicalEntra", status.PrincipalStrategy);
-        Assert.AreEqual("assistant", status.AgentBinding);
-        Assert.AreEqual("22222222-2222-2222-2222-222222222222", status.ManifestId);
+        Assert.AreEqual(IntegrationAdministration.Microsoft365ApiVersion, status.ApiVersion);
+        var agent = status.Agents.Single();
+        Assert.AreEqual("assistant", agent.Name);
+        Assert.AreEqual("/api/messages", agent.MessagesEndpoint);
+        Assert.AreEqual("WorkloadIdentity", agent.AuthType);
+        Assert.AreEqual("crm-agent", agent.AgentType);
+        Assert.AreEqual("assistant", agent.AgentHandle);
+        Assert.AreEqual("11111111-1111-1111-1111-111111111111", agent.TenantId);
+        Assert.AreEqual("22222222-2222-2222-2222-222222222222", agent.ManifestId);
         Assert.AreEqual(nameof(DurableStorage), status.TurnStateStorage);
         Assert.AreEqual(IntegrationAdministration.Skipped, StatusOf(status.Findings, "proactive-scopes"));
     }
@@ -65,10 +86,10 @@ public sealed class CopilotAdministrationTests
     [TestMethod]
     public void DefaultsOutOfTheBox_AreFlaggedForReview()
     {
-        var options = new Microsoft365CopilotOptions { ClientId = "client", ClientSecret = "do-not-report-me" };
-        options.Agent.AgentType = "chat-agent";
+        var options = new Microsoft365CopilotOptions { Agents = { CopilotTestAgents.Entry(clientId: "client") } };
+        options.Agents[0].ClientSecret = "do-not-report-me";
 
-        var status = CopilotIntegrationStatusBuilder.Build(options, On, typeof(MemoryStorage), false);
+        var status = Build(options, On, typeof(MemoryStorage), false);
 
         Assert.AreEqual(IntegrationAdministration.Warn, status.Status);
         Assert.AreEqual(IntegrationAdministration.Pass, StatusOf(status.Findings, "token-validation"));
@@ -92,7 +113,7 @@ public sealed class CopilotAdministrationTests
         options.Proactive.Enabled = true;
         options.Proactive.AllowedConversationTypes = ["personal", "groupChat"];
 
-        var status = CopilotIntegrationStatusBuilder.Build(options, On, typeof(DurableStorage), false);
+        var status = Build(options, On, typeof(DurableStorage), false);
 
         Assert.AreEqual(IntegrationAdministration.Fail, status.Status);
         Assert.AreEqual(IntegrationAdministration.Fail, StatusOf(status.Findings, "token-validation"));
@@ -109,7 +130,7 @@ public sealed class CopilotAdministrationTests
         var options = ProductionOptions();
         options.UserAuthorization.PassUserTokenToAgent = true;
 
-        var status = CopilotIntegrationStatusBuilder.Build(options, On, typeof(DurableStorage), false);
+        var status = Build(options, On, typeof(DurableStorage), false);
 
         Assert.IsFalse(status.ForwardsUserCredential);
         Assert.AreEqual(IntegrationAdministration.Warn, StatusOf(status.Findings, "user-credential-forwarding"));
@@ -120,9 +141,9 @@ public sealed class CopilotAdministrationTests
     {
         var marker = new Marker(Enabled: true, NativeServiceConnection: true);
 
-        var status = CopilotIntegrationStatusBuilder.Build(ProductionOptions(), marker, typeof(DurableStorage), customPrincipalResolver: true);
+        var status = Build(ProductionOptions(), marker, typeof(DurableStorage), customPrincipalResolver: true);
 
-        Assert.IsNull(status.AuthType, "With a native Agents SDK connection the add-on's AuthType is not what authenticates.");
+        Assert.IsNull(status.Agents.Single().AuthType, "With a native Agents SDK connection the add-on's AuthType is not what authenticates.");
         Assert.AreEqual(IntegrationAdministration.Skipped, StatusOf(status.Findings, "credential-type"));
         Assert.AreEqual(IntegrationAdministration.Skipped, StatusOf(status.Findings, "principal-strategy"));
     }
@@ -133,9 +154,45 @@ public sealed class CopilotAdministrationTests
         var options = ProductionOptions();
         options.Principal.AllowChannelIdFallback = true;
 
-        var status = CopilotIntegrationStatusBuilder.Build(options, On, typeof(DurableStorage), false);
+        var status = Build(options, On, typeof(DurableStorage), false);
 
         Assert.AreEqual(IntegrationAdministration.Warn, StatusOf(status.Findings, "principal-strategy"));
+    }
+
+    [TestMethod]
+    public void SeveralAgents_AreEachReported_AndASecretOnAnyOfThemIsFlagged()
+    {
+        var options = ProductionOptions();
+        options.Agents.Add(new CopilotAgentEntryOptions
+        {
+            Name = "sales", AgentType = "sales-agent", Handle = "sales-desk", AuthType = "ClientSecret",
+            ClientId = "33333333-3333-3333-3333-333333333333", ClientSecret = "do-not-report-me",
+            Manifest = { Name = "Sales Desk", Version = "2.1.0" },
+        });
+
+        var status = Build(options, On, typeof(DurableStorage), false);
+
+        CollectionAssert.AreEqual(new[] { "assistant", "sales" }, status.Agents.Select(a => a.Name).ToArray());
+        var sales = status.Agents[1];
+        Assert.AreEqual("/api/messages/sales", sales.MessagesEndpoint);
+        Assert.AreEqual("33333333-3333-3333-3333-333333333333", sales.ClientId);
+        Assert.AreEqual("sales-desk", sales.AgentHandle);
+        Assert.AreEqual("Sales Desk", sales.ManifestName);
+        Assert.AreEqual("2.1.0", sales.ManifestVersion);
+        var credential = status.Findings.Single(f => f.Id == "credential-type");
+        Assert.AreEqual(IntegrationAdministration.Warn, credential.Status);
+        StringAssert.Contains(credential.Message, "sales");
+        Assert.IsFalse(JsonSerializer.Serialize(status, JsonSerializerOptions.Web).Contains("do-not-report-me", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void NoAgents_IsReportedAsAnEmptyList()
+    {
+        var status = Build(new Microsoft365CopilotOptions(), On, typeof(DurableStorage), false);
+
+        Assert.IsTrue(status.Enabled);
+        Assert.IsEmpty(status.Agents);
+        Assert.AreEqual(IntegrationAdministration.Skipped, StatusOf(status.Findings, "credential-type"));
     }
 
     // ----- Capability advertisement -----
@@ -143,7 +200,7 @@ public sealed class CopilotAdministrationTests
     [TestMethod]
     public void Capabilities_AreAdvertisedWhileOff_AsUnavailable()
     {
-        IFabrCoreCapabilityContributor contributor = new CopilotCapabilityContributor(Options.Create(new Microsoft365CopilotOptions()), Unconfigured);
+        IFabrCoreCapabilityContributor contributor = Capabilities(new Microsoft365CopilotOptions(), Unconfigured);
 
         var service = contributor.GetServices().Single();
         var flags = contributor.GetHeartbeatCapabilities();
@@ -151,9 +208,11 @@ public sealed class CopilotAdministrationTests
         Assert.AreEqual("microsoft365-copilot", service.Name);
         Assert.IsFalse(service.Available);
         Assert.AreEqual("not configured", service.UnavailableReason);
-        CollectionAssert.AreEqual(new[] { "status", "app-package", "diagnostics" }, service.Features);
+        CollectionAssert.AreEqual(new[] { "status", "app-package", "diagnostics", "multi-agent" }, service.Features);
+        Assert.AreEqual(IntegrationAdministration.Microsoft365ApiVersion, service.ApiVersion);
         Assert.AreEqual("1", flags["m365copilot"]);
         Assert.AreEqual("false", flags["m365copilot.enabled"]);
+        Assert.AreEqual("0", flags["m365copilot.agents"]);
     }
 
     [TestMethod]
@@ -163,7 +222,7 @@ public sealed class CopilotAdministrationTests
         options.Proactive.Enabled = true;
         options.UserAuthorizationConfigured = true;
         options.TokenValidation.Enabled = false;
-        IFabrCoreCapabilityContributor contributor = new CopilotCapabilityContributor(Options.Create(options), On);
+        IFabrCoreCapabilityContributor contributor = Capabilities(options, On);
 
         var service = contributor.GetServices().Single();
 
@@ -172,11 +231,12 @@ public sealed class CopilotAdministrationTests
         CollectionAssert.AreEqual(
             new[]
             {
-                "status", "app-package", "diagnostics", "activity-protocol", "streaming", "adaptive-cards",
-                "principal-canonicalentra", "proactive", "sso", "agent-binding", "token-validation-off"
+                "status", "app-package", "diagnostics", "multi-agent", "activity-protocol", "streaming", "adaptive-cards",
+                "principal-canonicalentra", "proactive", "sso", "token-validation-off"
             },
             service.Features);
         Assert.AreEqual("true", contributor.GetHeartbeatCapabilities()["m365copilot.enabled"]);
+        Assert.AreEqual("1", contributor.GetHeartbeatCapabilities()["m365copilot.agents"]);
     }
 
     [TestMethod]
@@ -184,12 +244,12 @@ public sealed class CopilotAdministrationTests
     {
         var options = new Microsoft365CopilotOptions();
         options.Streaming.Enabled = false;
-        IFabrCoreCapabilityContributor contributor = new CopilotCapabilityContributor(Options.Create(options), On);
+        IFabrCoreCapabilityContributor contributor = Capabilities(options, On);
 
         var features = contributor.GetServices().Single().Features;
 
         CollectionAssert.AreEqual(
-            new[] { "status", "app-package", "diagnostics", "activity-protocol", "adaptive-cards", "principal-entraobjectid" },
+            new[] { "status", "app-package", "diagnostics", "multi-agent", "activity-protocol", "adaptive-cards", "principal-entraobjectid" },
             features);
     }
 
@@ -198,17 +258,19 @@ public sealed class CopilotAdministrationTests
     [TestMethod]
     public void AppliedSettings_ReportIdentityAndPosture_WithDefaults()
     {
-        var contributor = new CopilotRuntimeSettingsContributor(Options.Create(ProductionOptions()), On);
+        var contributor = Settings(ProductionOptions(), On);
 
         var rows = contributor.Observe().ToDictionary(o => o.Key);
 
         CollectionAssert.AreEquivalent(
             new[]
             {
-                "Microsoft365Copilot:Enabled", "Microsoft365Copilot:TenantId", "Microsoft365Copilot:ClientId",
-                "Microsoft365Copilot:AuthType", "Microsoft365Copilot:MessagesEndpoint", "Microsoft365Copilot:TokenValidation:Enabled",
-                "Microsoft365Copilot:Principal:Strategy", "Microsoft365Copilot:Agent:Binding", "Microsoft365Copilot:Proactive:Enabled",
+                "Microsoft365Copilot:Enabled", "Microsoft365Copilot:TenantId",
+                "Microsoft365Copilot:AuthType", "Microsoft365Copilot:TokenValidation:Enabled",
+                "Microsoft365Copilot:Principal:Strategy", "Microsoft365Copilot:Proactive:Enabled",
                 "Microsoft365Copilot:Streaming:Enabled", "Microsoft365Copilot:Manifest:PublicHostName",
+                "Microsoft365Copilot:Agents:0:Name", "Microsoft365Copilot:Agents:0:Route", "Microsoft365Copilot:Agents:0:ClientId",
+                "Microsoft365Copilot:Agents:0:AgentType", "Microsoft365Copilot:Agents:0:Handle",
                 "Runtime:Microsoft365Copilot:SingleSignOn", "Runtime:Microsoft365Copilot:ForwardsUserCredential"
             },
             rows.Keys.ToArray());
@@ -217,7 +279,8 @@ public sealed class CopilotAdministrationTests
         Assert.AreEqual("True", rows["Microsoft365Copilot:Enabled"].DefaultValue);
         Assert.AreEqual("WorkloadIdentity", rows["Microsoft365Copilot:AuthType"].Value);
         Assert.AreEqual("ClientSecret", rows["Microsoft365Copilot:AuthType"].DefaultValue);
-        Assert.AreEqual("/api/messages", rows["Microsoft365Copilot:MessagesEndpoint"].DefaultValue);
+        Assert.AreEqual("/api/messages", rows["Microsoft365Copilot:Agents:0:Route"].Value);
+        Assert.AreEqual("assistant", rows["Microsoft365Copilot:Agents:0:Handle"].Value, "The handle the agent runs under, default applied.");
         Assert.AreEqual("CanonicalEntra", rows["Microsoft365Copilot:Principal:Strategy"].Value);
         Assert.AreEqual("EntraObjectId", rows["Microsoft365Copilot:Principal:Strategy"].DefaultValue);
         Assert.IsNull(rows["Microsoft365Copilot:TenantId"].DefaultValue, "Identity has no default to fall back on.");
@@ -227,7 +290,7 @@ public sealed class CopilotAdministrationTests
     [TestMethod]
     public void AppliedSettings_WhileOff_ClaimOnlyThatTheChannelIsOff()
     {
-        var contributor = new CopilotRuntimeSettingsContributor(Options.Create(new Microsoft365CopilotOptions { Enabled = false }), Unconfigured);
+        var contributor = Settings(new Microsoft365CopilotOptions { Enabled = false }, Unconfigured);
 
         var rows = contributor.Observe().ToDictionary(o => o.Key);
 
@@ -241,7 +304,7 @@ public sealed class CopilotAdministrationTests
     [TestMethod]
     public void RuntimeFacts_UseNamesTheCatalogDoesNotRedact()
     {
-        var contributor = new CopilotRuntimeSettingsContributor(Options.Create(ProductionOptions()), On);
+        var contributor = Settings(ProductionOptions(), On);
 
         foreach (var fact in contributor.Observe().Where(o => o.Key.StartsWith("Runtime:", StringComparison.Ordinal)))
         {
@@ -252,8 +315,7 @@ public sealed class CopilotAdministrationTests
     [TestMethod]
     public void AuthType_IsNotClaimedAsApplied_WhenTheHostOwnsTheConnection()
     {
-        var contributor = new CopilotRuntimeSettingsContributor(
-            Options.Create(ProductionOptions()), new Marker(Enabled: true, NativeServiceConnection: true));
+        var contributor = Settings(ProductionOptions(), new Marker(Enabled: true, NativeServiceConnection: true));
 
         var authType = contributor.Observe().Single(o => o.Key == "Microsoft365Copilot:AuthType");
 
@@ -264,23 +326,22 @@ public sealed class CopilotAdministrationTests
     // ----- Diagnostics -----
 
     [TestMethod]
-    public void AgentTypeCheck_ReportsWhetherTheTypeIsRegistered()
+    public void AgentTypeCheck_ReportsWhetherEveryTypeIsRegistered()
     {
         var options = ProductionOptions();
         var registry = new Registry("crm-agent");
+        var agents = CopilotTestAgents.Resolve(options);
 
-        Assert.AreEqual(IntegrationAdministration.Pass, CopilotIntegrationEndpoints.AgentTypeCheck(options, On, registry).Status);
+        Assert.AreEqual(IntegrationAdministration.Pass, CopilotIntegrationEndpoints.AgentTypeCheck(agents, On, registry).Status);
+        Assert.AreEqual(IntegrationAdministration.Skipped, CopilotIntegrationEndpoints.AgentTypeCheck(agents, On, registry: null).Status);
+        Assert.AreEqual(IntegrationAdministration.Skipped, CopilotIntegrationEndpoints.AgentTypeCheck(agents, Unconfigured, registry).Status);
+        Assert.AreEqual(IntegrationAdministration.Skipped, CopilotIntegrationEndpoints.AgentTypeCheck([], On, registry).Status);
 
-        options.Agent.AgentType = "missing-agent";
-        var missing = CopilotIntegrationEndpoints.AgentTypeCheck(options, On, registry);
+        options.Agents.Add(CopilotTestAgents.Entry("sales", "33333333-3333-3333-3333-333333333333", "missing-agent"));
+        var missing = CopilotIntegrationEndpoints.AgentTypeCheck(CopilotTestAgents.Resolve(options), On, registry);
         Assert.AreEqual(IntegrationAdministration.Fail, missing.Status);
-        StringAssert.Contains(missing.Message, "missing-agent");
-
-        Assert.AreEqual(IntegrationAdministration.Skipped, CopilotIntegrationEndpoints.AgentTypeCheck(options, On, registry: null).Status);
-        Assert.AreEqual(IntegrationAdministration.Skipped, CopilotIntegrationEndpoints.AgentTypeCheck(options, Unconfigured, registry).Status);
-
-        options.Agent.SharedAgentHandle = "system:helpdesk";
-        Assert.AreEqual(IntegrationAdministration.Skipped, CopilotIntegrationEndpoints.AgentTypeCheck(options, On, registry).Status);
+        StringAssert.Contains(missing.Message, "'missing-agent' (sales)");
+        Assert.IsFalse(missing.Message.Contains("crm-agent", StringComparison.Ordinal), "A registered type is not named as a problem.");
     }
 
     [TestMethod]

@@ -66,14 +66,20 @@
   },
   "Microsoft365Copilot": {
     "TenantId": "replace-with-entra-tenant-id",
-    "ClientId": "replace-with-bot-app-registration-client-id",
-    "ClientSecret": "<set-with-user-secrets-or-key-vault>",
+    "Agents": [
+      {
+        "Name": "crm",
+        "Route": "/api/messages",
+        "ClientId": "replace-with-bot-app-registration-client-id",
+        "ClientSecret": "<set-with-user-secrets-or-key-vault>",
+        "AgentType": "crm-demo-agent",
+        "Handle": "assistant",
+        "Models": "default"
+      }
+    ],
     "WelcomeMessage": "Hello! I'm the FabrCore Surface CRM demo agent. Ask me about the Contoso CRM data.",
     "Principal": {
       "Strategy": "CanonicalEntra"
-    },
-    "Agent": {
-      "Binding": "assistant"
     },
     "Proactive": {
       "Enabled": true,
