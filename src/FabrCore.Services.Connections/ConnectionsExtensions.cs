@@ -27,6 +27,11 @@ public sealed class ConnectionsOptions
     public string? HandoffAudience { get; set; }
     /// <summary>Legacy compatibility flag. Host now selects and validates actual protection; this flag is not required or trusted.</summary>
     public bool ProtectedKeyRingConfigured { get; set; }
+    /// <summary>
+    /// Connections each person gets on first use, by name, with no profile made for them. Allowed agents are bare handles,
+    /// meaning that person's own agent of that handle.
+    /// </summary>
+    public Dictionary<string, ConnectionProfile> Templates { get; set; } = new(StringComparer.Ordinal);
 }
 
 public interface IConnectionPrincipalResolver
@@ -74,6 +79,11 @@ public static class ConnectionsExtensions
     private static IServiceCollection Register(IServiceCollection services, ConnectionsOptions options)
     {
         if (!options.Enabled) return services;
+        foreach (var (name, template) in options.Templates)
+        {
+            try { ConnectionGrain.ValidateTemplate(name, template, options); }
+            catch (ConnectionException e) { throw new InvalidOperationException($"FabrCore:Connections:Templates:{name}: {e.Message}", e); }
+        }
         services.AddSingleton(options);
         services.AddSingleton(new ConnectionCapabilities(options.EntraAgentIdEnabled, options.ClientHandoffEnabled));
         services.AddFabrCoreDataProtection();
@@ -85,6 +95,7 @@ public static class ConnectionsExtensions
         services.AddSingleton(sp => new OAuthProvider(sp.GetRequiredService<IConnectionCredentialProvider>()));
         services.AddSingleton<ConnectionService>();
         services.AddSingleton<IConnectionService>(sp => sp.GetRequiredService<ConnectionService>());
+        services.AddSingleton<IConnectionUserAssertions>(sp => sp.GetRequiredService<ConnectionService>());
         services.AddSingleton<FabrCore.Core.Blueprints.IBlueprintExpander, ConnectionBlueprintExpander>();
         return services;
     }
@@ -162,8 +173,11 @@ public static class ConnectionsExtensions
     }
 }
 
-internal sealed class ConnectionService(IClusterClient cluster) : IConnectionService
+internal sealed class ConnectionService(IClusterClient cluster) : IConnectionService, IConnectionUserAssertions
 {
+    public Task SubmitAsync(string principal, string agent, string assertion, CancellationToken cancellationToken = default)
+        => Execute(principal, "assertion-agent", new(string.Empty, principal, agent, Assertion: assertion)).WaitAsync(cancellationToken);
+
     public async Task<string> GetSessionVersionAsync(string principal, string agent, ConnectionBinding binding, CancellationToken cancellationToken = default)
         => JsonSerializer.Deserialize<string>(await Execute(binding.OwnerPrincipal, "session", new(binding.Name, principal, agent)).WaitAsync(cancellationToken))!;
     internal async Task<string> Execute(string owner, string operation, GrainRequest request)

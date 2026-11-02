@@ -75,6 +75,18 @@ namespace FabrCore.Core
         }
 
         /// <summary>
+        /// Whether an event goes to an agent's own event stream, so its channel names that agent and sending it needs
+        /// access to it, whether the namespace is left empty or names that stream outright. Other namespaces are shared
+        /// topics, which reach only the agents subscribed to them.
+        /// </summary>
+        public static bool TargetsAgentEventStream(EventMessage message)
+        {
+            ArgumentNullException.ThrowIfNull(message);
+            return string.IsNullOrWhiteSpace(message.Namespace)
+                || string.Equals(message.Namespace.Trim(), StreamConstants.AgentEventNamespace, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
         /// Converts the subscription into the Orleans stream name used by the host.
         /// </summary>
         public StreamName ToStreamName()

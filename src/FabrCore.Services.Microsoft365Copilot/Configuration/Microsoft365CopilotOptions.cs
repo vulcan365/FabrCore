@@ -220,6 +220,12 @@ public sealed class CopilotAgentEntryOptions
     /// <summary>Greeting for this agent. Defaults to the top-level <c>WelcomeMessage</c>.</summary>
     public string? WelcomeMessage { get; set; }
 
+    /// <summary>
+    /// The OAuth connection on this agent's Azure Bot that signs people in. Set, the agent gets its own sign-in handler and
+    /// single sign-on in its app package, and the person's token goes to its on-behalf-of connections, not into its messages.
+    /// </summary>
+    public string? SignInConnectionName { get; set; }
+
     /// <summary>App-manifest values for this agent, layered over the top-level <c>Manifest</c>.</summary>
     public CopilotAgentManifestOptions Manifest { get; set; } = new();
 }

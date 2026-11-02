@@ -21,6 +21,8 @@ internal sealed class ConnectionRecord
     public string Revision { get; set; } = Guid.NewGuid().ToString("N");
     public string SessionVersion { get; set; } = Guid.NewGuid().ToString("N");
     public string? ExternalSubject { get; set; }
+    /// <summary>The host's template this came from, while it's unchanged. Null for a profile an administrator saved.</summary>
+    public string? TemplateHash { get; set; }
     public TokenMaterial? Grant { get; set; }
     public Dictionary<string, TokenMaterial> Tokens { get; set; } = [];
     public Dictionary<string, PendingConnection> Pending { get; set; } = [];
@@ -41,6 +43,7 @@ internal sealed class ConnectionGrain(IUserScopedFabrCoreStorageProvider store, 
     OAuthProvider oauth, ConnectionsOptions options, IConnectionHandoffPrincipalValidator handoffValidator) : Grain, IConnectionGrain
 {
     private static readonly JsonSerializerOptions Json = JsonSerializerOptions.Web;
+    private static readonly TimeSpan AssertionRenewal = TimeSpan.FromMinutes(5);
     private Dictionary<string, ConnectionRecord>? records;
     private string Owner => this.GetPrimaryKeyString();
     private IDataProtector Protector => protection.CreateProtector("FabrCore.Connections.v1", Owner);
@@ -63,11 +66,23 @@ internal sealed class ConnectionGrain(IUserScopedFabrCoreStorageProvider store, 
         {
             var ciphertext = await store.GetAsync<string>(Owner, "fabrcore.protected-connections", "catalog");
             records = ciphertext is null ? [] : JsonSerializer.Deserialize<Dictionary<string, ConnectionRecord>>(Protector.Unprotect(ciphertext), Json)!;
+            if (ApplyTemplates(records, options.Templates, Owner)) await Persist();
         }
         if (operation == "list") return Serialize(records.Values.Select(Status).ToArray());
+        if (operation == "assertion-agent")
+        {
+            if (request.Principal != Owner) throw new ConnectionException("access-denied", "An assertion can only be submitted for its own principal.");
+            var changed = false;
+            foreach (var candidate in records.Values.Where(r => r.Profile is { Enabled: true, Authentication: ConnectionAuthentication.OnBehalfOf } && r.Profile.AllowedAgents.Contains(request.Agent!, StringComparer.Ordinal)))
+                changed |= await ApplyAssertion(candidate, request.Assertion!, onlyWhenExpiring: true);
+            if (changed) await Persist();
+            return Serialize(changed);
+        }
         if (operation == "save")
         {
-            ValidateProfile(request.Profile!);
+            ValidateProfile(request.Profile!, options);
+            if (options.Templates.ContainsKey(request.Name))
+                throw new ConnectionException("invalid-configuration", "This connection comes from the host's templates, so it's changed there.");
             records.TryGetValue(request.Name, out var old);
             if ((old is null && request.Revision != "*") || (old is not null && request.Revision != old.Revision))
                 throw new ConnectionException("revision-conflict", "Read the current revision before updating the connection.");
@@ -158,15 +173,8 @@ internal sealed class ConnectionGrain(IUserScopedFabrCoreStorageProvider store, 
         {
             if (p.Authentication is not (ConnectionAuthentication.AgentIdOnBehalfOf or ConnectionAuthentication.OnBehalfOf))
                 throw new ConnectionException("unsupported-flow", "User assertions require an Agent ID OBO connection.");
-            var subject = await oauth.Validate(p, request.Assertion!, p.BlueprintAudience ?? p.ClientId, null, CancellationToken.None);
-            var tid = subject.FindFirst("tid")?.Value; var oid = subject.FindFirst("oid")?.Value;
-            if (string.IsNullOrEmpty(tid) || string.IsNullOrEmpty(oid) || string.IsNullOrEmpty(subject.FindFirst("scp")?.Value)
-                || EntraPrincipalHandle.Create(tid, oid) != Owner)
-                throw new ConnectionException("access-denied", "The assertion must represent this connection's authenticated Entra principal.");
-            var exp = long.Parse(subject.FindFirst("exp")!.Value, System.Globalization.CultureInfo.InvariantCulture);
-            record.Grant = new() { AccessToken = request.Assertion!, ExpiresAt = DateTimeOffset.FromUnixTimeSeconds(exp) };
-            if (record.ExternalSubject != oid) record.SessionVersion = Guid.NewGuid().ToString("N");
-            record.ExternalSubject = oid; record.Tokens.Clear(); await Persist(); return Serialize(Status(record));
+            await ApplyAssertion(record, request.Assertion!, onlyWhenExpiring: false);
+            await Persist(); return Serialize(Status(record));
         }
         if (operation == "session")
         {
@@ -189,6 +197,64 @@ internal sealed class ConnectionGrain(IUserScopedFabrCoreStorageProvider store, 
             await Persist(); return Serialize(token);
         }
         throw new ConnectionException("unsupported-operation", "Unsupported connection operation.");
+    }
+
+    /// <summary>Takes a person's token as this connection's grant. Returns false when it keeps the one it has.</summary>
+    private async Task<bool> ApplyAssertion(ConnectionRecord record, string assertion, bool onlyWhenExpiring)
+    {
+        var subject = await oauth.ValidateAssertion(record.Profile, assertion, CancellationToken.None);
+        var tid = subject.FindFirst("tid")?.Value; var oid = subject.FindFirst("oid")?.Value;
+        if (string.IsNullOrEmpty(tid) || string.IsNullOrEmpty(oid) || string.IsNullOrEmpty(subject.FindFirst("scp")?.Value)
+            || EntraPrincipalHandle.Create(tid, oid) != Owner)
+            throw new ConnectionException("access-denied", "The assertion must represent this connection's authenticated Entra principal.");
+        // Replacing the grant clears the tokens made from it, so a chat that sends one each turn mustn't do that each turn.
+        if (onlyWhenExpiring && record.ExternalSubject == oid && record.Grant?.ExpiresAt > DateTimeOffset.UtcNow.Add(AssertionRenewal))
+            return false;
+        var exp = long.Parse(subject.FindFirst("exp")!.Value, System.Globalization.CultureInfo.InvariantCulture);
+        record.Grant = new() { AccessToken = assertion, ExpiresAt = DateTimeOffset.FromUnixTimeSeconds(exp) };
+        if (record.ExternalSubject != oid) record.SessionVersion = Guid.NewGuid().ToString("N");
+        record.ExternalSubject = oid; record.Tokens.Clear();
+        return true;
+    }
+
+    /// <summary>
+    /// Brings a person's connections in step with the host's templates: makes one the first time, replaces one whose template
+    /// changed, which ends its sign-in because its permissions may have, and drops one whose template has gone, with its tokens.
+    /// A profile an administrator saved under the same name stays theirs. Returns whether anything changed.
+    /// </summary>
+    internal static bool ApplyTemplates(Dictionary<string, ConnectionRecord> records, IReadOnlyDictionary<string, ConnectionProfile> templates, string owner)
+    {
+        var changed = false;
+        foreach (var (name, template) in templates)
+        {
+            var hash = TemplateHash(template);
+            if (records.TryGetValue(name, out var existing) && (existing.TemplateHash is null || existing.TemplateHash == hash))
+                continue;
+            var profile = JsonSerializer.Deserialize<ConnectionProfile>(Serialize(template), Json)!;
+            profile.Name = name;
+            profile.AllowedAgents = template.AllowedAgents.Select(handle => $"{owner}:{handle}").ToList();
+            records[name] = new() { Profile = profile, TemplateHash = hash };
+            changed = true;
+        }
+        foreach (var gone in records.Where(r => r.Value.TemplateHash is not null && !templates.ContainsKey(r.Key)).Select(r => r.Key).ToArray())
+        {
+            records.Remove(gone);
+            changed = true;
+        }
+        return changed;
+    }
+
+    private static string TemplateHash(ConnectionProfile template) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Serialize(template))));
+
+    /// <summary>What a template has to be, checked when the host starts so a bad one can't wait for someone's first use.</summary>
+    internal static void ValidateTemplate(string name, ConnectionProfile template, ConnectionsOptions options)
+    {
+        template.Name = name;
+        ValidateProfile(template, options);
+        if (template.Authentication is not (ConnectionAuthentication.AuthorizationCode or ConnectionAuthentication.OnBehalfOf))
+            throw new ConnectionException("invalid-configuration", $"Connection template '{name}' acts for one person each, so it must use AuthorizationCode or OnBehalfOf.");
+        if (template.AllowedAgents.Count == 0 || template.AllowedAgents.Any(a => string.IsNullOrWhiteSpace(a) || a.Contains(':')))
+            throw new ConnectionException("invalid-configuration", $"Connection template '{name}' names its allowed agents by bare handle: each person's own agent of that handle.");
     }
 
     internal static ConnectionHandoffPayload DecryptHandoff(ConnectionHandoffEnvelope envelope, PendingHandoff handoff)
@@ -217,7 +283,7 @@ internal sealed class ConnectionGrain(IUserScopedFabrCoreStorageProvider store, 
         if (p.Authentication is ConnectionAuthentication.AuthorizationCode or ConnectionAuthentication.AgentIdOnBehalfOf or ConnectionAuthentication.OnBehalfOf && owner != principal)
             throw new ConnectionException("access-denied", "Delegated connections cannot be shared across principals.");
     }
-    private void ValidateProfile(ConnectionProfile p)
+    internal static void ValidateProfile(ConnectionProfile p, ConnectionsOptions options)
     {
         if (p is null || string.IsNullOrWhiteSpace(p.Name) || !System.Text.RegularExpressions.Regex.IsMatch(p.Name, "^[a-zA-Z0-9_-]{1,100}$") || string.IsNullOrWhiteSpace(p.ClientId))
             throw new ConnectionException("invalid-configuration", "A connection name and client ID are required.");

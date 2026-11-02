@@ -44,7 +44,19 @@ by local protocol tests.
 - Bind each connection to its FabrCore owner principal and grant exact full agent
   handles separately. Agent aliases reference those bindings. Delegated credentials
   cannot cross principal ownership; application connections can explicitly grant
-  agents owned by other principals. Obtain actor identity from host context.
+  agents owned by other principals. Obtain actor identity from host context. An
+  alias with no binding means the agent's own principal's connection of that name.
+- `FabrCore:Connections:Templates:{name}` defines a delegated connection once per
+  host. Each person gets their own on first use, with `AllowedAgents` as bare
+  handles. A changed template ends their sign-in and a removed one deletes their
+  tokens, when their connections next load. Keep delegated tokens only on a host
+  with a database: without one the ACL isn't enforced.
+- Use two connections, on purpose, when an agent acts as someone both in chat and
+  in the background: an `OnBehalfOf` one fed each turn through
+  `IConnectionUserAssertions`, and an `AuthorizationCode` one the person connects.
+  `AssertionAudiences` and `AssertionIssuers` accept a bot's `api://botid-{appId}`.
+- `FabrCore:ConnectionCredentials:{reference}:ManagedIdentityClientId` proves the
+  app with a managed identity's token instead of a secret.
 - Keep tokens, authorization codes, assertions, and secret values out of model
   tools, agent arguments, blueprint documents, logs, and ordinary cloud commands.
   Profiles contain credential references resolved by the host. Diagnostic turns

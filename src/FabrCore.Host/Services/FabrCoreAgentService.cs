@@ -305,13 +305,12 @@ namespace FabrCore.Host.Services
         {
             if (string.IsNullOrWhiteSpace(message.Namespace))
             {
-                message.Channel = BuildAgentKey(userHandle, handle);
+                message.Channel = handle;
             }
 
-            var streamName = EventStreamSubscription.ToStreamName(message);
-            var stream = _clusterClient.GetStream<EventMessage>(streamName);
-            await stream.OnNextAsync(message);
-            _logger.LogDebug("Event published to stream {StreamName} for user {userHandle}", streamName, userHandle);
+            // Through the caller's principal, as messages go: publishing to the stream here would skip the ACL check.
+            await _clusterClient.GetGrain<IPrincipalGrain>(userHandle).SendEvent(message);
+            _logger.LogDebug("Event sent to {Channel} for user {userHandle}", message.Channel, userHandle);
         }
 
         // ── Agent Management (registration / lifecycle) ──

@@ -3,6 +3,8 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
+using Azure.Core;
+using Azure.Identity;
 using FabrCore.Connections;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Protocols;
@@ -17,15 +19,44 @@ public interface IConnectionCredentialProvider
 }
 
 /// <summary>References resolve only in server-side configuration (including vault providers).</summary>
-internal sealed class ConfigurationCredentialProvider(IConfiguration configuration) : IConnectionCredentialProvider
+internal sealed class ConfigurationCredentialProvider : IConnectionCredentialProvider
 {
-    public Task<Dictionary<string, string>> GetCredentialAsync(ConnectionProfile profile, string tokenEndpoint, CancellationToken cancellationToken)
+    private const string TokenExchangeScope = "api://AzureADTokenExchange/.default";
+    private const string AssertionType = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
+
+    private readonly IConfiguration configuration;
+    private readonly Func<string, CancellationToken, Task<string>> managedIdentityToken;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, ManagedIdentityCredential> identities = new();
+
+    public ConfigurationCredentialProvider(IConfiguration configuration)
+    {
+        this.configuration = configuration;
+        managedIdentityToken = async (clientId, ct) =>
+        {
+            // Kept per identity, because the credential caches its token.
+            var credential = identities.GetOrAdd(clientId, id => new ManagedIdentityCredential(ManagedIdentityId.FromUserAssignedClientId(id)));
+            return (await credential.GetTokenAsync(new TokenRequestContext([TokenExchangeScope]), ct)).Token;
+        };
+    }
+
+    internal ConfigurationCredentialProvider(IConfiguration configuration, Func<string, CancellationToken, Task<string>> managedIdentityToken)
+    {
+        this.configuration = configuration;
+        this.managedIdentityToken = managedIdentityToken;
+    }
+
+    public async Task<Dictionary<string, string>> GetCredentialAsync(ConnectionProfile profile, string tokenEndpoint, CancellationToken cancellationToken)
     {
         var reference = profile.CredentialReference;
-        if (string.IsNullOrWhiteSpace(reference)) return Task.FromResult(new Dictionary<string, string>());
+        if (string.IsNullOrWhiteSpace(reference)) return [];
         var section = configuration.GetSection("FabrCore:ConnectionCredentials:" + reference);
+        // A federated credential on the app registration trusts this identity, so there's no secret to keep.
+        if (section["ManagedIdentityClientId"] is { Length: > 0 } identity)
+            return new Dictionary<string, string> {
+                ["client_assertion_type"] = AssertionType,
+                ["client_assertion"] = await managedIdentityToken(identity, cancellationToken) };
         if (section["Secret"] is { Length: > 0 } secret)
-            return Task.FromResult(new Dictionary<string, string> { ["client_secret"] = secret });
+            return new Dictionary<string, string> { ["client_secret"] = secret };
         if (section["CertificatePath"] is { Length: > 0 } path)
         {
             using var certificate = X509CertificateLoader.LoadPkcs12FromFile(path, section["CertificatePassword"]);
@@ -33,9 +64,9 @@ internal sealed class ConfigurationCredentialProvider(IConfiguration configurati
             var token = new JwtSecurityToken(profile.ClientId, tokenEndpoint,
                 [new Claim("sub", profile.ClientId), new Claim("jti", Guid.NewGuid().ToString())], now, now.AddMinutes(5),
                 new X509SigningCredentials(certificate, SecurityAlgorithms.RsaSha256));
-            return Task.FromResult(new Dictionary<string, string> {
-                ["client_assertion_type"] = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
-                ["client_assertion"] = new JwtSecurityTokenHandler().WriteToken(token) });
+            return new Dictionary<string, string> {
+                ["client_assertion_type"] = AssertionType,
+                ["client_assertion"] = new JwtSecurityTokenHandler().WriteToken(token) };
         }
         throw new ConnectionException("credential-unavailable", "The configured credential reference cannot be resolved.");
     }
@@ -102,7 +133,14 @@ internal sealed class OAuthProvider(IConnectionCredentialProvider credentials, H
         };
     }
 
-    internal async Task<ClaimsPrincipal> Validate(ConnectionProfile p, string jwt, string audience, string? nonce, CancellationToken ct)
+    internal Task<ClaimsPrincipal> Validate(ConnectionProfile p, string jwt, string audience, string? nonce, CancellationToken ct)
+        => Validate(p, jwt, [audience], [], nonce, ct);
+
+    /// <summary>A person's token for this connection's app: its usual audience, or any the profile also accepts.</summary>
+    internal Task<ClaimsPrincipal> ValidateAssertion(ConnectionProfile p, string jwt, CancellationToken ct)
+        => Validate(p, jwt, [p.BlueprintAudience ?? p.ClientId, .. p.AssertionAudiences], p.AssertionIssuers, null, ct);
+
+    private async Task<ClaimsPrincipal> Validate(ConnectionProfile p, string jwt, IReadOnlyList<string> audiences, IReadOnlyList<string> extraIssuers, string? nonce, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(jwt) || jwt.Length > 64 * 1024)
             throw new ConnectionException("invalid-assertion", "A bounded, signed identity token is required.");
@@ -110,7 +148,7 @@ internal sealed class OAuthProvider(IConnectionCredentialProvider credentials, H
         var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
         var principal = handler.ValidateToken(jwt, new TokenValidationParameters {
             ConfigurationManager = managers[p.Authority.TrimEnd('/') + "/.well-known/openid-configuration"],
-            ValidIssuer = metadata.Issuer, ValidAudience = audience, IssuerSigningKeys = metadata.SigningKeys,
+            ValidIssuers = [metadata.Issuer, .. extraIssuers], ValidAudiences = audiences, IssuerSigningKeys = metadata.SigningKeys,
             ValidateIssuer = true, ValidateAudience = true, ValidateLifetime = true, RequireExpirationTime = true,
             RequireSignedTokens = true, ValidateIssuerSigningKey = true, ClockSkew = TimeSpan.FromSeconds(30),
             ValidAlgorithms = [SecurityAlgorithms.RsaSha256, SecurityAlgorithms.RsaSsaPssSha256, SecurityAlgorithms.EcdsaSha256]

@@ -123,8 +123,10 @@ public sealed class CopilotAppPackageBuilder
         };
 
         // Single sign-on needs webApplicationInfo pointing at the api://botid-{clientId}
-        // application id URI and the Bot Framework token domain.
-        if (_options.UserAuthorizationConfigured)
+        // application id URI and the Bot Framework token domain. Where agents have sign-in of
+        // their own, an agent without it mustn't claim it.
+        var perAgentSignIn = _options.Agents.Any(entry => !string.IsNullOrWhiteSpace(entry.SignInConnectionName));
+        if (perAgentSignIn ? agent.SignInConnectionName is not null : _options.UserAuthorizationConfigured)
         {
             root["webApplicationInfo"] = new JsonObject
             {

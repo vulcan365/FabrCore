@@ -25,6 +25,22 @@ public sealed class FabrCoreAgentServiceTrackingTests
         await Assert.ThrowsExactlyAsync<UnauthorizedAccessException>(() => service.SendAndReceiveMessageAsync("user1", "system:assistant", "hello"));
     }
     [TestMethod]
+    public async Task Events_GoThroughTheCallersPrincipal_SoItsAccessCheckApplies()
+    {
+        var principal = new FakePrincipalGrain("user1");
+        var service = CreateService(new Dictionary<string, FakePrincipalGrain> { ["user1"] = principal });
+
+        await service.SendEventAsync("user1", "assistant", new EventMessage { Channel = "bob:agent", Type = "ping" });
+        Assert.AreEqual("assistant", principal.Event!.Channel, "The route says which agent, not the body.");
+
+        await service.SendEventAsync("user1", "assistant", new EventMessage { Namespace = "topic", Channel = "shared", Type = "ping" });
+        Assert.AreEqual("shared", principal.Event!.Channel);
+
+        principal.Deny = true;
+        await Assert.ThrowsExactlyAsync<UnauthorizedAccessException>(() => service.SendEventAsync("user1", "bob:agent", new EventMessage { Type = "ping" }));
+    }
+
+    [TestMethod]
     public async Task ConfigureAgentAsync_WithBareHandle_CreatesThroughPrincipalGrainAndTracksAgent()
     {
         var principalGrain = new FakePrincipalGrain("user1");
@@ -283,7 +299,13 @@ public sealed class FabrCoreAgentServiceTrackingTests
             string deliveryId,
             PrincipalMessageDeliveryOutcome outcome) => throw new NotSupportedException();
 
-        public Task SendEvent(EventMessage request) => throw new NotSupportedException();
+        public Task SendEvent(EventMessage request)
+    {
+        Event = request;
+        return Deny ? throw new UnauthorizedAccessException("denied") : Task.CompletedTask;
+    }
+
+    public EventMessage? Event { get; private set; }
 
         public Task<AgentHealthStatus> CreateAgent(AgentConfiguration agentConfiguration)
         {

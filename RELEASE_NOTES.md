@@ -2,6 +2,36 @@
 
 These changes are on `develop` and are not in a published package yet.
 
+## An agent can act as the person who signed in, in Teams and Copilot
+
+- **Sign-in per agent.** `Microsoft365Copilot:Agents:{n}:SignInConnectionName` names the OAuth connection on that agent's Azure
+  Bot. The agent gets its own sign-in handler, and only it declares single sign-on in its app package. Handlers under
+  `UserAuthorization:Handlers` still work and are still shared by all agents.
+- **The person's token goes to Connections, not to the agent.** After sign-in, `ICopilotUserAssertionSink` hands the token to the
+  on-behalf-of connections that allow this agent, so it never goes into a message's args. A connection keeps a token that's more
+  than five minutes from expiring, since replacing one clears the tokens made from it. Replace the sink to handle tokens yourself.
+- **Connection templates.** `FabrCore:Connections:Templates:{name}` defines a connection once per host. Each person gets their
+  own on first use, with `AllowedAgents` given by bare handle, meaning their own agent of that handle. Changing a template ends
+  each person's sign-in the next time their connections load, and removing one deletes their tokens at that point. A template only
+  allows `AuthorizationCode` or `OnBehalfOf`, and a host with an invalid one doesn't start.
+- **Several audiences and issuers.** `ConnectionProfile.AssertionAudiences` and `AssertionIssuers` let a user assertion carry a
+  bot's `api://botid-{appId}` audience, or Entra's v1 issuer.
+- **No secret.** `FabrCore:ConnectionCredentials:{reference}:ManagedIdentityClientId` signs a connection in with a managed
+  identity's token, through a federated credential on the app registration.
+- **Undeclared connections.** `Connections.GetAccessTokenAsync("name", ...)` in an agent with no binding for that name now means
+  its own principal's connection of that name, so agents a channel created can use one. The connection's `AllowedAgents` still
+  decides, so a connection that doesn't allow the agent refuses as before. An agent asking for a name its principal doesn't have
+  now gets `not-found` rather than `access-denied`.
+
+## Events can't reach another principal's agent without access
+
+`IFabrCoreAgentService.SendEventAsync` used to publish straight to the stream, skipping the ACL. It now goes through the caller's
+principal, as messages do. An event that named the agent event stream outright as its `Namespace` also skipped the check, on all
+paths: it's now treated as the default stream. Other namespaces are shared topics and stay unchecked: they reach only the agents
+subscribed to them.
+
+A host with no database still doesn't enforce the ACL at all, so **don't keep delegated tokens on one**.
+
 ## BREAKING: the Microsoft 365 Copilot add-on exposes a list of agents
 
 `FabrCore.Services.Microsoft365Copilot` used to expose one agent. It now exposes zero or more, each
