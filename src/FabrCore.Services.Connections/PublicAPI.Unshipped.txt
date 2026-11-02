@@ -19,6 +19,8 @@ FabrCore.Services.Connections.ConnectionsOptions.HandoffAuthority.get -> string?
 FabrCore.Services.Connections.ConnectionsOptions.HandoffAuthority.set -> void
 FabrCore.Services.Connections.ConnectionsOptions.ProtectedKeyRingConfigured.get -> bool
 FabrCore.Services.Connections.ConnectionsOptions.ProtectedKeyRingConfigured.set -> void
+FabrCore.Services.Connections.ConnectionsOptions.ReconnectUrl.get -> string?
+FabrCore.Services.Connections.ConnectionsOptions.ReconnectUrl.set -> void
 FabrCore.Services.Connections.IConnectionCredentialProvider
 FabrCore.Services.Connections.IConnectionCredentialProvider.GetCredentialAsync(FabrCore.Connections.ConnectionProfile! profile, string! tokenEndpoint, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.Dictionary<string!, string!>!>!
 FabrCore.Services.Connections.IConnectionHandoffPrincipalValidator

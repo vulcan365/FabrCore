@@ -44,6 +44,8 @@
     <PackageReference Include="Microsoft.Orleans.Reminders.AdoNet" Version="10.4.0" />
     <PackageReference Include="Microsoft.Orleans.Streaming.AdoNet" Version="10.3.1-alpha.1" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.1" />
+    <!-- SqlClient 7.1.1 brings Pkcs 9.0.18, which has CVE-2026-84008. -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="9.0.22" />
     <EmbeddedResource Include="SqlServer/SqlScripts/*.sql" />
     <InternalsVisibleTo Include="FabrCore.Services.Memory.Tests" />
     <InternalsVisibleTo Include="FabrCore.Services.GraphRag.Tests" />

@@ -32,6 +32,11 @@ public sealed class ConnectionsOptions
     /// meaning that person's own agent of that handle.
     /// </summary>
     public Dictionary<string, ConnectionProfile> Templates { get; set; } = new(StringComparer.Ordinal);
+    /// <summary>
+    /// Where a person connects their accounts again, put in what an agent tells them when a connection that works without them,
+    /// one they connected with <see cref="ConnectionAuthentication.AuthorizationCode"/>, lapses.
+    /// </summary>
+    public string? ReconnectUrl { get; set; }
 }
 
 public interface IConnectionPrincipalResolver
@@ -106,7 +111,7 @@ public static class ConnectionsExtensions
         var group = endpoints.MapGroup("/fabrcoreapi/connections/v1").RequireAuthorization();
         group.MapGet("", (HttpContext c, ConnectionService s, IConnectionPrincipalResolver r) => Run(c, r, p => s.Execute(p, "list", new(""))));
         group.MapPost("/begin", (BeginConnectionRequest b, HttpContext c, ConnectionService s, IConnectionPrincipalResolver r) =>
-            Run(c, r, p => s.Execute(p, "begin", new(b.Connection, RedirectUri: b.RedirectUri))));
+            Run(c, r, p => s.Execute(p, "begin", new(b.Connection, RedirectUri: b.RedirectUri, LoginHint: LoginHint(c.User)))));
         group.MapPost("/complete", (CompleteConnectionRequest b, HttpContext c, ConnectionService s, IConnectionPrincipalResolver r) =>
             Run(c, r, p => s.Execute(p, "complete", new(b.Connection, State: b.State, Code: b.ProviderError is null ? b.AuthorizationCode : null))));
         group.MapPost("/assertion", (ConnectionAssertionRequest b, HttpContext c, ConnectionService s, IConnectionPrincipalResolver r) =>
@@ -144,6 +149,11 @@ public static class ConnectionsExtensions
             Result(() => s.Execute(principal, "handoff-complete", new(name, Handoff: envelope))));
         return endpoints;
     }
+    /// <summary>The account the caller signed in with, so the provider offers it first. It's only a hint: completing checks the account.</summary>
+    internal static string? LoginHint(ClaimsPrincipal user)
+        => user.FindFirst("login_hint")?.Value ?? user.FindFirst("preferred_username")?.Value ?? user.FindFirst("upn")?.Value
+           ?? user.FindFirst(ClaimTypes.Upn)?.Value;
+
     private static async Task<IResult> Run(HttpContext context, IConnectionPrincipalResolver resolver, Func<string, Task<string>> action)
     {
         // Cookie clients must send same-origin requests; bearer clients have no ambient credential.
@@ -186,7 +196,10 @@ internal sealed class ConnectionService(IClusterClient cluster) : IConnectionSer
         var result = await cluster.GetGrain<IConnectionGrain>(owner).Execute(operation, JsonSerializer.Serialize(request, JsonSerializerOptions.Web));
         using var json = JsonDocument.Parse(result);
         if (json.RootElement.ValueKind == JsonValueKind.Object && json.RootElement.TryGetProperty("connectionError", out var error))
-            throw new ConnectionException(error.GetString()!, json.RootElement.GetProperty("message").GetString()!);
+            throw new ConnectionException(error.GetString()!, json.RootElement.GetProperty("message").GetString()!)
+            {
+                Notice = json.RootElement.TryGetProperty("notice", out var notice) && notice.ValueKind == JsonValueKind.String ? notice.GetString() : null
+            };
         return result;
     }
     public async Task<ConnectionAccessToken> GetAccessTokenAsync(string principal, string agent, ConnectionBinding binding, string resource, CancellationToken cancellationToken = default)
@@ -195,15 +208,20 @@ internal sealed class ConnectionService(IClusterClient cluster) : IConnectionSer
         var token = JsonSerializer.Deserialize<TokenMaterial>(json, JsonSerializerOptions.Web)!;
         return new(token.AccessToken, token.ExpiresAt);
     }
-    public async Task<HttpClient> GetHttpClientAsync(string principal, string agent, ConnectionBinding binding, string resource, CancellationToken cancellationToken = default)
+    public Task<HttpClient> GetHttpClientAsync(string principal, string agent, ConnectionBinding binding, string resource, CancellationToken cancellationToken = default)
+        => GetHttpClientAsync(principal, agent, binding, resource, _ => Task.CompletedTask, cancellationToken);
+
+    public async Task<HttpClient> GetHttpClientAsync(string principal, string agent, ConnectionBinding binding, string resource, Func<string, Task> notify, CancellationToken cancellationToken = default)
     {
         var json = await Execute(binding.OwnerPrincipal, "resource", new(binding.Name, principal, agent, resource)).WaitAsync(cancellationToken);
         var config = JsonSerializer.Deserialize<AuthorizedResource>(json, JsonSerializerOptions.Web)!;
         var baseUri = new Uri(config.Resource.BaseUrl);
         return new HttpClient(new ConnectionHandler(baseUri, async ct => {
-            var material = JsonSerializer.Deserialize<TokenMaterial>(await Execute(binding.OwnerPrincipal, "token",
-                new(binding.Name, principal, agent, resource, SessionVersion: config.SessionVersion)).WaitAsync(ct), JsonSerializerOptions.Web)!;
-            return new ConnectionAccessToken(material.AccessToken, material.ExpiresAt);
+            string material;
+            try { material = await Execute(binding.OwnerPrincipal, "token", new(binding.Name, principal, agent, resource, SessionVersion: config.SessionVersion)).WaitAsync(ct); }
+            catch (ConnectionException e) when (e.Notice is not null) { await notify(e.Notice); throw; }
+            var token = JsonSerializer.Deserialize<TokenMaterial>(material, JsonSerializerOptions.Web)!;
+            return new ConnectionAccessToken(token.AccessToken, token.ExpiresAt);
         })) { BaseAddress = baseUri };
     }
 }

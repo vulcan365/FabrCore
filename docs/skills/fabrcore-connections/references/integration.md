@@ -219,6 +219,14 @@ The connection APIs return status, never access or refresh tokens. Provider
 interaction/consent failures return `interaction-required`. Refresh is serialized
 by a principal-owned Orleans grain, including refresh-token rotation.
 
+With the `microsoft` provider, a person's principal (`entra-{tid}-{oid}`) can only
+link their own account on complete, and begin sends `login_hint` from the
+caller's token. When the provider refuses an authorization code connection's
+refresh token, the connection drops it and lists as `interaction-required` until
+the person connects again. The first failure's `ConnectionException.Notice`, with
+`FabrCore:Connections:ReconnectUrl` if set, goes to the person through the
+agent's `SendToUserAsync`.
+
 ## Agent SDK usage and MCP
 
 Inside a `FabrCoreAgentProxy` implementation:

@@ -24,6 +24,8 @@ internal sealed class ConnectionRecord
     /// <summary>The host's template this came from, while it's unchanged. Null for a profile an administrator saved.</summary>
     public string? TemplateHash { get; set; }
     public TokenMaterial? Grant { get; set; }
+    /// <summary>When the provider refused this connection's refresh token, until the person connects it again.</summary>
+    public DateTimeOffset? LapsedAt { get; set; }
     public Dictionary<string, TokenMaterial> Tokens { get; set; } = [];
     public Dictionary<string, PendingConnection> Pending { get; set; } = [];
     public Dictionary<string, PendingHandoff> Handoffs { get; set; } = [];
@@ -32,7 +34,7 @@ internal sealed record PendingHandoff(string PrivateKey, DateTimeOffset ExpiresA
 internal sealed record PendingConnection(string RedirectUri, string Verifier, string Nonce, DateTimeOffset ExpiresAt);
 internal sealed record GrainRequest(string Name, string? Principal = null, string? Agent = null, string? Resource = null,
     string? Revision = null, ConnectionProfile? Profile = null, string? RedirectUri = null, string? State = null,
-    string? Code = null, string? Assertion = null, ConnectionHandoffEnvelope? Handoff = null, string? SessionVersion = null)
+    string? Code = null, string? Assertion = null, ConnectionHandoffEnvelope? Handoff = null, string? SessionVersion = null, string? LoginHint = null)
 {
     public override string ToString() => "[protected connection operation]";
 }
@@ -51,7 +53,7 @@ internal sealed class ConnectionGrain(IUserScopedFabrCoreStorageProvider store, 
     public async Task<string> Execute(string operation, string body)
     {
         try { return await ExecuteCore(operation, body); }
-        catch (ConnectionException e) { return Serialize(new { connectionError = e.Code, message = e.Message }); }
+        catch (ConnectionException e) { return Serialize(new { connectionError = e.Code, message = e.Message, notice = e.Notice }); }
         catch (Microsoft.IdentityModel.Tokens.SecurityTokenException) { return Serialize(new { connectionError = "invalid-assertion", message = "Identity validation failed." }); }
         catch (JsonException) { return Serialize(new { connectionError = "invalid-payload", message = "The payload could not be read." }); }
         catch (HttpRequestException) { return Serialize(new { connectionError = "provider-unavailable", message = "The identity provider could not be reached." }); }
@@ -96,7 +98,7 @@ internal sealed class ConnectionGrain(IUserScopedFabrCoreStorageProvider store, 
         if (operation == "profile") return Serialize(new { record.Profile, record.Revision });
         if (operation == "disconnect")
         {
-            record.Grant = null; record.ExternalSubject = null; record.Tokens.Clear(); record.Pending.Clear(); record.Handoffs.Clear();
+            record.Grant = null; record.LapsedAt = null; record.ExternalSubject = null; record.Tokens.Clear(); record.Pending.Clear(); record.Handoffs.Clear();
             record.SessionVersion = Guid.NewGuid().ToString("N");
             await Persist(); return Serialize(Status(record));
         }
@@ -146,6 +148,7 @@ internal sealed class ConnectionGrain(IUserScopedFabrCoreStorageProvider store, 
                 ["code_challenge"] = WebEncoders.Base64UrlEncode(SHA256.HashData(Encoding.ASCII.GetBytes(verifier))), ["code_challenge_method"] = "S256"
             };
             if (p.Provider == "google") { query["access_type"] = "offline"; query["prompt"] = "consent"; }
+            else if (!string.IsNullOrWhiteSpace(request.LoginHint)) query["login_hint"] = request.LoginHint;
             await Persist();
             return Serialize(new ConnectionTransaction(state, QueryHelpers.AddQueryString(metadata.AuthorizationEndpoint, query), expires));
         }
@@ -161,9 +164,9 @@ internal sealed class ConnectionGrain(IUserScopedFabrCoreStorageProvider store, 
             }, CancellationToken.None);
             if (token.IdToken is null) throw new ConnectionException("invalid-assertion", "OpenID identity confirmation is required.");
             var subject = await oauth.Validate(p, token.IdToken, p.ClientId, pending.Nonce, CancellationToken.None);
-            record.ExternalSubject = subject.FindFirst("sub")?.Value ?? throw new ConnectionException("invalid-assertion", "Missing external subject.");
+            record.ExternalSubject = SignedInAccount(p, subject, Owner);
             token.IdToken = null;
-            record.Grant = token; record.Tokens.Clear();
+            record.Grant = token; record.LapsedAt = null; record.Tokens.Clear();
             record.SessionVersion = Guid.NewGuid().ToString("N");
             // Initial access token is only cached when the requested scopes unambiguously identify one resource.
             if (p.Resources.Count == 1 && p.Resources.Values.Single().Scopes.All(p.SignInScopes.Contains)) record.Tokens[p.Resources.Keys.Single()] = token;
@@ -189,7 +192,16 @@ internal sealed class ConnectionGrain(IUserScopedFabrCoreStorageProvider store, 
                 throw new ConnectionException("connection-changed", "The connection changed. Start a new request using its current binding.");
             if (operation == "resource") return Serialize(new AuthorizedResource(resource, record.SessionVersion));
             if (record.Tokens.TryGetValue(request.Resource!, out var cached) && cached.ExpiresAt > DateTimeOffset.UtcNow.AddMinutes(1)) return Serialize(cached);
-            var token = await oauth.Acquire(p, resource, record.Grant, CancellationToken.None, cached);
+            TokenMaterial token;
+            try { token = await oauth.Acquire(p, resource, record.Grant, CancellationToken.None, cached); }
+            catch (ConnectionException e) when (e.Code == "interaction-required" && p.Authentication == ConnectionAuthentication.AuthorizationCode && record.Grant is not null)
+            {
+                // The provider won't refresh it any more. It's no use kept, and the person hears once, from the agent that found out.
+                record.Grant = null; record.Tokens.Clear(); record.LapsedAt = DateTimeOffset.UtcNow;
+                record.SessionVersion = Guid.NewGuid().ToString("N");
+                await Persist();
+                throw new ConnectionException(e.Code, e.Message) { Notice = LapseNotice(p.Name, options.ReconnectUrl) };
+            }
             token.RefreshToken ??= cached?.RefreshToken;
             record.Tokens[request.Resource!] = token;
             if (p.Authentication == ConnectionAuthentication.AuthorizationCode && record.Grant is not null && token.RefreshToken is not null)
@@ -312,9 +324,28 @@ internal sealed class ConnectionGrain(IUserScopedFabrCoreStorageProvider store, 
                 throw new ConnectionException("invalid-configuration", "Resource URLs must end in / and declare scopes.");
         }
     }
+    /// <summary>
+    /// Who signed in to finish connecting. With Microsoft, an Entra principal can only connect their own account: someone signed in
+    /// as one person mustn't give their agents another's mail. Recorded as the object id, as a person's own token records it.
+    /// </summary>
+    internal static string SignedInAccount(ConnectionProfile p, System.Security.Claims.ClaimsPrincipal signedIn, string owner)
+    {
+        if (p.Provider != "microsoft")
+            return signedIn.FindFirst("sub")?.Value ?? throw new ConnectionException("invalid-assertion", "Missing external subject.");
+        var tid = signedIn.FindFirst("tid")?.Value; var oid = signedIn.FindFirst("oid")?.Value;
+        if (string.IsNullOrEmpty(oid)) throw new ConnectionException("invalid-assertion", "Missing external subject.");
+        if (owner.StartsWith("entra-", StringComparison.Ordinal) && EntraPrincipalHandle.Create(tid, oid) != owner)
+            throw new ConnectionException("access-denied", "Sign in with the same account you're connecting for. Another account was used, so nothing was connected.");
+        return oid;
+    }
+
+    internal static string LapseNotice(string connection, string? reconnectUrl)
+        => $"I can't act for you through '{connection}' any more: your sign-in for it has lapsed. "
+           + (reconnectUrl is null ? "Connect it again to let me carry on." : $"Connect it again at {reconnectUrl} to let me carry on.");
+
     private static ConnectionStatus Status(ConnectionRecord r) => new(r.Profile.Name, r.Profile.Enabled,
         !r.Profile.Enabled ? "disabled" : r.Profile.Authentication is ConnectionAuthentication.ClientCredentials or ConnectionAuthentication.AgentIdApplication
-        ? "configured" : r.Grant is null ? "connection-required" : r.Grant.RefreshToken is null && r.Grant.ExpiresAt <= DateTimeOffset.UtcNow
+        ? "configured" : r.LapsedAt is not null ? "interaction-required" : r.Grant is null ? "connection-required" : r.Grant.RefreshToken is null && r.Grant.ExpiresAt <= DateTimeOffset.UtcNow
             && !r.Tokens.Values.Any(t => t.RefreshToken is not null || t.ExpiresAt > DateTimeOffset.UtcNow) ? "interaction-required" : "connected", r.Revision, r.ExternalSubject);
     private async Task Persist()
     {
