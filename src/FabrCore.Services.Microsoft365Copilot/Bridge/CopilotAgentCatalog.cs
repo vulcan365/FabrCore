@@ -42,6 +42,9 @@ public sealed class CopilotAgent
     /// <summary>App-manifest values for this agent, top-level defaults already applied.</summary>
     public CopilotManifestOptions Manifest { get; internal init; } = new();
 
+    /// <summary>The Azure Bot OAuth connection that signs people in to this agent, or null when it has no sign-in of its own.</summary>
+    public string? SignInConnectionName { get; internal init; }
+
     /// <summary>Name of the Agents SDK connection the host authenticates this bot with.</summary>
     public string ConnectionName { get; internal init; } = Microsoft365CopilotDefaults.ServiceConnectionName;
 
@@ -206,6 +209,7 @@ public sealed partial class CopilotAgentCatalog
                 Models = string.IsNullOrWhiteSpace(entry.Models) ? "default" : entry.Models.Trim(),
                 // An explicit empty string turns the greeting off for this agent.
                 WelcomeMessage = entry.WelcomeMessage ?? options.WelcomeMessage,
+                SignInConnectionName = string.IsNullOrWhiteSpace(entry.SignInConnectionName) ? null : entry.SignInConnectionName.Trim(),
                 Manifest = manifest,
                 // The first agent keeps the historical connection name, so user-authorization
                 // handlers written against "ServiceConnection" keep working on single-agent hosts.

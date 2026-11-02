@@ -37,6 +37,7 @@ public class FabrCoreCopilotAgent : AgentApplication
     private readonly Microsoft365CopilotOptions _copilotOptions;
     private readonly ILogger<FabrCoreCopilotAgent> _logger;
     private readonly ICopilotConversationContextWriter? _conversationContextWriter;
+    private readonly ICopilotUserAssertionSink? _userAssertionSink;
 
     public FabrCoreCopilotAgent(
         AgentApplicationOptions options,
@@ -47,7 +48,8 @@ public class FabrCoreCopilotAgent : AgentApplication
         IGrainFactory grainFactory,
         IOptions<Microsoft365CopilotOptions> copilotOptions,
         ILogger<FabrCoreCopilotAgent> logger,
-        ICopilotConversationContextWriter? conversationContextWriter = null)
+        ICopilotConversationContextWriter? conversationContextWriter = null,
+        ICopilotUserAssertionSink? userAssertionSink = null)
         : base(options)
     {
         _agentService = agentService;
@@ -58,8 +60,21 @@ public class FabrCoreCopilotAgent : AgentApplication
         _copilotOptions = copilotOptions.Value;
         _logger = logger;
         _conversationContextWriter = conversationContextWriter;
+        _userAssertionSink = userAssertionSink;
 
         OnConversationUpdate(ConversationUpdateEvents.MembersAdded, WelcomeAsync);
+
+        // An agent with its own sign-in gets a route that signs the person in with its handler before the turn goes on.
+        foreach (var signingIn in catalog.Agents.Where(agent => agent.SignInConnectionName is not null))
+        {
+            OnActivity(
+                (context, _) => Task.FromResult(
+                    context.Activity.Type == ActivityTypes.Message && catalog.Resolve(context.Identity) == signingIn),
+                OnMessageActivityAsync,
+                rank: RouteRank.Last,
+                autoSignInHandlers: [signingIn.Name]);
+        }
+
         OnActivity(ActivityTypes.Message, OnMessageActivityAsync, rank: RouteRank.Last);
         OnTurnError(HandleTurnErrorAsync);
     }
@@ -127,7 +142,7 @@ public class FabrCoreCopilotAgent : AgentApplication
             await StopTypingTimer(turnContext);
         }
 
-        var userToken = await TryGetUserTokenAsync(turnContext, cancellationToken);
+        var userToken = await TryGetUserTokenAsync(turnContext, agent, cancellationToken);
 
         var principalHandle = await _principalResolver.ResolvePrincipalHandleAsync(turnContext, userToken, cancellationToken);
         if (principalHandle is null)
@@ -136,6 +151,21 @@ public class FabrCoreCopilotAgent : AgentApplication
                 MessageFactory.Text("I couldn't verify your identity, so I can't process this request."),
                 cancellationToken);
             return;
+        }
+
+        if (userToken is not null && _userAssertionSink is not null)
+        {
+            try
+            {
+                await _userAssertionSink.SubmitAsync(agent, principalHandle, userToken, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // The agent can still answer. Anything that needs the person's access says so when it asks for it.
+                _logger.LogWarning(
+                    "Could not hand the signed-in token of principal {Principal} to agent {Agent}'s connections: {Error}",
+                    principalHandle, agent.Name, ex.GetType().Name);
+            }
         }
 
         string? deliveryEndpointId = null;
@@ -364,7 +394,7 @@ public class FabrCoreCopilotAgent : AgentApplication
         }
     }
 
-    private async Task<string?> TryGetUserTokenAsync(ITurnContext turnContext, CancellationToken cancellationToken)
+    private async Task<string?> TryGetUserTokenAsync(ITurnContext turnContext, CopilotAgent agent, CancellationToken cancellationToken)
     {
         if (!_copilotOptions.UserAuthorizationConfigured || Options.UserAuthorization is null)
         {
@@ -373,7 +403,9 @@ public class FabrCoreCopilotAgent : AgentApplication
 
         try
         {
-            return await UserAuthorization.GetTurnTokenAsync(turnContext, cancellationToken: cancellationToken);
+            return agent.SignInConnectionName is null
+                ? await UserAuthorization.GetTurnTokenAsync(turnContext, cancellationToken: cancellationToken)
+                : await UserAuthorization.GetTurnTokenAsync(turnContext, agent.Name, cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {

@@ -27,6 +27,25 @@ public sealed class OAuthProviderTests
         await Assert.ThrowsExactlyAsync<SecurityTokenInvalidAudienceException>(() => provider.Validate(profile, encoded, "wrong", "nonce", default));
     }
     [TestMethod]
+    public async Task AnAssertionMayHaveAnAudienceOrIssuerTheProfileAlsoAccepts()
+    {
+        using var rsa = RSA.Create(2048);
+        var wire = new IdentityProvider { SigningParameters = rsa.ExportParameters(false) }; using var http = new HttpClient(wire);
+        var provider = new OAuthProvider(new CredentialProvider(), http);
+        string Token(string issuer, string audience) => new JwtSecurityTokenHandler().WriteToken(new JwtSecurityToken(issuer, audience, [new Claim("sub", "user")],
+            DateTime.UtcNow.AddMinutes(-1), DateTime.UtcNow.AddMinutes(5), new SigningCredentials(new RsaSecurityKey(rsa) { KeyId = "key" }, SecurityAlgorithms.RsaSha256)));
+        var profile = Profile(ConnectionAuthentication.OnBehalfOf);
+        profile.AssertionAudiences = ["api://botid-parent"];
+        profile.AssertionIssuers = ["https://sts.example/tenant/"];
+
+        Assert.AreEqual("user", (await provider.ValidateAssertion(profile, Token("https://identity.example", "parent"), default)).FindFirst("sub")?.Value);
+        Assert.AreEqual("user", (await provider.ValidateAssertion(profile, Token("https://identity.example", "api://botid-parent"), default)).FindFirst("sub")?.Value);
+        Assert.AreEqual("user", (await provider.ValidateAssertion(profile, Token("https://sts.example/tenant/", "parent"), default)).FindFirst("sub")?.Value);
+        await Assert.ThrowsExactlyAsync<SecurityTokenInvalidAudienceException>(() => provider.ValidateAssertion(profile, Token("https://identity.example", "api://botid-other"), default));
+        await Assert.ThrowsExactlyAsync<SecurityTokenInvalidIssuerException>(() => provider.ValidateAssertion(profile, Token("https://other.example", "parent"), default));
+        await Assert.ThrowsExactlyAsync<SecurityTokenInvalidAudienceException>(() => provider.Validate(profile, Token("https://identity.example", "api://botid-parent"), "parent", null, default));
+    }
+    [TestMethod]
     public async Task ApplicationFlowRequestsConfiguredResourceWithoutUserGrant()
     {
         var wire = new IdentityProvider(); using var http = new HttpClient(wire);

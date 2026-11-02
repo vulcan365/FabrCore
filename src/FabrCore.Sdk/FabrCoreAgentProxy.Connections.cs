@@ -19,9 +19,11 @@ public abstract partial class FabrCoreAgentProxy
                 ?? throw new ConnectionException("feature-disabled", "Authenticated connections are not enabled.");
             var bindings = proxy.config.Args.TryGetValue("connections", out var json)
                 ? JsonSerializer.Deserialize<Dictionary<string, ConnectionBinding>>(json, JsonSerializerOptions.Web) : null;
-            if (bindings is null || !bindings.TryGetValue(name, out var binding))
-                throw new ConnectionException("access-denied", "The agent does not declare this connection.");
-            return (service, binding);
+            // Undeclared means the agent's own principal's connection of that name, so an agent a channel created, or one created
+            // before the connection existed, can use it. The connection's own AllowedAgents still decides.
+            return (service, bindings is not null && bindings.TryGetValue(name, out var binding)
+                ? binding
+                : new ConnectionBinding(proxy.fabrcoreAgentHost.GetUserHandle(), name));
         }
         public Task<string> GetSessionVersionAsync(string connection, CancellationToken cancellationToken = default)
         {

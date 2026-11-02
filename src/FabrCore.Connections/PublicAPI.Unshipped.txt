@@ -247,3 +247,9 @@ static FabrCore.Connections.ConnectionStatus.operator !=(FabrCore.Connections.Co
 static FabrCore.Connections.ConnectionStatus.operator ==(FabrCore.Connections.ConnectionStatus? left, FabrCore.Connections.ConnectionStatus? right) -> bool
 static FabrCore.Connections.ConnectionTransaction.operator !=(FabrCore.Connections.ConnectionTransaction? left, FabrCore.Connections.ConnectionTransaction? right) -> bool
 static FabrCore.Connections.ConnectionTransaction.operator ==(FabrCore.Connections.ConnectionTransaction? left, FabrCore.Connections.ConnectionTransaction? right) -> bool
+FabrCore.Connections.ConnectionProfile.AssertionAudiences.get -> System.Collections.Generic.List<string!>!
+FabrCore.Connections.ConnectionProfile.AssertionAudiences.set -> void
+FabrCore.Connections.ConnectionProfile.AssertionIssuers.get -> System.Collections.Generic.List<string!>!
+FabrCore.Connections.ConnectionProfile.AssertionIssuers.set -> void
+FabrCore.Connections.IConnectionUserAssertions
+FabrCore.Connections.IConnectionUserAssertions.SubmitAsync(string! principal, string! agent, string! assertion, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!

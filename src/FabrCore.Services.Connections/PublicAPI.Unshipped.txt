@@ -29,3 +29,5 @@ static FabrCore.Services.Connections.ConnectionsExtensions.AddFabrCoreConnection
 static FabrCore.Services.Connections.ConnectionsExtensions.MapFabrCoreConnections(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints) -> Microsoft.AspNetCore.Routing.IEndpointRouteBuilder!
 const FabrCore.Services.Connections.ConnectionsOptions.SectionName = "FabrCore:Connections" -> string!
 static FabrCore.Services.Connections.ConnectionsExtensions.AddFabrCoreConnections(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, Microsoft.Extensions.Configuration.IConfiguration! configuration, System.Action<FabrCore.Services.Connections.ConnectionsOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+FabrCore.Services.Connections.ConnectionsOptions.Templates.get -> System.Collections.Generic.Dictionary<string!, FabrCore.Connections.ConnectionProfile!>!
+FabrCore.Services.Connections.ConnectionsOptions.Templates.set -> void

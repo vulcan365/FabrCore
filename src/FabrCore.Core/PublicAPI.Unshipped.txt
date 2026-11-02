@@ -483,3 +483,4 @@ FabrCore.Core.CloudServer.Microsoft365IntegrationAgent.MessagesEndpoint.get -> s
 FabrCore.Core.CloudServer.Microsoft365IntegrationAgent.Name.get -> string!
 const FabrCore.Core.CloudServer.IntegrationAdministration.Microsoft365ApiVersion = "2" -> string!
 FabrCore.Core.CloudServer.Microsoft365IntegrationAgent.AgentHandle.get -> string!
+static FabrCore.Core.EventStreamSubscription.TargetsAgentEventStream(FabrCore.Core.EventMessage! message) -> bool

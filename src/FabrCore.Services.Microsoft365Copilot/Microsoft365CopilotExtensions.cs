@@ -59,7 +59,8 @@ public static class Microsoft365CopilotExtensions
         var options = section.Get<Microsoft365CopilotOptions>() ?? new Microsoft365CopilotOptions();
         configure?.Invoke(options);
         options.UserAuthorizationConfigured = section.GetSection("UserAuthorization:Handlers").Exists()
-            || builder.Configuration.GetSection("AgentApplication:UserAuthorization:Handlers").Exists();
+            || builder.Configuration.GetSection("AgentApplication:UserAuthorization:Handlers").Exists()
+            || options.Agents.Any(agent => !string.IsNullOrWhiteSpace(agent.SignInConnectionName));
 
         string? disabledReason = null;
         if (!configured)
@@ -115,6 +116,7 @@ public static class Microsoft365CopilotExtensions
         builder.Services.TryAddSingleton<ICopilotPrincipalResolver, DefaultCopilotPrincipalResolver>();
         builder.Services.TryAddSingleton<ICopilotAgentProvisioner, CopilotAgentProvisioner>();
         builder.Services.TryAddSingleton<ICopilotConversationContextWriter, CopilotConversationContextWriter>();
+        builder.Services.TryAddSingleton<ICopilotUserAssertionSink, ConnectionsCopilotUserAssertionSink>();
         builder.Services.AddSingleton<CopilotAppPackageBuilder>();
 
         if (options.Proactive.Enabled)
@@ -224,7 +226,7 @@ public static class Microsoft365CopilotExtensions
                 agent.Name, agent.Route, agent.ClientId ?? "(none)", agent.AgentType, agent.Handle);
         }
 
-        if (options.UserAuthorizationConfigured && catalog.Agents.Count > 1)
+        if (options.UserAuthorizationConfigured && catalog.Agents.Count > 1 && catalog.Agents.All(agent => agent.SignInConnectionName is null))
         {
             logger.LogWarning(
                 "Microsoft 365 Copilot user authorization is configured once and shared by all {Count} agents. " +

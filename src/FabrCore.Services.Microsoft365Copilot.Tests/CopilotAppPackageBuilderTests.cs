@@ -29,6 +29,24 @@ public sealed class CopilotAppPackageBuilderTests
     }
 
     [TestMethod]
+    public void OnlyAnAgentWithItsOwnSignIn_DeclaresSingleSignOn()
+    {
+        var options = CopilotTestAgents.Single(o => o.Manifest.PublicHostName = "agents.contoso.com");
+        options.Agents[0].SignInConnectionName = "assistant-sso";
+        options.Agents.Add(CopilotTestAgents.Entry("sales", CopilotTestAgents.SecondClientId));
+        options.UserAuthorizationConfigured = true;
+        var catalog = CopilotTestAgents.Catalog(options);
+        var builder = new CopilotAppPackageBuilder(Options.Create(options), catalog);
+
+        var signedIn = JsonDocument.Parse(builder.BuildManifestJson(catalog.Agents[0])).RootElement;
+        Assert.AreEqual($"api://botid-{CopilotTestAgents.ClientId}", signedIn.GetProperty("webApplicationInfo").GetProperty("resource").GetString());
+        Assert.AreEqual(CopilotTestAgents.ClientId, signedIn.GetProperty("webApplicationInfo").GetProperty("id").GetString());
+
+        var other = JsonDocument.Parse(builder.BuildManifestJson(catalog.Agents[1])).RootElement;
+        Assert.IsFalse(other.TryGetProperty("webApplicationInfo", out _));
+    }
+
+    [TestMethod]
     public void Manifest_DeclaresCustomEngineAgent_BoundToBot()
     {
         var manifest = JsonDocument.Parse(CreateBuilder().ManifestJson()).RootElement;

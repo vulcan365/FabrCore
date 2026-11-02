@@ -17,6 +17,10 @@ public sealed class ConnectionProfile
     public string? CredentialReference { get; set; }
     public string? AgentIdentityClientId { get; set; }
     public string? BlueprintAudience { get; set; }
+    /// <summary>Token audiences a user assertion may also have, such as a bot's <c>api://botid-{appId}</c>.</summary>
+    public List<string> AssertionAudiences { get; set; } = [];
+    /// <summary>Token issuers a user assertion may also have, such as Entra's v1 issuer, beside the authority's own.</summary>
+    public List<string> AssertionIssuers { get; set; } = [];
     public List<string> SignInScopes { get; set; } = [];
     public List<string> RedirectUris { get; set; } = [];
     public List<string> AllowedAgents { get; set; } = [];
@@ -62,6 +66,15 @@ public interface IConnectionService
     Task<string> GetSessionVersionAsync(string principal, string agent, ConnectionBinding binding, CancellationToken cancellationToken = default);
     Task<ConnectionAccessToken> GetAccessTokenAsync(string principal, string agent, ConnectionBinding binding, string resource, CancellationToken cancellationToken = default);
     Task<HttpClient> GetHttpClientAsync(string principal, string agent, ConnectionBinding binding, string resource, CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// Host service for a channel that signed a person in. Hands their token to the on-behalf-of connections this agent may use, so
+/// the agent never sees it. A connection keeps a token that isn't close to expiring, since replacing one clears its cached tokens.
+/// </summary>
+public interface IConnectionUserAssertions
+{
+    Task SubmitAsync(string principal, string agent, string assertion, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Agent-bound facade; does not permit model-selected principal or actor overrides.</summary>

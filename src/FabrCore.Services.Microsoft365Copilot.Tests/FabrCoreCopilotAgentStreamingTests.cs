@@ -187,7 +187,7 @@ public sealed class FabrCoreCopilotAgentStreamingTests
         }
     }
 
-    private class ThrowingProxy : DispatchProxy
+    internal class ThrowingProxy : DispatchProxy
     {
         public static T Create<T>() where T : class
             => DispatchProxy.Create<T, ThrowingProxy>();

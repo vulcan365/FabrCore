@@ -1535,7 +1535,7 @@ namespace FabrCore.Host.Grains
 
             try
             {
-                if (string.IsNullOrWhiteSpace(request.Namespace))
+                if (EventStreamSubscription.TargetsAgentEventStream(request))
                 {
                     request.Channel = ResolveTargetHandle(request.Channel);
                     EnforceCrossPrincipalEventAcl(request.Channel);

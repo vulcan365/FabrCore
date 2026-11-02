@@ -541,7 +541,7 @@ namespace FabrCore.Host.Grains
 
             try
             {
-                if (string.IsNullOrWhiteSpace(request.Namespace))
+                if (EventStreamSubscription.TargetsAgentEventStream(request))
                 {
                     // Default agent event stream — resolve handle from Channel
                     var resolvedChannel = ResolveAgentHandle(request.Channel, principalHandle);

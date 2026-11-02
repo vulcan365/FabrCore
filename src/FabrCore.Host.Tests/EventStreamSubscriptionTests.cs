@@ -79,6 +79,17 @@ namespace FabrCore.Host.Tests
         }
 
         [TestMethod]
+        [DataRow(null, true)]
+        [DataRow("", true)]
+        [DataRow(StreamConstants.AgentEventNamespace, true)]
+        [DataRow("agentevent", true)]
+        [DataRow("velo-itinerary", false)]
+        public void AnEventNamingTheAgentEventStreamOutrightStillTargetsAnAgent(string? @namespace, bool targetsAgent)
+        {
+            Assert.AreEqual(targetsAgent, EventStreamSubscription.TargetsAgentEventStream(new EventMessage { Namespace = @namespace, Channel = "bob:agent" }));
+        }
+
+        [TestMethod]
         public void ToStreamNameRejectsReservedChatNamespace()
         {
             var subscription = new EventStreamSubscription

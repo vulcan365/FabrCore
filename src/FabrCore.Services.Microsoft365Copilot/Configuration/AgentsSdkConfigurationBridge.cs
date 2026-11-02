@@ -25,6 +25,7 @@ internal static class AgentsSdkConfigurationBridge
         InjectServiceConnections(configuration, agents, values);
         InjectAgentApplication(configuration, values);
         InjectUserAuthorization(configuration, copilotSection, values);
+        InjectAgentSignIn(configuration, agents, values);
 
         if (values.Count > 0)
         {
@@ -141,6 +142,29 @@ internal static class AgentsSdkConfigurationBridge
             }
 
             values["AgentApplication:UserAuthorization:" + key] = value;
+        }
+    }
+
+    /// <summary>
+    /// One sign-in handler per agent that has one, named after the agent. Its OAuth connection belongs to its own bot, so the
+    /// bridge's routes pick the handler by agent, and nothing signs in automatically on every activity.
+    /// </summary>
+    private static void InjectAgentSignIn(
+        IConfigurationManager configuration,
+        IReadOnlyList<CopilotAgent> agents,
+        Dictionary<string, string?> values)
+    {
+        var signingIn = agents.Where(agent => agent.SignInConnectionName is not null).ToList();
+        if (signingIn.Count == 0 || configuration.GetSection("AgentApplication:UserAuthorization").Exists())
+        {
+            return;
+        }
+
+        values["AgentApplication:UserAuthorization:AutoSignIn"] = "false";
+        values.TryAdd("AgentApplication:UserAuthorization:Default", signingIn[0].Name);
+        foreach (var agent in signingIn)
+        {
+            values[$"AgentApplication:UserAuthorization:Handlers:{agent.Name}:Settings:AzureBotOAuthConnectionName"] = agent.SignInConnectionName;
         }
     }
 }

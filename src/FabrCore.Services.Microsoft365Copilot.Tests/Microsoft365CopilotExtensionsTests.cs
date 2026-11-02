@@ -53,6 +53,40 @@ public sealed class Microsoft365CopilotExtensionsTests
     }
 
     [TestMethod]
+    public void AnAgentWithItsOwnSignIn_GetsItsOwnHandler_AndTheSdkAcceptsIt()
+    {
+        var builder = CreateBuilder(new()
+        {
+            ["Microsoft365Copilot:TenantId"] = "tenant",
+            ["Microsoft365Copilot:AuthType"] = "FederatedCredentials",
+            ["Microsoft365Copilot:FederatedClientId"] = "33333333-3333-3333-3333-333333333333",
+            [Agent0 + "Name"] = "assistant",
+            [Agent0 + "ClientId"] = CopilotTestAgents.ClientId,
+            [Agent0 + "AgentType"] = "chat-agent",
+            [Agent0 + "SignInConnectionName"] = "assistant-sso",
+            [Agent1 + "Name"] = "sales",
+            [Agent1 + "ClientId"] = CopilotTestAgents.SecondClientId,
+            [Agent1 + "AgentType"] = "sales-agent",
+        });
+
+        builder.AddMicrosoft365Copilot();
+
+        Assert.AreEqual("assistant-sso", builder.Configuration["AgentApplication:UserAuthorization:Handlers:assistant:Settings:AzureBotOAuthConnectionName"]);
+        Assert.AreEqual("assistant", builder.Configuration["AgentApplication:UserAuthorization:Default"]);
+        Assert.AreEqual("false", builder.Configuration["AgentApplication:UserAuthorization:AutoSignIn"]);
+        Assert.IsNull(builder.Configuration["AgentApplication:UserAuthorization:Handlers:sales:Settings:AzureBotOAuthConnectionName"]);
+
+        builder.Services.AddSingleton(FabrCoreCopilotAgentStreamingTests.ThrowingProxy.Create<FabrCore.Host.Services.IFabrCoreAgentService>());
+        builder.Services.AddSingleton(FabrCoreCopilotAgentStreamingTests.ThrowingProxy.Create<Orleans.IGrainFactory>());
+        builder.Services.AddSingleton(FabrCoreCopilotAgentStreamingTests.ThrowingProxy.Create<IPrincipalContextStore>());
+        using var provider = builder.Services.BuildServiceProvider();
+
+        // The SDK reads the handlers when it builds its options, and the bridge adds its routes in its constructor.
+        Assert.IsNotNull(provider.GetRequiredService<FabrCoreCopilotAgent>());
+        Assert.IsInstanceOfType<ICopilotUserAssertionSink>(provider.GetRequiredService<ICopilotUserAssertionSink>());
+    }
+
+    [TestMethod]
     public void SeveralAgents_EachGetACatalogEntryAndAConnection()
     {
         var builder = CreateBuilder(new()

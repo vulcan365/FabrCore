@@ -649,6 +649,11 @@ exists. Effort is rough: S = days, M = one to two weeks, L = several weeks.
 
 ### 8.3 Reaching out from FabrCore
 
+**Built, tested against fakes, not yet run in a real tenant:** FC16 (`ICopilotUserAssertionSink`), FC17 (`FabrCore:Connections:Templates`,
+per host, not published by a cloud server), FC18 (connection bindings only: an undeclared name is the agent's own principal's
+connection), FC21 (managed identity only, through `ManagedIdentityClientId`), and per-agent sign-in (`SignInConnectionName`).
+Forge is the provisioner for all of this on its managed hosts.
+
 | ID | Change | Why | Effort |
 | --- | --- | --- | --- |
 | FC16 | **SSO-to-Connections bridge** (B1): when the channel obtains a user token, submit it as an OBO assertion to the user's Connections grain for profiles that accept the bot's audience; never put the token in agent args | Unlocks every delegated outbound path from a Copilot conversation | M |

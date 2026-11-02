@@ -303,6 +303,12 @@ token in `Args["Microsoft365Copilot:UserToken"]` — it then flows through FabrC
 monitors, so enable deliberately. Handlers are configured once and shared by all agents: with
 several agents, sign-in works only for the agent whose bot owns the Azure Bot OAuth connection.
 
+With several agents, set `Agents:{n}:SignInConnectionName` instead: that agent gets its own handler,
+and only it declares single sign-on in its package. The person's token then goes to its on-behalf-of
+connections through `ICopilotUserAssertionSink` (default: `IConnectionUserAssertions`), not into its
+messages. Agents ask for it with `Connections.GetHttpClientAsync("name", "resource")`. See the
+`fabrcore-connections` skill for templates.
+
 ## Streaming
 
 On streaming channels the addon sends the informative update, keeps a typing indicator running,
