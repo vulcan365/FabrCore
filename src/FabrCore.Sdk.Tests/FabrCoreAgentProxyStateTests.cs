@@ -52,6 +52,23 @@ public sealed class FabrCoreAgentProxyStateTests
     }
 
     [TestMethod]
+    public async Task ALapsedConnectionsNoticeGoesToThePerson_ForATokenAndForARequest()
+    {
+        var notice = new FabrCore.Connections.ConnectionException("interaction-required", "Lapsed.") { Notice = "Connect it again." };
+        var agent = CreateAgent(new Dictionary<string, JsonElement>(), new LapsedConnections(notice));
+
+        var fromToken = await Assert.ThrowsExactlyAsync<FabrCore.Connections.ConnectionException>(() => agent.Token());
+        Assert.AreSame(notice, fromToken);
+        Assert.AreEqual("Connect it again.", agent.SentMessage?.Message);
+        Assert.AreEqual("owner", agent.SentMessage?.ToHandle);
+
+        ((TestAgentHost)agent.Host).Clear();
+        using var client = await agent.Client();
+        await Assert.ThrowsExactlyAsync<FabrCore.Connections.ConnectionException>(() => client.GetAsync("me/events"));
+        Assert.AreEqual("Connect it again.", agent.SentMessage?.Message, "A client fetches its token as it sends, so the lapse shows there.");
+    }
+
+    [TestMethod]
     public async Task GetStateAsync_ReturnsDefault_WhenStateElementIsUndefined()
     {
         var agent = CreateAgent(new Dictionary<string, JsonElement>
@@ -123,12 +140,14 @@ public sealed class FabrCoreAgentProxyStateTests
         Assert.IsInstanceOfType(ex.InnerException, typeof(JsonException));
     }
 
-    private static TestAgentProxy CreateAgent(Dictionary<string, JsonElement> customState)
+    private static TestAgentProxy CreateAgent(Dictionary<string, JsonElement> customState, FabrCore.Connections.IConnectionService? connections = null)
     {
         var services = new ServiceCollection();
         services.AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
         services.AddSingleton<IConfiguration>(new ConfigurationManager());
         services.AddSingleton<IFabrCoreChatClientService, TestChatClientService>();
+        if (connections is not null)
+            services.AddSingleton(connections);
         var serviceProvider = services.BuildServiceProvider();
 
         return new TestAgentProxy(
@@ -170,6 +189,12 @@ public sealed class FabrCoreAgentProxyStateTests
 
         public Task SendStructured(AgentMessage message) => SendToUserAsync(message);
 
+        public IFabrCoreAgentHost Host => fabrcoreAgentHost;
+
+        public Task<FabrCore.Connections.ConnectionAccessToken> Token() => Connections.GetAccessTokenAsync("background", "graph");
+
+        public Task<HttpClient> Client() => Connections.GetHttpClientAsync("background", "graph");
+
         public override Task OnInitialize() => Task.CompletedTask;
 
         public override Task<AgentMessage> OnMessage(AgentMessage message) => Task.FromResult(message.Response());
@@ -189,6 +214,8 @@ public sealed class FabrCoreAgentProxyStateTests
         public string GetHandle() => _handle;
 
         public AgentMessage? SentMessage { get; private set; }
+
+        public void Clear() => SentMessage = null;
 
         public Task<AgentMessage> SendAndReceiveMessage(AgentMessage request) => Task.FromResult(request.Response());
 
@@ -259,6 +286,31 @@ public sealed class FabrCoreAgentProxyStateTests
 
         public void SetStatusMessage(string? message)
         {
+        }
+    }
+
+    /// <summary>A connection whose sign-in lapsed: every token request fails with the notice the connection sends once.</summary>
+    private sealed class LapsedConnections(FabrCore.Connections.ConnectionException lapse) : FabrCore.Connections.IConnectionService
+    {
+        public Task<string> GetSessionVersionAsync(string principal, string agent, FabrCore.Connections.ConnectionBinding binding, CancellationToken cancellationToken = default)
+            => Task.FromResult("1");
+
+        public Task<FabrCore.Connections.ConnectionAccessToken> GetAccessTokenAsync(string principal, string agent, FabrCore.Connections.ConnectionBinding binding, string resource, CancellationToken cancellationToken = default)
+            => Task.FromException<FabrCore.Connections.ConnectionAccessToken>(lapse);
+
+        public Task<HttpClient> GetHttpClientAsync(string principal, string agent, FabrCore.Connections.ConnectionBinding binding, string resource, CancellationToken cancellationToken = default)
+            => GetHttpClientAsync(principal, agent, binding, resource, _ => Task.CompletedTask, cancellationToken);
+
+        public Task<HttpClient> GetHttpClientAsync(string principal, string agent, FabrCore.Connections.ConnectionBinding binding, string resource, Func<string, Task> notify, CancellationToken cancellationToken = default)
+            => Task.FromResult(new HttpClient(new Lapsing(lapse, notify)) { BaseAddress = new Uri("https://graph.microsoft.com/v1.0/") });
+
+        private sealed class Lapsing(FabrCore.Connections.ConnectionException lapse, Func<string, Task> notify) : HttpMessageHandler
+        {
+            protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            {
+                await notify(lapse.Notice!);
+                throw lapse;
+            }
         }
     }
 

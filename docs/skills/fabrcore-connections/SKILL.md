@@ -62,7 +62,10 @@ by local protocol tests.
   Profiles contain credential references resolved by the host. Diagnostic turns
   cannot use production connections.
 - Authorization code flow uses begin/complete with exact registered callbacks,
-  PKCE, nonce and single-use state. OBO accepts validated user assertions. Client
+  PKCE, nonce and single-use state. With the `microsoft` provider, a person's
+  principal can only link their own account, and begin sends `login_hint`. A
+  refused refresh token drops the grant (`interaction-required`) and the agent
+  tells the person once, through `SendToUserAsync`, with `ReconnectUrl`. OBO accepts validated user assertions. Client
   credentials reacquire access tokens without human login or refresh tokens;
   provider application permissions/admin consent remain required. Google service
   account delegation is not the standard client-credentials implementation.

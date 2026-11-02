@@ -61,6 +61,9 @@ FabrCore.Connections.ConnectionCapabilities.Equals(FabrCore.Connections.Connecti
 FabrCore.Connections.ConnectionException
 FabrCore.Connections.ConnectionException.Code.get -> string!
 FabrCore.Connections.ConnectionException.ConnectionException(string! code, string! message) -> void
+FabrCore.Connections.IConnectionService.GetHttpClientAsync(string! principal, string! agent, FabrCore.Connections.ConnectionBinding! binding, string! resource, System.Func<string!, System.Threading.Tasks.Task!>! notify, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Net.Http.HttpClient!>!
+FabrCore.Connections.ConnectionException.Notice.get -> string?
+FabrCore.Connections.ConnectionException.Notice.init -> void
 FabrCore.Connections.ConnectionHandoff
 FabrCore.Connections.ConnectionHandoffChallenge
 FabrCore.Connections.ConnectionHandoffChallenge.<Clone>$() -> FabrCore.Connections.ConnectionHandoffChallenge!

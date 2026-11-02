@@ -1,6 +1,7 @@
 using System.Text.Json;
 using FabrCore.Connections;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace FabrCore.Sdk;
 
@@ -30,15 +31,23 @@ public abstract partial class FabrCoreAgentProxy
             var (service, binding) = Resolve(connection);
             return service.GetSessionVersionAsync(proxy.fabrcoreAgentHost.GetUserHandle(), proxy.fabrcoreAgentHost.GetHandle(), binding, cancellationToken);
         }
-        public Task<ConnectionAccessToken> GetAccessTokenAsync(string connection, string resource, CancellationToken cancellationToken = default)
+        public async Task<ConnectionAccessToken> GetAccessTokenAsync(string connection, string resource, CancellationToken cancellationToken = default)
         {
             var (service, binding) = Resolve(connection);
-            return service.GetAccessTokenAsync(proxy.fabrcoreAgentHost.GetUserHandle(), proxy.fabrcoreAgentHost.GetHandle(), binding, resource, cancellationToken);
+            try { return await service.GetAccessTokenAsync(proxy.fabrcoreAgentHost.GetUserHandle(), proxy.fabrcoreAgentHost.GetHandle(), binding, resource, cancellationToken); }
+            catch (ConnectionException e) when (e.Notice is not null) { await TellPersonAsync(e.Notice); throw; }
         }
-        public Task<HttpClient> GetHttpClientAsync(string connection, string resource, CancellationToken cancellationToken = default)
+        public async Task<HttpClient> GetHttpClientAsync(string connection, string resource, CancellationToken cancellationToken = default)
         {
             var (service, binding) = Resolve(connection);
-            return service.GetHttpClientAsync(proxy.fabrcoreAgentHost.GetUserHandle(), proxy.fabrcoreAgentHost.GetHandle(), binding, resource, cancellationToken);
+            return await service.GetHttpClientAsync(proxy.fabrcoreAgentHost.GetUserHandle(), proxy.fabrcoreAgentHost.GetHandle(), binding, resource, TellPersonAsync, cancellationToken);
+        }
+
+        /// <summary>Best effort: failing to tell them mustn't hide why the agent stopped.</summary>
+        private async Task TellPersonAsync(string notice)
+        {
+            try { await proxy.SendToUserAsync(notice); }
+            catch (Exception e) { proxy.logger.LogWarning(e, "Couldn't tell the person their connection lapsed."); }
         }
     }
 }

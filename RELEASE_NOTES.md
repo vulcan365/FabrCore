@@ -2,6 +2,23 @@
 
 These changes are on `develop` and are not in a published package yet.
 
+## Connecting an account for agents that work without the person
+
+- **Only your own account.** Finishing an `AuthorizationCode` connection with the `microsoft` provider now checks the account
+  that signed in. For a person's principal (`entra-{tid}-{oid}`), it must be that same person, or nothing is connected and the
+  call fails with `access-denied`. The connection records the account's object id, as a chat's token already did, rather than
+  its pairwise `sub`.
+- **The provider offers the right account.** `POST /fabrcoreapi/connections/v1/begin` adds `login_hint` from the caller's
+  token (`login_hint`, `preferred_username` or `upn`), for any provider but Google.
+- **A lapse is told, once.** When the provider refuses a connection's refresh token (`invalid_grant`, `interaction_required`,
+  `consent_required`), the connection drops it, lists as `interaction-required` until the person connects again, and the
+  `ConnectionException` the agent gets carries a `Notice` the first time. `Connections` in an agent sends that notice to the
+  person with `SendToUserAsync`, so it reaches them through a relay such as Microsoft 365 Copilot's proactive messages.
+  `FabrCore:Connections:ReconnectUrl` puts where to reconnect in it.
+- `IConnectionService.GetHttpClientAsync` has an overload that takes a `notify` callback, because a client fetches its token as
+  it sends. It has a default implementation, so existing implementations still compile.
+- `System.Security.Cryptography.Pkcs` is pinned to 9.0.22 beside `Microsoft.Data.SqlClient`, for CVE-2026-84008.
+
 ## An agent can act as the person who signed in, in Teams and Copilot
 
 - **Sign-in per agent.** `Microsoft365Copilot:Agents:{n}:SignInConnectionName` names the OAuth connection on that agent's Azure

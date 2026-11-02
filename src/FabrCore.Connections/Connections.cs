@@ -58,6 +58,12 @@ public sealed class ConnectionAccessToken(string accessToken, DateTimeOffset exp
 public sealed class ConnectionException(string code, string message) : Exception(message)
 {
     public string Code { get; } = code;
+
+    /// <summary>
+    /// What to tell the person, set once when their connection lapses. The agent that hit it sends it to them, so a background
+    /// agent doesn't fail quietly.
+    /// </summary>
+    public string? Notice { get; init; }
 }
 
 /// <summary>Host service. Principal and agent arguments must come from trusted host context.</summary>
@@ -66,6 +72,14 @@ public interface IConnectionService
     Task<string> GetSessionVersionAsync(string principal, string agent, ConnectionBinding binding, CancellationToken cancellationToken = default);
     Task<ConnectionAccessToken> GetAccessTokenAsync(string principal, string agent, ConnectionBinding binding, string resource, CancellationToken cancellationToken = default);
     Task<HttpClient> GetHttpClientAsync(string principal, string agent, ConnectionBinding binding, string resource, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// As <see cref="GetHttpClientAsync(string, string, ConnectionBinding, string, CancellationToken)"/>, calling
+    /// <paramref name="notify"/> with a lapse's <see cref="ConnectionException.Notice"/>. The client fetches its token as it
+    /// sends each request, which is where a lapse shows up.
+    /// </summary>
+    Task<HttpClient> GetHttpClientAsync(string principal, string agent, ConnectionBinding binding, string resource, Func<string, Task> notify, CancellationToken cancellationToken = default)
+        => GetHttpClientAsync(principal, agent, binding, resource, cancellationToken);
 }
 
 /// <summary>

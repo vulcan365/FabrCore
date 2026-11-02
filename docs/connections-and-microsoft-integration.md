@@ -254,6 +254,9 @@ must authenticate as the same FabrCore principal as begin. A transaction is
 consumed before exchange and cannot be replayed. An uncertain exchange requires
 new consent rather than replaying a code. FabrCore validates the ID token's
 signature, issuer, audience, lifetime, and nonce before linking the account.
+With the `microsoft` provider, a person's principal (`entra-{tid}-{oid}`) can
+only link their own account: another one is refused with `access-denied`. Begin
+sends `login_hint` from the caller's token, so the provider offers that account.
 
 Authorization codes, assertions, tokens, and callback query strings must be
 excluded from application HTTP body/query logging. Cookie clients need a
@@ -263,6 +266,13 @@ bearer requests and the host's explicit CORS policy.
 The connection APIs return status, never access or refresh tokens. Provider
 interaction/consent failures return `interaction-required`. Refresh is serialized
 by a principal-owned Orleans grain, including refresh-token rotation.
+
+When the provider refuses an authorization code connection's refresh token, the
+connection drops it and lists as `interaction-required` until the person connects
+again. The first failure's `ConnectionException.Notice` says so, with
+`FabrCore:Connections:ReconnectUrl` if it's set, and an agent's `Connections`
+sends it to the person with `SendToUserAsync`. Turn on a relay, such as Microsoft
+365 Copilot's proactive messages, for it to reach someone who isn't connected.
 
 ## Agent SDK usage and MCP
 
