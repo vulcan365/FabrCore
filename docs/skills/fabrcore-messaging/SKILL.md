@@ -154,7 +154,7 @@ Use `SystemMessageTypes.IsSystemMessage(messageType)` when you only have a `Mess
 - Agent chat stream delivery ignores underscore-prefixed system messages before `OnMessage`/`OnMessageBusy`
 - System messages are NOT stored in chat history
 - Do not use non-prefixed message types such as `thinking` for FabrCore system/control traffic
-- **Busy routing:** `OnMessage` is marked `[AlwaysInterleave]`, so a second message can enter the grain while the first is processing. The grain routes the concurrent message to `OnMessageBusy` instead of `OnMessage`. No heartbeat, compaction, or chat history flush occurs for busy-routed messages. The monitor records busy-routed messages with `BusyRouted = true`.
+- **Busy routing:** `OnMessage` is marked `[AlwaysInterleave]`. By default overlapping turns busy-route agent-wide. With `AgentConfiguration.Args["_ChannelBusyRoutingEnabled"]="true"`, same exact nonblank channel busy-routes and different channels can enter primary processing concurrently; null/blank share the default channel. This is not a queue or a session lock. With default agent-wide routing, a primary older than five minutes can be treated as stale and another admitted; channel-wide routing keeps that channel busy until its primary completes. Busy-routed messages have no primary heartbeat, compaction or chat history flush; the monitor marks them `BusyRouted = true`. Concurrency requires safe shared state and tools, and separate history/session mapping; see **fabrcore-agent**.
 
 ## Handle Routing
 
@@ -214,11 +214,43 @@ provider contracts, delivery semantics, and M365/SMS/email/push/webhook implemen
 ### Client-to-Agent
 
 ```csharp
-var request = new AgentMessage { ToHandle = "my-agent", Message = "Hello!" };
+// Subscribe before sending; route ordinary replies using the returned Channel.
+context.AgentMessageReceived += (sender, response) =>
+{
+    var conversationKey = response.Channel;
+    // Dispatch to the matching authorized conversation; handle system messages separately.
+};
+var request = new AgentMessage
+{
+    ToHandle = "my-agent",
+    Channel = "conversation-42", // stable key issued or authorized by your application
+    Message = "Hello!"
+};
 await context.SendMessage(request);
-// Response arrives via AgentMessageReceived event
-context.AgentMessageReceived += (sender, response) => { /* process */ };
 ```
+
+For a custom agent, return `var reply = message.Response();` and set `reply.Message`:
+`Response()` copies the request's `Channel`. A manually constructed reply must set it explicitly.
+The default `OnMessageBusy` response and host-generated `_status`/`_error` messages do not copy it.
+Override `OnMessageBusy` with `message.Response()` if a busy reply needs a channel, without
+mutating shared state. Treat host system messages as unassociated unless your transport provides a
+reliable correlation mechanism; do not assume their `Channel` is set.
+Send the same key on subsequent turns; clients should associate replies with their authorized
+conversation. A channel alone does not select isolated history. The agent must map each key to a
+separate session and history thread as shown in **fabrcore-agent**, while preserving the original
+default thread for null/blank channels. Durable storage is needed for history across restarts.
+
+A channel is not proof of identity or permission. Authenticate callers and authorize both the agent
+and conversation mapping; namespace or issue opaque keys within the correct trusted principal/tenant
+scope. Routing/tracking preserve exact nonblank values; normalize or reject whitespace variants
+before authorization and dispatch, and validate null/blank and reserved diagnostic channels. A guessed key must not grant access to someone else's history.
+
+`Channel` also has transport semantics: addons stamp `m365copilot` or `a2a`, and `EventMessage.Channel`
+is an event-stream routing channel, not an `AgentMessage` conversation ID. The consumer controls
+mapping from authenticated transport context and identifiers to conversation keys; don't overwrite
+or assume those addon channels uniquely identify conversations. Adapt the ingress/agent integration
+without breaking transport routing or bypassing authorization. The catalog flag is metadata only,
+and neither it nor channel busy routing isolates history, agent-wide Memory or GraphRAG.
 
 ### Agent-to-Agent (Request-Response)
 

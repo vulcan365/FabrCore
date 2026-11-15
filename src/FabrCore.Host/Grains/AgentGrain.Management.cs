@@ -18,7 +18,7 @@ internal partial class AgentGrain
         {
             AgentHandle = this.GetPrimaryKeyString(), Revision = revision, Configuration = Clone(agentConfiguration),
             State = Clone(_messageState.State.CustomState), Threads = _messageState.State.MessageThreads.Keys.Order().ToList(),
-            Processing = fabrcoreAgentProxy?.InternalIsProcessingMessage == true, AdminProcessing = adminTurnBusy
+            Processing = IsAgentProcessing, AdminProcessing = adminTurnBusy
         });
         if (operation == "thread")
         {
@@ -28,7 +28,7 @@ internal partial class AgentGrain
             return AdminResult(200, new AdministrationPage<StoredChatMessage> { Items = messages.Skip(offset).Take(limit).ToList(),
                 Revision = revision, NextCursor = offset + limit < messages.Count ? (offset + limit).ToString() : null });
         }
-        if (adminTurnBusy || adminControlBusy || fabrcoreAgentProxy?.InternalIsProcessingMessage == true)
+        if (adminTurnBusy || adminControlBusy || IsAgentProcessing)
             return AdminResult(409, new { error = "Agent is actively processing." });
         if (request.Revision != revision) return AdminResult(412, new { error = "Agent changed; refresh and review the operation.", revision });
         if (managementBusy) return AdminResult(409, new { error = "Agent management is busy." });

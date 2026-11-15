@@ -140,7 +140,188 @@ public sealed class FabrCoreAgentProxyStateTests
         Assert.IsInstanceOfType(ex.InnerException, typeof(JsonException));
     }
 
-    private static TestAgentProxy CreateAgent(Dictionary<string, JsonElement> customState, FabrCore.Connections.IConnectionService? connections = null)
+    [TestMethod]
+    public async Task AConnectionCarriesTheAgentsTypeAndTheHostPicksAnUndeclaredBinding()
+    {
+        var connections = new RecordingConnections();
+        var agent = CreateAgent(new Dictionary<string, JsonElement>(), connections,
+            services => services.AddSingleton<FabrCore.Connections.IConnectionBindingResolver>(new TypeResolver()));
+
+        await agent.Token();
+        using var _ = await agent.Client();
+
+        Assert.HasCount(2, connections.Calls);
+        foreach (var (caller, binding) in connections.Calls)
+        {
+            Assert.AreEqual(new FabrCore.Connections.ConnectionCaller("owner", "owner:swarm-test2", "surface-task-runner"), caller);
+            Assert.AreEqual(new FabrCore.Connections.ConnectionBinding("host", "agentid-surface-task-runner"), binding);
+        }
+    }
+
+    [TestMethod]
+    public async Task WithoutAResolverAnUndeclaredConnectionIsTheAgentsOwnPrincipals()
+    {
+        var connections = new RecordingConnections();
+        var agent = CreateAgent(new Dictionary<string, JsonElement>(), connections);
+
+        await agent.Token();
+
+        Assert.AreEqual(new FabrCore.Connections.ConnectionBinding("owner", "background"), connections.Calls.Single().Binding);
+    }
+
+    [TestMethod]
+    public async Task ConcurrentFlushes_PreserveInFlightUpdatesDeletesAndSnapshots()
+    {
+        var stored = new Dictionary<string, JsonElement> { ["restore"] = JsonSerializer.SerializeToElement("original") };
+        var agent = CreateAgent(stored);
+        Assert.AreEqual("original", await agent.GetState<string>("restore"));
+        var host = (TestAgentHost)agent.Host;
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Dictionary<string, JsonElement>? firstChanges = null;
+        IEnumerable<string>? firstDeletes = null;
+        var mergeCount = 0;
+        host.BeforeMerge = async (changes, deletes) =>
+        {
+            if (Interlocked.Increment(ref mergeCount) == 1)
+            {
+                firstChanges = changes;
+                firstDeletes = deletes;
+                entered.SetResult();
+                await release.Task;
+            }
+        };
+
+        var mutable = new Dictionary<string, int> { ["value"] = 1 };
+        agent.Set("update", mutable);
+        agent.Set("remove", "old");
+        agent.Remove("restore");
+        var first = agent.Flush();
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            mutable["value"] = 99;
+            agent.Set("update", new Dictionary<string, int> { ["value"] = 2 });
+            agent.Remove("remove");
+            agent.Set("restore", "new");
+            agent.Set("added", "later");
+            Assert.AreEqual(2, (await agent.GetState<Dictionary<string, int>>("update"))!["value"]);
+            Assert.IsNull(await agent.GetState<string>("remove"));
+            Assert.AreEqual("new", await agent.GetState<string>("restore"));
+
+            var second = agent.Flush();
+            Assert.IsFalse(second.IsCompleted);
+            Assert.AreEqual(1, Volatile.Read(ref mergeCount));
+            Assert.IsNotNull(firstChanges);
+            Assert.IsNotNull(firstDeletes);
+            Assert.AreEqual(1, firstChanges["update"].GetProperty("value").GetInt32());
+            Assert.AreEqual("old", firstChanges["remove"].GetString());
+            Assert.IsFalse(firstChanges.ContainsKey("added"));
+            CollectionAssert.AreEquivalent(new[] { "restore" }, firstDeletes.ToArray());
+
+            release.TrySetResult();
+            await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.AreEqual(2, mergeCount);
+            Assert.AreEqual(2, stored["update"].GetProperty("value").GetInt32());
+            Assert.IsFalse(stored.ContainsKey("remove"));
+            Assert.AreEqual("new", stored["restore"].GetString());
+            Assert.AreEqual("later", stored["added"].GetString());
+            Assert.IsFalse(agent.Pending);
+            Assert.AreEqual(2, (await agent.GetState<Dictionary<string, int>>("update"))!["value"]);
+            Assert.IsNull(await agent.GetState<string>("remove"));
+            Assert.AreEqual("new", await agent.GetState<string>("restore"));
+            Assert.AreEqual(1, firstChanges["update"].GetProperty("value").GetInt32());
+            Assert.AreEqual("old", firstChanges["remove"].GetString());
+            CollectionAssert.AreEquivalent(new[] { "restore" }, firstDeletes.ToArray());
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+    }
+
+    [TestMethod]
+    public async Task FailedMerge_RetryPreservesNewerChangesAndOriginalSnapshot()
+    {
+        var stored = new Dictionary<string, JsonElement>
+        {
+            ["restore"] = JsonSerializer.SerializeToElement("original"),
+            ["delete-only"] = JsonSerializer.SerializeToElement("original")
+        };
+        var agent = CreateAgent(stored);
+        Assert.AreEqual("original", await agent.GetState<string>("restore"));
+        var host = (TestAgentHost)agent.Host;
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Dictionary<string, JsonElement>? failedChanges = null;
+        IEnumerable<string>? failedDeletes = null;
+        var failure = new InvalidOperationException("merge failed");
+        var mergeCount = 0;
+        host.BeforeMerge = async (changes, deletes) =>
+        {
+            if (Interlocked.Increment(ref mergeCount) == 1)
+            {
+                failedChanges = changes;
+                failedDeletes = deletes;
+                entered.SetResult();
+                await release.Task;
+                throw failure;
+            }
+        };
+
+        agent.Set("unchanged", "keep");
+        agent.Set("update", "old");
+        agent.Set("remove", "old");
+        agent.Remove("restore");
+        var first = agent.Flush();
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            agent.Set("update", "new");
+            agent.Remove("remove");
+            agent.Set("restore", "new");
+            agent.Remove("delete-only");
+            release.TrySetResult();
+
+            var caught = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
+                async () => await first.WaitAsync(TimeSpan.FromSeconds(10)));
+            Assert.AreSame(failure, caught);
+            Assert.IsTrue(agent.Pending);
+            Assert.AreEqual("original", stored["restore"].GetString());
+            Assert.IsFalse(stored.ContainsKey("unchanged"));
+            Assert.AreEqual("new", await agent.GetState<string>("update"));
+            Assert.IsNull(await agent.GetState<string>("remove"));
+            Assert.AreEqual("new", await agent.GetState<string>("restore"));
+            Assert.IsNotNull(failedChanges);
+            Assert.IsNotNull(failedDeletes);
+            Assert.AreEqual("old", failedChanges["update"].GetString());
+            Assert.AreEqual("old", failedChanges["remove"].GetString());
+            CollectionAssert.AreEquivalent(new[] { "restore" }, failedDeletes.ToArray());
+
+            await agent.Flush().WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.AreEqual(2, mergeCount);
+            Assert.AreEqual("keep", stored["unchanged"].GetString());
+            Assert.AreEqual("new", stored["update"].GetString());
+            Assert.AreEqual("new", stored["restore"].GetString());
+            Assert.IsFalse(stored.ContainsKey("remove"));
+            Assert.IsFalse(stored.ContainsKey("delete-only"));
+            Assert.IsFalse(agent.Pending);
+            Assert.AreEqual("keep", await agent.GetState<string>("unchanged"));
+            Assert.AreEqual("new", await agent.GetState<string>("update"));
+            Assert.IsNull(await agent.GetState<string>("remove"));
+            Assert.AreEqual("new", await agent.GetState<string>("restore"));
+            Assert.AreEqual("old", failedChanges["update"].GetString());
+            Assert.AreEqual("old", failedChanges["remove"].GetString());
+            CollectionAssert.AreEquivalent(new[] { "restore" }, failedDeletes.ToArray());
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+    }
+
+    private static TestAgentProxy CreateAgent(Dictionary<string, JsonElement> customState, FabrCore.Connections.IConnectionService? connections = null,
+        Action<ServiceCollection>? configure = null)
     {
         var services = new ServiceCollection();
         services.AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
@@ -148,6 +329,7 @@ public sealed class FabrCoreAgentProxyStateTests
         services.AddSingleton<IFabrCoreChatClientService, TestChatClientService>();
         if (connections is not null)
             services.AddSingleton(connections);
+        configure?.Invoke(services);
         var serviceProvider = services.BuildServiceProvider();
 
         return new TestAgentProxy(
@@ -178,6 +360,14 @@ public sealed class FabrCoreAgentProxyStateTests
         public Task<T?> GetState<T>(string key) => GetStateAsync<T>(key);
 
         public Task<StateReadResult<T>> TryGetState<T>(string key) => TryGetStateAsync<T>(key);
+
+        public void Set<T>(string key, T value) => SetState(key, value);
+
+        public void Remove(string key) => RemoveState(key);
+
+        public Task Flush() => FlushStateAsync();
+
+        public bool Pending => HasPendingStateChanges;
 
         public AgentMessage? SentMessage => ((TestAgentHost)fabrcoreAgentHost).SentMessage;
 
@@ -269,8 +459,13 @@ public sealed class FabrCoreAgentProxyStateTests
 
         public Task<Dictionary<string, JsonElement>> GetCustomStateAsync() => Task.FromResult(_customState);
 
-        public Task MergeCustomStateAsync(Dictionary<string, JsonElement> changes, IEnumerable<string> deletes)
+        public Func<Dictionary<string, JsonElement>, IEnumerable<string>, Task>? BeforeMerge { get; set; }
+
+        public async Task MergeCustomStateAsync(Dictionary<string, JsonElement> changes, IEnumerable<string> deletes)
         {
+            if (BeforeMerge is not null)
+                await BeforeMerge(changes, deletes);
+
             foreach (var key in deletes)
             {
                 _customState.Remove(key);
@@ -281,11 +476,41 @@ public sealed class FabrCoreAgentProxyStateTests
                 _customState[key] = value;
             }
 
-            return Task.CompletedTask;
         }
 
         public void SetStatusMessage(string? message)
         {
+        }
+    }
+
+    /// <summary>The host's rule in a test: each agent type's identity is the host's connection named for it.</summary>
+    private sealed class TypeResolver : FabrCore.Connections.IConnectionBindingResolver
+    {
+        public FabrCore.Connections.ConnectionBinding? Resolve(FabrCore.Connections.ConnectionCaller caller, string connection)
+            => new("host", "agentid-" + caller.AgentType);
+    }
+
+    /// <summary>Records who asked for which connection, through the overloads that carry the agent's type.</summary>
+    private sealed class RecordingConnections : FabrCore.Connections.IConnectionService
+    {
+        public List<(FabrCore.Connections.ConnectionCaller Caller, FabrCore.Connections.ConnectionBinding Binding)> Calls { get; } = [];
+
+        public Task<string> GetSessionVersionAsync(string principal, string agent, FabrCore.Connections.ConnectionBinding binding, CancellationToken cancellationToken = default)
+            => throw new AssertFailedException("The agent's type was dropped.");
+        public Task<FabrCore.Connections.ConnectionAccessToken> GetAccessTokenAsync(string principal, string agent, FabrCore.Connections.ConnectionBinding binding, string resource, CancellationToken cancellationToken = default)
+            => throw new AssertFailedException("The agent's type was dropped.");
+        public Task<HttpClient> GetHttpClientAsync(string principal, string agent, FabrCore.Connections.ConnectionBinding binding, string resource, CancellationToken cancellationToken = default)
+            => throw new AssertFailedException("The agent's type was dropped.");
+
+        public Task<FabrCore.Connections.ConnectionAccessToken> GetAccessTokenAsync(FabrCore.Connections.ConnectionCaller caller, FabrCore.Connections.ConnectionBinding binding, string resource, CancellationToken cancellationToken = default)
+        {
+            Calls.Add((caller, binding));
+            return Task.FromResult(new FabrCore.Connections.ConnectionAccessToken("t", DateTimeOffset.UtcNow.AddHours(1)));
+        }
+        public Task<HttpClient> GetHttpClientAsync(FabrCore.Connections.ConnectionCaller caller, FabrCore.Connections.ConnectionBinding binding, string resource, Func<string, Task> notify, CancellationToken cancellationToken = default)
+        {
+            Calls.Add((caller, binding));
+            return Task.FromResult(new HttpClient());
         }
     }
 

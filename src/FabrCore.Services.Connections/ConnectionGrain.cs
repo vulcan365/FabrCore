@@ -34,7 +34,8 @@ internal sealed record PendingHandoff(string PrivateKey, DateTimeOffset ExpiresA
 internal sealed record PendingConnection(string RedirectUri, string Verifier, string Nonce, DateTimeOffset ExpiresAt);
 internal sealed record GrainRequest(string Name, string? Principal = null, string? Agent = null, string? Resource = null,
     string? Revision = null, ConnectionProfile? Profile = null, string? RedirectUri = null, string? State = null,
-    string? Code = null, string? Assertion = null, ConnectionHandoffEnvelope? Handoff = null, string? SessionVersion = null, string? LoginHint = null)
+    string? Code = null, string? Assertion = null, ConnectionHandoffEnvelope? Handoff = null, string? SessionVersion = null, string? LoginHint = null,
+    string? AgentType = null)
 {
     public override string ToString() => "[protected connection operation]";
 }
@@ -181,12 +182,12 @@ internal sealed class ConnectionGrain(IUserScopedFabrCoreStorageProvider store, 
         }
         if (operation == "session")
         {
-            Authorize(p, Owner, request.Principal!, request.Agent!);
+            Authorize(p, Owner, request.Principal!, request.Agent!, request.AgentType);
             return Serialize(record.SessionVersion);
         }
         if (operation == "token" || operation == "resource")
         {
-            Authorize(p, Owner, request.Principal!, request.Agent!);
+            Authorize(p, Owner, request.Principal!, request.Agent!, request.AgentType);
             if (!p.Resources.TryGetValue(request.Resource!, out var resource)) throw new ConnectionException("access-denied", "Resource is not configured.");
             if (request.SessionVersion is not null && request.SessionVersion != record.SessionVersion)
                 throw new ConnectionException("connection-changed", "The connection changed. Start a new request using its current binding.");
@@ -256,7 +257,14 @@ internal sealed class ConnectionGrain(IUserScopedFabrCoreStorageProvider store, 
         return changed;
     }
 
-    private static string TemplateHash(ConnectionProfile template) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Serialize(template))));
+    private static string TemplateHash(ConnectionProfile template)
+    {
+        // A template can't allow agent types, so leaving the empty list out keeps the hashes templates had before it existed:
+        // a new hash would end everyone's sign-in.
+        var node = System.Text.Json.Nodes.JsonNode.Parse(Serialize(template))!.AsObject();
+        if (node["allowedAgentTypes"] is System.Text.Json.Nodes.JsonArray { Count: 0 }) node.Remove("allowedAgentTypes");
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(node.ToJsonString(Json))));
+    }
 
     /// <summary>What a template has to be, checked when the host starts so a bad one can't wait for someone's first use.</summary>
     internal static void ValidateTemplate(string name, ConnectionProfile template, ConnectionsOptions options)
@@ -289,18 +297,27 @@ internal sealed class ConnectionGrain(IUserScopedFabrCoreStorageProvider store, 
         catch (Exception e) when (e is CryptographicException or FormatException or ArgumentException or JsonException)
         { throw new ConnectionException("invalid-transaction", "The encrypted handoff could not be validated."); }
     }
-    internal static void Authorize(ConnectionProfile p, string owner, string principal, string agent)
+    internal static void Authorize(ConnectionProfile p, string owner, string principal, string agent, string? agentType = null)
     {
-        if (!p.AllowedAgents.Contains(agent, StringComparer.Ordinal)) throw new ConnectionException("access-denied", "Agent is not permitted to use this connection.");
+        // A type is only honoured on an application connection, which acts as no one person.
+        var byType = agentType is { Length: > 0 } && IsApplication(p) && (p.AllowedAgentTypes?.Contains(agentType, StringComparer.Ordinal) ?? false);
+        if (!byType && !p.AllowedAgents.Contains(agent, StringComparer.Ordinal)) throw new ConnectionException("access-denied", "Agent is not permitted to use this connection.");
         if (p.Authentication is ConnectionAuthentication.AuthorizationCode or ConnectionAuthentication.AgentIdOnBehalfOf or ConnectionAuthentication.OnBehalfOf && owner != principal)
             throw new ConnectionException("access-denied", "Delegated connections cannot be shared across principals.");
     }
+    private static bool IsApplication(ConnectionProfile p)
+        => p.Authentication is ConnectionAuthentication.ClientCredentials or ConnectionAuthentication.AgentIdApplication;
+
     internal static void ValidateProfile(ConnectionProfile p, ConnectionsOptions options)
     {
         if (p is null || string.IsNullOrWhiteSpace(p.Name) || !System.Text.RegularExpressions.Regex.IsMatch(p.Name, "^[a-zA-Z0-9_-]{1,100}$") || string.IsNullOrWhiteSpace(p.ClientId))
             throw new ConnectionException("invalid-configuration", "A connection name and client ID are required.");
-        if (p.Resources is null || p.AllowedAgents is null || p.RedirectUris is null || p.SignInScopes is null)
+        if (p.Resources is null || p.AllowedAgents is null || p.AllowedAgentTypes is null || p.RedirectUris is null || p.SignInScopes is null)
             throw new ConnectionException("invalid-configuration", "Connection collections cannot be null.");
+        if (p.AllowedAgentTypes.Count > 0 && !IsApplication(p))
+            throw new ConnectionException("invalid-configuration", "Only an application connection can allow agents by type: a delegated one acts for one person.");
+        if (p.AllowedAgentTypes.Any(t => string.IsNullOrWhiteSpace(t) || t.Contains(':')))
+            throw new ConnectionException("invalid-configuration", "Allowed agent types are type names, not handles.");
         OAuthProvider.RequireHttps(p.Authority);
         if (p.Provider is not ("microsoft" or "google" or "oidc")) throw new ConnectionException("invalid-configuration", "Unknown provider.");
         if (!Enum.IsDefined(p.Authentication)) throw new ConnectionException("invalid-configuration", "Unknown authentication mode.");

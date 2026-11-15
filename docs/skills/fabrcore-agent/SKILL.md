@@ -235,6 +235,130 @@ protected Task<ChatClientAgentResult> CreateChatClientAgent(
 
 **`CreateFabrCoreHarnessAgent`** is the drop-in sibling for agents that need to work a multi-step plan rather than answer one message. Same call shape, but the model gets a todo list, an iteration loop re-invokes it until that list is clear, and it can delegate to other FabrCore agents — with the whole session persisted across grain deactivation. See **fabrcore-harness**.
 
+### Multiple conversations on one agent
+
+`AgentMessage.Channel` can be a consumer-chosen conversation key, but it does not select a
+session or isolate history automatically. Map the key to a distinct `AIAgent`,
+`AgentSession`, and history provider/thread. Keep the existing thread ID for null/blank
+channels so existing default history remains available. Use a stable, collision-free mapping
+for named threads; do not map all messages to the single `_agent`/`_session` above.
+
+The following are members of a `FabrCoreAgentProxy` subclass (add `using FabrCore.Core;`,
+`using FabrCore.Sdk;`, `using Microsoft.Extensions.AI;`, and the usual System collection,
+threading and text namespaces). It assumes the caller has already authenticated and authorized
+the conversation key and accepts only canonical, nonblank ASCII keys for named conversations.
+Enable `_ChannelBusyRoutingEnabled` to allow distinct channels to run concurrently. The creation
+gate protects the session dictionary; each session has its own gate to avoid overlapping runs.
+Shared tools and other mutable agent state must also support concurrent use.
+
+```csharp
+private sealed record ConversationSession(ChatClientAgentResult Client, SemaphoreSlim Gate);
+private readonly SemaphoreSlim _conversationCreationGate = new(1, 1);
+private readonly Dictionary<string, ConversationSession> _conversations =
+    new(StringComparer.Ordinal);
+private IList<AITool> _tools = null!;
+private string _defaultThreadId = null!;
+
+public override async Task OnInitialize()
+{
+    _tools = await ResolveConfiguredToolsAsync();
+    // Use the exact thread ID used by the existing single-conversation agent.
+    _defaultThreadId = config.Handle ?? fabrcoreAgentHost.GetHandle();
+    _conversations.Clear();
+    _conversations[""] = new ConversationSession(
+        await CreateChatClientAgent(config.Models ?? "default", _defaultThreadId, _tools),
+        new SemaphoreSlim(1, 1));
+}
+
+public override async Task<AgentMessage> OnMessage(AgentMessage message)
+{
+    var channel = string.IsNullOrWhiteSpace(message.Channel) ? "" : message.Channel;
+    ConversationSession conversation;
+    await _conversationCreationGate.WaitAsync();
+    try
+    {
+        if (!_conversations.TryGetValue(channel, out conversation!))
+        {
+            // Hex encodes the complete key; the prefix keeps named threads distinct from default.
+            var threadId = _defaultThreadId + ":conversation:" +
+                Convert.ToHexString(Encoding.UTF8.GetBytes(channel));
+            conversation = new ConversationSession(
+                await CreateChatClientAgent(config.Models ?? "default", threadId, _tools),
+                new SemaphoreSlim(1, 1));
+            _conversations.Add(channel, conversation);
+        }
+    }
+    finally
+    {
+        _conversationCreationGate.Release();
+    }
+    await conversation.Gate.WaitAsync();
+    try
+    {
+        var result = await conversation.Client.Agent.RunAsync(
+            message.Message ?? "", conversation.Client.Session);
+        var response = message.Response(); // copies the original Channel
+        response.Message = result.Text;
+        return response;
+    }
+    finally
+    {
+        conversation.Gate.Release();
+    }
+}
+```
+
+Each creation registers a distinct `FabrCoreChatHistoryProvider` and compaction configuration.
+The host attempts to flush tracked providers after primary messages and on deactivation; a new
+activation recreates sessions/providers and loads history by thread ID. Flush failures are retried
+and logged, not propagated; a successful reply does not guarantee durable history. Persistence
+across process restarts requires durable Orleans storage. Bound channel creation and lifetime:
+caching providers, sessions, threads and compaction registrations for arbitrary keys grows resources. Use a durable,
+authorized mapping when keys or the thread naming scheme can change; changing an existing
+thread ID does not migrate its history.
+
+Reuse all existing tool and `configureOptions`/context-provider setup for **each** creation; do
+not silently drop Memory, GraphRAG, custom instructions, or compaction configuration. Separate
+chat history does not create per-conversation long-term Memory or GraphRAG scopes: retain their
+existing agent-wide scopes and permissions unless deliberately redesigned. Shared tools, mutable
+agent fields, custom state and external resources must themselves be safe for the chosen
+concurrency. A channel is not an authorization boundary: authenticate the sender, authorize access
+to the agent and conversation, and issue or validate scoped opaque keys. Untrusted callers can
+otherwise collide with another conversation (including by using blank or whitespace variants).
+Framework routing and tracking treat nonblank channels as exact ordinal strings; normalize or reject
+variants consistently before authorization and dispatch, rather than only inside `OnMessage`.
+Reserve `_admin` and `_debug`; don't repurpose addon transport channels as conversation IDs.
+See **fabrcore-messaging** for transport mapping and replies.
+
+#### Optional routing and catalog
+
+These independent string-valued `AgentConfiguration.Args` flags default to false:
+
+```json
+{
+  "_ChannelBusyRoutingEnabled": "true",
+  "_ConversationTrackingEnabled": "true",
+  "_ConversationWorkerModel": "small"
+}
+```
+
+- `_ChannelBusyRoutingEnabled=true` routes overlapping messages on the same exact nonblank channel
+  to `OnMessageBusy`; different channels may enter primary processing concurrently. Blank channels
+  share the default key. This is not a queue or a history/session isolation mechanism. With default
+  agent-wide routing, a primary older than five minutes may be treated as stale and another admitted;
+  channel-wide routing keeps the same channel busy until its primary completes. Busy messages do
+  not get primary heartbeat, compaction or history flush. Enable concurrency only after validating
+  all shared proxy/host state and tools. The session gate above protects only each session.
+- `_ConversationTrackingEnabled=true` records exact nonblank channels in agent custom state
+  `_ConversationCatalog`; it is metadata, not history isolation or access control. In a subclass,
+  `await GetConversationsAsync()` returns a metadata snapshot. Tracking happens before `OnMessage`:
+  authorize before dispatch, and account for first-message text being sent to the worker model.
+  The optional `_ConversationWorkerModel` selects that model, falling back to nonblank
+  `config.Models`, then `"default"`.
+- The first message supplies a provisional first-sentence description, retained on model failure
+  and retried on later messages. Both provisional and generated descriptions are capped at 74
+  words (strictly fewer than 75). Blank channels are not cataloged; persistence can fail.
+
 ### Private internal specialists
 
 One proxy may privately own several Microsoft `AIAgent` specialists without creating more FabrCore

@@ -2,8 +2,6 @@ using FabrCore.Core.CloudServer;
 using FabrCore.Host.Services.CloudServer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Configuration.CommandLine;
-using Microsoft.Extensions.Configuration.EnvironmentVariables;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -144,14 +142,9 @@ internal static class CloudSettingsBootstrapper
         // sources come first, and the unprefixed application source comes last. Inserting before
         // the first match would bury the cloud layer underneath appsettings.json, silently
         // inverting the intended precedence. What we want is the position immediately before the
-        // trailing run of environment and command-line sources.
+        // trailing run of environment, command-line and host database sources.
         var sources = configuration.Sources;
-        var index = sources.Count;
-        while (index > 0 &&
-               sources[index - 1] is EnvironmentVariablesConfigurationSource or CommandLineConfigurationSource)
-        {
-            index--;
-        }
+        var index = ConfigurationLayering.TrailingIndex(sources);
 
         sources.Insert(index, source);
         logger.LogDebug(

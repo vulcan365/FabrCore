@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.Json;
 using FabrCore.Core.CloudServer;
+using FabrCore.Host.Database;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Configuration.CommandLine;
@@ -43,8 +44,7 @@ internal sealed class RuntimeConfigurationState
         if (this.rules.Select(r => r.Name).Distinct(StringComparer.Ordinal).Count() != this.rules.Length)
             throw new InvalidOperationException("Runtime configuration rule names must be unique.");
         // A single overlay contains only explicit overrides and absent-key defaults. Operator sources stay last.
-        var index = configuration.Sources.Count;
-        while (index > 0 && configuration.Sources[index - 1] is EnvironmentVariablesConfigurationSource or CommandLineConfigurationSource) index--;
+        var index = ConfigurationLayering.TrailingIndex(configuration.Sources);
         ((IConfigurationBuilder)configuration).Sources.Insert(index, new RuleSource(provider));
         Commit(Evaluate(null));
         var a2aDefaults = new A2AOptions();
@@ -210,8 +210,11 @@ internal sealed class RuntimeConfigurationState
             }
             if (winner is not null)
             {
-                source = winner == cloud?.Provider ? "cloud" : IsOperator(winner) ? "operator" : "file-or-provider";
-                sourceId = winner is JsonConfigurationProvider json ? Path.GetFileName(json.Source.Path) : winner.GetType().Name;
+                source = winner == cloud?.Provider ? "cloud" : winner is HostDatabaseConfigurationProvider ? "host" : IsOperator(winner) ? "operator" : "file-or-provider";
+                sourceId = winner is JsonConfigurationProvider json ? Path.GetFileName(json.Source.Path)
+                    : winner is HostDatabaseConfigurationProvider ? FabrCoreHostDatabase.SectionName : winner.GetType().Name;
+                if (winner is HostDatabaseConfigurationProvider)
+                    reason = "Set on the host; values from the cloud server are ignored.";
             }
             if (ruleValues.TryGetValue(key, out var rule) && (winner == provider || preview && (winner is null || !IsOperator(winner))))
             { source = rule.Kind; sourceId = rule.Rule; reason = rule.Reason; }
@@ -262,7 +265,7 @@ internal sealed class RuntimeConfigurationState
         return report;
     }
 
-    private static bool IsOperator(IConfigurationProvider p) => p is EnvironmentVariablesConfigurationProvider or CommandLineConfigurationProvider;
+    private static bool IsOperator(IConfigurationProvider p) => p is EnvironmentVariablesConfigurationProvider or CommandLineConfigurationProvider or HostDatabaseConfigurationProvider;
     private static bool ValuesEqual(string key, string? left, string? right) =>
         bool.TryParse(left, out var a) && bool.TryParse(right, out var b) ? a == b :
         string.Equals(left, right, key.EndsWith(":ClusteringMode", StringComparison.OrdinalIgnoreCase) ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);

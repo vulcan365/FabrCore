@@ -137,3 +137,12 @@ FabrCore.Host.Api.Controllers.IntegrationsAdminController.GetA2A(System.Threadin
 FabrCore.Host.Api.Controllers.IntegrationsAdminController.IntegrationsAdminController(System.IServiceProvider! services) -> void
 FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation.DefaultValue.get -> string?
 FabrCore.Host.Configuration.Cloud.RuntimeSettingObservation.DefaultValue.init -> void
+FabrCore.Host.Database.FabrCoreHostDatabase
+const FabrCore.Host.Database.FabrCoreHostDatabase.Acl = "Acl" -> string!
+const FabrCore.Host.Database.FabrCoreHostDatabase.Default = "Default" -> string!
+const FabrCore.Host.Database.FabrCoreHostDatabase.GraphRag = "GraphRag" -> string!
+const FabrCore.Host.Database.FabrCoreHostDatabase.Membership = "Membership" -> string!
+const FabrCore.Host.Database.FabrCoreHostDatabase.Memory = "Memory" -> string!
+const FabrCore.Host.Database.FabrCoreHostDatabase.Operations = "Operations" -> string!
+const FabrCore.Host.Database.FabrCoreHostDatabase.SectionName = "FabrCore:HostDatabase" -> string!
+const FabrCore.Host.Database.FabrCoreHostDatabase.State = "State" -> string!

@@ -93,6 +93,35 @@ For existing split databases, the optional `MemoryConnectionStringName`,
 `FabrCore:Database` override individual connections. These require the main SQL
 connection to be configured.
 
+### The host's own database
+
+Where a host is deployed with its database, such as a host Forge sets up with a managed SQL
+database, set it once in the host's environment:
+
+```
+FabrCore__HostDatabase__Default=<connection string>
+```
+
+`Default` covers everything: Orleans membership, reminders and streams, Orleans grain state, ACL,
+Memory, GraphRAG and the operational database. Each other key moves one feature to its own
+database, and falls back to `Default` when unset:
+
+| Key | Feature | Falls back to |
+|---|---|---|
+| `Membership` | Orleans clustering, reminders, AdoNet streams | `Default` |
+| `State` | Orleans grain and pub/sub storage | `Membership`, then `Default` |
+| `Acl`, `Memory`, `GraphRag`, `Operations` | That feature's SQL data | `Default` |
+
+The host reads these first. Only a feature with neither its key nor `Default` uses the settings
+below (`ConnectionStrings:FabrCore`, `FabrCore:Database:*ConnectionStringName`,
+`FabrCore:Orleans:*`), whether they come from files or a cloud server. A cloud server can never
+set `FabrCore:HostDatabase` itself, and what it sends for a feature the host has covered is
+ignored. With `Membership` or `Default` set, Orleans uses SQL Server clustering. An unknown key
+or an empty value stops startup.
+
+`Default` turns on the full SQL feature set, which checks its models at startup. A host that
+has no models yet can set `Membership` alone, so agents' state is kept in SQL until they arrive.
+
 An explicitly configured Orleans clustering mode/provider takes precedence over
 the SQL runtime default. Existing Orleans connection overrides remain supported.
 This permits Azure/custom Orleans storage with SQL-backed knowledge and ACL data.

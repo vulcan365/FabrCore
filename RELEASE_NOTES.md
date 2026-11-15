@@ -2,6 +2,34 @@
 
 These changes are on `develop` and are not in a published package yet.
 
+## The host's own database comes first
+
+- **`FabrCore:HostDatabase`.** A host deployed with its database sets one connection,
+  `FabrCore__HostDatabase__Default`, for every feature: Orleans membership and state, ACL, Memory, GraphRAG and
+  operations. `Membership`, `State`, `Acl`, `Memory`, `GraphRag` and `Operations` move one feature each. These are read before
+  anything else. A feature they don't cover still uses `ConnectionStrings:FabrCore`, `FabrCore:Database` and `FabrCore:Orleans`
+  as before.
+- **A cloud server can't move it.** The section is on the cloud blocklist, and what it settles stays above the cloud and runtime
+  rule layers, even when a host adds its own in-memory configuration last. Before this, a source added after the environment
+  variables put the cloud layer above it. The runtime report shows the keys it covers with source `host`.
+
+## An application connection for every agent of a type
+
+- **`ConnectionProfile.AllowedAgentTypes`.** An application connection (`ClientCredentials` or `AgentIdApplication`) can allow
+  every instance of an agent type, whoever owns it, beside the exact handles in `AllowedAgents`. A delegated connection that lists
+  a type is refused when it's saved, and a type is never honoured on one. Use it, for example, to give each agent type its own
+  Entra Agent ID identity, so a new instance needs no profile change.
+- **The caller's type reaches the connection.** `ConnectionCaller` (principal, handle, agent type) comes from host context, and
+  `IConnectionService` has overloads that take it. They have default implementations, so existing implementations still compile
+  and simply don't see the type. `Connections` in an agent uses them.
+- **`IConnectionBindingResolver`.** A host can choose the connection an agent gets for an alias its `connections` argument
+  doesn't bind. Without one, it's still the agent's own principal's connection of that name.
+- Templates hash as before, so upgrading doesn't end anyone's sign-in.
+
+# Released by 2.1.4
+
+These were listed as unreleased, but tag `v2.1.4` includes them.
+
 ## Connecting an account for agents that work without the person
 
 - **Only your own account.** Finishing an `AuthorizationCode` connection with the `microsoft` provider now checks the account

@@ -33,6 +33,12 @@ namespace FabrCore.Sdk
         /// <summary>How long the current primary OnMessage has been running. Zero if not processing.</summary>
         internal TimeSpan InternalProcessingElapsed { get; }
 
+        // Channel queries use the exact nonblank channel; blank channels share one key.
+        internal bool InternalIsProcessingMessageForChannel(string? channel);
+        internal TimeSpan InternalProcessingElapsedForChannel(string? channel);
+        internal AgentMessage? InternalActiveMessageForChannel(string? channel);
+        internal string? InternalStatusMessageForChannel(string? channel);
+
         /// <summary>
         /// Lightweight handler invoked when a new message arrives while OnMessage is already running.
         /// Routes to the virtual OnMessageBusy method.
@@ -143,29 +149,96 @@ namespace FabrCore.Sdk
 
         private DateTime? _initializedAt;
 
-        // Tracks the message currently being processed (set by InternalOnMessage)
-        private AgentMessage? _activeMessage;
-        private int _activeMessageCount;
-        private long _processingStartTimestamp;
+        private sealed class MessageTurn
+        {
+            public AgentMessage? Message { get; init; }
+            public long Started { get; } = Stopwatch.GetTimestamp();
+            public string? Status;
+        }
 
-        /// <summary>The message currently being processed. Set automatically by InternalOnMessage.</summary>
-        protected AgentMessage? ActiveMessage => _activeMessage;
-
+        private readonly object _turnLock = new();
+        private readonly List<MessageTurn> _activeTurns = new();
+        private readonly AsyncLocal<MessageTurn?> _currentTurn = new();
         private volatile string? _statusMessage;
 
-        /// <summary>
-        /// Sets the status message shown in the heartbeat loop.
-        /// The grain's _status heartbeat sends this instead of "Thinking..".
-        /// Pass null to revert to the default.
-        /// </summary>
-        protected void SetStatusMessage(string? message) => _statusMessage = message;
+        private MessageTurn? FindTurn(string? channel)
+        {
+            var key = NormalizeConversationChannel(channel);
+            lock (_turnLock)
+                return _activeTurns.LastOrDefault(t => NormalizeConversationChannel(t.Message?.Channel) == key);
+        }
+
+        private MessageTurn? LatestTurn()
+        {
+            lock (_turnLock) return _activeTurns.LastOrDefault();
+        }
+
+        /// <summary>The primary message for this execution, or the latest active primary outside a turn.</summary>
+        protected AgentMessage? ActiveMessage => (_currentTurn.Value ?? LatestTurn())?.Message;
+
+        /// <summary>Sets the current turn's heartbeat status, or the legacy fallback outside a turn.</summary>
+        protected void SetStatusMessage(string? message)
+        {
+            var turn = _currentTurn.Value;
+            if (turn is null) _statusMessage = message;
+            else Volatile.Write(ref turn.Status, message);
+        }
 
         /// <inheritdoc/>
         string? IFabrCoreAgentProxy.StatusMessage
         {
-            get => _statusMessage;
-            set => _statusMessage = value;
+            get
+            {
+                var turn = _currentTurn.Value ?? LatestTurn();
+                return turn is null ? _statusMessage : Volatile.Read(ref turn.Status);
+            }
+            set => SetStatusMessage(value);
         }
+
+        // A writer excludes all handlers. Preflight is opportunistic so another active handler
+        // never prevents different channels from entering; postflight runs at a quiet point.
+        private sealed class HistoryGate
+        {
+            private readonly object _sync = new();
+            private int _readers;
+            private bool _writer;
+            private TaskCompletionSource<bool> _changed = NewSignal();
+            private static TaskCompletionSource<bool> NewSignal() => new(TaskCreationOptions.RunContinuationsAsynchronously);
+            private void Signal() { var previous = _changed; _changed = NewSignal(); previous.TrySetResult(true); }
+
+            public bool TryEnterWriter()
+            {
+                lock (_sync)
+                {
+                    if (_writer || _readers != 0) return false;
+                    _writer = true;
+                    return true;
+                }
+            }
+
+            public async Task EnterReaderAsync()
+            {
+                while (true)
+                {
+                    Task wait;
+                    lock (_sync)
+                    {
+                        if (!_writer) { _readers++; return; }
+                        wait = _changed.Task;
+                    }
+                    await wait;
+                }
+            }
+
+            public void ExitReader()
+            {
+                lock (_sync) { _readers--; if (_readers == 0) Signal(); }
+            }
+
+            public void ExitWriter() { lock (_sync) { _writer = false; Signal(); } }
+        }
+
+        private readonly HistoryGate _historyGate = new();
 
         // MCP client lifecycle tracking
         private readonly List<McpClient> _mcpClients = new();
@@ -185,7 +258,17 @@ namespace FabrCore.Sdk
             public int AppliedStatedLimit { get; set; }
         }
 
-        private readonly List<ChatHistoryCompactionRegistration> _chatHistoryCompactionRegistrations = new();
+        private sealed class CompactionRegistrations
+        {
+            private readonly object _sync = new();
+            private readonly List<ChatHistoryCompactionRegistration> _items = new();
+            public void Add(ChatHistoryCompactionRegistration registration) { lock (_sync) _items.Add(registration); }
+            public int Count { get { lock (_sync) return _items.Count; } }
+            public ChatHistoryCompactionRegistration[] ToArray() { lock (_sync) return _items.ToArray(); }
+        }
+
+        private readonly CompactionRegistrations _chatHistoryCompactionRegistrations = new();
+        private readonly SemaphoreSlim _compactionInitializationGate = new(1, 1);
         private FabrCoreChatHistoryProvider? _chatHistoryProvider;
         private string? _chatClientConfigName;
         private CompactionService? _compactionService;
@@ -223,6 +306,19 @@ namespace FabrCore.Sdk
         private readonly Dictionary<string, JsonElement> _pendingStateChanges = new();
         private readonly HashSet<string> _pendingStateDeletes = new();
         private bool _customStateLoaded;
+        private readonly object _stateLock = new();
+        private readonly SemaphoreSlim _stateLoadGate = new(1, 1);
+        private readonly SemaphoreSlim _stateMergeGate = new(1, 1);
+        private readonly Dictionary<string, long> _stateVersions = new();
+        private long _nextStateVersion;
+
+        private const string ConversationTrackingEnabledArg = "_ConversationTrackingEnabled";
+        private const string ConversationWorkerModelArg = "_ConversationWorkerModel";
+        private const string ConversationCatalogStateKey = "_ConversationCatalog";
+        private const int ConversationDescriptionMaxWords = 74;
+        private readonly SemaphoreSlim _conversationCatalogLock = new(1, 1);
+        private readonly HashSet<string> _conversationDescriptionsInFlight = new(StringComparer.Ordinal);
+        private JsonElement? _conversationCatalogPendingWrite;
 
         public FabrCoreAgentProxy(AgentConfiguration config, IServiceProvider serviceProvider, IFabrCoreAgentHost fabrcoreAgentHost)
         {
@@ -596,13 +692,13 @@ namespace FabrCore.Sdk
             CompactionConfig compactionConfig,
             int estimatedTokens = 0)
         {
-            var customCompaction = _chatHistoryCompactionRegistrations
+            var customCompaction = _chatHistoryCompactionRegistrations.ToArray()
                 .LastOrDefault(r => ReferenceEquals(r.Provider, chatHistoryProvider))?.HistoryCompaction;
             if (customCompaction is null && (_compactionService is null || _chatClientConfigName is null))
                 return null;
 
             // Set status so the grain's heartbeat loop shows "Compacting.." instead of "Thinking.."
-            _statusMessage = "Compacting..";
+            SetStatusMessage("Compacting..");
 
             // Exempt the summarization call from the turn budget: history compaction exists to reduce
             // spend and must never be aborted by the spend limit it is working to keep the run under.
@@ -616,7 +712,7 @@ namespace FabrCore.Sdk
             }
             finally
             {
-                _statusMessage = null;
+                SetStatusMessage(null);
             }
         }
 
@@ -665,6 +761,13 @@ namespace FabrCore.Sdk
         }
 
         private async Task EnsureCompactionInitializedAsync(ChatHistoryCompactionRegistration registration)
+        {
+            await _compactionInitializationGate.WaitAsync();
+            try { await InitializeCompactionCoreAsync(registration); }
+            finally { _compactionInitializationGate.Release(); }
+        }
+
+        private async Task InitializeCompactionCoreAsync(ChatHistoryCompactionRegistration registration)
         {
             // Resolved once per activation, and again whenever a provider states a different limit
             // for this model, so history, the fuse and the stop follow a learned cap on the next turn.
@@ -1241,18 +1344,316 @@ namespace FabrCore.Sdk
 
         #region Custom State API
 
+        private sealed class ConversationCatalogState
+        {
+            public Dictionary<string, ConversationCatalogEntry> Conversations { get; set; } = new(StringComparer.Ordinal);
+        }
+
+        private sealed class ConversationCatalogEntry
+        {
+            public string Channel { get; set; } = string.Empty;
+            public string Description { get; set; } = string.Empty;
+            public bool IsProvisional { get; set; }
+            public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+            public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
+        }
+
+        private bool IsConversationTrackingEnabled()
+        {
+            var args = config.Args;
+            return args != null
+                && args.TryGetValue(ConversationTrackingEnabledArg, out var enabledRaw)
+                && bool.TryParse(enabledRaw, out var enabled)
+                && enabled;
+        }
+
+        private static string NormalizeConversationChannel(string? channel)
+            => string.IsNullOrWhiteSpace(channel) ? string.Empty : channel;
+
+        private string ResolveConversationWorkerModel()
+        {
+            var args = config.Args;
+            if (args != null
+                && args.TryGetValue(ConversationWorkerModelArg, out var workerModel)
+                && !string.IsNullOrWhiteSpace(workerModel))
+            {
+                return workerModel;
+            }
+
+            return !string.IsNullOrWhiteSpace(config.Models) ? config.Models : "default";
+        }
+
+#pragma warning disable RS0016 // Public API baseline update is outside this change's permitted scope.
+        /// <summary>Gets the configured worker chat client for lightweight agent tasks.</summary>
+        /// <remarks>Falls back to the agent's model configuration, then to the default model.</remarks>
+        protected Task<IChatClient> GetWorkerChatClientAsync(int networkTimeoutSeconds = 100)
+            => GetChatClient(ResolveConversationWorkerModel(), networkTimeoutSeconds);
+
+        /// <summary>Lists persisted conversation metadata, including provisional descriptions.</summary>
+        /// <remarks>Returns a snapshot; blank channels are not tracked.</remarks>
+        protected async Task<IReadOnlyList<ConversationMetadata>> GetConversationsAsync()
+        {
+            await _conversationCatalogLock.WaitAsync();
+            try
+            {
+                var catalog = await LoadConversationCatalogAsync();
+                return catalog.Conversations.Values.Select(entry => new ConversationMetadata
+                {
+                    Channel = entry.Channel,
+                    Description = entry.Description,
+                    IsProvisional = entry.IsProvisional,
+                    CreatedAtUtc = entry.CreatedAtUtc,
+                    UpdatedAtUtc = entry.UpdatedAtUtc
+                }).ToArray();
+            }
+            finally
+            {
+                _conversationCatalogLock.Release();
+            }
+        }
+
+#pragma warning restore RS0016
+
+        // Read and write the reserved catalog independently of the general-purpose pending state cache.
+        // The lock serializes the whole read/merge/write, but is never held during a worker call.
+        private async Task<ConversationCatalogState> LoadConversationCatalogAsync()
+        {
+            JsonElement? pending;
+            lock (_stateLock) pending = _conversationCatalogPendingWrite;
+            if (pending is { } pendingValue)
+                return pendingValue.Deserialize<ConversationCatalogState>() ?? new ConversationCatalogState();
+            var state = await fabrcoreAgentHost.GetCustomStateAsync();
+            if (!state.TryGetValue(ConversationCatalogStateKey, out var value))
+                return new ConversationCatalogState();
+
+            return value.Deserialize<ConversationCatalogState>() ?? new ConversationCatalogState();
+        }
+
+        private async Task SaveConversationCatalogAsync(ConversationCatalogState catalog)
+        {
+            lock (_stateLock) _conversationCatalogPendingWrite = JsonSerializer.SerializeToElement(catalog);
+            await RetryConversationCatalogWriteAsync();
+        }
+
+        private async Task RetryConversationCatalogWriteAsync()
+        {
+            JsonElement? pending;
+            lock (_stateLock) pending = _conversationCatalogPendingWrite;
+            if (pending is not { } value) return;
+
+            await _stateMergeGate.WaitAsync();
+            try
+            {
+                await fabrcoreAgentHost.MergeCustomStateAsync(
+                    new Dictionary<string, JsonElement> { [ConversationCatalogStateKey] = value },
+                    Array.Empty<string>());
+                lock (_stateLock)
+                {
+                    _conversationCatalogPendingWrite = null;
+                    if (_customStateCache is not null) _customStateCache[ConversationCatalogStateKey] = value;
+                }
+            }
+            finally { _stateMergeGate.Release(); }
+        }
+
+        private static string ExtractFirstSentence(string? message)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+            {
+                return "New conversation.";
+            }
+
+            var trimmed = message.Trim();
+            var sentenceBreak = trimmed.IndexOfAny(['.', '!', '?', '\r', '\n']);
+            var sentence = sentenceBreak >= 0 ? trimmed[..(sentenceBreak + 1)] : trimmed;
+            sentence = sentence.Trim();
+            return string.IsNullOrWhiteSpace(sentence) ? "New conversation." : sentence;
+        }
+
+        private static string LimitWords(string text, int maxWords)
+        {
+            if (string.IsNullOrWhiteSpace(text) || maxWords <= 0)
+            {
+                return string.Empty;
+            }
+
+            var parts = text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length <= maxWords)
+            {
+                return string.Join(' ', parts);
+            }
+
+            return string.Join(' ', parts.Take(maxWords));
+        }
+
+        private static string NormalizeConversationDescription(string? text)
+        {
+            var compact = LimitWords(text?.Trim() ?? string.Empty, ConversationDescriptionMaxWords);
+            return string.IsNullOrWhiteSpace(compact) ? string.Empty : compact;
+        }
+
+        private async Task<string?> TryGenerateConversationDescriptionAsync(string channel, string firstMessage)
+        {
+            var workerModel = ResolveConversationWorkerModel();
+            var prompt = string.IsNullOrWhiteSpace(firstMessage) ? "No conversation text was provided." : firstMessage;
+
+            try
+            {
+                var parentSafety = ChatRunSafetyScope.Current;
+                using var workerSafety = parentSafety is null ? null : ChatRunSafetyScope.Begin(
+                    parentSafety.AgentHandle, parentSafety.ParentMessageId, parentSafety.TraceId,
+                    parentSafety.Config, serviceProvider.GetService<FabrCore.Core.Monitoring.IAgentMessageMonitor>(), logger);
+                try
+                {
+                var chatClient = await GetWorkerChatClientAsync();
+                var response = await chatClient.GetResponseAsync(
+                [
+                    new ChatMessage(ChatRole.System,
+                        "Write one concise conversation title-style description with at most 74 words. " +
+                        "Return plain text only, no bullets, no markdown, no labels."),
+                    new ChatMessage(ChatRole.User, prompt)
+                ],
+                    new ChatOptions { MaxOutputTokens = 120 });
+
+                var description = NormalizeConversationDescription(response.Text);
+                return string.IsNullOrWhiteSpace(description) ? null : description;
+                }
+                finally
+                {
+                    if (parentSafety is not null && workerSafety is not null)
+                    {
+                        for (var i = 0; i < workerSafety.LlmCalls; i++)
+                            parentSafety.RecordCompletedCall(i == 0 ? workerSafety.TurnCumulativeInputTokens : 0, 0);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(
+                    ex,
+                    "Failed to generate conversation description for channel '{Channel}' on agent '{Handle}' using model '{Model}'. Keeping provisional description.",
+                    channel,
+                    config.Handle,
+                    workerModel);
+                return null;
+            }
+        }
+
+        private async Task EnsureConversationTrackedAsync(AgentMessage message)
+        {
+            if (!IsConversationTrackingEnabled())
+                return;
+
+            var channel = NormalizeConversationChannel(message.Channel);
+            if (channel.Length == 0)
+                return;
+
+            var firstSentence = LimitWords(ExtractFirstSentence(message.Message), ConversationDescriptionMaxWords);
+            var generate = false;
+            var workerInput = message.Message ?? firstSentence;
+            try
+            {
+                await _conversationCatalogLock.WaitAsync();
+                try
+                {
+                    await RetryConversationCatalogWriteAsync();
+                    var catalog = await LoadConversationCatalogAsync();
+                    if (!catalog.Conversations.TryGetValue(channel, out var entry))
+                    {
+                        var now = DateTime.UtcNow;
+                        entry = new ConversationCatalogEntry
+                        {
+                            Channel = channel,
+                            Description = firstSentence,
+                            IsProvisional = true,
+                            CreatedAtUtc = now,
+                            UpdatedAtUtc = now
+                        };
+                        catalog.Conversations[channel] = entry;
+                        await SaveConversationCatalogAsync(catalog);
+                    }
+                    else if (string.IsNullOrWhiteSpace(entry.Description))
+                    {
+                        entry.Description = firstSentence;
+                        entry.IsProvisional = true;
+                        entry.UpdatedAtUtc = DateTime.UtcNow;
+                        await SaveConversationCatalogAsync(catalog);
+                    }
+
+                    else if (entry.IsProvisional)
+                    {
+                        workerInput = entry.Description;
+                    }
+
+                    generate = entry.IsProvisional && _conversationDescriptionsInFlight.Add(channel);
+                }
+                finally
+                {
+                    _conversationCatalogLock.Release();
+                }
+
+                if (!generate)
+                    return;
+
+                var generated = await TryGenerateConversationDescriptionAsync(channel, workerInput);
+                if (string.IsNullOrWhiteSpace(generated))
+                    return;
+
+                await _conversationCatalogLock.WaitAsync();
+                try
+                {
+                    // Re-read after the worker call so other channels' updates are retained.
+                    await RetryConversationCatalogWriteAsync();
+                    var catalog = await LoadConversationCatalogAsync();
+                    if (catalog.Conversations.TryGetValue(channel, out var entry) && entry.IsProvisional)
+                    {
+                        entry.Description = generated;
+                        entry.IsProvisional = false;
+                        entry.UpdatedAtUtc = DateTime.UtcNow;
+                        await SaveConversationCatalogAsync(catalog);
+                    }
+                }
+                finally
+                {
+                    _conversationCatalogLock.Release();
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to persist conversation metadata for channel '{Channel}' on agent '{Handle}'.", channel, config.Handle);
+            }
+            finally
+            {
+                if (generate)
+                {
+                    await _conversationCatalogLock.WaitAsync();
+                    try { _conversationDescriptionsInFlight.Remove(channel); }
+                    finally { _conversationCatalogLock.Release(); }
+                }
+            }
+        }
+
         /// <summary>
         /// Ensures custom state is loaded from persistent storage.
         /// Called lazily on first state access.
         /// </summary>
         private async Task EnsureStateLoadedAsync()
         {
-            if (!_customStateLoaded)
+            lock (_stateLock) { if (_customStateLoaded) return; }
+            await _stateLoadGate.WaitAsync();
+            try
             {
-                _customStateCache = await fabrcoreAgentHost.GetCustomStateAsync();
-                _customStateLoaded = true;
-                logger.LogDebug("Loaded custom state with {Count} keys", _customStateCache.Count);
+                lock (_stateLock) { if (_customStateLoaded) return; }
+                await _stateMergeGate.WaitAsync();
+                try
+                {
+                    var state = new Dictionary<string, JsonElement>(await fabrcoreAgentHost.GetCustomStateAsync());
+                    lock (_stateLock) { _customStateCache = state; _customStateLoaded = true; }
+                    logger.LogDebug("Loaded custom state with {Count} keys", state.Count);
+                }
+                finally { _stateMergeGate.Release(); }
             }
+            finally { _stateLoadGate.Release(); }
         }
 
         /// <summary>
@@ -1282,6 +1683,8 @@ namespace FabrCore.Sdk
         {
             await EnsureStateLoadedAsync();
 
+            lock (_stateLock)
+            {
             // Check pending changes first
             if (_pendingStateChanges.TryGetValue(key, out var pendingElement))
             {
@@ -1301,6 +1704,7 @@ namespace FabrCore.Sdk
             }
 
             return StateReadSuccess<T>(key, valueKind: null, value: default);
+            }
         }
 
         private StateReadResult<T> DeserializeStateElement<T>(string key, JsonElement element)
@@ -1385,6 +1789,8 @@ namespace FabrCore.Sdk
         {
             await EnsureStateLoadedAsync();
 
+            lock (_stateLock)
+            {
             if (_pendingStateDeletes.Contains(key))
             {
                 return false;
@@ -1396,6 +1802,7 @@ namespace FabrCore.Sdk
             }
 
             return _customStateCache?.ContainsKey(key) ?? false;
+            }
         }
 
         /// <summary>
@@ -1407,8 +1814,12 @@ namespace FabrCore.Sdk
         protected void SetState<T>(string key, T value)
         {
             var element = JsonSerializer.SerializeToElement(value);
-            _pendingStateChanges[key] = element;
-            _pendingStateDeletes.Remove(key);
+            lock (_stateLock)
+            {
+                _pendingStateChanges[key] = element;
+                _pendingStateDeletes.Remove(key);
+                _stateVersions[key] = ++_nextStateVersion;
+            }
             logger.LogTrace("Set state key: {Key}", key);
         }
 
@@ -1418,61 +1829,101 @@ namespace FabrCore.Sdk
         /// <param name="key">The state key to remove.</param>
         protected void RemoveState(string key)
         {
-            _pendingStateChanges.Remove(key);
-            _pendingStateDeletes.Add(key);
+            lock (_stateLock)
+            {
+                _pendingStateChanges.Remove(key);
+                _pendingStateDeletes.Add(key);
+                _stateVersions[key] = ++_nextStateVersion;
+            }
             logger.LogTrace("Removed state key: {Key}", key);
         }
 
         /// <summary>
         /// Returns true if there are unsaved state changes.
         /// </summary>
-        protected bool HasPendingStateChanges => _pendingStateChanges.Count > 0 || _pendingStateDeletes.Count > 0;
+        protected bool HasPendingStateChanges
+        {
+            get { lock (_stateLock) return _pendingStateChanges.Count > 0 || _pendingStateDeletes.Count > 0 || _conversationCatalogPendingWrite.HasValue; }
+        }
 
         /// <summary>
         /// Persists all pending state changes to Orleans grain storage.
         /// </summary>
         protected async Task FlushStateAsync()
         {
-            if (!HasPendingStateChanges)
+            Exception? stateError = null;
+            await _stateMergeGate.WaitAsync();
+            try
             {
-                return;
-            }
-
-            await fabrcoreAgentHost.MergeCustomStateAsync(_pendingStateChanges, _pendingStateDeletes);
-
-            // Update local cache
-            if (_customStateCache != null)
-            {
-                foreach (var key in _pendingStateDeletes)
+                Dictionary<string, JsonElement> changes;
+                string[] deletes;
+                Dictionary<string, long> versions;
+                lock (_stateLock)
                 {
-                    _customStateCache.Remove(key);
+                    changes = new(_pendingStateChanges);
+                    deletes = _pendingStateDeletes.ToArray();
+                    versions = new(_stateVersions);
                 }
-                foreach (var (key, value) in _pendingStateChanges)
+                if (changes.Count != 0 || deletes.Length != 0)
                 {
-                    _customStateCache[key] = value;
+                    try
+                    {
+                        await fabrcoreAgentHost.MergeCustomStateAsync(changes, deletes);
+                        lock (_stateLock)
+                        {
+                            if (_customStateCache is not null)
+                            {
+                                foreach (var key in deletes) _customStateCache.Remove(key);
+                                foreach (var (key, value) in changes) _customStateCache[key] = value;
+                            }
+                            foreach (var (key, version) in versions)
+                            {
+                                if (_stateVersions.TryGetValue(key, out var current) && current == version)
+                                {
+                                    _pendingStateChanges.Remove(key);
+                                    _pendingStateDeletes.Remove(key);
+                                    _stateVersions.Remove(key);
+                                }
+                            }
+                        }
+                        logger.LogDebug("Flushed state: {ChangesCount} changes, {DeletesCount} deletes", changes.Count, deletes.Length);
+                    }
+                    catch (Exception ex) { stateError = ex; }
                 }
             }
+            finally { _stateMergeGate.Release(); }
 
-            logger.LogDebug("Flushed state: {ChangesCount} changes, {DeletesCount} deletes",
-                _pendingStateChanges.Count, _pendingStateDeletes.Count);
-
-            _pendingStateChanges.Clear();
-            _pendingStateDeletes.Clear();
+            Exception? catalogError = null;
+            await _conversationCatalogLock.WaitAsync();
+            try { await RetryConversationCatalogWriteAsync(); }
+            catch (Exception ex) { catalogError = ex; }
+            finally { _conversationCatalogLock.Release(); }
+            if (stateError is not null && catalogError is not null) throw new AggregateException(stateError, catalogError);
+            if (stateError is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(stateError).Throw();
+            if (catalogError is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(catalogError).Throw();
         }
 
         // Internal methods for IFabrCoreAgentProxy
         bool IFabrCoreAgentProxy.InternalHasPendingStateChanges => HasPendingStateChanges;
-        bool IFabrCoreAgentProxy.InternalIsProcessingMessage => _activeMessageCount > 0;
-
-        TimeSpan IFabrCoreAgentProxy.InternalProcessingElapsed =>
-            _activeMessageCount > 0
-                ? Stopwatch.GetElapsedTime(_processingStartTimestamp)
-                : TimeSpan.Zero;
-
-        async Task IFabrCoreAgentProxy.InternalFlushStateAsync()
+        bool IFabrCoreAgentProxy.InternalIsProcessingMessage => LatestTurn() is not null;
+        TimeSpan IFabrCoreAgentProxy.InternalProcessingElapsed
         {
-            await FlushStateAsync();
+            get { var turn = LatestTurn(); return turn is null ? TimeSpan.Zero : Stopwatch.GetElapsedTime(turn.Started); }
         }
+        bool IFabrCoreAgentProxy.InternalIsProcessingMessageForChannel(string? channel) => FindTurn(channel) is not null;
+        TimeSpan IFabrCoreAgentProxy.InternalProcessingElapsedForChannel(string? channel)
+        {
+            var turn = FindTurn(channel);
+            return turn is null ? TimeSpan.Zero : Stopwatch.GetElapsedTime(turn.Started);
+        }
+        AgentMessage? IFabrCoreAgentProxy.InternalActiveMessageForChannel(string? channel) => FindTurn(channel)?.Message;
+        string? IFabrCoreAgentProxy.InternalStatusMessageForChannel(string? channel)
+        {
+            var turn = FindTurn(channel);
+            return turn is null ? null : Volatile.Read(ref turn.Status);
+        }
+
+        Task IFabrCoreAgentProxy.InternalFlushStateAsync() => FlushStateAsync();
 
         private readonly List<FabrCoreResolvedToolScope> _configuredToolScopes = [];
 
@@ -1706,12 +2157,12 @@ namespace FabrCore.Sdk
 
             var startTime = Stopwatch.GetTimestamp();
 
+            var turn = new MessageTurn { Message = message };
+            var previousTurn = _currentTurn.Value;
+            _currentTurn.Value = turn;
+            lock (_turnLock) _activeTurns.Add(turn);
             try
             {
-                Interlocked.Increment(ref _activeMessageCount);
-                _activeMessage = message;
-                _processingStartTimestamp = Stopwatch.GetTimestamp();
-
                 AgentMessage response;
                 using (var llmScope = LlmUsageScope.Begin(
                     agentHandle: fabrcoreAgentHost.GetHandle(),
@@ -1719,9 +2170,13 @@ namespace FabrCore.Sdk
                     traceId: message.TraceId,
                     originContext: $"OnMessage:{message.Id}"))
                 {
-                    // Resolving the ladder also resolves the run-safety rung, so reuse it rather than
-                    // rebuilding it — that is what keeps the stop anchored above the compaction rungs.
-                    await EnsureCompactionInitializedAsync();
+                    // Initialize and compact only at an exclusive quiet point. A concurrent turn
+                    // skips preflight rather than blocking behind another active handler.
+                    if (_historyGate.TryEnterWriter())
+                    {
+                        try { await EnsureCompactionInitializedAsync(); }
+                        finally { _historyGate.ExitWriter(); }
+                    }
                     var runSafetyModelConfig = _chatClientConfigName ?? config.Models ?? "default";
                     var runSafetyConfig = _compactionLadder?.RunSafety
                         ?? await BuildRunSafetyConfigAsync(
@@ -1739,14 +2194,25 @@ namespace FabrCore.Sdk
 
                     try
                     {
-                        // Preflight: history-compact any registered provider whose stored thread is
-                        // already over budget before OnMessage can make an LLM call.
-                        await TryPreflightCompactAsync();
+                        await EnsureConversationTrackedAsync(message);
 
-                        response = await OnMessage(message);
+                        if (_historyGate.TryEnterWriter())
+                        {
+                            try { await TryPreflightCompactAsync(); }
+                            finally { _historyGate.ExitWriter(); }
+                        }
 
-                        // Consolidate the persisted thread if it grew past the history threshold.
-                        await TryCompactAsync();
+                        await _historyGate.EnterReaderAsync();
+                        try { response = await OnMessage(message); }
+                        finally { _historyGate.ExitReader(); }
+
+                        // Never wait for another handler here: it may be awaiting this turn.
+                        // The last finishing handler performs the shared postflight pass.
+                        if (_historyGate.TryEnterWriter())
+                        {
+                            try { await TryCompactAsync(); }
+                            finally { _historyGate.ExitWriter(); }
+                        }
                     }
                     catch (FabrCoreRunStoppedException ex)
                     {
@@ -1802,11 +2268,8 @@ namespace FabrCore.Sdk
             }
             finally
             {
-                if (Interlocked.Decrement(ref _activeMessageCount) == 0)
-                {
-                    _activeMessage = null;
-                    _processingStartTimestamp = 0;
-                }
+                lock (_turnLock) _activeTurns.Remove(turn);
+                _currentTurn.Value = previousTurn;
             }
         }
 
@@ -1823,6 +2286,9 @@ namespace FabrCore.Sdk
                 message.FromHandle, message.ToHandle);
 
             var startTime = Stopwatch.GetTimestamp();
+            var previousTurn = _currentTurn.Value;
+            var primary = IsChannelBusyRoutingEnabled() ? FindTurn(message.Channel) : LatestTurn();
+            _currentTurn.Value = new MessageTurn { Message = primary?.Message };
             try
             {
                 var response = await OnMessageBusy(message);
@@ -1851,7 +2317,12 @@ namespace FabrCore.Sdk
                     new KeyValuePair<string, object?>("agent.type", config.AgentType));
                 throw;
             }
+            finally { _currentTurn.Value = previousTurn; }
         }
+
+        private bool IsChannelBusyRoutingEnabled() => config.Args is { } args
+            && args.TryGetValue("_ChannelBusyRoutingEnabled", out var raw)
+            && bool.TryParse(raw, out var enabled) && enabled;
 
         async Task IFabrCoreAgentProxy.InternalOnEvent(EventMessage message)
         {

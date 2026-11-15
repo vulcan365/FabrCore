@@ -90,6 +90,7 @@ namespace FabrCore.Host.Grains
         // Message persistence state
         private readonly IPersistentState<AgentGrainState> _messageState;
         private readonly List<FabrCoreChatHistoryProvider> _activeChatHistoryProviders = new();
+        private readonly SemaphoreSlim _chatHistoryFlushGate = new(1, 1);
 
         // Timer and reminder state
         private readonly Dictionary<string, IDisposable> _timers = new();
@@ -105,10 +106,34 @@ namespace FabrCore.Host.Grains
         private readonly AgentGrainOptions _grainOptions;
         private readonly FabrCore.Core.Acl.AclEnforcer _acl;
 
-        // Cross-principal breadcrumb of the message currently being processed, so chains the
-        // agent composes itself (new AgentMessage objects) inherit the lineage host-side.
-        private string? _inboundCrossPrincipalOrigin;
-        private int _inboundCrossPrincipalHops;
+        private sealed class MessageExecutionContext
+        {
+            public string? Origin { get; init; }
+            public int Hops { get; init; }
+            private string? _statusMessage;
+            public string? StatusMessage { get => Volatile.Read(ref _statusMessage); set => Volatile.Write(ref _statusMessage, value); }
+        }
+
+        private sealed class MessageExecutionScope : IDisposable
+        {
+            private readonly AsyncLocal<MessageExecutionContext?> _context;
+            private readonly MessageExecutionContext? _previous;
+
+            public MessageExecutionScope(AsyncLocal<MessageExecutionContext?> context, AgentMessage request)
+            {
+                _context = context;
+                _previous = context.Value;
+                context.Value = new MessageExecutionContext { Origin = request.CrossPrincipalOrigin, Hops = request.CrossPrincipalHops };
+            }
+
+            public void Dispose() => _context.Value = _previous;
+        }
+
+        private readonly AsyncLocal<MessageExecutionContext?> _messageExecution = new();
+        private readonly HashSet<string> _activePrimaryChannels = new(StringComparer.Ordinal);
+        private int _activeChannelBusyMessages;
+        private bool IsAgentProcessing => _activePrimaryChannels.Count != 0 || _activeChannelBusyMessages != 0
+            || fabrcoreAgentProxy?.InternalIsProcessingMessage == true;
 
         public AgentGrain(
             IClusterClient clusterClient,
@@ -301,7 +326,7 @@ namespace FabrCore.Host.Grains
             logger.LogInformation("Configuring agent: {AgentType} {Handle}", config.AgentType, config.Handle);
             logger.LogDebug("Agent configuration details - Streams: {StreamCount}", config.Streams?.Count ?? 0);
 
-            if (fabrcoreAgentProxy?.InternalIsProcessingMessage == true)
+            if (IsAgentProcessing)
                 throw new InvalidOperationException("Agent is actively processing.");
             lifecycleDepth++;
             try
@@ -510,7 +535,7 @@ namespace FabrCore.Host.Grains
         public async Task<AgentHealthStatus> ResetAgent()
         {
             RejectAdminBusy();
-            if (fabrcoreAgentProxy?.InternalIsProcessingMessage == true) throw new InvalidOperationException("Agent is actively processing.");
+            if (IsAgentProcessing) throw new InvalidOperationException("Agent is actively processing.");
             using var activity = ActivitySource.StartActivity("ResetAgent", ActivityKind.Internal);
             var handle = this.GetPrimaryKeyString();
             activity?.SetTag("agent.handle", handle);
@@ -569,7 +594,7 @@ namespace FabrCore.Host.Grains
             var handle = this.GetPrimaryKeyString();
             activity?.SetTag("agent.handle", handle);
 
-            if (fabrcoreAgentProxy?.InternalIsProcessingMessage == true)
+            if (IsAgentProcessing)
             {
                 activity?.SetStatus(ActivityStatusCode.Error, "Agent is actively processing");
                 throw new InvalidOperationException("Agent is actively processing a message and cannot be evicted.");
@@ -772,9 +797,8 @@ namespace FabrCore.Host.Grains
         }
 
         /// <summary>
-        /// Messages that have been processing for longer than this threshold are considered stale.
-        /// A new message arriving while a stale primary is running will be treated as a fresh primary
-        /// instead of being busy-routed, preventing the agent from getting permanently stuck.
+        /// In legacy routing, a stale primary can be bypassed to avoid a permanently stuck agent.
+        /// Channel routing never bypasses an outstanding reservation.
         /// </summary>
         private static readonly TimeSpan StaleMessageThreshold = TimeSpan.FromMinutes(5);
 
@@ -788,10 +812,17 @@ namespace FabrCore.Host.Grains
             if (fabrcoreAgentProxy == null)
                 throw new InvalidOperationException("Agent has not been configured. Call ConfigureAgent first.");
 
+            var useChannelBusyRouting = IsChannelBusyRoutingEnabled();
+            var normalizedChannel = NormalizeBusyChannel(request.Channel);
+
             // Routing decision: checked before the first await, so Orleans' single-threaded
-            // turn guarantees this is atomic. Only one caller enters HandlePrimaryMessage;
-            // all others are routed to HandleBusyMessage.
-            if (fabrcoreAgentProxy.InternalIsProcessingMessage)
+            // turn guarantees this is atomic.
+            if (useChannelBusyRouting)
+            {
+                if (!_activePrimaryChannels.Add(normalizedChannel))
+                    return await HandleChannelBusyMessage(request);
+            }
+            else if (fabrcoreAgentProxy.InternalIsProcessingMessage)
             {
                 // Safety valve: if the primary message has been running too long, it's likely
                 // stuck (hung LLM call, deadlocked tool, etc.). Log a warning and allow this
@@ -810,11 +841,20 @@ namespace FabrCore.Host.Grains
                 }
             }
 
-            return await HandlePrimaryMessage(request);
+            try
+            {
+                return await HandlePrimaryMessage(request);
+            }
+            finally
+            {
+                if (useChannelBusyRouting)
+                    _activePrimaryChannels.Remove(normalizedChannel);
+            }
         }
 
         private async Task<AgentMessage> HandlePrimaryMessage(AgentMessage request)
         {
+            using var executionScope = new MessageExecutionScope(_messageExecution, request);
             using var activity = request.StartIngressActivity(ActivitySource, "OnMessage", ActivityKind.Server);
             activity?.SetTag("message.from", request.FromHandle);
             activity?.SetTag("message.to", request.ToHandle);
@@ -824,11 +864,6 @@ namespace FabrCore.Host.Grains
             logger.LogDebug("OnMessage received: {AgentMessage}", SerializeForLog(request));
 
             var startTime = Stopwatch.GetTimestamp();
-
-            // Stash the inbound cross-principal breadcrumb so messages the agent sends while
-            // processing (via SendMessage/SendAndReceiveMessage) inherit the lineage.
-            _inboundCrossPrincipalOrigin = request.CrossPrincipalOrigin;
-            _inboundCrossPrincipalHops = request.CrossPrincipalHops;
 
             // Start heartbeat: send _status every 3 seconds to original sender
             using var heartbeatCts = new CancellationTokenSource();
@@ -983,12 +1018,33 @@ namespace FabrCore.Host.Grains
                     ErrorCounter.Add(1, new KeyValuePair<string, object?>("error.type", "heartbeat_failed"));
                 }
 
-                // Clear the inbound breadcrumb stash — the message is no longer being processed.
-                _inboundCrossPrincipalOrigin = null;
-                _inboundCrossPrincipalHops = 0;
-
                 // Auto-flush all tracked message stores after each message
                 await FlushAllChatHistoryProvidersAsync();
+            }
+        }
+
+        private static string NormalizeBusyChannel(string? channel)
+            => string.IsNullOrWhiteSpace(channel) ? string.Empty : channel;
+
+        private bool IsChannelBusyRoutingEnabled()
+        {
+            var args = agentConfiguration?.Args;
+            return args != null
+                && args.TryGetValue("_ChannelBusyRoutingEnabled", out var enabledValue)
+                && bool.TryParse(enabledValue, out var enabled)
+                && enabled;
+        }
+
+        private async Task<AgentMessage> HandleChannelBusyMessage(AgentMessage request)
+        {
+            _activeChannelBusyMessages++;
+            try
+            {
+                return await HandleBusyMessage(request);
+            }
+            finally
+            {
+                _activeChannelBusyMessages--;
             }
         }
 
@@ -999,6 +1055,7 @@ namespace FabrCore.Host.Grains
         /// </summary>
         private async Task<AgentMessage> HandleBusyMessage(AgentMessage request)
         {
+            using var executionScope = new MessageExecutionScope(_messageExecution, request);
             using var activity = request.StartIngressActivity(ActivitySource, "OnMessageBusy", ActivityKind.Server);
             activity?.SetTag("message.from", request.FromHandle);
             activity?.SetTag("message.to", request.ToHandle);
@@ -1109,7 +1166,10 @@ namespace FabrCore.Host.Grains
 
                 while (!cancellationToken.IsCancellationRequested)
                 {
-                    var statusText = fabrcoreAgentProxy?.StatusMessage ?? "Thinking..";
+                    var statusText = IsChannelBusyRoutingEnabled()
+                        ? fabrcoreAgentProxy?.InternalStatusMessageForChannel(request.Channel)
+                            ?? _messageExecution.Value?.StatusMessage ?? "Thinking.."
+                        : fabrcoreAgentProxy?.StatusMessage ?? "Thinking..";
                     var statusMessage = new AgentMessage
                     {
                         FromHandle = myHandle,
@@ -1177,6 +1237,27 @@ namespace FabrCore.Host.Grains
         /// Flushes all pending messages from tracked chat history providers to persistent storage.
         /// </summary>
         private async Task FlushAllChatHistoryProvidersAsync()
+        {
+            if (!IsChannelBusyRoutingEnabled())
+            {
+                await FlushChatHistoryProvidersCoreAsync();
+                return;
+            }
+
+            // Only serialize the flush itself, not message processing: a primary can await
+            // another channel, whose cleanup must be able to acquire this gate.
+            await _chatHistoryFlushGate.WaitAsync();
+            try
+            {
+                await FlushChatHistoryProvidersCoreAsync();
+            }
+            finally
+            {
+                _chatHistoryFlushGate.Release();
+            }
+        }
+
+        private async Task FlushChatHistoryProvidersCoreAsync()
         {
             foreach (var provider in _activeChatHistoryProviders.ToList())
             {
@@ -1341,11 +1422,12 @@ namespace FabrCore.Host.Grains
         private void EnforceCrossPrincipalAcl(AgentMessage request, string targetHandle)
         {
             // Inherit the inbound breadcrumb so chains this agent composes stay tagged.
-            if (_inboundCrossPrincipalOrigin is not null)
+            var execution = _messageExecution.Value;
+            if (execution?.Origin is not null)
             {
-                request.CrossPrincipalOrigin ??= _inboundCrossPrincipalOrigin;
-                if (request.CrossPrincipalHops < _inboundCrossPrincipalHops)
-                    request.CrossPrincipalHops = _inboundCrossPrincipalHops;
+                request.CrossPrincipalOrigin ??= execution.Origin;
+                if (request.CrossPrincipalHops < execution.Hops)
+                    request.CrossPrincipalHops = execution.Hops;
             }
 
             if (request.Kind == MessageKind.Response || request.IsSystemMessage)
@@ -1738,6 +1820,8 @@ namespace FabrCore.Host.Grains
 
         void IFabrCoreAgentHost.SetStatusMessage(string? message)
         {
+            if (IsChannelBusyRoutingEnabled() && _messageExecution.Value is { } execution)
+                execution.StatusMessage = message;
             if (fabrcoreAgentProxy is not null)
                 fabrcoreAgentProxy.StatusMessage = message;
         }
@@ -1826,6 +1910,12 @@ namespace FabrCore.Host.Grains
 
         private async Task SendTimerOrReminderMessage(string name, string messageType, string? message, bool isReminder)
         {
+            if (managementBusy || lifecycleDepth != 0 || _isEvicting)
+            {
+                logger.LogDebug("Ignoring {Type} during lifecycle management: {Name}", isReminder ? "reminder" : "timer", name);
+                return;
+            }
+
             if (fabrcoreAgentProxy == null)
             {
                 logger.LogWarning("Agent proxy not initialized, cannot process {Type}: {Name}",
@@ -1851,8 +1941,24 @@ namespace FabrCore.Host.Grains
             // so the monitor can distinguish them from user-initiated OnMessage calls.
             var origin = isReminder ? $"Reminder:{name}" : $"Timer:{name}";
             using (FabrCore.Sdk.LlmCallContext.Begin(handle, origin))
+            using (new MessageExecutionScope(_messageExecution, agentMessage))
             {
-                await fabrcoreAgentProxy.InternalOnMessage(agentMessage);
+                var useChannelBusyRouting = IsChannelBusyRoutingEnabled();
+                if (useChannelBusyRouting && !_activePrimaryChannels.Add(string.Empty))
+                {
+                    await HandleChannelBusyMessage(agentMessage);
+                    return;
+                }
+
+                try
+                {
+                    await fabrcoreAgentProxy.InternalOnMessage(agentMessage);
+                }
+                finally
+                {
+                    if (useChannelBusyRouting)
+                        _activePrimaryChannels.Remove(string.Empty);
+                }
             }
         }
 
