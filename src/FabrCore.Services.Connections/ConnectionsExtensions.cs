@@ -188,8 +188,11 @@ internal sealed class ConnectionService(IClusterClient cluster) : IConnectionSer
     public Task SubmitAsync(string principal, string agent, string assertion, CancellationToken cancellationToken = default)
         => Execute(principal, "assertion-agent", new(string.Empty, principal, agent, Assertion: assertion)).WaitAsync(cancellationToken);
 
-    public async Task<string> GetSessionVersionAsync(string principal, string agent, ConnectionBinding binding, CancellationToken cancellationToken = default)
-        => JsonSerializer.Deserialize<string>(await Execute(binding.OwnerPrincipal, "session", new(binding.Name, principal, agent)).WaitAsync(cancellationToken))!;
+    public Task<string> GetSessionVersionAsync(string principal, string agent, ConnectionBinding binding, CancellationToken cancellationToken = default)
+        => GetSessionVersionAsync(new ConnectionCaller(principal, agent), binding, cancellationToken);
+    public async Task<string> GetSessionVersionAsync(ConnectionCaller caller, ConnectionBinding binding, CancellationToken cancellationToken = default)
+        => JsonSerializer.Deserialize<string>(await Execute(binding.OwnerPrincipal, "session",
+            new(binding.Name, caller.Principal, caller.Agent, AgentType: caller.AgentType)).WaitAsync(cancellationToken))!;
     internal async Task<string> Execute(string owner, string operation, GrainRequest request)
     {
         if (string.IsNullOrWhiteSpace(owner)) throw new ConnectionException("access-denied", "A stable principal is required.");
@@ -202,23 +205,30 @@ internal sealed class ConnectionService(IClusterClient cluster) : IConnectionSer
             };
         return result;
     }
-    public async Task<ConnectionAccessToken> GetAccessTokenAsync(string principal, string agent, ConnectionBinding binding, string resource, CancellationToken cancellationToken = default)
+    public Task<ConnectionAccessToken> GetAccessTokenAsync(string principal, string agent, ConnectionBinding binding, string resource, CancellationToken cancellationToken = default)
+        => GetAccessTokenAsync(new ConnectionCaller(principal, agent), binding, resource, cancellationToken);
+    public async Task<ConnectionAccessToken> GetAccessTokenAsync(ConnectionCaller caller, ConnectionBinding binding, string resource, CancellationToken cancellationToken = default)
     {
-        var json = await Execute(binding.OwnerPrincipal, "token", new(binding.Name, principal, agent, resource)).WaitAsync(cancellationToken);
+        var json = await Execute(binding.OwnerPrincipal, "token",
+            new(binding.Name, caller.Principal, caller.Agent, resource, AgentType: caller.AgentType)).WaitAsync(cancellationToken);
         var token = JsonSerializer.Deserialize<TokenMaterial>(json, JsonSerializerOptions.Web)!;
         return new(token.AccessToken, token.ExpiresAt);
     }
     public Task<HttpClient> GetHttpClientAsync(string principal, string agent, ConnectionBinding binding, string resource, CancellationToken cancellationToken = default)
-        => GetHttpClientAsync(principal, agent, binding, resource, _ => Task.CompletedTask, cancellationToken);
+        => GetHttpClientAsync(new ConnectionCaller(principal, agent), binding, resource, _ => Task.CompletedTask, cancellationToken);
 
-    public async Task<HttpClient> GetHttpClientAsync(string principal, string agent, ConnectionBinding binding, string resource, Func<string, Task> notify, CancellationToken cancellationToken = default)
+    public Task<HttpClient> GetHttpClientAsync(string principal, string agent, ConnectionBinding binding, string resource, Func<string, Task> notify, CancellationToken cancellationToken = default)
+        => GetHttpClientAsync(new ConnectionCaller(principal, agent), binding, resource, notify, cancellationToken);
+
+    public async Task<HttpClient> GetHttpClientAsync(ConnectionCaller caller, ConnectionBinding binding, string resource, Func<string, Task> notify, CancellationToken cancellationToken = default)
     {
-        var json = await Execute(binding.OwnerPrincipal, "resource", new(binding.Name, principal, agent, resource)).WaitAsync(cancellationToken);
+        var (principal, agent, agentType) = caller;
+        var json = await Execute(binding.OwnerPrincipal, "resource", new(binding.Name, principal, agent, resource, AgentType: agentType)).WaitAsync(cancellationToken);
         var config = JsonSerializer.Deserialize<AuthorizedResource>(json, JsonSerializerOptions.Web)!;
         var baseUri = new Uri(config.Resource.BaseUrl);
         return new HttpClient(new ConnectionHandler(baseUri, async ct => {
             string material;
-            try { material = await Execute(binding.OwnerPrincipal, "token", new(binding.Name, principal, agent, resource, SessionVersion: config.SessionVersion)).WaitAsync(ct); }
+            try { material = await Execute(binding.OwnerPrincipal, "token", new(binding.Name, principal, agent, resource, SessionVersion: config.SessionVersion, AgentType: agentType)).WaitAsync(ct); }
             catch (ConnectionException e) when (e.Notice is not null) { await notify(e.Notice); throw; }
             var token = JsonSerializer.Deserialize<TokenMaterial>(material, JsonSerializerOptions.Web)!;
             return new ConnectionAccessToken(token.AccessToken, token.ExpiresAt);

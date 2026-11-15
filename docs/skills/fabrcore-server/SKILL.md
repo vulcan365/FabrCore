@@ -84,6 +84,12 @@ pre-provisioned schemas. Failed SQL configuration/schema initialization never fa
 standalone. Mode changes require restart. Explicit Orleans provider/configuration wins over
 the SQL defaults, so review any old `ClusteringMode: Localhost` setting.
 
+A host deployed with its own database sets `FabrCore__HostDatabase__Default` in its environment instead.
+It is read before anything else, cloud settings included, and covers Orleans membership and state,
+ACL, Memory, GraphRAG and operations. `Membership`, `State`, `Acl`, `Memory`, `GraphRag` and
+`Operations` override one feature each. A cloud server can't set the section, and the runtime report
+shows the keys it covers with source `host`. See docs/database-modes.md, "The host's own database".
+
 Memory options bind from `FabrCore:Memory`; the extraction alias uses
 `FabrCore:GraphRag:ExtractionModelName`. GraphRAG ingestion tuning is an implementation exception:
 it still binds from top-level `GraphRag:Ingestion`. Do not relocate these keys blindly.

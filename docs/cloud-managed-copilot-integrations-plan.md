@@ -9,6 +9,14 @@ can do the same.
 Read the [integration guide](microsoft-365-copilot-native-integration.md) first. It defines what
 "native" means, what ships, and the backlog (B1–B19) this plan draws from.
 
+**Update, 2 November 2026: Insights' part of this plan is retired.** Vulcan365 provisions Microsoft 365 for its
+customers' hosts in Forge, not Insights: per-agent app registrations and Azure Bots with no secret, the Teams
+catalog, acting as the person in chat (on behalf of) and in the background (an authorization code connection
+the person connects), proven in a customer tenant. Insights' Microsoft 365 page and its tables are removed
+(Insights migration M014), and Insights keeps AI connections, settings and fleet management. The FabrCore
+parts below (F-items) stand and are built; the Insights module (section 9, I-items) and the Insights phases
+won't be. When Agent ID (I9) comes, Forge provisions it too.
+
 **Update, 13 October 2026.** F8, several bots per host, is built on the host and in Insights, and
 it changed the channel's configuration and administration contract. Section 17 records it. Statements in
 sections 3, 5, 6, 7, 12, and 16 that describe a single bot per host or the single-agent keys are

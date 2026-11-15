@@ -30,6 +30,13 @@ where they matter and collected in [section 13](#13-open-questions-to-settle-in-
 cloud server can drive. Everything specific to Vulcan365's product goes in Insights. FabrCore never
 learns that Insights exists.
 
+**Update, 2 November 2026: Forge is the provisioner, not Insights.** Vulcan365 now sets up Microsoft 365
+for customers' hosts in Forge: an app registration and Azure Bot per agent with no secret, the Teams catalog,
+acting as the person in chat and, through a Connect your account app, in the background. Section 5.2's
+Insights page has been removed, and section 9's Insights changes won't be made. FabrCore stays as described
+here (FabrCore 2.1.3 and 2.1.4 built the FC items Forge needed), and Agent ID (section 10), when it comes,
+is provisioned by Forge.
+
 ---
 
 ## Contents
@@ -516,6 +523,8 @@ Do option 1 now; leave option 2 to Phase D.
 `src/FabrCore.Services.A2A` and its test folder contain only stale `obj/` output and can be deleted.
 
 ### 5.2 Insights
+
+*Removed on 2 November 2026: Forge provisions this now. Kept as the record of what it did.*
 
 Insights' Microsoft 365 page (Cluster → environment → Operations → Microsoft 365) is the "bring your
 own app registration" release (plan Phase 2):

@@ -122,6 +122,19 @@ The SDK obtains the principal and agent handle from trusted host context. Prompt
 cannot supply those identities. Diagnostic turns cannot access production
 connections. Do not expose raw-token methods as model tools.
 
+An application connection (`ClientCredentials` or `AgentIdApplication`) can also
+list `AllowedAgentTypes`: every instance of those agent types may use it, whoever
+owns the instance, beside the exact handles in `AllowedAgents`. The SDK sends the
+agent's type from its configuration (`ConnectionCaller`), so who may create an
+agent of a type is the host's access control. Delegated connections refuse
+agent types, because each acts for one person.
+
+An alias the agent's `connections` argument doesn't bind normally means its own
+principal's connection of that name. A host can register an
+`IConnectionBindingResolver` to choose another binding from the caller (principal,
+handle and type), for example one application connection per agent type owned by a
+service principal. The connection's own grants still decide.
+
 The default user API resolver maps authenticated Entra `tid` and `oid` through
 `EntraPrincipalHandle.Create`. Other client authentication systems register an
 `IConnectionPrincipalResolver` which maps **validated** claims to the canonical

@@ -20,7 +20,7 @@ metadata:
 
 ## FabrCore 2.0 baseline
 
-FabrCore 2.0 GA uses Orleans 10.3.1. SQL Server hosting is built into FabrCore.Host; Azure Storage remains separate. ConnectionStrings:FabrCore enables integrated SQL features and SQL Orleans defaults unless explicitly overridden. Azure/custom Orleans storage alone does not enable relational ACL, Memory or GraphRAG. Preserve cluster/service/storage identities during upgrades.
+FabrCore 2.0 GA uses Orleans 10.3.1. SQL Server hosting is built into FabrCore.Host; Azure Storage remains separate. ConnectionStrings:FabrCore enables integrated SQL features and SQL Orleans defaults unless explicitly overridden. `FabrCore__HostDatabase__Default` (or `__Membership`/`__State`) set in a host's environment pins SQL clustering and state above every other source, cloud settings included. Azure/custom Orleans storage alone does not enable relational ACL, Memory or GraphRAG. Preserve cluster/service/storage identities during upgrades.
 
 FabrCore uses Microsoft Orleans as its distributed runtime. This skill covers clustering, persistence, streaming, and advanced Orleans configuration.
 

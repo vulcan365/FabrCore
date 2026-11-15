@@ -135,7 +135,7 @@ internal partial class AgentGrain
                 data = new { observedAt = DateTimeOffset.UtcNow, scope = "persisted-state", activation = adminActivationId,
                     agent = this.GetPrimaryKeyString(), configuration = Clone(agentConfiguration), state = Clone(_messageState.State.CustomState),
                     threads = _messageState.State.MessageThreads.Select(t => new { id = t.Key, count = t.Value.Count }).ToList(),
-                    processing = fabrcoreAgentProxy?.InternalIsProcessingMessage, adminProcessing = adminTurnBusy };
+                    processing = IsAgentProcessing, adminProcessing = adminTurnBusy };
                 break;
             case "thread": data = new { threadId = id, observedAt = DateTimeOffset.UtcNow,
                     scope = "supported-history-snapshot", messages = id is null ? [] : CaptureAdminThread(id).TakeLast(100).ToList(), limit = 100 }; break;

@@ -256,3 +256,26 @@ FabrCore.Connections.ConnectionProfile.AssertionIssuers.get -> System.Collection
 FabrCore.Connections.ConnectionProfile.AssertionIssuers.set -> void
 FabrCore.Connections.IConnectionUserAssertions
 FabrCore.Connections.IConnectionUserAssertions.SubmitAsync(string! principal, string! agent, string! assertion, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Connections.ConnectionCaller
+FabrCore.Connections.ConnectionCaller.<Clone>$() -> FabrCore.Connections.ConnectionCaller!
+FabrCore.Connections.ConnectionCaller.Agent.get -> string!
+FabrCore.Connections.ConnectionCaller.Agent.init -> void
+FabrCore.Connections.ConnectionCaller.AgentType.get -> string?
+FabrCore.Connections.ConnectionCaller.AgentType.init -> void
+FabrCore.Connections.ConnectionCaller.ConnectionCaller(string! Principal, string! Agent, string? AgentType = null) -> void
+FabrCore.Connections.ConnectionCaller.Deconstruct(out string! Principal, out string! Agent, out string? AgentType) -> void
+FabrCore.Connections.ConnectionCaller.Equals(FabrCore.Connections.ConnectionCaller? other) -> bool
+FabrCore.Connections.ConnectionCaller.Principal.get -> string!
+FabrCore.Connections.ConnectionCaller.Principal.init -> void
+FabrCore.Connections.ConnectionProfile.AllowedAgentTypes.get -> System.Collections.Generic.List<string!>!
+FabrCore.Connections.ConnectionProfile.AllowedAgentTypes.set -> void
+FabrCore.Connections.IConnectionBindingResolver
+FabrCore.Connections.IConnectionBindingResolver.Resolve(FabrCore.Connections.ConnectionCaller! caller, string! connection) -> FabrCore.Connections.ConnectionBinding?
+FabrCore.Connections.IConnectionService.GetAccessTokenAsync(FabrCore.Connections.ConnectionCaller! caller, FabrCore.Connections.ConnectionBinding! binding, string! resource, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Connections.ConnectionAccessToken!>!
+FabrCore.Connections.IConnectionService.GetHttpClientAsync(FabrCore.Connections.ConnectionCaller! caller, FabrCore.Connections.ConnectionBinding! binding, string! resource, System.Func<string!, System.Threading.Tasks.Task!>! notify, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Net.Http.HttpClient!>!
+FabrCore.Connections.IConnectionService.GetSessionVersionAsync(FabrCore.Connections.ConnectionCaller! caller, FabrCore.Connections.ConnectionBinding! binding, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
+override FabrCore.Connections.ConnectionCaller.Equals(object? obj) -> bool
+override FabrCore.Connections.ConnectionCaller.GetHashCode() -> int
+override FabrCore.Connections.ConnectionCaller.ToString() -> string!
+static FabrCore.Connections.ConnectionCaller.operator !=(FabrCore.Connections.ConnectionCaller? left, FabrCore.Connections.ConnectionCaller? right) -> bool
+static FabrCore.Connections.ConnectionCaller.operator ==(FabrCore.Connections.ConnectionCaller? left, FabrCore.Connections.ConnectionCaller? right) -> bool

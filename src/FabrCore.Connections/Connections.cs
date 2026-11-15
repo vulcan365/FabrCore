@@ -24,6 +24,13 @@ public sealed class ConnectionProfile
     public List<string> SignInScopes { get; set; } = [];
     public List<string> RedirectUris { get; set; } = [];
     public List<string> AllowedAgents { get; set; } = [];
+    /// <summary>
+    /// Agent types every instance of which may use this application connection, whoever owns the instance, beside the exact
+    /// handles in <see cref="AllowedAgents"/>. Only for <see cref="ConnectionAuthentication.ClientCredentials"/> and
+    /// <see cref="ConnectionAuthentication.AgentIdApplication"/>. The type comes from the host, so who may create an agent of
+    /// a type is the host's access control.
+    /// </summary>
+    public List<string> AllowedAgentTypes { get; set; } = [];
     public Dictionary<string, ConnectionResource> Resources { get; set; } = new(StringComparer.Ordinal);
 }
 
@@ -34,6 +41,18 @@ public sealed class ConnectionResource
 }
 
 public sealed record ConnectionBinding(string OwnerPrincipal, string Name);
+
+/// <summary>The agent asking for a connection, taken from trusted host context: never from a prompt or a message.</summary>
+public sealed record ConnectionCaller(string Principal, string Agent, string? AgentType = null);
+
+/// <summary>
+/// Host service, optional: the connection an agent gets for a name its arguments don't bind. Return null to fall back to the
+/// agent's own principal's connection of that name. The connection's own allowed agents and agent types still decide.
+/// </summary>
+public interface IConnectionBindingResolver
+{
+    ConnectionBinding? Resolve(ConnectionCaller caller, string connection);
+}
 public sealed record ConnectionStatus(string Name, bool Enabled, string State, string Revision, string? ExternalSubject = null);
 public sealed record ConnectionTransaction(string State, string AuthorizationUrl, DateTimeOffset ExpiresAt);
 public sealed record BeginConnectionRequest(string Connection, string RedirectUri);
@@ -80,6 +99,18 @@ public interface IConnectionService
     /// </summary>
     Task<HttpClient> GetHttpClientAsync(string principal, string agent, ConnectionBinding binding, string resource, Func<string, Task> notify, CancellationToken cancellationToken = default)
         => GetHttpClientAsync(principal, agent, binding, resource, cancellationToken);
+
+    /// <summary>As the principal-and-agent overload, also passing the caller's agent type for <see cref="ConnectionProfile.AllowedAgentTypes"/>.</summary>
+    Task<string> GetSessionVersionAsync(ConnectionCaller caller, ConnectionBinding binding, CancellationToken cancellationToken = default)
+        => GetSessionVersionAsync(caller.Principal, caller.Agent, binding, cancellationToken);
+
+    /// <summary>As the principal-and-agent overload, also passing the caller's agent type for <see cref="ConnectionProfile.AllowedAgentTypes"/>.</summary>
+    Task<ConnectionAccessToken> GetAccessTokenAsync(ConnectionCaller caller, ConnectionBinding binding, string resource, CancellationToken cancellationToken = default)
+        => GetAccessTokenAsync(caller.Principal, caller.Agent, binding, resource, cancellationToken);
+
+    /// <summary>As the principal-and-agent overload, also passing the caller's agent type for <see cref="ConnectionProfile.AllowedAgentTypes"/>.</summary>
+    Task<HttpClient> GetHttpClientAsync(ConnectionCaller caller, ConnectionBinding binding, string resource, Func<string, Task> notify, CancellationToken cancellationToken = default)
+        => GetHttpClientAsync(caller.Principal, caller.Agent, binding, resource, notify, cancellationToken);
 }
 
 /// <summary>

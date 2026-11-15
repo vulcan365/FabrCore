@@ -41,3 +41,17 @@ FabrCore.Sdk.ContextCompactionConfig.OutputReserveIsDerived.get -> bool
 FabrCore.Sdk.ContextCompactionConfig.OutputReserveIsDerived.init -> void
 FabrCore.Sdk.ContextCompactionConfig.WindowIsLearned.get -> bool
 FabrCore.Sdk.ContextCompactionConfig.WindowIsLearned.init -> void
+FabrCore.Sdk.ConversationMetadata
+FabrCore.Sdk.ConversationMetadata.ConversationMetadata() -> void
+FabrCore.Sdk.ConversationMetadata.Channel.get -> string!
+FabrCore.Sdk.ConversationMetadata.Channel.init -> void
+FabrCore.Sdk.ConversationMetadata.CreatedAtUtc.get -> System.DateTime
+FabrCore.Sdk.ConversationMetadata.CreatedAtUtc.init -> void
+FabrCore.Sdk.ConversationMetadata.Description.get -> string!
+FabrCore.Sdk.ConversationMetadata.Description.init -> void
+FabrCore.Sdk.ConversationMetadata.IsProvisional.get -> bool
+FabrCore.Sdk.ConversationMetadata.IsProvisional.init -> void
+FabrCore.Sdk.ConversationMetadata.UpdatedAtUtc.get -> System.DateTime
+FabrCore.Sdk.ConversationMetadata.UpdatedAtUtc.init -> void
+FabrCore.Sdk.FabrCoreAgentProxy.GetConversationsAsync() -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<FabrCore.Sdk.ConversationMetadata!>!>!
+FabrCore.Sdk.FabrCoreAgentProxy.GetWorkerChatClientAsync(int networkTimeoutSeconds = 100) -> System.Threading.Tasks.Task<Microsoft.Extensions.AI.IChatClient!>!

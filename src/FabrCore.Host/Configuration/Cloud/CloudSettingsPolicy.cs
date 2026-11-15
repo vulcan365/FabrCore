@@ -36,6 +36,9 @@ internal sealed record CloudSettingsFilterResult(
 /// remote recovery path.</item>
 /// <item><c>FabrCore:HostUrl</c> — the connect channel dispatches local admin requests here, so
 /// a remotely settable value is an SSRF pivot.</item>
+/// <item><c>FabrCore:HostDatabase</c> — the database a host is given where it runs. It outranks
+/// the connection strings a cloud server sends, so a publish meant for somewhere else can't move
+/// a host's data.</item>
 /// </list>
 /// </summary>
 internal static class CloudSettingsPolicy
@@ -49,7 +52,8 @@ internal static class CloudSettingsPolicy
     private static readonly string[] BlockedSections =
     [
         CloudServerOptions.SectionName,
-        RemoteAdministrationOptions.SectionName
+        RemoteAdministrationOptions.SectionName,
+        Database.FabrCoreHostDatabase.SectionName
     ];
 
     private static readonly string[] BlockedKeys =

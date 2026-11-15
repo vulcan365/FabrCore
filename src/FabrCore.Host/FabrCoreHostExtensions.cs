@@ -475,6 +475,8 @@ namespace FabrCore.Host
                 // strings) are read while the silo is built and never again. A no-op unless the
                 // Cloud Server feature and its Settings sub-feature are both enabled.
                 A2AExtensions.AddLegacyConfigurationFallback(builder);
+                // The host's own database goes on top first, so what a cloud server sends for it is ignored.
+                Database.FabrCoreHostDatabase.Apply(builder.Configuration, builder.Configuration);
                 var cloudSettings = Configuration.Cloud.CloudSettingsBootstrapper.TryApply(builder, loggerFactory);
                 if (cloudSettings is not null)
                 {

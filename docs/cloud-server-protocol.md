@@ -168,12 +168,17 @@ The cloud layer sits **above `appsettings*.json` and below environment variables
 arguments**:
 
 ```
-appsettings.json  <  appsettings.{Environment}.json  <  cloud settings  <  environment variables  <  command line
+appsettings.json  <  appsettings.{Environment}.json  <  cloud settings  <  environment variables  <  command line  <  host database
 ```
 
 Central configuration therefore beats a stale file on the machine, while an operator keeps a local
 override that does not depend on reaching the server — which matters precisely when the thing being
 corrected is a bad publish.
+
+The host's own database (`FabrCore:HostDatabase`, see [database modes](database-modes.md#the-hosts-own-database))
+sits on top. When a host sets it, the connection strings, Orleans clustering mode, Orleans connections
+and `FabrCore:Database` connection names it covers ignore whatever a server sends, even under a
+different key. The runtime report shows those keys with source `host`.
 
 ### Keys a server may never set
 
@@ -184,6 +189,7 @@ A host **must** refuse these, whatever a server sends, and should log each refus
 | `FabrCore:CloudServer` | Owns enrollment. A server that could rewrite its own URL, key, or `Enabled` flag could orphan or redirect an entire fleet with no local way back. |
 | `FabrCore:RemoteAdministration` | Owns the outbound recovery channel. |
 | `FabrCore:HostUrl` | The connect channel dispatches admin requests to this address, so a remotely settable value is an SSRF pivot. |
+| `FabrCore:HostDatabase` | The database the host is given where it runs. It outranks what a server sends, so a publish meant for another host can't move this one's data. |
 
 A host should also bound the payload (key count and total size) and reject malformed keys, rather
 than trusting a server to be well-behaved.
