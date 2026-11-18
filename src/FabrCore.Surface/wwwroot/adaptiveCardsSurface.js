@@ -368,3 +368,107 @@ function countRenderedActions(rendered) {
 
     return rendered.querySelectorAll("button, a").length;
 }
+
+// SurfaceChat: the full-page chat's message box and history.
+
+const chatComposers = new WeakMap();
+const chatTimelines = new WeakMap();
+const chatPinnedDistance = 64;
+
+/** Enter sends the box's text; Shift (or Alt/Ctrl/Cmd) + Enter adds a line; the box grows with what's typed up to its max height. */
+export function bindSurfaceChatComposer(textarea, dotNetRef) {
+    if (!textarea || chatComposers.has(textarea)) {
+        return;
+    }
+
+    const keydown = event => {
+        if (event.key !== "Enter" || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || event.isComposing) {
+            return;
+        }
+
+        event.preventDefault();
+        const text = textarea.value;
+        if (!text.trim()) {
+            return;
+        }
+
+        dotNetRef.invokeMethodAsync("SubmitFromKeyboardAsync", text).then(sent => {
+            if (sent) {
+                textarea.value = "";
+                resizeSurfaceChatComposer(textarea);
+            }
+        });
+    };
+    const input = () => resizeSurfaceChatComposer(textarea);
+
+    textarea.addEventListener("keydown", keydown);
+    textarea.addEventListener("input", input);
+    chatComposers.set(textarea, { keydown, input });
+    resizeSurfaceChatComposer(textarea);
+}
+
+export function unbindSurfaceChatComposer(textarea) {
+    const handlers = textarea && chatComposers.get(textarea);
+    if (!handlers) {
+        return;
+    }
+
+    textarea.removeEventListener("keydown", handlers.keydown);
+    textarea.removeEventListener("input", handlers.input);
+    chatComposers.delete(textarea);
+}
+
+export function resizeSurfaceChatComposer(textarea) {
+    if (!textarea?.style) {
+        return;
+    }
+
+    textarea.style.height = "auto";
+    const max = Number.parseFloat(window.getComputedStyle?.(textarea)?.maxHeight ?? "") || 240;
+    textarea.style.height = `${Math.min(textarea.scrollHeight, max)}px`;
+    textarea.style.overflowY = textarea.scrollHeight > max ? "auto" : "hidden";
+}
+
+/** Follows the history: it stays at the latest message unless the reader scrolled up, when "Jump to latest" shows instead. */
+export function bindSurfaceChatTimeline(timeline) {
+    if (!timeline || chatTimelines.has(timeline)) {
+        return;
+    }
+
+    const state = { pinned: true };
+    timeline.addEventListener("scroll", () => {
+        state.pinned = timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight < chatPinnedDistance;
+        if (state.pinned) {
+            timeline.parentElement?.classList.remove("is-away");
+        }
+    }, { passive: true });
+    chatTimelines.set(timeline, state);
+}
+
+export function scrollSurfaceChatToLatest(timeline, force) {
+    if (!timeline) {
+        return;
+    }
+
+    bindSurfaceChatTimeline(timeline);
+    const state = chatTimelines.get(timeline);
+    if (!force && !state.pinned) {
+        timeline.parentElement?.classList.add("is-away");
+        return;
+    }
+
+    const toBottom = () => {
+        timeline.scrollTop = timeline.scrollHeight;
+        state.pinned = true;
+        timeline.parentElement?.classList.remove("is-away");
+    };
+    requestAnimationFrame(() => {
+        toBottom();
+        requestAnimationFrame(toBottom);
+    });
+}
+
+/** Minutes ahead of UTC on the reader's computer, so times show as theirs rather than the server's. */
+export function surfaceTimeZoneOffset() {
+    return -new Date().getTimezoneOffset();
+}

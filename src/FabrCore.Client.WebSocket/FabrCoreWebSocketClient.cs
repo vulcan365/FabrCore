@@ -122,6 +122,16 @@ public sealed class FabrCoreWebSocketClient : IFabrCoreWebSocketClient
                 await ReceiveLoopAsync(cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
+            catch (HttpRequestException ex) when (!firstConnection.Task.IsCompleted
+                                                  && ex.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
+            {
+                // A refused key or principal won't be accepted on a retry: say so to whoever is waiting to connect, instead of
+                // retrying until they give up. Once connected, a refusal is retried, since the key may be rotated back.
+                logger.LogWarning(ex, "FabrCore WebSocket ticket was refused ({Status}).", (int)ex.StatusCode!);
+                firstConnection.TrySetException(new FabrCoreWebSocketException(
+                    "refused", $"The FabrCore host refused the connection ({(int)ex.StatusCode!}).", retryable: false));
+                break;
+            }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "FabrCore WebSocket disconnected; reconnecting.");

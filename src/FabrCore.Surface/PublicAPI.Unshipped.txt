@@ -1,2 +1,113 @@
 #nullable enable
 FabrCore.Surface.Ai.Squads.SurfaceSquadBlueprintExpander.ConfigurationSchema.get -> System.Text.Json.JsonElement?
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.ClearTimeline(string? handle) -> void
+FabrCore.Surface.CommandCenter.SurfaceWorkspaceService.SendChatAsync(string! message, string? targetAgentHandle, System.Collections.Generic.IReadOnlyCollection<string!>? fileIds, System.Action<FabrCore.Core.AgentMessage!>? configure, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+FabrCore.Surface.Components.SurfaceChat
+FabrCore.Surface.Components.SurfaceChat.AfterMessages.get -> Microsoft.AspNetCore.Components.RenderFragment?
+FabrCore.Surface.Components.SurfaceChat.AfterMessages.set -> void
+FabrCore.Surface.Components.SurfaceChat.Agent.get -> FabrCore.Core.AgentConfiguration?
+FabrCore.Surface.Components.SurfaceChat.Agent.set -> void
+FabrCore.Surface.Components.SurfaceChat.AgentHandle.get -> string!
+FabrCore.Surface.Components.SurfaceChat.AgentHandle.set -> void
+FabrCore.Surface.Components.SurfaceChat.AllowNewConversation.get -> bool
+FabrCore.Surface.Components.SurfaceChat.AllowNewConversation.set -> void
+FabrCore.Surface.Components.SurfaceChat.ConfigureMessage.get -> System.Action<FabrCore.Core.AgentMessage!>?
+FabrCore.Surface.Components.SurfaceChat.ConfigureMessage.set -> void
+FabrCore.Surface.Components.SurfaceChat.CssClass.get -> string?
+FabrCore.Surface.Components.SurfaceChat.CssClass.set -> void
+FabrCore.Surface.Components.SurfaceChat.DescribeProblem.get -> System.Func<System.Exception!, FabrCore.Surface.Components.SurfaceChatProblem!>?
+FabrCore.Surface.Components.SurfaceChat.DescribeProblem.set -> void
+FabrCore.Surface.Components.SurfaceChat.DisposeAsync() -> System.Threading.Tasks.ValueTask
+FabrCore.Surface.Components.SurfaceChat.Drafts.get -> System.Collections.Generic.Dictionary<string!, string!>?
+FabrCore.Surface.Components.SurfaceChat.Drafts.set -> void
+FabrCore.Surface.Components.SurfaceChat.FocusAsync() -> System.Threading.Tasks.Task!
+FabrCore.Surface.Components.SurfaceChat.HeaderActions.get -> Microsoft.AspNetCore.Components.RenderFragment?
+FabrCore.Surface.Components.SurfaceChat.HeaderActions.set -> void
+FabrCore.Surface.Components.SurfaceChat.Icon.get -> string!
+FabrCore.Surface.Components.SurfaceChat.Icon.set -> void
+FabrCore.Surface.Components.SurfaceChat.IsReady.get -> bool
+FabrCore.Surface.Components.SurfaceChat.LoadingMessage.get -> string!
+FabrCore.Surface.Components.SurfaceChat.LoadingMessage.set -> void
+FabrCore.Surface.Components.SurfaceChat.NewConversation.get -> System.Func<System.Threading.Tasks.Task!>?
+FabrCore.Surface.Components.SurfaceChat.NewConversation.set -> void
+FabrCore.Surface.Components.SurfaceChat.OnMessageReceived.get -> Microsoft.AspNetCore.Components.EventCallback<FabrCore.Core.AgentMessage!>
+FabrCore.Surface.Components.SurfaceChat.OnMessageReceived.set -> void
+FabrCore.Surface.Components.SurfaceChat.OnMessageSent.get -> Microsoft.AspNetCore.Components.EventCallback<string!>
+FabrCore.Surface.Components.SurfaceChat.OnMessageSent.set -> void
+FabrCore.Surface.Components.SurfaceChat.Placeholder.get -> string!
+FabrCore.Surface.Components.SurfaceChat.Placeholder.set -> void
+FabrCore.Surface.Components.SurfaceChat.ProblemActions.get -> Microsoft.AspNetCore.Components.RenderFragment?
+FabrCore.Surface.Components.SurfaceChat.ProblemActions.set -> void
+FabrCore.Surface.Components.SurfaceChat.RetryAsync() -> System.Threading.Tasks.Task!
+FabrCore.Surface.Components.SurfaceChat.SendAsync(string! text) -> System.Threading.Tasks.Task!
+FabrCore.Surface.Components.SurfaceChat.Subtitle.get -> string?
+FabrCore.Surface.Components.SurfaceChat.Subtitle.set -> void
+FabrCore.Surface.Components.SurfaceChat.Suggestions.get -> System.Collections.Generic.IReadOnlyList<string!>?
+FabrCore.Surface.Components.SurfaceChat.Suggestions.set -> void
+FabrCore.Surface.Components.SurfaceChat.SurfaceChat() -> void
+FabrCore.Surface.Components.SurfaceChat.Title.get -> string?
+FabrCore.Surface.Components.SurfaceChat.Title.set -> void
+FabrCore.Surface.Components.SurfaceChat.WelcomeMessage.get -> string!
+FabrCore.Surface.Components.SurfaceChat.WelcomeMessage.set -> void
+FabrCore.Surface.Components.SurfaceChat.WelcomeTitle.get -> string?
+FabrCore.Surface.Components.SurfaceChat.WelcomeTitle.set -> void
+FabrCore.Surface.Components.SurfaceChatComposer
+FabrCore.Surface.Components.SurfaceChatComposer.AllowEmpty.get -> bool
+FabrCore.Surface.Components.SurfaceChatComposer.AllowEmpty.set -> void
+FabrCore.Surface.Components.SurfaceChatComposer.Attachments.get -> Microsoft.AspNetCore.Components.RenderFragment?
+FabrCore.Surface.Components.SurfaceChatComposer.Attachments.set -> void
+FabrCore.Surface.Components.SurfaceChatComposer.Busy.get -> string?
+FabrCore.Surface.Components.SurfaceChatComposer.Busy.set -> void
+FabrCore.Surface.Components.SurfaceChatComposer.CanSend.get -> bool
+FabrCore.Surface.Components.SurfaceChatComposer.CanSend.set -> void
+FabrCore.Surface.Components.SurfaceChatComposer.Conversation.get -> string!
+FabrCore.Surface.Components.SurfaceChatComposer.Conversation.set -> void
+FabrCore.Surface.Components.SurfaceChatComposer.Disabled.get -> bool
+FabrCore.Surface.Components.SurfaceChatComposer.Disabled.set -> void
+FabrCore.Surface.Components.SurfaceChatComposer.DisposeAsync() -> System.Threading.Tasks.ValueTask
+FabrCore.Surface.Components.SurfaceChatComposer.Drafts.get -> System.Collections.Generic.Dictionary<string!, string!>?
+FabrCore.Surface.Components.SurfaceChatComposer.Drafts.set -> void
+FabrCore.Surface.Components.SurfaceChatComposer.FocusAsync() -> System.Threading.Tasks.Task!
+FabrCore.Surface.Components.SurfaceChatComposer.OnSend.get -> Microsoft.AspNetCore.Components.EventCallback<string!>
+FabrCore.Surface.Components.SurfaceChatComposer.OnSend.set -> void
+FabrCore.Surface.Components.SurfaceChatComposer.Placeholder.get -> string!
+FabrCore.Surface.Components.SurfaceChatComposer.Placeholder.set -> void
+FabrCore.Surface.Components.SurfaceChatComposer.SubmitFromKeyboardAsync(string! text) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Surface.Components.SurfaceChatComposer.SurfaceChatComposer() -> void
+FabrCore.Surface.Components.SurfaceChatProblem
+FabrCore.Surface.Components.SurfaceChatProblem.<Clone>$() -> FabrCore.Surface.Components.SurfaceChatProblem!
+FabrCore.Surface.Components.SurfaceChatProblem.Deconstruct(out string! Title, out string! Message, out FabrCore.Surface.SurfaceConnectionProblem? Problem) -> void
+FabrCore.Surface.Components.SurfaceChatProblem.Equals(FabrCore.Surface.Components.SurfaceChatProblem? other) -> bool
+FabrCore.Surface.Components.SurfaceChatProblem.Message.get -> string!
+FabrCore.Surface.Components.SurfaceChatProblem.Message.init -> void
+FabrCore.Surface.Components.SurfaceChatProblem.Problem.get -> FabrCore.Surface.SurfaceConnectionProblem?
+FabrCore.Surface.Components.SurfaceChatProblem.Problem.init -> void
+FabrCore.Surface.Components.SurfaceChatProblem.SurfaceChatProblem(string! Title, string! Message, FabrCore.Surface.SurfaceConnectionProblem? Problem = null) -> void
+FabrCore.Surface.Components.SurfaceChatProblem.Title.get -> string!
+FabrCore.Surface.Components.SurfaceChatProblem.Title.init -> void
+FabrCore.Surface.SurfaceConnectionException
+FabrCore.Surface.SurfaceConnectionException.Problem.get -> FabrCore.Surface.SurfaceConnectionProblem
+FabrCore.Surface.SurfaceConnectionException.SurfaceConnectionException(FabrCore.Surface.SurfaceConnectionProblem problem, string! message, System.Exception? innerException = null) -> void
+FabrCore.Surface.SurfaceConnectionProblem
+FabrCore.Surface.SurfaceConnectionProblem.AgentMissing = 3 -> FabrCore.Surface.SurfaceConnectionProblem
+FabrCore.Surface.SurfaceConnectionProblem.NotConfigured = 0 -> FabrCore.Surface.SurfaceConnectionProblem
+FabrCore.Surface.SurfaceConnectionProblem.Refused = 2 -> FabrCore.Surface.SurfaceConnectionProblem
+FabrCore.Surface.SurfaceConnectionProblem.Unreachable = 1 -> FabrCore.Surface.SurfaceConnectionProblem
+override FabrCore.Surface.Components.SurfaceChat.OnAfterRenderAsync(bool firstRender) -> System.Threading.Tasks.Task!
+override FabrCore.Surface.Components.SurfaceChat.OnInitialized() -> void
+override FabrCore.Surface.Components.SurfaceChat.OnParametersSetAsync() -> System.Threading.Tasks.Task!
+override FabrCore.Surface.Components.SurfaceChatComposer.OnAfterRenderAsync(bool firstRender) -> System.Threading.Tasks.Task!
+override FabrCore.Surface.Components.SurfaceChatComposer.OnParametersSet() -> void
+override FabrCore.Surface.Components.SurfaceChatProblem.Equals(object? obj) -> bool
+override FabrCore.Surface.Components.SurfaceChatProblem.GetHashCode() -> int
+override FabrCore.Surface.Components.SurfaceChatProblem.ToString() -> string!
+static FabrCore.Surface.Components.SurfaceChatProblem.From(System.Exception! exception, string! agentName) -> FabrCore.Surface.Components.SurfaceChatProblem!
+static FabrCore.Surface.Components.SurfaceChatProblem.operator !=(FabrCore.Surface.Components.SurfaceChatProblem? left, FabrCore.Surface.Components.SurfaceChatProblem? right) -> bool
+static FabrCore.Surface.Components.SurfaceChatProblem.operator ==(FabrCore.Surface.Components.SurfaceChatProblem? left, FabrCore.Surface.Components.SurfaceChatProblem? right) -> bool
+static FabrCore.Surface.FabrCoreSurfaceExtensions.AddFabrCoreSurfaceChat(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+~override FabrCore.Surface.Components.SurfaceChat.BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder __builder) -> void
+~override FabrCore.Surface.Components.SurfaceChatComposer.BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder __builder) -> void
+FabrCore.Surface.Components.SurfaceChat.OnReady.get -> Microsoft.AspNetCore.Components.EventCallback
+FabrCore.Surface.Components.SurfaceChat.OnReady.set -> void
+FabrCore.Surface.Components.SurfaceChat.Principal.get -> FabrCore.Surface.Identity.SurfacePrincipalContext?
+FabrCore.Surface.Components.SurfaceChat.Principal.set -> void

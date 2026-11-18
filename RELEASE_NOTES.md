@@ -2,6 +2,29 @@
 
 These changes are on `develop` and are not in a published package yet.
 
+## Surface's chat over the WebSocket
+
+- **`FabrCore.Surface.WebSocket`.** A new package for Blazor Server apps that reach a host over `/ws` rather than an Orleans
+  cluster connection. `AddFabrCoreSurfaceWebSocket(options)` registers only what Surface's chat needs and one
+  `SurfaceWebSocketPrincipalContext` per principal (sent as `x-user-handle`, with the app's key). It reads and acknowledges
+  deliveries across the client's reconnects, creates agents over `POST fabrcoreapi/Agent/create` (and again when a restarted host
+  reports one it created as not set up), stops a chat waiting when an agent says nothing for `QuietLimit` by delivering an error
+  from it, and sends chat fire-and-forget, since proxies cut off a request that waits for the answer.
+- **`SurfaceChat`.** A full-page chat with one agent: a history grouped by sender and day, the agent's progress while it works,
+  copy on answers, Adaptive Cards, and a message box where Enter sends and Shift+Enter adds a line. It can create the agent
+  (`Agent`), change each message before it goes (`ConfigureMessage`), replace the reset (`NewConversation`), take its own
+  `Principal`, word problems its own way (`DescribeProblem`) and show page content after the messages (`AfterMessages`). Theme it
+  with the `--surface-chat-*` CSS variables.
+- **`SurfaceConnectionException`.** A context says which step failed (`NotConfigured`, `Unreachable`, `Refused`, `AgentMissing`).
+- **Workspace.** `SendChatAsync` takes a `configure` callback, `ClearTimeline(handle)` forgets one agent's conversation, and
+  `AddFabrCoreSurfaceChat()` registers the chat's services without the command center's.
+- **`FabrCore.Client.WebSocket`.** A first connection whose ticket is refused (401 or 403) now fails with a non-retryable
+  `FabrCoreWebSocketException` instead of retrying until the caller gives up. Once connected, a refusal is still retried.
+
+# Released by 2.2.0
+
+These were listed as unreleased, but tag `v2.2.0` includes them.
+
 ## The host's own database comes first
 
 - **`FabrCore:HostDatabase`.** A host deployed with its database sets one connection,
