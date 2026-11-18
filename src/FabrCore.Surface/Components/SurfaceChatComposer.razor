@@ -1,0 +1,158 @@
+@inject IJSRuntime JSRuntime
+@implements IAsyncDisposable
+@* SurfaceChat's message box: Enter sends, Shift+Enter adds a line, and it grows as you type. Typing only redraws this box, never the
+   history above it. Each conversation keeps its unsent text in Drafts, owned by the page, so moving between chats doesn't lose it. *@
+
+<div class="surface-chat-composer">
+    <div class="surface-chat-composer-box @(Disabled ? "is-disabled" : string.Empty)">
+        @if (Attachments is not null)
+        {
+            @Attachments
+        }
+        <textarea @ref="_box"
+                  rows="1"
+                  placeholder="@Placeholder"
+                  aria-label="@Placeholder"
+                  value="@_draft"
+                  @oninput="OnInput"
+                  disabled="@Disabled"></textarea>
+        <button type="button"
+                class="surface-chat-send"
+                title="Send (Enter)"
+                aria-label="Send"
+                disabled="@(Disabled || !CanSend || (string.IsNullOrWhiteSpace(_draft) && !AllowEmpty))"
+                @onclick="SubmitAsync">
+            <i class="bi bi-send-fill"></i>
+        </button>
+    </div>
+    <div class="surface-chat-composer-hint">
+        @if (!CanSend && !string.IsNullOrWhiteSpace(Busy))
+        {
+            <span>@Busy</span>
+        }
+        else
+        {
+            <span><kbd>Enter</kbd> to send · <kbd>Shift</kbd> + <kbd>Enter</kbd> for a new line</span>
+        }
+    </div>
+</div>
+
+@code {
+    /// <summary>Which conversation this box writes in, for its unsent text.</summary>
+    [Parameter, EditorRequired] public string Conversation { get; set; } = string.Empty;
+
+    /// <summary>Unsent text per conversation. Owned by the caller so it outlives this box.</summary>
+    [Parameter] public Dictionary<string, string>? Drafts { get; set; }
+
+    [Parameter] public string Placeholder { get; set; } = "Type a message";
+
+    /// <summary>False while the agent is answering: you can keep typing, and it sends once the answer is in.</summary>
+    [Parameter] public bool CanSend { get; set; } = true;
+
+    /// <summary>The box can't be used at all, such as while the chat isn't connected.</summary>
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>Lets Send go with no text, such as when files are attached.</summary>
+    [Parameter] public bool AllowEmpty { get; set; }
+
+    /// <summary>What shows under the box while <see cref="CanSend"/> is false.</summary>
+    [Parameter] public string? Busy { get; set; }
+
+    /// <summary>Shown inside the box, before the text, such as an attach button.</summary>
+    [Parameter] public RenderFragment? Attachments { get; set; }
+
+    [Parameter] public EventCallback<string> OnSend { get; set; }
+
+    private ElementReference _box;
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<SurfaceChatComposer>? _self;
+    private string _draft = string.Empty;
+    private string? _shown;
+    private bool _resize;
+
+    protected override void OnParametersSet()
+    {
+        if (_shown == Conversation)
+        {
+            return;
+        }
+
+        _shown = Conversation;
+        _draft = Drafts?.GetValueOrDefault(Conversation) ?? string.Empty;
+        _resize = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _module = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./_content/FabrCore.Surface/adaptiveCardsSurface.js");
+            _self = DotNetObjectReference.Create(this);
+            await _module.InvokeVoidAsync("bindSurfaceChatComposer", _box, _self);
+        }
+        else if (_resize && _module is not null)
+        {
+            await _module.InvokeVoidAsync("resizeSurfaceChatComposer", _box);
+        }
+
+        _resize = false;
+    }
+
+    public async Task FocusAsync()
+    {
+        if (_module is not null)
+        {
+            await _module.InvokeVoidAsync("focusSurfaceComposer", _box);
+        }
+    }
+
+    private void OnInput(ChangeEventArgs args)
+    {
+        _draft = args.Value?.ToString() ?? string.Empty;
+        if (Drafts is not null)
+        {
+            Drafts[Conversation] = _draft;
+        }
+    }
+
+    /// <summary>Enter, from the box's script, with the text as it is in the box.</summary>
+    [JSInvokable]
+    public async Task<bool> SubmitFromKeyboardAsync(string text)
+    {
+        _draft = text;
+        return await SubmitAsync();
+    }
+
+    private async Task<bool> SubmitAsync()
+    {
+        if (Disabled || !CanSend || (string.IsNullOrWhiteSpace(_draft) && !AllowEmpty))
+        {
+            return false;
+        }
+
+        var text = _draft.Trim();
+        _draft = string.Empty;
+        Drafts?.Remove(Conversation);
+        _resize = true;
+        StateHasChanged();
+        await OnSend.InvokeAsync(text);
+        return true;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_module is not null)
+            {
+                await _module.InvokeVoidAsync("unbindSurfaceChatComposer", _box);
+                await _module.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+
+        _self?.Dispose();
+    }
+}

@@ -175,6 +175,44 @@ Embed a compact header notification icon with `SurfaceNotify`:
 
 `SurfaceNotify` shows the total unread count across Surface agents and squads. Left click navigates to `/surface`; right click opens a compact unread menu with per-target open/mark-seen actions plus a mark-all-seen action. Clicking outside the menu closes it. Inspecting or closing the menu does not clear unread state.
 
+### A full-page chat, and apps that reach the host over `/ws`
+
+`SurfaceChat` is one agent's chat filling its container (a page of its own rather than SurfaceChatLink's popup): a team-chat history
+grouped by sender and day, the agent's progress while it works, copy on answers, Adaptive Cards, Enter to send and Shift+Enter for a new
+line (its `SurfaceChatComposer` redraws only itself while typing). Give its container a height; theme it with the `--surface-chat-*`
+CSS variables on `.surface-chat`.
+
+```razor
+<SurfaceChat AgentHandle="assistant"
+             Title="Assistant"
+             Agent="@(new AgentConfiguration { Handle = "assistant", AgentType = "assistant-agent" })"
+             Suggestions="@(["What changed this week?"])"
+             ConfigureMessage="@(message => message.Args!["who"] = userName)"
+             OnReady="AskAboutThisPageAsync" />
+```
+
+- `Agent` is created when the host doesn't have it set up; leave it out for an agent someone else makes (a shared `system:` agent),
+  which the chat only checks. `NewConversation` replaces the reset for an agent that mustn't be reset.
+- `Principal` overrides the signed-in principal, for apps that give each chat its own principal (one such chat at a time per page).
+- `DescribeProblem` gives the app's own words for a `SurfaceConnectionException` (`NotConfigured`, `Unreachable`, `Refused`, `AgentMissing`).
+- `AfterMessages` shows page content after the last message (cards asking the reader to confirm something the agent proposed).
+
+Apps without an Orleans cluster connection (Blazor Server apps outside the host's network) use `FabrCore.Surface.WebSocket`:
+
+```csharp
+builder.Services.AddFabrCoreSurfaceWebSocket(socket =>
+{
+    socket.HostUrl = new Uri(builder.Configuration["FabrCore:HostUrl"]!);
+    socket.ApiKey = builder.Configuration["FabrCore:ApiKey"];
+});
+```
+
+It registers only what the chat needs (`AddFabrCoreSurfaceChat`), one `SurfaceWebSocketPrincipalContext` per principal (sent as
+`x-user-handle`, which the host's key must be allowed to act for), and fire-and-forget delivery, since proxies cut off a request that
+waits for an answer. The context reads and acknowledges deliveries, creates agents over `POST fabrcoreapi/Agent/create` and creates them
+again when a restarted host reports them not set up, and delivers an error from an agent that says nothing for `QuietLimit`, which ends
+the chat's wait.
+
 For app setup details, read [integration.md](references/integration.md) and reuse [blazor-program-snippet.cs](assets/templates/blazor-program-snippet.cs).
 For chat-link usage, read [chat-link.md](references/chat-link.md) and reuse [surface-chat-link-snippet.razor](assets/templates/surface-chat-link-snippet.razor).
 For notification icon usage, reuse [surface-notify-snippet.razor](assets/templates/surface-notify-snippet.razor).

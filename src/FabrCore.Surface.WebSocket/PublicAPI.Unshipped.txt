@@ -1,0 +1,47 @@
+#nullable enable
+FabrCore.Surface.WebSocket.SurfaceWebSocketExtensions
+FabrCore.Surface.WebSocket.SurfaceWebSocketOptions
+FabrCore.Surface.WebSocket.SurfaceWebSocketOptions.ApiKey.get -> string?
+FabrCore.Surface.WebSocket.SurfaceWebSocketOptions.ApiKey.set -> void
+FabrCore.Surface.WebSocket.SurfaceWebSocketOptions.ApiKeyHeader.get -> string!
+FabrCore.Surface.WebSocket.SurfaceWebSocketOptions.ApiKeyHeader.set -> void
+FabrCore.Surface.WebSocket.SurfaceWebSocketOptions.ConnectTimeout.get -> System.TimeSpan
+FabrCore.Surface.WebSocket.SurfaceWebSocketOptions.ConnectTimeout.set -> void
+FabrCore.Surface.WebSocket.SurfaceWebSocketOptions.HostUrl.get -> System.Uri?
+FabrCore.Surface.WebSocket.SurfaceWebSocketOptions.HostUrl.set -> void
+FabrCore.Surface.WebSocket.SurfaceWebSocketOptions.HttpClientName.get -> string!
+FabrCore.Surface.WebSocket.SurfaceWebSocketOptions.HttpClientName.set -> void
+FabrCore.Surface.WebSocket.SurfaceWebSocketOptions.NoAnswerMessage.get -> string!
+FabrCore.Surface.WebSocket.SurfaceWebSocketOptions.NoAnswerMessage.set -> void
+FabrCore.Surface.WebSocket.SurfaceWebSocketOptions.PrincipalHeader.get -> string!
+FabrCore.Surface.WebSocket.SurfaceWebSocketOptions.PrincipalHeader.set -> void
+FabrCore.Surface.WebSocket.SurfaceWebSocketOptions.QuietLimit.get -> System.TimeSpan
+FabrCore.Surface.WebSocket.SurfaceWebSocketOptions.QuietLimit.set -> void
+FabrCore.Surface.WebSocket.SurfaceWebSocketOptions.RestoreCreatedAgents.get -> bool
+FabrCore.Surface.WebSocket.SurfaceWebSocketOptions.RestoreCreatedAgents.set -> void
+FabrCore.Surface.WebSocket.SurfaceWebSocketOptions.SurfaceWebSocketOptions() -> void
+FabrCore.Surface.WebSocket.SurfaceWebSocketPrincipalContext
+FabrCore.Surface.WebSocket.SurfaceWebSocketPrincipalContext.AgentMessageReceived -> System.EventHandler<FabrCore.Core.AgentMessage!>?
+FabrCore.Surface.WebSocket.SurfaceWebSocketPrincipalContext.ConnectAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+FabrCore.Surface.WebSocket.SurfaceWebSocketPrincipalContext.CreateAgent(FabrCore.Core.AgentConfiguration! agentConfiguration) -> System.Threading.Tasks.Task<FabrCore.Core.AgentHealthStatus!>!
+FabrCore.Surface.WebSocket.SurfaceWebSocketPrincipalContext.DisposeAsync() -> System.Threading.Tasks.ValueTask
+FabrCore.Surface.WebSocket.SurfaceWebSocketPrincipalContext.GetAccessibleSharedAgents() -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.AgentInfo!>!>!
+FabrCore.Surface.WebSocket.SurfaceWebSocketPrincipalContext.GetAgentHealth(string! handle, FabrCore.Core.HealthDetailLevel detailLevel = FabrCore.Core.HealthDetailLevel.Basic) -> System.Threading.Tasks.Task<FabrCore.Core.AgentHealthStatus!>!
+FabrCore.Surface.WebSocket.SurfaceWebSocketPrincipalContext.GetTrackedAgents(bool activate = false) -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.TrackedAgentInfo!>!>!
+FabrCore.Surface.WebSocket.SurfaceWebSocketPrincipalContext.Handle.get -> string!
+FabrCore.Surface.WebSocket.SurfaceWebSocketPrincipalContext.IsAgentTracked(string! handle) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Surface.WebSocket.SurfaceWebSocketPrincipalContext.IsDisposed.get -> bool
+FabrCore.Surface.WebSocket.SurfaceWebSocketPrincipalContext.ResetAgent(string! handle) -> System.Threading.Tasks.Task<FabrCore.Core.AgentHealthStatus!>!
+FabrCore.Surface.WebSocket.SurfaceWebSocketPrincipalContext.SendAndReceiveMessage(FabrCore.Core.AgentMessage! request) -> System.Threading.Tasks.Task<FabrCore.Core.AgentMessage!>!
+FabrCore.Surface.WebSocket.SurfaceWebSocketPrincipalContext.SendEvent(FabrCore.Core.EventMessage! request) -> System.Threading.Tasks.Task!
+FabrCore.Surface.WebSocket.SurfaceWebSocketPrincipalContext.SendMessage(FabrCore.Core.AgentMessage! request) -> System.Threading.Tasks.Task!
+FabrCore.Surface.WebSocket.SurfaceWebSocketPrincipalContextFactory
+FabrCore.Surface.WebSocket.SurfaceWebSocketPrincipalContextFactory.CreateAsync(string! handle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.ISurfacePrincipalContext!>!
+FabrCore.Surface.WebSocket.SurfaceWebSocketPrincipalContextFactory.DisposeAsync() -> System.Threading.Tasks.ValueTask
+FabrCore.Surface.WebSocket.SurfaceWebSocketPrincipalContextFactory.GetOrCreateAsync(string! handle, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Surface.ISurfacePrincipalContext!>!
+FabrCore.Surface.WebSocket.SurfaceWebSocketPrincipalContextFactory.HasContext(string! handle) -> bool
+FabrCore.Surface.WebSocket.SurfaceWebSocketPrincipalContextFactory.ReleaseAsync(string! handle) -> System.Threading.Tasks.Task<bool>!
+FabrCore.Surface.WebSocket.SurfaceWebSocketPrincipalContextFactory.SurfaceWebSocketPrincipalContextFactory(System.Net.Http.IHttpClientFactory! clients, Microsoft.Extensions.Options.IOptions<FabrCore.Surface.WebSocket.SurfaceWebSocketOptions!>! options, Microsoft.Extensions.Logging.ILoggerFactory! loggers, System.TimeProvider? time = null) -> void
+const FabrCore.Surface.WebSocket.SurfaceWebSocketExtensions.HttpClientName = "FabrCore.Surface.WebSocket" -> string!
+const FabrCore.Surface.WebSocket.SurfaceWebSocketPrincipalContext.NoAnswerArg = "_fabrcore_surface_no_answer" -> string!
+static FabrCore.Surface.WebSocket.SurfaceWebSocketExtensions.AddFabrCoreSurfaceWebSocket(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<FabrCore.Surface.WebSocket.SurfaceWebSocketOptions!>! configure, System.Action<FabrCore.Surface.Services.SurfaceOptions!>? configureSurface = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

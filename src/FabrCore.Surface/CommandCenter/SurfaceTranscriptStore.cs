@@ -113,6 +113,34 @@ internal sealed class SurfaceTranscriptStore
         }
     }
 
+    /// <summary>Removes the principal's timeline items that match, and their unread counts' dedupe keys. Returns how many went.</summary>
+    public int RemoveAll(string? principalId, Predicate<SurfaceTimelineItem> match)
+    {
+        if (string.IsNullOrWhiteSpace(principalId))
+        {
+            return 0;
+        }
+
+        lock (syncRoot)
+        {
+            if (!timelines.TryGetValue(principalId, out var timeline))
+            {
+                return 0;
+            }
+
+            var keys = GetOrCreateDedupeKeys(principalId);
+            foreach (var item in timeline.Where(item => match(item)))
+            {
+                if (BuildDedupeKey(item) is { } key)
+                {
+                    keys.Remove(key);
+                }
+            }
+
+            return timeline.RemoveAll(match);
+        }
+    }
+
     public IReadOnlyList<string> ClearAllUnread(string? principalId)
     {
         if (string.IsNullOrWhiteSpace(principalId))

@@ -14,6 +14,7 @@
         'FabrCore.Services.Connections'
         'FabrCore.Services.RemoteAgents'
         'FabrCore.Surface'
+        'FabrCore.Surface.WebSocket'
     )
     VSTestProjects = @(
         'src/FabrCore.Sdk.Tests/FabrCore.Sdk.Tests.csproj'
@@ -24,6 +25,7 @@
         'src/FabrCore.Client.WebSocket.Tests/FabrCore.Client.WebSocket.Tests.csproj'
         'src/FabrCore.Services.Microsoft365Copilot.Tests/FabrCore.Services.Microsoft365Copilot.Tests.csproj'
         'src/FabrCore.Surface.Tests/FabrCore.Surface.Tests.csproj'
+        'src/FabrCore.Surface.WebSocket.Tests/FabrCore.Surface.WebSocket.Tests.csproj'
         'samples/FabrCore.SampleApp.Tests/FabrCore.SampleApp.Tests.csproj'
     )
     TestingPlatformProjects = @(

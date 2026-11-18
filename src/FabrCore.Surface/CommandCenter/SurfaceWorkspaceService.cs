@@ -319,6 +319,20 @@ public sealed class SurfaceWorkspaceService : IAsyncDisposable
     public IEnumerable<SurfaceTimelineItem> GetVisibleTimelineForAgent(string? handle)
         => GetTimelineForAgent(handle).Where(item => item.DisplayInChat);
 
+    /// <summary>Forgets the conversation with an agent here, for everything the principal has open, such as after a new conversation.</summary>
+    public void ClearTimeline(string? handle)
+    {
+        if (string.IsNullOrWhiteSpace(handle) || Principal?.PrincipalId is not { Length: > 0 } principalId)
+        {
+            return;
+        }
+
+        var normalized = NormalizeHandle(handle);
+        transcriptStore.RemoveAll(principalId, item => BelongsToAgentTimeline(item, normalized));
+        MarkAgentSeenCore(normalized);
+        NotifyTimelineChanged();
+    }
+
     public void MarkAgentSeen(string? handle)
     {
         if (!MarkAgentSeenCore(handle))
@@ -573,6 +587,18 @@ public sealed class SurfaceWorkspaceService : IAsyncDisposable
         string? targetAgentHandle,
         IReadOnlyCollection<string>? fileIds,
         CancellationToken cancellationToken = default)
+        => await SendChatAsync(message, targetAgentHandle, fileIds, configure: null, cancellationToken);
+
+    /// <summary>
+    /// Sends a chat message, letting the caller change it before it goes, such as to send on a channel of a shared agent, or with
+    /// arguments the agent reads (who's asking). <paramref name="configure"/> runs after Surface has filled the message in.
+    /// </summary>
+    public async Task SendChatAsync(
+        string message,
+        string? targetAgentHandle,
+        IReadOnlyCollection<string>? fileIds,
+        Action<AgentMessage>? configure,
+        CancellationToken cancellationToken)
     {
         if (context is null || Principal?.PrincipalId is null || !options.EnableAgentChat)
         {
@@ -657,6 +683,8 @@ public sealed class SurfaceWorkspaceService : IAsyncDisposable
                 request.Args[SurfaceSquadArgs.RoutedMention] = routedMention;
             }
         }
+
+        configure?.Invoke(request);
 
         AddTimelineItem(new SurfaceTimelineItem
         {

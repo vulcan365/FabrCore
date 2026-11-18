@@ -238,6 +238,28 @@ public static class FabrCoreSurfaceExtensions
         return services;
     }
 
+    /// <summary>
+    /// Registers only what Surface's chat needs (<see cref="SurfaceChat"/>, <see cref="SurfaceChatLink"/> and the workspace behind
+    /// them), without the command center's preferences, squads, blueprints or monitor. A host connection package registers the
+    /// <see cref="ISurfacePrincipalContextFactory"/>, such as <c>AddFabrCoreSurfaceWebSocket</c>.
+    /// </summary>
+    public static IServiceCollection AddFabrCoreSurfaceChat(this IServiceCollection services)
+    {
+        services.AddOptions<SurfaceOptions>();
+        services.AddHttpClient();
+        services.TryAddSingleton<SurfaceTranscriptStore>();
+        services.TryAddScoped<IFabrCoreHostApiClient>(CreateFabrCoreHostApiClient);
+        services.TryAddScoped<ISurfaceFileUploadClient, SurfaceFileUploadClient>();
+        services.TryAddSingleton<ISurfaceActionRegistry, EmptySurfaceActionRegistry>();
+        services.TryAddSingleton<IHttpContextAccessor, HttpContextAccessor>();
+        services.TryAddScoped<SurfacePrincipalAccessor>();
+        services.TryAddScoped<ISurfacePrincipalContextProvider, DefaultSurfacePrincipalContextProvider>();
+        services.TryAddScoped<SurfaceWorkspaceService>();
+        services.TryAddScoped<AdaptiveCardSurfaceValidator>();
+        services.TryAddScoped<ISurfaceActionDispatcher, SurfaceActionDispatcher>();
+        return services;
+    }
+
     internal static IServiceCollection AddFabrCoreSurfaceNavigation(this IServiceCollection services)
     {
         services.AddOptions<SurfaceNavigationOptions>()
