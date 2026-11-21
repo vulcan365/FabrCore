@@ -68,6 +68,12 @@ namespace FabrCore.Core.Interfaces
         Task<bool> UntrackAgent(string handle);
 
         /// <summary>
+        /// Reads the current registration without activating the agent.
+        /// </summary>
+        [AlwaysInterleave]
+        Task<Guid?> GetAgentRegistrationId(string fullHandle);
+
+        /// <summary>
         /// Gets the list of agents created by this principal.
         /// </summary>
         /// <param name="activate">When true, activates each tracked agent by querying health and includes the health result on each returned item.</param>

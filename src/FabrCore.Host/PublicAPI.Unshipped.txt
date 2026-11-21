@@ -146,3 +146,6 @@ const FabrCore.Host.Database.FabrCoreHostDatabase.Memory = "Memory" -> string!
 const FabrCore.Host.Database.FabrCoreHostDatabase.Operations = "Operations" -> string!
 const FabrCore.Host.Database.FabrCoreHostDatabase.SectionName = "FabrCore:HostDatabase" -> string!
 const FabrCore.Host.Database.FabrCoreHostDatabase.State = "State" -> string!
+FabrCore.Host.Api.Controllers.AgentManagementController.Registrations(string! principalId, int offset = 0, int limit = 100, string? revision = null) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
+FabrCore.Host.Services.AgentRegistrationLookup
+static FabrCore.Host.Services.AgentRegistrationLookup.GetRegistrationAsync(Orleans.IClusterClient! cluster, string! principal, string! fullHandle) -> System.Threading.Tasks.Task<System.Guid?>!

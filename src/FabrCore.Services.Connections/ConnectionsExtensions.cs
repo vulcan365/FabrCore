@@ -109,7 +109,7 @@ public static class ConnectionsExtensions
     {
         if (endpoints.ServiceProvider.GetService<ConnectionsOptions>()?.Enabled != true) return endpoints;
         var group = endpoints.MapGroup("/fabrcoreapi/connections/v1").RequireAuthorization();
-        group.MapGet("", (HttpContext c, ConnectionService s, IConnectionPrincipalResolver r) => Run(c, r, p => s.Execute(p, "list", new(""))));
+        group.MapGet("", (HttpContext c, ConnectionService s, IConnectionPrincipalResolver r) => Run(c, r, p => s.Execute(p, "user-list", new(""))));
         group.MapPost("/begin", (BeginConnectionRequest b, HttpContext c, ConnectionService s, IConnectionPrincipalResolver r) =>
             Run(c, r, p => s.Execute(p, "begin", new(b.Connection, RedirectUri: b.RedirectUri, LoginHint: LoginHint(c.User)))));
         group.MapPost("/complete", (CompleteConnectionRequest b, HttpContext c, ConnectionService s, IConnectionPrincipalResolver r) =>
@@ -140,9 +140,33 @@ public static class ConnectionsExtensions
             return result;
         });
         admin.MapGet("", (string principal, ConnectionService s) => Result(() => s.Execute(principal, "list", new(""))));
+        admin.MapGet("/{name}/observations", async (string principal, string name, ConnectionService service,
+            FabrCore.Core.Auditing.IAuditProvider audit) =>
+        {
+            return await Result(async () =>
+            {
+                using var profile = JsonDocument.Parse(await service.Execute(principal, "profile", new(name)));
+                var link = profile.RootElement.GetProperty("profile").Deserialize<ConnectionProfile>(JsonSerializerOptions.Web)?.ManagedIdentity
+                    ?? throw new ConnectionException("not-found", "No managed identity is linked.");
+                var events = await audit.GetEventsAsync(new() { Category = FabrCore.Core.Auditing.AuditCategory.AgentIdentityAccess,
+                    ResourcePrincipal = principal, Limit = 100 });
+                return JsonSerializer.Serialize(events.Where(e => e.Resource == link.BindingId.ToString()).Take(20)
+                    .Select(e => new { e.Timestamp, e.SubjectAgent, e.Permission, e.Details }), JsonSerializerOptions.Web);
+            });
+        });
         admin.MapGet("/{name}", (string principal, string name, ConnectionService s) => Result(() => s.Execute(principal, "profile", new(name))));
         admin.MapPut("/{name}", (string principal, string name, ConnectionProfile b, [Microsoft.AspNetCore.Mvc.FromHeader(Name = "If-Match")] string? revision, ConnectionService s) =>
             Result(() => s.Execute(principal, "save", new(name, Revision: revision?.Trim('"'), Profile: b))));
+        admin.MapPut("/{name}/managed-identity", (HttpContext context, string principal, string name, ConnectionProfile profile,
+            [Microsoft.AspNetCore.Mvc.FromHeader(Name = "If-Match")] string? revision, ConnectionService service) =>
+            context.User.HasClaim("fabrcore:host-admin-key", "true")
+                ? Result(() => service.Execute(principal, "save-managed", new(name, Revision: revision?.Trim('"'), Profile: profile)))
+                : Task.FromResult<IResult>(Results.Forbid()));
+        admin.MapPost("/{name}/managed-identity/renew", (HttpContext context, string principal, string name,
+            [Microsoft.AspNetCore.Mvc.FromHeader(Name = "If-Match")] string? revision, ConnectionService service) =>
+            context.User.HasClaim("fabrcore:host-admin-key", "true")
+                ? Result(() => service.Execute(principal, "renew-managed", new(name, Revision: revision?.Trim('"'))))
+                : Task.FromResult<IResult>(Results.Forbid()));
         admin.MapDelete("/{name}/authorization", (string principal, string name, ConnectionService s) => Result(() => s.Execute(principal, "disconnect", new(name))));
         admin.MapPost("/{name}/handoff", (string principal, string name, ConnectionService s) => Result(() => s.Execute(principal, "handoff-create", new(name))));
         admin.MapPost("/{name}/handoff/complete", (string principal, string name, ConnectionHandoffEnvelope envelope, ConnectionService s) =>
@@ -183,7 +207,7 @@ public static class ConnectionsExtensions
     }
 }
 
-internal sealed class ConnectionService(IClusterClient cluster) : IConnectionService, IConnectionUserAssertions
+internal sealed class ConnectionService(IClusterClient cluster, FabrCore.Core.Auditing.IAuditProvider audit) : IConnectionService, IConnectionUserAssertions
 {
     public Task SubmitAsync(string principal, string agent, string assertion, CancellationToken cancellationToken = default)
         => Execute(principal, "assertion-agent", new(string.Empty, principal, agent, Assertion: assertion)).WaitAsync(cancellationToken);
@@ -232,11 +256,23 @@ internal sealed class ConnectionService(IClusterClient cluster) : IConnectionSer
             catch (ConnectionException e) when (e.Notice is not null) { await notify(e.Notice); throw; }
             var token = JsonSerializer.Deserialize<TokenMaterial>(material, JsonSerializerOptions.Web)!;
             return new ConnectionAccessToken(token.AccessToken, token.ExpiresAt);
+        }, config.BindingId is null ? null : async (requestId, response) =>
+        {
+            var outcome = response.IsSuccessStatusCode ? FabrCore.Core.Auditing.AuditOutcome.Success :
+                response.StatusCode is System.Net.HttpStatusCode.Forbidden or System.Net.HttpStatusCode.Unauthorized
+                    ? FabrCore.Core.Auditing.AuditOutcome.Denied : FabrCore.Core.Auditing.AuditOutcome.Error;
+            var serviceId = response.Headers.TryGetValues("x-ms-request-id", out var storage) ? storage.FirstOrDefault() :
+                response.Headers.TryGetValues("request-id", out var graph) ? graph.FirstOrDefault() : null;
+            await audit.RecordAsync(new() { Category = FabrCore.Core.Auditing.AuditCategory.AgentIdentityAccess, Outcome = outcome,
+                SubjectPrincipal = principal, SubjectAgent = agent, ResourcePrincipal = principal, Resource = config.BindingId.Value.ToString(),
+                Permission = resource, Details = new() { ["requestId"] = requestId, ["status"] = ((int)response.StatusCode).ToString(),
+                    ["childObjectId"] = config.ChildObjectId?.ToString() ?? "", ["serviceRequestId"] = serviceId ?? "" } });
         })) { BaseAddress = baseUri };
     }
 }
 
-internal sealed class ConnectionHandler(Uri baseUri, Func<CancellationToken, Task<ConnectionAccessToken>> tokenProvider)
+internal sealed class ConnectionHandler(Uri baseUri, Func<CancellationToken, Task<ConnectionAccessToken>> tokenProvider,
+    Func<string, HttpResponseMessage, Task>? record = null)
     : DelegatingHandler(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false })
 {
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -245,6 +281,13 @@ internal sealed class ConnectionHandler(Uri baseUri, Func<CancellationToken, Tas
             throw new ConnectionException("access-denied", "The request destination is outside the configured resource.");
         var token = await tokenProvider(cancellationToken);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.AccessToken);
-        return await base.SendAsync(request, cancellationToken);
+        if (record is null) return await base.SendAsync(request, cancellationToken);
+        var header = baseUri.Host.Equals("graph.microsoft.com", StringComparison.OrdinalIgnoreCase) ? "client-request-id" : "x-ms-client-request-id";
+        var requestId = request.Headers.TryGetValues(header, out var supplied) && Guid.TryParse(supplied.FirstOrDefault(), out var id) ? id : Guid.NewGuid();
+        request.Headers.Remove(header);
+        request.Headers.Add(header, requestId.ToString());
+        var response = await base.SendAsync(request, cancellationToken);
+        await record(requestId.ToString(), response);
+        return response;
     }
 }

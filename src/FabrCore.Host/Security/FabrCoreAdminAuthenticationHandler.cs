@@ -56,6 +56,8 @@ internal sealed class FabrCoreAdminAuthenticationHandler(
         var identity = new ClaimsIdentity(
             [new Claim(ClaimTypes.NameIdentifier, principalId), new Claim(ClaimTypes.Name, principalId)],
             FabrCoreAdminAuthenticationDefaults.Scheme);
+        if (FixedTimeEquals(Options.ApiKey, suppliedKey))
+            identity.AddClaim(new Claim("fabrcore:host-admin-key", "true"));
         var ticket = new AuthenticationTicket(
             new ClaimsPrincipal(identity),
             FabrCoreAdminAuthenticationDefaults.Scheme);

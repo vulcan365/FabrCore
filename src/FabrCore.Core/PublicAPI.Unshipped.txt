@@ -484,3 +484,6 @@ FabrCore.Core.CloudServer.Microsoft365IntegrationAgent.Name.get -> string!
 const FabrCore.Core.CloudServer.IntegrationAdministration.Microsoft365ApiVersion = "2" -> string!
 FabrCore.Core.CloudServer.Microsoft365IntegrationAgent.AgentHandle.get -> string!
 static FabrCore.Core.EventStreamSubscription.TargetsAgentEventStream(FabrCore.Core.EventMessage! message) -> bool
+FabrCore.Core.TrackedAgentInfo.RegistrationId.get -> System.Guid
+FabrCore.Core.TrackedAgentInfo.RegistrationId.set -> void
+FabrCore.Core.Auditing.AuditCategory.AgentIdentityAccess = 7 -> FabrCore.Core.Auditing.AuditCategory

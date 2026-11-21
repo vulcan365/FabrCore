@@ -1,6 +1,8 @@
-# Unreleased
+# 2.2.2
 
-These changes are on `develop` and are not in a published package yet.
+Hosts can expose durable agent registration IDs and bind a managed connection to selected registrations. The connection broker checks the calling registration before issuing or reusing its Entra Agent ID token. Administrators can renew tokens for one binding independently. Agents that do not use a managed connection keep their existing authentication path.
+
+# 2.2.1
 
 ## Surface's chat over the WebSocket
 

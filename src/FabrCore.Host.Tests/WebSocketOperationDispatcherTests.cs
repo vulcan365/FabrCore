@@ -100,6 +100,7 @@ public sealed class WebSocketOperationDispatcherTests
         public Task SendEvent(EventMessage request) { LastEvent = request; return Task.CompletedTask; }
         public Task<AgentHealthStatus> ResetAgent(string handle) => Task.FromResult(Health(handle));
         public Task<AgentHealthStatus> GetAgentHealth(string handle, HealthDetailLevel detailLevel = HealthDetailLevel.Basic) => Task.FromResult(Health(handle));
+        public Task<Guid?> GetAgentRegistrationId(string fullHandle) => Task.FromResult<Guid?>(null);
         public Task<List<TrackedAgentInfo>> GetTrackedAgents(bool activate = false) => Task.FromResult(new List<TrackedAgentInfo>());
         public Task<bool> IsAgentTracked(string handle) => Task.FromResult(true);
         public Task<List<AgentInfo>> GetAccessibleSharedAgents() => Task.FromResult(new List<AgentInfo>());

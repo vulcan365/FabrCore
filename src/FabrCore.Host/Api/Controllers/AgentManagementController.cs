@@ -17,6 +17,20 @@ namespace FabrCore.Host.Api.Controllers;
 public sealed class AgentManagementController(IClusterClient cluster, IFabrCoreAgentService agents, IFabrCoreConfigurationStore configuration,
     IEnumerable<IBlueprintExpander> expanders, IFabrCoreSkillCatalogService skills) : ControllerBase
 {
+    [HttpGet("registrations")]
+    public async Task<IActionResult> Registrations(string principalId, int offset = 0, int limit = 100, string? revision = null)
+    {
+        var tracked = await cluster.GetGrain<IPrincipalGrain>(principalId).GetTrackedAgents(false);
+        var entries = tracked.OrderBy(a => a.Handle, StringComparer.Ordinal)
+            .Select(a => new { a.RegistrationId, a.Handle, a.AgentType }).ToArray();
+        var current = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(entries)));
+        if (revision is not null && current != revision) return StatusCode(412);
+        limit = Math.Clamp(limit, 1, 1000);
+        offset = Math.Clamp(offset, 0, entries.Length);
+        return Ok(new { items = entries.Skip(offset).Take(limit), revision = current,
+            nextCursor = offset + limit < entries.Length ? (offset + limit).ToString() : null });
+    }
+
     [HttpGet("catalog")]
     public async Task<IActionResult> Catalog(string principalId, CancellationToken cancellationToken) => Ok(new { agents = agents.GetAgentTypes(), plugins = agents.GetPlugins(), tools = agents.GetTools(),
         models = (await configuration.GetConfigurationAsync()).ModelConfigurations.Select(m => new { m.Name, m.Model, m.Provider }),

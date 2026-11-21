@@ -334,6 +334,7 @@ public sealed class FabrCoreAgentServiceTrackingTests
 
         public Task<bool> UntrackAgent(string handle) => throw new NotSupportedException();
 
+        public Task<Guid?> GetAgentRegistrationId(string fullHandle) => Task.FromResult<Guid?>(null);
         public Task<List<TrackedAgentInfo>> GetTrackedAgents(bool activate = false)
             => Task.FromResult(_trackedAgents.Values.ToList());
 

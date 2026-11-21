@@ -279,3 +279,29 @@ override FabrCore.Connections.ConnectionCaller.GetHashCode() -> int
 override FabrCore.Connections.ConnectionCaller.ToString() -> string!
 static FabrCore.Connections.ConnectionCaller.operator !=(FabrCore.Connections.ConnectionCaller? left, FabrCore.Connections.ConnectionCaller? right) -> bool
 static FabrCore.Connections.ConnectionCaller.operator ==(FabrCore.Connections.ConnectionCaller? left, FabrCore.Connections.ConnectionCaller? right) -> bool
+FabrCore.Connections.ConnectionProfile.ManagedIdentity.get -> FabrCore.Connections.ManagedAgentIdentity?
+FabrCore.Connections.ConnectionProfile.ManagedIdentity.set -> void
+FabrCore.Connections.ConnectionStatus.ManagedIdentity.get -> FabrCore.Connections.ManagedAgentIdentity?
+FabrCore.Connections.ConnectionStatus.ManagedIdentity.init -> void
+FabrCore.Connections.ManagedAgentIdentity
+FabrCore.Connections.ManagedAgentIdentity.<Clone>$() -> FabrCore.Connections.ManagedAgentIdentity!
+FabrCore.Connections.ManagedAgentIdentity.BindingId.get -> System.Guid
+FabrCore.Connections.ManagedAgentIdentity.BindingId.init -> void
+FabrCore.Connections.ManagedAgentIdentity.Deconstruct(out System.Guid BindingId, out System.Guid TenantId, out System.Guid ObjectId, out bool Shared, out System.Collections.Generic.Dictionary<string!, System.Guid>! Members, out string! ManagementUrl) -> void
+FabrCore.Connections.ManagedAgentIdentity.Equals(FabrCore.Connections.ManagedAgentIdentity? other) -> bool
+FabrCore.Connections.ManagedAgentIdentity.ManagedAgentIdentity(System.Guid BindingId, System.Guid TenantId, System.Guid ObjectId, bool Shared, System.Collections.Generic.Dictionary<string!, System.Guid>! Members, string! ManagementUrl) -> void
+FabrCore.Connections.ManagedAgentIdentity.ManagementUrl.get -> string!
+FabrCore.Connections.ManagedAgentIdentity.ManagementUrl.init -> void
+FabrCore.Connections.ManagedAgentIdentity.Members.get -> System.Collections.Generic.Dictionary<string!, System.Guid>!
+FabrCore.Connections.ManagedAgentIdentity.Members.init -> void
+FabrCore.Connections.ManagedAgentIdentity.ObjectId.get -> System.Guid
+FabrCore.Connections.ManagedAgentIdentity.ObjectId.init -> void
+FabrCore.Connections.ManagedAgentIdentity.Shared.get -> bool
+FabrCore.Connections.ManagedAgentIdentity.Shared.init -> void
+FabrCore.Connections.ManagedAgentIdentity.TenantId.get -> System.Guid
+FabrCore.Connections.ManagedAgentIdentity.TenantId.init -> void
+override FabrCore.Connections.ManagedAgentIdentity.Equals(object? obj) -> bool
+override FabrCore.Connections.ManagedAgentIdentity.GetHashCode() -> int
+override FabrCore.Connections.ManagedAgentIdentity.ToString() -> string!
+static FabrCore.Connections.ManagedAgentIdentity.operator !=(FabrCore.Connections.ManagedAgentIdentity? left, FabrCore.Connections.ManagedAgentIdentity? right) -> bool
+static FabrCore.Connections.ManagedAgentIdentity.operator ==(FabrCore.Connections.ManagedAgentIdentity? left, FabrCore.Connections.ManagedAgentIdentity? right) -> bool

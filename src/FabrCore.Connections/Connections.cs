@@ -9,6 +9,8 @@ public enum ConnectionAuthentication { AuthorizationCode, ClientCredentials, Age
 public sealed class ConnectionProfile
 {
     public string Name { get; set; } = "";
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ManagedAgentIdentity? ManagedIdentity { get; set; }
     public string Provider { get; set; } = "microsoft";
     public bool Enabled { get; set; }
     public ConnectionAuthentication Authentication { get; set; }
@@ -34,6 +36,10 @@ public sealed class ConnectionProfile
     public Dictionary<string, ConnectionResource> Resources { get; set; } = new(StringComparer.Ordinal);
 }
 
+/// <summary>Administrative link to a directory child and the exact Host registrations allowed to act as it.</summary>
+public sealed record ManagedAgentIdentity(Guid BindingId, Guid TenantId, Guid ObjectId, bool Shared,
+    Dictionary<string, Guid> Members, string ManagementUrl);
+
 public sealed class ConnectionResource
 {
     public string BaseUrl { get; set; } = "";
@@ -53,7 +59,11 @@ public interface IConnectionBindingResolver
 {
     ConnectionBinding? Resolve(ConnectionCaller caller, string connection);
 }
-public sealed record ConnectionStatus(string Name, bool Enabled, string State, string Revision, string? ExternalSubject = null);
+public sealed record ConnectionStatus(string Name, bool Enabled, string State, string Revision, string? ExternalSubject = null)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ManagedAgentIdentity? ManagedIdentity { get; init; }
+}
 public sealed record ConnectionTransaction(string State, string AuthorizationUrl, DateTimeOffset ExpiresAt);
 public sealed record BeginConnectionRequest(string Connection, string RedirectUri);
 public sealed record CompleteConnectionRequest(string Connection, string State, string? AuthorizationCode, string? ProviderError = null)

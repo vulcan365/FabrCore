@@ -25,7 +25,10 @@ namespace FabrCore.Core.Auditing
         RemoteAdministration,
 
         /// <summary>WebSocket tickets, protocol violations, replay gaps, and overload disconnects.</summary>
-        WebSocketSecurity
+        WebSocketSecurity,
+
+        /// <summary>A downstream HTTP result observed by a managed agent identity connection.</summary>
+        AgentIdentityAccess
     }
 
     /// <summary>Outcome of the audited operation.</summary>
