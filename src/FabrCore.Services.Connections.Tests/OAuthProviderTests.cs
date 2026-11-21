@@ -93,12 +93,12 @@ public sealed class OAuthProviderTests
     }
     private static ConnectionProfile Profile(ConnectionAuthentication authentication) => new() { Authentication = authentication, Authority = "https://identity.example", ClientId = "parent", AgentIdentityClientId = "child" };
     private static ConnectionResource Resource() => new() { BaseUrl = "https://graph.microsoft.com/", Scopes = ["https://graph.microsoft.com/.default"] };
-    private sealed class CredentialProvider : IConnectionCredentialProvider
+    internal sealed class CredentialProvider : IConnectionCredentialProvider
     {
         public Task<Dictionary<string, string>> GetCredentialAsync(ConnectionProfile profile, string tokenEndpoint, CancellationToken cancellationToken)
             => Task.FromResult(new Dictionary<string, string> { ["client_secret"] = "credential" });
     }
-    private sealed class IdentityProvider : HttpMessageHandler
+    internal sealed class IdentityProvider : HttpMessageHandler
     {
         public RSAParameters? SigningParameters { get; init; }
         public bool Deny { get; init; }

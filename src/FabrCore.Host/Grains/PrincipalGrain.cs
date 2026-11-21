@@ -599,10 +599,17 @@ namespace FabrCore.Host.Grains
                 // Restore tracked agents from persisted state
                 if (_state.State.TrackedAgents.Count > 0)
                 {
+                    var upgraded = false;
                     foreach (var kvp in _state.State.TrackedAgents)
                     {
+                        if (kvp.Value.RegistrationId == Guid.Empty)
+                        {
+                            kvp.Value.RegistrationId = Guid.NewGuid();
+                            upgraded = true;
+                        }
                         _trackedAgents[kvp.Key] = kvp.Value;
                     }
+                    if (upgraded) await _state.WriteStateAsync();
                     logger.LogInformation("Restored {Count} tracked agents for principal: {PrincipalHandle}",
                         _trackedAgents.Count, principalHandle);
                 }
@@ -1388,7 +1395,9 @@ namespace FabrCore.Host.Grains
                     _trackedAgents[agentConfiguration.Handle] = new TrackedAgentInfo(
                         agentConfiguration.Handle,
                         agentConfiguration.AgentType ?? "Unknown"
-                    );
+                    ) { RegistrationId = _trackedAgents.TryGetValue(agentConfiguration.Handle, out var existing)
+                        && existing.AgentType == (agentConfiguration.AgentType ?? "Unknown")
+                        ? existing.RegistrationId : Guid.NewGuid() };
 
                     // Persist tracked agents immediately
                     _state.State.TrackedAgents[agentConfiguration.Handle] = _trackedAgents[agentConfiguration.Handle];
@@ -1565,9 +1574,13 @@ namespace FabrCore.Host.Grains
             return new TrackedAgentInfo
             {
                 Handle = agent.Handle,
+                RegistrationId = agent.RegistrationId,
                 AgentType = agent.AgentType
             };
         }
+
+        public Task<Guid?> GetAgentRegistrationId(string fullHandle) =>
+            Task.FromResult(_trackedAgents.TryGetValue(fullHandle, out var agent) ? (Guid?)agent.RegistrationId : null);
 
         public Task<bool> IsAgentTracked(string handle)
         {

@@ -39,11 +39,11 @@ internal sealed record GrainRequest(string Name, string? Principal = null, strin
 {
     public override string ToString() => "[protected connection operation]";
 }
-internal sealed record AuthorizedResource(ConnectionResource Resource, string SessionVersion);
+internal sealed record AuthorizedResource(ConnectionResource Resource, string SessionVersion, Guid? BindingId, Guid? ChildObjectId);
 
 /// <summary>One serialized owner actor prevents refresh rotation and disconnect races across silos.</summary>
 internal sealed class ConnectionGrain(IUserScopedFabrCoreStorageProvider store, FabrCore.Host.Security.IFabrCoreDataProtectionProvider protection,
-    OAuthProvider oauth, ConnectionsOptions options, IConnectionHandoffPrincipalValidator handoffValidator) : Grain, IConnectionGrain
+    OAuthProvider oauth, ConnectionsOptions options, IConnectionHandoffPrincipalValidator handoffValidator, IClusterClient cluster) : Grain, IConnectionGrain
 {
     private static readonly JsonSerializerOptions Json = JsonSerializerOptions.Web;
     private static readonly TimeSpan AssertionRenewal = TimeSpan.FromMinutes(5);
@@ -71,6 +71,7 @@ internal sealed class ConnectionGrain(IUserScopedFabrCoreStorageProvider store, 
             records = ciphertext is null ? [] : JsonSerializer.Deserialize<Dictionary<string, ConnectionRecord>>(Protector.Unprotect(ciphertext), Json)!;
             if (ApplyTemplates(records, options.Templates, Owner)) await Persist();
         }
+        if (operation == "user-list") return Serialize(records.Values.Where(r => r.Profile.ManagedIdentity is null).Select(Status).ToArray());
         if (operation == "list") return Serialize(records.Values.Select(Status).ToArray());
         if (operation == "assertion-agent")
         {
@@ -81,12 +82,38 @@ internal sealed class ConnectionGrain(IUserScopedFabrCoreStorageProvider store, 
             if (changed) await Persist();
             return Serialize(changed);
         }
-        if (operation == "save")
+        if (request.Name == "$agent-identity" && operation is "session" or "resource" or "token")
+        {
+            var link = records.Values.SingleOrDefault(r => r.Profile.Enabled &&
+                r.Profile.ManagedIdentity?.Members.ContainsKey(request.Agent ?? "") == true);
+            if (link is null) throw new ConnectionException("identity-required", "Ask an administrator to link this agent to an identity.");
+            request = request with { Name = link.Profile.Name };
+        }
+        if (operation is "save" or "save-managed")
         {
             ValidateProfile(request.Profile!, options);
             if (options.Templates.ContainsKey(request.Name))
                 throw new ConnectionException("invalid-configuration", "This connection comes from the host's templates, so it's changed there.");
             records.TryGetValue(request.Name, out var old);
+            if (operation == "save-managed")
+            {
+                ValidateManaged(request.Profile!, Owner, records.Values.Where(r => r != old).Select(r => r.Profile));
+                if (old is not null && (old.Profile.ManagedIdentity?.BindingId != request.Profile!.ManagedIdentity!.BindingId ||
+                    old.Profile.ManagedIdentity.ObjectId != request.Profile.ManagedIdentity.ObjectId ||
+                    old.Profile.ManagedIdentity.TenantId != request.Profile.ManagedIdentity.TenantId ||
+                    old.Profile.AgentIdentityClientId != request.Profile.AgentIdentityClientId))
+                    throw new ConnectionException("revision-conflict", "This profile belongs to another identity.");
+                foreach (var member in request.Profile!.ManagedIdentity!.Members)
+                    if (await Registration(member.Key) != member.Value)
+                        throw new ConnectionException("revision-conflict", "An agent registration changed. Refresh the member list.");
+            }
+            else if (old?.Profile.ManagedIdentity is not null || request.Profile!.ManagedIdentity is not null)
+                throw new ConnectionException("managed-identity", "Use the identity manager to change this binding.");
+            if (request.Profile!.Enabled && request.Profile.AgentIdentityClientId is { } child &&
+                records.Values.Any(r => r != old && r.Profile.Enabled &&
+                    (request.Profile.ManagedIdentity is not null || r.Profile.ManagedIdentity is not null) &&
+                    string.Equals(r.Profile.AgentIdentityClientId, child, StringComparison.OrdinalIgnoreCase)))
+                throw new ConnectionException("revision-conflict", "Disable the other connection for this directory child before enabling this one.");
             if ((old is null && request.Revision != "*") || (old is not null && request.Revision != old.Revision))
                 throw new ConnectionException("revision-conflict", "Read the current revision before updating the connection.");
             if (request.Profile!.Name != request.Name) throw new ConnectionException("invalid-configuration", "Connection name mismatch.");
@@ -97,6 +124,23 @@ internal sealed class ConnectionGrain(IUserScopedFabrCoreStorageProvider store, 
         }
         if (!records.TryGetValue(request.Name, out var record)) throw new ConnectionException("not-found", "Connection not found.");
         if (operation == "profile") return Serialize(new { record.Profile, record.Revision });
+        if (operation == "renew-managed")
+        {
+            if (record.Profile.ManagedIdentity is null || request.Revision != record.Revision)
+                throw new ConnectionException("revision-conflict", "Refresh the identity before requesting new tokens.");
+            record.Tokens.Clear();
+            record.SessionVersion = Guid.NewGuid().ToString("N");
+            await Persist();
+            return Serialize(Status(record));
+        }
+        if (record.Profile.ManagedIdentity is { } managed && operation != "profile")
+        {
+            if (operation is not ("session" or "resource" or "token"))
+                throw new ConnectionException("managed-identity", "Use the identity manager to change this binding.");
+            if (request.Principal != Owner || request.Agent is null || !managed.Members.TryGetValue(request.Agent, out var member)
+                || await Registration(request.Agent) != member)
+                throw new ConnectionException("access-denied", "This agent registration cannot use the identity.");
+        }
         if (operation == "disconnect")
         {
             record.Grant = null; record.LapsedAt = null; record.ExternalSubject = null; record.Tokens.Clear(); record.Pending.Clear(); record.Handoffs.Clear();
@@ -191,7 +235,7 @@ internal sealed class ConnectionGrain(IUserScopedFabrCoreStorageProvider store, 
             if (!p.Resources.TryGetValue(request.Resource!, out var resource)) throw new ConnectionException("access-denied", "Resource is not configured.");
             if (request.SessionVersion is not null && request.SessionVersion != record.SessionVersion)
                 throw new ConnectionException("connection-changed", "The connection changed. Start a new request using its current binding.");
-            if (operation == "resource") return Serialize(new AuthorizedResource(resource, record.SessionVersion));
+            if (operation == "resource") return Serialize(new AuthorizedResource(resource, record.SessionVersion, p.ManagedIdentity?.BindingId, p.ManagedIdentity?.ObjectId));
             if (record.Tokens.TryGetValue(request.Resource!, out var cached) && cached.ExpiresAt > DateTimeOffset.UtcNow.AddMinutes(1)) return Serialize(cached);
             TokenMaterial token;
             try { token = await oauth.Acquire(p, resource, record.Grant, CancellationToken.None, cached); }
@@ -305,6 +349,27 @@ internal sealed class ConnectionGrain(IUserScopedFabrCoreStorageProvider store, 
         if (p.Authentication is ConnectionAuthentication.AuthorizationCode or ConnectionAuthentication.AgentIdOnBehalfOf or ConnectionAuthentication.OnBehalfOf && owner != principal)
             throw new ConnectionException("access-denied", "Delegated connections cannot be shared across principals.");
     }
+    private Task<Guid?> Registration(string handle) =>
+        AgentRegistrationLookup.GetRegistrationAsync(cluster, Owner, handle);
+
+    internal static void ValidateManaged(ConnectionProfile profile, string owner, IEnumerable<ConnectionProfile> others)
+    {
+        var link = profile.ManagedIdentity;
+        if (link is null || link.BindingId == Guid.Empty || link.TenantId == Guid.Empty || link.ObjectId == Guid.Empty ||
+            link.Members is null || link.Members.Any(m => !m.Key.StartsWith(owner + ":", StringComparison.Ordinal) ||
+                m.Key.Count(c => c == ':') != 1 || m.Value == Guid.Empty) ||
+            profile.Name != $"identity-{link.BindingId:N}" || profile.Authentication != ConnectionAuthentication.AgentIdApplication ||
+            !Guid.TryParse(profile.AgentIdentityClientId, out _) || !Guid.TryParse(profile.ClientId, out _) ||
+            !string.Equals(profile.Authority.TrimEnd('/'), $"https://login.microsoftonline.com/{link.TenantId:D}/v2.0", StringComparison.OrdinalIgnoreCase) ||
+            !Uri.TryCreate(link.ManagementUrl, UriKind.Absolute, out var url) || url.Scheme != Uri.UriSchemeHttps ||
+            profile.AllowedAgentTypes.Count != 0 || !link.Members.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(profile.AllowedAgents) ||
+            (!link.Shared && link.Members.Count > 1) || (profile.Enabled && link.Members.Count == 0))
+            throw new ConnectionException("invalid-configuration", "A managed identity requires exact registrations, a directory child and a management address.");
+        if (profile.Enabled && others.Any(p => p.Enabled && p.ManagedIdentity is { } other &&
+            other.Members.Keys.Any(link.Members.ContainsKey)))
+            throw new ConnectionException("revision-conflict", "An agent already uses another managed identity.");
+    }
+
     private static bool IsApplication(ConnectionProfile p)
         => p.Authentication is ConnectionAuthentication.ClientCredentials or ConnectionAuthentication.AgentIdApplication;
 
@@ -363,7 +428,7 @@ internal sealed class ConnectionGrain(IUserScopedFabrCoreStorageProvider store, 
     private static ConnectionStatus Status(ConnectionRecord r) => new(r.Profile.Name, r.Profile.Enabled,
         !r.Profile.Enabled ? "disabled" : r.Profile.Authentication is ConnectionAuthentication.ClientCredentials or ConnectionAuthentication.AgentIdApplication
         ? "configured" : r.LapsedAt is not null ? "interaction-required" : r.Grant is null ? "connection-required" : r.Grant.RefreshToken is null && r.Grant.ExpiresAt <= DateTimeOffset.UtcNow
-            && !r.Tokens.Values.Any(t => t.RefreshToken is not null || t.ExpiresAt > DateTimeOffset.UtcNow) ? "interaction-required" : "connected", r.Revision, r.ExternalSubject);
+            && !r.Tokens.Values.Any(t => t.RefreshToken is not null || t.ExpiresAt > DateTimeOffset.UtcNow) ? "interaction-required" : "connected", r.Revision, r.ExternalSubject) { ManagedIdentity = r.Profile.ManagedIdentity };
     private async Task Persist()
     {
         try { await store.UpsertAsync(Owner, "fabrcore.protected-connections", "catalog", Protector.Protect(Serialize(records))); }

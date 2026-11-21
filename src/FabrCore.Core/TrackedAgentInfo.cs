@@ -7,6 +7,7 @@ namespace FabrCore.Core;
 /// </summary>
 public class TrackedAgentInfo
 {
+    public Guid RegistrationId { get; set; }
     public string Handle { get; set; } = string.Empty;
     public string AgentType { get; set; } = string.Empty;
 
@@ -35,6 +36,9 @@ internal struct TrackedAgentInfoSurrogate
     [Id(1)]
     public string AgentType { get; set; }
 
+    [Id(3)]
+    public Guid RegistrationId { get; set; }
+
     [Id(2)]
     public AgentHealthStatus? Health { get; set; }
 }
@@ -46,6 +50,7 @@ internal sealed class TrackedAgentInfoSurrogateConverter : IConverter<TrackedAge
     {
         return new TrackedAgentInfo
         {
+            RegistrationId = surrogate.RegistrationId,
             Handle = surrogate.Handle,
             AgentType = surrogate.AgentType,
             Health = surrogate.Health
@@ -56,6 +61,7 @@ internal sealed class TrackedAgentInfoSurrogateConverter : IConverter<TrackedAge
     {
         return new TrackedAgentInfoSurrogate
         {
+            RegistrationId = value.RegistrationId,
             Handle = value.Handle,
             AgentType = value.AgentType,
             Health = value.Health

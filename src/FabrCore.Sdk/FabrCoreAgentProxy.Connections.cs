@@ -21,6 +21,8 @@ public abstract partial class FabrCoreAgentProxy
                 throw new ConnectionException("access-denied", "Diagnostic turns cannot access production connections.");
             var service = proxy.serviceProvider.GetService<IConnectionService>()
                 ?? throw new ConnectionException("feature-disabled", "Authenticated connections are not enabled.");
+            // Explicit opt-in. This reserved alias cannot be redirected by agent arguments.
+            if (name == "$agent-identity") return (service, new ConnectionBinding(Caller.Principal, name));
             var bindings = proxy.config.Args.TryGetValue("connections", out var json)
                 ? JsonSerializer.Deserialize<Dictionary<string, ConnectionBinding>>(json, JsonSerializerOptions.Web) : null;
             if (bindings is not null && bindings.TryGetValue(name, out var binding)) return (service, binding);
@@ -43,7 +45,12 @@ public abstract partial class FabrCoreAgentProxy
         public async Task<HttpClient> GetHttpClientAsync(string connection, string resource, CancellationToken cancellationToken = default)
         {
             var (service, binding) = Resolve(connection);
-            return await service.GetHttpClientAsync(Caller, binding, resource, TellPersonAsync, cancellationToken);
+            try { return await service.GetHttpClientAsync(Caller, binding, resource, TellPersonAsync, cancellationToken); }
+            catch (ConnectionException e) when (connection == "$agent-identity" && e.Code == "identity-required")
+            {
+                await TellPersonAsync($"An administrator needs to link {Caller.Agent} to an agent identity before I can use {resource}.");
+                throw;
+            }
         }
 
         /// <summary>Best effort: failing to tell them mustn't hide why the agent stopped.</summary>

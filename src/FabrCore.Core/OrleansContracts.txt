@@ -83,6 +83,7 @@ interface [GrainInterfaceType("FabrCore.Core.Interfaces.IPrincipalGrain")] FabrC
   47D72034: GetAgentHealth(string, FabrCore.Core.HealthDetailLevel) -> Task<FabrCore.Core.AgentHealthStatus>
   32AB5412: GetContextValue(string) -> Task<string?>
   FDF6F9A9: GetContextValues() -> Task<System.Collections.Generic.Dictionary<string, string>>
+  6D98B516: GetAgentRegistrationId(string) -> Task<System.Guid?>
   2FD5330F: GetTrackedAgents(bool) -> Task<System.Collections.Generic.List<FabrCore.Core.TrackedAgentInfo>>
   9D2F73B6: IsAgentTracked(string) -> Task<bool>
   96884478: ResetAgent(string) -> Task<FabrCore.Core.AgentHealthStatus>
