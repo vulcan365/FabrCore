@@ -400,6 +400,9 @@ namespace FabrCore.Sdk
             }
         }
 
+        /// <summary>Resolve a configured Foundry Decision deployment by its FabrCore alias.</summary>
+        protected Task<IFabrCoreDecisionClient> GetDecisionClient(string name) => chatClientService.GetDecisionClient(name);
+
         protected async Task<Microsoft.Extensions.AI.IChatClient> GetChatClient(string name, int networkTimeoutSeconds = 100)
         {
             var client = await chatClientService.GetChatClient(name, networkTimeoutSeconds);

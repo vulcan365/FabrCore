@@ -25,7 +25,9 @@ namespace FabrCore.Sdk
             await ProcessNextAsync(message, pipeline, currentIndex).ConfigureAwait(false);
         }
 
-        private static void ApplyHeaders(PipelineMessage message)
+        private static void ApplyHeaders(PipelineMessage message) => ApplyHeaders(message.Request.Headers.Set);
+
+        internal static void ApplyHeaders(Action<string, string> setHeader)
         {
             // Same resolution order as TokenTrackingChatClient: the usage scope carries the
             // OnMessage context; an LlmCallContext overrides the origin for nested work.
@@ -39,12 +41,12 @@ namespace FabrCore.Sdk
                 ?? scope?.OriginContext
                 ?? (scope is not null ? "OnMessage" : null);
 
-            SetHeader(message, AttributionHeaders.AgentHandle, handle);
-            SetHeader(message, AttributionHeaders.TraceId, traceId);
-            SetHeader(message, AttributionHeaders.Origin, origin);
+            SetHeader(setHeader, AttributionHeaders.AgentHandle, handle);
+            SetHeader(setHeader, AttributionHeaders.TraceId, traceId);
+            SetHeader(setHeader, AttributionHeaders.Origin, origin);
         }
 
-        private static void SetHeader(PipelineMessage message, string name, string? value)
+        private static void SetHeader(Action<string, string> setHeader, string name, string? value)
         {
             if (string.IsNullOrEmpty(value))
             {
@@ -62,7 +64,7 @@ namespace FabrCore.Sdk
                 }
             }
 
-            message.Request.Headers.Set(name, value);
+            setHeader(name, value);
         }
     }
 }

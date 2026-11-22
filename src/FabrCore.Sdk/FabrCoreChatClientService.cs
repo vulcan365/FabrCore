@@ -14,6 +14,9 @@ namespace FabrCore.Sdk
 {
     public interface IFabrCoreChatClientService
     {
+        Task<IFabrCoreDecisionClient> GetDecisionClient(string name) =>
+            throw new NotSupportedException("This model client service does not support Foundry Decision deployments.");
+
         Task<IChatClient> GetChatClient(string name, int networkTimeoutSeconds = 100);
 #pragma warning disable MEAI001 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
         Task<ISpeechToTextClient> GetAudioClient(string name, int networkTimeoutSeconds = 100);
@@ -100,6 +103,24 @@ namespace FabrCore.Sdk
         {
         }
 
+        private static readonly HttpClient DecisionHttpClient = new(new HttpClientHandler { AllowAutoRedirect = false })
+        {
+            Timeout = Timeout.InfiniteTimeSpan
+        };
+
+        public Task<IFabrCoreDecisionClient> GetDecisionClient(string name) => GetDecisionClient(name, DecisionHttpClient);
+
+        internal async Task<IFabrCoreDecisionClient> GetDecisionClient(string name, HttpClient transport)
+        {
+            var model = await GetModelConfiguration(name);
+            if (!model.Provider.Equals("FoundryDecision", StringComparison.OrdinalIgnoreCase))
+                throw new NotSupportedException($"Model '{name}' requires provider FoundryDecision for decision calls.");
+            var endpoint = new Uri(model.Uri.TrimEnd('/') + "/systemone", UriKind.Absolute);
+            var key = await GetApiKey(model.ApiKeyAlias);
+            return new FoundryDecisionClient(transport, endpoint, model.Model, key,
+                TimeSpan.FromSeconds(model.TimeoutSeconds > 0 ? model.TimeoutSeconds : 60), _emitAttributionHeaders);
+        }
+
         public async Task<IChatClient> GetChatClient(string name, int networkTimeoutSeconds = 100)
         {
             using var activity = ActivitySource.StartActivity("GetChatClient", ActivityKind.Client);
@@ -108,6 +129,8 @@ namespace FabrCore.Sdk
             try
             {
                 var modelConfig = await GetModelConfiguration(name);
+                if (modelConfig.Provider.Equals("FoundryDecision", StringComparison.OrdinalIgnoreCase))
+                    throw new NotSupportedException($"Use GetDecisionClient(\"{name}\") to call a Foundry Decision deployment.");
                 ModelDefaultsChatClient.ValidateConfiguration(modelConfig);
                 var apiKey = await GetApiKey(modelConfig.ApiKeyAlias);
 
