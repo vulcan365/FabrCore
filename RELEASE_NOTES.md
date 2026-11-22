@@ -1,3 +1,7 @@
+# 2.2.3
+
+Agents can resolve a Microsoft Foundry Decision deployment by its FabrCore model alias with `GetDecisionClient("decision")`. Call `DecideAsync` with shared state, named questions, and optional image assets to receive the deployment's answers and token usage. The client supports direct calls and Insights gateway routing. [Agent example](docs/skills/fabrcore-agent/SKILL.md#call-a-foundry-decision-deployment)
+
 # 2.2.2
 
 Hosts can expose durable agent registration IDs and bind a managed connection to selected registrations. The connection broker checks the calling registration before issuing or reusing its Entra Agent ID token. Administrators can renew tokens for one binding independently. Agents that do not use a managed connection keep their existing authentication path.

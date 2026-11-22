@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Json.Nodes;
 
 namespace FabrCore.Sdk.Tests;
 
@@ -24,6 +25,36 @@ public sealed class ModelConfigurationResolutionTests
         Assert.IsNotNull(client);
         Assert.AreEqual(1, resolver.ModelRequests);
         Assert.AreEqual(1, resolver.ApiKeyRequests);
+    }
+
+    [TestMethod]
+    public async Task DecisionClientResolvesAliasAndSendsNamedQuestionsAndAssets()
+    {
+        var resolver = new RecordingResolver("FoundryDecision");
+        var service = new FabrCoreChatClientService(new ConfigurationBuilder().Build(), NullLoggerFactory.Instance, resolver);
+        var capture = new DecisionRequestCapture();
+        using var recordingTransport = new HttpClient(capture);
+        var client = await service.GetDecisionClient("decision", recordingTransport);
+        var questions = JsonNode.Parse("""{"urgent":{"type":"noul","instructions":"Is delivery urgent?"}}""")!.AsObject();
+        var result = await client.DecideAsync(new JsonObject { ["ticket"] = "image:ticket.png" }, questions,
+            new JsonObject { ["ticket.png"] = new JsonObject { ["type"] = "image", ["format"] = "png", ["data_base64"] = "AA==" } });
+        Assert.AreEqual("Decision-1.1", capture.Body!["model"]!.GetValue<string>());
+        Assert.AreEqual("image:ticket.png", capture.Body["state"]!["ticket"]!.GetValue<string>());
+        Assert.IsTrue(JsonNode.DeepEquals(questions, capture.Body["questions"]));
+        Assert.AreEqual("AA==", capture.Body["assets"]!["ticket.png"]!["data_base64"]!.GetValue<string>());
+        Assert.AreEqual(0.8, result["answers"]!["urgent"]!["noul"]!.GetValue<double>());
+    }
+
+    private sealed class DecisionRequestCapture : HttpMessageHandler
+    {
+        public JsonNode? Body { get; private set; }
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            Body = JsonNode.Parse(await request.Content!.ReadAsStringAsync(ct));
+            Assert.AreEqual("https://foundry.test/providers/microsoft/v1/systemone", request.RequestUri!.ToString());
+            Assert.AreEqual("provider-key", request.Headers.GetValues("api-key").Single());
+            return JsonResponse("""{"answers":{"urgent":{"type":"noul","noul":0.8}}}""");
+        }
     }
 
     [TestMethod]
@@ -209,7 +240,7 @@ public sealed class ModelConfigurationResolutionTests
         }
     }
 
-    private sealed class RecordingResolver : IFabrCoreModelConfigurationResolver
+    private sealed class RecordingResolver(string provider = "OpenAI") : IFabrCoreModelConfigurationResolver
     {
         public int ModelRequests { get; private set; }
         public int ApiKeyRequests { get; private set; }
@@ -222,9 +253,9 @@ public sealed class ModelConfigurationResolutionTests
             return Task.FromResult(new ModelConfiguration
             {
                 Name = name,
-                Provider = "OpenAI",
-                Uri = "https://openai.test/v1",
-                Model = "gpt-test",
+                Provider = provider,
+                Uri = provider == "FoundryDecision" ? "https://foundry.test/providers/microsoft/v1" : "https://openai.test/v1",
+                Model = provider == "FoundryDecision" ? "Decision-1.1" : "gpt-test",
                 ApiKeyAlias = "provider"
             });
         }

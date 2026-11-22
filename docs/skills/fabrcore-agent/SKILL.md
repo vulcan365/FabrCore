@@ -39,6 +39,30 @@ Target FabrCore.Sdk 2.0.0 on .NET 10. Ordinary agents, tools and compaction work
 
 Build agents by extending `FabrCoreAgentProxy` — the base class that connects your business logic to Orleans grains, LLM clients, tools, and inter-agent messaging.
 
+## Call a Foundry Decision deployment
+
+In Insights, open the cluster's Foundry deployments, select **Use in cluster**, enter `decision`, review and apply. Once the host has loaded that configuration, a `FabrCoreAgentProxy` can evaluate a question with the named deployment:
+
+```csharp
+var client = await GetDecisionClient("decision");
+var questions = new System.Text.Json.Nodes.JsonObject
+{
+    ["billing"] = new System.Text.Json.Nodes.JsonObject
+    {
+        ["type"] = "noul",
+        ["instructions"] = "Does the request concern a bill or payment?"
+    }
+};
+var result = await client.DecideAsync("My subscription was charged twice.", questions, cancellationToken: ct);
+var probability = result["answers"]!["billing"]!["noul"]!.GetValue<double>();
+```
+
+The client accepts JSON state, named `choice`, `score`, or `noul` questions, and optional image assets. It returns the full response including answers and usage. The alias resolves through the same model and credential stores as other agents' model clients.
+
+For standalone configuration, set the model provider to `FoundryDecision`, the URI to the resource root followed by `/providers/microsoft/v1`, and the model to the actual Azure deployment name. Insights also manages the route and credentials for gateway-enabled clusters. Both the cluster SDK and Insights gateway must support Decision.
+
+Microsoft documents separate endpoints for [Microsoft-Decision-1.1](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-microsoft-decision), [agents using Responses](https://learn.microsoft.com/en-us/azure/foundry/agents/quickstarts/responses-api), and [Azure OpenAI Decisions](https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/decisions).
+
 ## Agent Structure
 
 Every agent extends `FabrCoreAgentProxy` and is decorated with `[AgentAlias]`:

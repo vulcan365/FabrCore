@@ -1,4 +1,9 @@
 #nullable enable
+FabrCore.Sdk.FabrCoreAgentProxy.GetDecisionClient(string! name) -> System.Threading.Tasks.Task<FabrCore.Sdk.IFabrCoreDecisionClient!>!
+FabrCore.Sdk.FabrCoreChatClientService.GetDecisionClient(string! name) -> System.Threading.Tasks.Task<FabrCore.Sdk.IFabrCoreDecisionClient!>!
+FabrCore.Sdk.IFabrCoreChatClientService.GetDecisionClient(string! name) -> System.Threading.Tasks.Task<FabrCore.Sdk.IFabrCoreDecisionClient!>!
+FabrCore.Sdk.IFabrCoreDecisionClient
+FabrCore.Sdk.IFabrCoreDecisionClient.DecideAsync(System.Text.Json.Nodes.JsonNode! state, System.Text.Json.Nodes.JsonObject! questions, System.Text.Json.Nodes.JsonObject? assets = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Text.Json.Nodes.JsonObject!>!
 FabrCore.Sdk.FabrCoreAgentProxy.Connections.get -> FabrCore.Connections.IAgentConnections!
 FabrCore.Sdk.FabrCoreAdministrationClient
 FabrCore.Sdk.FabrCoreAdministrationClient.CreateAdminSessionAsync(string! principal, string! agent, FabrCore.Core.CloudServer.AdminSessionRequest! request, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<FabrCore.Core.CloudServer.AdminConversationSession!>!
