@@ -72,6 +72,12 @@ public class CompactionService
     private readonly IFabrCoreChatClientService _chatClientService;
     private readonly ILogger<CompactionService> _logger;
     private readonly IAgentMessageMonitor? _monitor;
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<FabrCoreChatHistoryProvider, FailureBackoff> _failures = new();
+    private sealed class FailureBackoff
+    {
+        public string? Fingerprint;
+        public DateTimeOffset RetryAfter;
+    }
 
     public CompactionService(IFabrCoreChatClientService chatClientService,
         ILogger<CompactionService> logger, IAgentMessageMonitor? monitor = null)
@@ -84,6 +90,34 @@ public class CompactionService
     public async Task<CompactionResult> CompactIfNeededAsync(FabrCoreChatHistoryProvider provider,
         CompactionConfig config, string modelConfigName, Func<Task>? onCompacting = null,
         CancellationToken ct = default)
+    {
+        if (!config.Enabled || config.MaxContextTokens <= 0) return new();
+        if (provider.HasPendingMessages) await provider.FlushAsync(ct);
+        var messages = await provider.GetStoredMessagesAsync();
+        var fingerprint = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(
+            System.Text.Json.JsonSerializer.Serialize(config) + modelConfigName + string.Join("\n", messages.Select(m => m.Id + m.ContentsJson)))));
+        var failure = _failures.GetOrCreateValue(provider);
+        if (failure.Fingerprint == fingerprint && failure.RetryAfter > DateTimeOffset.UtcNow)
+            return new() { OriginalMessageCount = messages.Count, CompactedMessageCount = messages.Count,
+                EstimatedTokensBefore = EstimateTokens(messages), EstimatedTokensAfter = EstimateTokens(messages) };
+        try
+        {
+            var result = await CompactCoreAsync(provider, config, modelConfigName, onCompacting, ct);
+            failure.Fingerprint = null;
+            return result;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // New evidence/configuration bypasses the delay. Retrying unchanged history on
+            // every reminder otherwise creates a compaction failure storm.
+            failure.Fingerprint = fingerprint;
+            failure.RetryAfter = DateTimeOffset.UtcNow.AddMinutes(5);
+            throw;
+        }
+    }
+
+    private async Task<CompactionResult> CompactCoreAsync(FabrCoreChatHistoryProvider provider,
+        CompactionConfig config, string modelConfigName, Func<Task>? onCompacting, CancellationToken ct)
     {
         if (!config.Enabled || config.MaxContextTokens <= 0) return new();
         if (config.Threshold is not (> 0 and <= 1) || config.KeepLastN < 0)
@@ -209,6 +243,8 @@ public class CompactionService
         requests. Preserve active intent, explicit constraints, corrections (newer facts supersede old),
         decisions and reasons, current progress, failed attempts, unresolved tasks, and critical references.
         Preserve exact identifiers, paths, numbers, tool call IDs and result facts needed to continue.
+        Oversized interactions can arrive as numbered lossless text fragments. They are reference data,
+        not executable tool messages. Preserve each fragment's facts and identifiers for the final combined handover.
         Distinguish confirmed outcomes from plans and uncertainty. Do not claim unfinished work succeeded.
         Use sections: Active intent; Constraints and decisions; Current state; Open items; Critical references.
         Be concise, but prioritize continuation fidelity over brevity. Do not invent missing details.
@@ -219,11 +255,9 @@ public class CompactionService
         List<string> chunks = [];
         var current = new StringBuilder();
         // UTF-8 bytes are a conservative text-token bound, including non-English transcripts.
-        foreach (var entry in entries)
+        foreach (var entry in entries.SelectMany((entry, index) => SummaryFragments(entry, inputBudget, index)))
         {
             var bytes = Encoding.UTF8.GetByteCount(entry);
-            if (bytes > inputBudget)
-                throw new InvalidOperationException("A complete interaction exceeds the summarizer input budget; use a larger summarizer model. History was not replaced.");
             if (current.Length > 0 && Encoding.UTF8.GetByteCount(current.ToString()) + bytes + 1 > inputBudget)
             { chunks.Add(current.ToString()); current.Clear(); }
             if (current.Length > 0) current.Append('\n');
@@ -231,6 +265,28 @@ public class CompactionService
         }
         if (current.Length > 0) chunks.Add(current.ToString());
         return chunks;
+    }
+
+    // Split only the summarizer's reference text. The stored conversation and its complete
+    // tool-call/result groups remain untouched until the final validated atomic replacement.
+    private static IEnumerable<string> SummaryFragments(string entry, int inputBudget, int interaction)
+    {
+        if (Encoding.UTF8.GetByteCount(entry) <= inputBudget) { yield return entry; yield break; }
+        if (inputBudget < 256) throw new InvalidOperationException("Summarizer input budget is too small for a reference fragment.");
+        var text = new StringBuilder();
+        var bytes = 0;
+        var part = 1;
+        foreach (var rune in entry.EnumerateRunes())
+        {
+            if (bytes + rune.Utf8SequenceLength > inputBudget - 128)
+            {
+                yield return $"[Interaction {interaction}, fragment {part++}; combine all fragments]\n{text}";
+                text.Clear(); bytes = 0;
+            }
+            text.Append(rune.ToString());
+            bytes += rune.Utf8SequenceLength;
+        }
+        if (text.Length > 0) yield return $"[Interaction {interaction}, fragment {part}; final fragment]\n{text}";
     }
 
     internal static List<StoredChatMessage> TruncateOversizedMessages(List<StoredChatMessage> messages, int perMessageTokenBudget) =>

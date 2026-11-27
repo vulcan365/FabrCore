@@ -84,8 +84,11 @@ internal sealed class ConnectionGrain(IUserScopedFabrCoreStorageProvider store, 
         }
         if (request.Name == "$agent-identity" && operation is "session" or "resource" or "token")
         {
-            var link = records.Values.SingleOrDefault(r => r.Profile.Enabled &&
-                r.Profile.ManagedIdentity?.Members.ContainsKey(request.Agent ?? "") == true);
+            var matches = records.Values.Where(r => r.Profile.Enabled && r.Profile.ManagedIdentity is { } managed &&
+                (managed.AgentType is { } type ? request.Principal == Owner && type == request.AgentType
+                    : managed.Members.ContainsKey(request.Agent ?? ""))).ToList();
+            if (matches.Count > 1) throw new ConnectionException("revision-conflict", "More than one identity matches this principal and agent type.");
+            var link = matches.SingleOrDefault();
             if (link is null) throw new ConnectionException("identity-required", "Ask an administrator to link this agent to an identity.");
             request = request with { Name = link.Profile.Name };
         }
@@ -98,6 +101,12 @@ internal sealed class ConnectionGrain(IUserScopedFabrCoreStorageProvider store, 
             if (operation == "save-managed")
             {
                 ValidateManaged(request.Profile!, Owner, records.Values.Where(r => r != old).Select(r => r.Profile));
+                var tracked = await AgentRegistrationLookup.GetTrackedAsync(cluster, Owner);
+                var incoming = request.Profile!.ManagedIdentity!;
+                if (request.Profile.Enabled && records.Values.Any(r => r != old && r.Profile.Enabled && r.Profile.ManagedIdentity is { } other &&
+                    (incoming.AgentType is { } incomingType && other.Members.Keys.Any(h => tracked.Any(a => a.Handle == h && a.AgentType == incomingType)) ||
+                     other.AgentType is { } otherType && incoming.Members.Keys.Any(h => tracked.Any(a => a.Handle == h && a.AgentType == otherType)))))
+                    throw new ConnectionException("revision-conflict", "An agent type overlaps an existing managed identity.");
                 if (old is not null && (old.Profile.ManagedIdentity?.BindingId != request.Profile!.ManagedIdentity!.BindingId ||
                     old.Profile.ManagedIdentity.ObjectId != request.Profile.ManagedIdentity.ObjectId ||
                     old.Profile.ManagedIdentity.TenantId != request.Profile.ManagedIdentity.TenantId ||
@@ -137,8 +146,13 @@ internal sealed class ConnectionGrain(IUserScopedFabrCoreStorageProvider store, 
         {
             if (operation is not ("session" or "resource" or "token"))
                 throw new ConnectionException("managed-identity", "Use the identity manager to change this binding.");
-            if (request.Principal != Owner || request.Agent is null || !managed.Members.TryGetValue(request.Agent, out var member)
-                || await Registration(request.Agent) != member)
+            if (request.Principal != Owner || request.Agent is null)
+                throw new ConnectionException("access-denied", "This principal cannot use the identity.");
+            var permitted = managed.AgentType is { } type
+                ? request.AgentType == type && (await AgentRegistrationLookup.GetTrackedAsync(cluster, Owner))
+                    .Any(a => a.Handle == request.Agent && a.AgentType == type && a.RegistrationId != Guid.Empty)
+                : managed.Members.TryGetValue(request.Agent, out var member) && await Registration(request.Agent) == member;
+            if (!permitted)
                 throw new ConnectionException("access-denied", "This agent registration cannot use the identity.");
         }
         if (operation == "disconnect")
@@ -362,11 +376,16 @@ internal sealed class ConnectionGrain(IUserScopedFabrCoreStorageProvider store, 
             !Guid.TryParse(profile.AgentIdentityClientId, out _) || !Guid.TryParse(profile.ClientId, out _) ||
             !string.Equals(profile.Authority.TrimEnd('/'), $"https://login.microsoftonline.com/{link.TenantId:D}/v2.0", StringComparison.OrdinalIgnoreCase) ||
             !Uri.TryCreate(link.ManagementUrl, UriKind.Absolute, out var url) || url.Scheme != Uri.UriSchemeHttps ||
-            profile.AllowedAgentTypes.Count != 0 || !link.Members.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(profile.AllowedAgents) ||
-            (!link.Shared && link.Members.Count > 1) || (profile.Enabled && link.Members.Count == 0))
-            throw new ConnectionException("invalid-configuration", "A managed identity requires exact registrations, a directory child and a management address.");
+            (!link.Shared && link.Members.Count > 1) ||
+            (link.AgentType is { } type
+                ? !link.Shared || !System.Text.RegularExpressions.Regex.IsMatch(type, "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$") ||
+                    link.Members.Count != 0 || profile.AllowedAgents.Count != 0 ||
+                    profile.AllowedAgentTypes.Count != 1 || profile.AllowedAgentTypes[0] != type
+                : profile.AllowedAgentTypes.Count != 0 || !link.Members.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(profile.AllowedAgents) ||
+                    profile.Enabled && link.Members.Count == 0))
+            throw new ConnectionException("invalid-configuration", "A managed identity requires an owner-scoped agent type or exact registrations, a directory child and a management address.");
         if (profile.Enabled && others.Any(p => p.Enabled && p.ManagedIdentity is { } other &&
-            other.Members.Keys.Any(link.Members.ContainsKey)))
+            (other.Members.Keys.Any(link.Members.ContainsKey) || link.AgentType is not null && other.AgentType == link.AgentType)))
             throw new ConnectionException("revision-conflict", "An agent already uses another managed identity.");
     }
 

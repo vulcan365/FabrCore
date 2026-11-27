@@ -305,3 +305,5 @@ override FabrCore.Connections.ManagedAgentIdentity.GetHashCode() -> int
 override FabrCore.Connections.ManagedAgentIdentity.ToString() -> string!
 static FabrCore.Connections.ManagedAgentIdentity.operator !=(FabrCore.Connections.ManagedAgentIdentity? left, FabrCore.Connections.ManagedAgentIdentity? right) -> bool
 static FabrCore.Connections.ManagedAgentIdentity.operator ==(FabrCore.Connections.ManagedAgentIdentity? left, FabrCore.Connections.ManagedAgentIdentity? right) -> bool
+FabrCore.Connections.ManagedAgentIdentity.AgentType.get -> string?
+FabrCore.Connections.ManagedAgentIdentity.AgentType.init -> void

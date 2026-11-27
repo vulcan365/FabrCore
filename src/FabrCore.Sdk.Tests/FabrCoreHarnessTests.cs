@@ -20,6 +20,70 @@ public sealed class FabrCoreHarnessTests
     private const string CorruptKey = "_harness_session_corrupt:main";
 
     [TestMethod]
+    public async Task CanceledToolTurnCheckpointsTodosAndCanResumeWithValidToolHistory()
+    {
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var read = AIFunctionFactory.Create(async (CancellationToken ct) =>
+        {
+            started.TrySetResult();
+            await Task.Delay(System.Threading.Timeout.InfiniteTimeSpan, ct);
+            return "unreachable";
+        }, "read");
+        var client = FakeChatClient.Scripted(
+            FakeChatClient.ToolCall("plan", "todos_add", """{"todos":[{"title":"Read exact evidence"}]}"""),
+            FakeChatClient.ToolCall("blocked", "read", "{}"));
+        var (agent, host, _) = CreateAgent(client, configure: options =>
+        {
+            options.DisableAgentModeProvider = true;
+            options.ChatOptions = new() { Tools = [read] };
+        });
+        await agent.OnInitialize();
+        using var cancellation = new CancellationTokenSource();
+        var turn = agent.Harness!.RunAsync("Investigate", cancellationToken: cancellation.Token);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        cancellation.Cancel();
+        await Assert.ThrowsAsync<OperationCanceledException>(() => turn);
+        Assert.AreEqual(1, (await agent.Harness.GetRemainingTodosAsync()).Count);
+        await agent.Harness.DisposeAsync();
+        CompactionTranscript.Groups(host.Threads.GetValueOrDefault("main") ?? []);
+        // Framework cancellation may omit the interrupted turn's transcript. Resume must
+        // re-read evidence rather than inventing successful results for its pending calls.
+        var freshReads = 0;
+        var freshRead = AIFunctionFactory.Create(() => { freshReads++; return "Fresh exact evidence"; }, "read");
+
+        var nextClient = FakeChatClient.Scripted(
+            FakeChatClient.ToolCall("reread", "read", "{}"),
+            FakeChatClient.ToolCall("finish", "todos_complete", """{"items":[{"id":1,"reason":"Read recovered exact evidence"}]}"""),
+            FakeChatClient.Text("Completed"));
+        var (resumed, _, _) = CreateAgent(nextClient, host: host, configure: options =>
+        {
+            options.DisableAgentModeProvider = true;
+            options.ChatOptions = new() { Tools = [freshRead] };
+        });
+        await resumed.OnInitialize();
+        Assert.IsTrue(resumed.Harness!.SessionRestored);
+        Assert.AreEqual(1, (await resumed.Harness.GetRemainingTodosAsync()).Count);
+        await resumed.Harness.RunAsync("Resume");
+        Assert.AreEqual(1, freshReads);
+        Assert.AreEqual(0, (await resumed.Harness.GetRemainingTodosAsync()).Count);
+    }
+
+    [TestMethod]
+    public async Task DisposingCachedHarnessFlushesHistoryAndUntracksExactlyOnce()
+    {
+        var (agent, host, _) = CreateAgent();
+        await agent.OnInitialize();
+        await agent.Harness!.RunAsync("Preserve this input", options: null);
+        await agent.Harness.DisposeAsync();
+        await agent.Harness.DisposeAsync();
+        Assert.AreEqual(1, host.UntrackedProviders);
+        Assert.IsTrue(host.Threads["main"].Count > 0);
+        var retained = host.Threads["main"].Count;
+        await agent.OnReset();
+        Assert.AreEqual(retained, host.Threads["main"].Count);
+    }
+
+    [TestMethod]
     public async Task HistoryCompactionCallbackIsBoundToItsRegisteredProvider()
     {
         FabrCoreChatHistoryProvider? invoked = null;

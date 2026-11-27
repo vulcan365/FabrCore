@@ -1,3 +1,11 @@
+# Unreleased — hunter reliability
+
+- Durable compaction partitions oversized interactions into bounded reference-text fragments, then validates and commits a combined
+  handover atomically. Original history remains intact on failure; tool protocol is never partially replaced.
+- Failed, unchanged histories back off for five minutes. New history or compaction settings permit an immediate retry.
+- Disposing a harness flushes its history and releases its compaction registration, host tracking and cached harness reference.
+  `IFabrCoreAgentHost.UntrackChatHistoryProvider` has a default implementation for existing custom hosts.
+
 # 2.2.3
 
 Agents can resolve a Microsoft Foundry Decision deployment by its FabrCore model alias with `GetDecisionClient("decision")`. Call `DecideAsync` with shared state, named questions, and optional image assets to receive the deployment's answers and token usage. The client supports direct calls and Insights gateway routing. [Agent example](docs/skills/fabrcore-agent/SKILL.md#call-a-foundry-decision-deployment)

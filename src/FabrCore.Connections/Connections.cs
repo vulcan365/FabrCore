@@ -36,9 +36,14 @@ public sealed class ConnectionProfile
     public Dictionary<string, ConnectionResource> Resources { get; set; } = new(StringComparer.Ordinal);
 }
 
-/// <summary>Administrative link to a directory child and the exact Host registrations allowed to act as it.</summary>
+/// <summary>Administrative link to a directory child, scoped to a principal and agent type or exact Host registrations.</summary>
 public sealed record ManagedAgentIdentity(Guid BindingId, Guid TenantId, Guid ObjectId, bool Shared,
-    Dictionary<string, Guid> Members, string ManagementUrl);
+    Dictionary<string, Guid> Members, string ManagementUrl)
+{
+    /// <summary>All current and future instances of this type under the connection's owner principal. Null keeps exact-member binding.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? AgentType { get; init; }
+}
 
 public sealed class ConnectionResource
 {

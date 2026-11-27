@@ -149,3 +149,4 @@ const FabrCore.Host.Database.FabrCoreHostDatabase.State = "State" -> string!
 FabrCore.Host.Api.Controllers.AgentManagementController.Registrations(string! principalId, int offset = 0, int limit = 100, string? revision = null) -> System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult!>!
 FabrCore.Host.Services.AgentRegistrationLookup
 static FabrCore.Host.Services.AgentRegistrationLookup.GetRegistrationAsync(Orleans.IClusterClient! cluster, string! principal, string! fullHandle) -> System.Threading.Tasks.Task<System.Guid?>!
+static FabrCore.Host.Services.AgentRegistrationLookup.GetTrackedAsync(Orleans.IClusterClient! cluster, string! principal) -> System.Threading.Tasks.Task<System.Collections.Generic.List<FabrCore.Core.TrackedAgentInfo!>!>!
