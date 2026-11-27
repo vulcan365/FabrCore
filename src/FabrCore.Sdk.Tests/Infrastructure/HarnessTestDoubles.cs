@@ -221,6 +221,9 @@ internal sealed class FakeAgentHost : IFabrCoreAgentHost
     {
     }
 
+    public int UntrackedProviders { get; private set; }
+    public void UntrackChatHistoryProvider(FabrCoreChatHistoryProvider provider) => UntrackedProviders++;
+
     public Dictionary<string, List<StoredChatMessage>> Threads { get; } = [];
     public int HistoryReplacements { get; private set; }
     public bool FailHistoryReplacement { get; set; }

@@ -263,6 +263,7 @@ namespace FabrCore.Sdk
             private readonly object _sync = new();
             private readonly List<ChatHistoryCompactionRegistration> _items = new();
             public void Add(ChatHistoryCompactionRegistration registration) { lock (_sync) _items.Add(registration); }
+            public void Remove(ChatHistoryCompactionRegistration registration) { lock (_sync) _items.Remove(registration); }
             public int Count { get { lock (_sync) return _items.Count; } }
             public ChatHistoryCompactionRegistration[] ToArray() { lock (_sync) return _items.ToArray(); }
         }

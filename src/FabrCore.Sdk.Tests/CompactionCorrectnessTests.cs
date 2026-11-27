@@ -67,14 +67,13 @@ public sealed class CompactionCorrectnessTests
     [DataRow("oversize")]
     [DataRow("cancel")]
     [DataRow("unknown-model")]
-    [DataRow("atomic-group-too-large")]
     [DataRow("write-failure")]
     public async Task FailureLeavesDurableHistoryAndCacheIntact(string failure)
     {
         var response = FakeChatClient.Text(failure == "empty" ? " " : failure == "oversize" ? new string('x', 20000) : Handover);
         if (failure == "length") response.FinishReason = ChatFinishReason.Length;
         var client = failure == "cancel" ? FakeChatClient.Canceled() : FakeChatClient.Scripted(response);
-        var (service, provider, host) = Setup(client, failure == "unknown-model" ? null : failure == "atomic-group-too-large" ? 4096 : 128000);
+        var (service, provider, host) = Setup(client, failure == "unknown-model" ? null : 128000);
         var original = host.Threads["main"].Select(m => m.ContentsJson).ToArray();
         await provider.GetMessagesAsync();
         host.FailHistoryReplacement = failure == "write-failure";
@@ -82,6 +81,35 @@ public sealed class CompactionCorrectnessTests
         CollectionAssert.AreEqual(original, host.Threads["main"].Select(m => m.ContentsJson).ToArray());
         Assert.AreEqual(0, host.HistoryReplacements);
         Assert.IsTrue((await provider.GetMessagesAsync()).Any(m => m.Text.Contains("Original request")));
+    }
+
+    [TestMethod]
+    public async Task OversizedInteractionIsSummarizedInBoundedFragmentsAndCommittedOnce()
+    {
+        var client = FakeChatClient.WithTextResponse(Handover);
+        var (service, provider, host) = Setup(client, 4096);
+        var original = host.Threads["main"].ToList();
+        var result = await service.CompactIfNeededAsync(provider, Config, "summary");
+        Assert.IsTrue(result.WasCompacted);
+        Assert.AreEqual(1, host.HistoryReplacements);
+        var fragments = client.Requests.SelectMany(r => r).Where(m => m.Role == ChatRole.User).ToList();
+        Assert.IsTrue(fragments.Any(m => m.Text.Contains("fragment")));
+        Assert.IsTrue(fragments.All(m => System.Text.Encoding.UTF8.GetByteCount(m.Text) <= 4096 - 1536 - 1024));
+        Assert.IsTrue(host.Threads["main"].Any(m => m.Id == original[3].Id));
+    }
+
+    [TestMethod]
+    public async Task UnchangedFailedHistoryBacksOffButNewEvidenceRetries()
+    {
+        var client = FakeChatClient.WithTextResponse(" ");
+        var (service, provider, host) = Setup(client);
+        await Assert.ThrowsAsync<Exception>(() => service.CompactIfNeededAsync(provider, Config, "summary"));
+        var calls = client.CallCount;
+        Assert.IsFalse((await service.CompactIfNeededAsync(provider, Config, "summary")).WasCompacted);
+        Assert.AreEqual(calls, client.CallCount);
+        await host.AddThreadMessagesAsync("main", [Message("user", new TextContent("New correction"))]);
+        await Assert.ThrowsAsync<Exception>(() => service.CompactIfNeededAsync(provider, Config, "summary"));
+        Assert.IsTrue(client.CallCount > calls);
     }
 
     [TestMethod]

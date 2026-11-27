@@ -93,8 +93,33 @@ public sealed class ManagedAgentIdentityTests
             Assert.AreEqual(HttpStatusCode.PreconditionFailed, stale.StatusCode);
             using var ordinary = await Save("", revision);
             Assert.IsFalse(ordinary.IsSuccessStatusCode);
+            // An older Insights form can omit all management metadata. The stored profile still determines ownership.
+            client.DefaultRequestHeaders.Authorization = new("Bearer", cloud.ApiKey);
+            var original = await client.GetStringAsync(root);
+            var ordinaryProfile = JsonSerializer.SerializeToNode(profile, JsonSerializerOptions.Web)!.AsObject();
+            ordinaryProfile.Remove("managedIdentity");
+            ordinaryProfile["enabled"] = false;
+            foreach (var expectedRevision in new[] { "*", revision })
+            {
+                using var edit = new HttpRequestMessage(HttpMethod.Put, root) { Content = JsonContent.Create(ordinaryProfile) };
+                edit.Headers.TryAddWithoutValidation("If-Match", expectedRevision);
+                using var rejected = await client.SendAsync(edit);
+                Assert.IsFalse(rejected.IsSuccessStatusCode);
+            }
             using var clear = await client.DeleteAsync(root + "/authorization");
             Assert.IsFalse(clear.IsSuccessStatusCode);
+            ordinaryProfile["name"] = "independent";
+            ordinaryProfile["agentIdentityClientId"] = Guid.NewGuid().ToString();
+            ordinaryProfile["enabled"] = true;
+            using var add = new HttpRequestMessage(HttpMethod.Put, root[..(root.LastIndexOf('/') + 1)] + "independent")
+                { Content = JsonContent.Create(ordinaryProfile) };
+            add.Headers.TryAddWithoutValidation("If-Match", "*");
+            using var added = await client.SendAsync(add);
+            Assert.IsTrue(added.IsSuccessStatusCode, await added.Content.ReadAsStringAsync());
+            await Register("a");
+            Assert.AreEqual(members["pilot:a"], (await Registrations())["pilot:a"]);
+            Assert.AreEqual(original, await client.GetStringAsync(root));
+            client.DefaultRequestHeaders.Authorization = new("Bearer", "integration-admin");
             var cachedVersion = await Session("a");
             using var renew = new HttpRequestMessage(HttpMethod.Post, root + "/managed-identity/renew");
             renew.Headers.TryAddWithoutValidation("If-Match", revision);

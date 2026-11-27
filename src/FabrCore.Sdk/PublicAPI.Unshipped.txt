@@ -1,4 +1,5 @@
 #nullable enable
+FabrCore.Sdk.IFabrCoreAgentHost.UntrackChatHistoryProvider(FabrCore.Sdk.FabrCoreChatHistoryProvider! provider) -> void
 FabrCore.Sdk.FabrCoreAgentProxy.GetDecisionClient(string! name) -> System.Threading.Tasks.Task<FabrCore.Sdk.IFabrCoreDecisionClient!>!
 FabrCore.Sdk.FabrCoreChatClientService.GetDecisionClient(string! name) -> System.Threading.Tasks.Task<FabrCore.Sdk.IFabrCoreDecisionClient!>!
 FabrCore.Sdk.IFabrCoreChatClientService.GetDecisionClient(string! name) -> System.Threading.Tasks.Task<FabrCore.Sdk.IFabrCoreDecisionClient!>!

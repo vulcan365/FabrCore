@@ -74,6 +74,9 @@ namespace FabrCore.Sdk
         /// <param name="provider">The chat history provider to track.</param>
         void TrackChatHistoryProvider(FabrCoreChatHistoryProvider provider);
 
+        /// <summary>Release a provider after its pending history was successfully flushed.</summary>
+        void UntrackChatHistoryProvider(FabrCoreChatHistoryProvider provider) { }
+
         /// <summary>
         /// Gets or creates a persisted ChatMessageStore for the specified thread.
         /// </summary>

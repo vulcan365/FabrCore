@@ -129,6 +129,23 @@ agent's type from its configuration (`ConnectionCaller`), so who may create an
 agent of a type is the host's access control. Delegated connections refuse
 agent types, because each acts for one person.
 
+Managed Entra identities use the reserved `$agent-identity` alias and an admin-owned
+`ManagedAgentIdentity` profile. Two exclusive audiences are supported:
+
+- Exact registrations: `Members` records full handles and registration IDs;
+  `AllowedAgents` matches those handles. Recreating a registration removes access.
+- Principal and agent type: set `ManagedIdentity.AgentType`, `Shared = true`,
+  `AllowedAgentTypes = [type]`, and empty `Members` / `AllowedAgents`. The connection
+  owner is the principal. Every current or future registered instance of that type
+  under that principal shares one child identity, without membership edits.
+
+Unlike generic application type grants, a managed type binding never crosses
+principals. The broker checks the actual host registration and type on each use,
+including cached-token access. Duplicate or overlapping enabled managed audiences
+are rejected. Changing a binding invalidates its tokens and sessions. Individual
+handles remain in resource-call audit evidence; Entra contains only the one child.
+This audience mode requires FabrCore 2.2.4 or later.
+
 An alias the agent's `connections` argument doesn't bind normally means its own
 principal's connection of that name. A host can register an
 `IConnectionBindingResolver` to choose another binding from the caller (principal,

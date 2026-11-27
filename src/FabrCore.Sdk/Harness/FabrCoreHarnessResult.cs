@@ -30,6 +30,8 @@ public sealed class FabrCoreHarnessResult : IAsyncDisposable
     private readonly string stateKey;
     private readonly ILogger? logger;
     private readonly string agentHandle;
+    internal Action? OnDisposed { get; set; }
+    private int disposed;
 
     internal FabrCoreHarnessResult(
         FabrCoreHarnessAgent agent,
@@ -377,7 +379,18 @@ public sealed class FabrCoreHarnessResult : IAsyncDisposable
     /// The shared chat client remains owned by the host. Cross-grain requests may continue remotely.</summary>
     public async ValueTask DisposeAsync()
     {
-        await ReleaseBackgroundSessionAsync(CancellationToken.None);
+        if (Interlocked.Exchange(ref disposed, 1) != 0) return;
+        try
+        {
+            await ReleaseBackgroundSessionAsync(CancellationToken.None);
+            if (ChatHistoryProvider is not null) await ChatHistoryProvider.FlushAsync();
+            OnDisposed?.Invoke();
+        }
+        catch
+        {
+            Volatile.Write(ref disposed, 0); // Retain tracking so pending history can be flushed again.
+            throw;
+        }
     }
 
     private Task ReleaseBackgroundSessionAsync(CancellationToken cancellationToken) =>

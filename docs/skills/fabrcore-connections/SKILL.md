@@ -41,8 +41,8 @@ by local protocol tests.
   `ProtectedKeyRingConfigured` flag as a substitute for real configuration. Read
   the guide's host setup for certificate rotation, manual schema, and overrides.
   Ephemeral state is lost on restart; protect internal silo traffic as well.
-- Bind each connection to its FabrCore owner principal and grant exact full agent
-  handles separately. Agent aliases reference those bindings. Delegated credentials
+- Bind each connection to its FabrCore owner principal and grant callers by exact
+  full handles or an explicit application type policy. Agent aliases reference those bindings. Delegated credentials
   cannot cross principal ownership; application connections can explicitly grant
   agents owned by other principals. Obtain actor identity from host context. An
   alias with no binding means the agent's own principal's connection of that name.

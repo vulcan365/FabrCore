@@ -14,7 +14,7 @@ public abstract partial class FabrCoreAgentProxy
 
     private async Task DisposeHarnessResourcesAsync()
     {
-        foreach (var harness in _harnessResults)
+        foreach (var harness in _harnessResults.ToArray())
         {
             try { await harness.DisposeAsync(); }
             catch (Exception ex) { logger.LogWarning(ex, "Failed to release harness session {ThreadId}", harness.ThreadId); }
@@ -295,6 +295,12 @@ public abstract partial class FabrCoreAgentProxy
             delegationsLost,
             logger);
         _harnessResults.Add(result);
+        result.OnDisposed = () =>
+        {
+            _chatHistoryCompactionRegistrations.Remove(compactionRegistration);
+            fabrcoreAgentHost.UntrackChatHistoryProvider(historyProvider);
+            _harnessResults.Remove(result);
+        };
         return result;
     }
 

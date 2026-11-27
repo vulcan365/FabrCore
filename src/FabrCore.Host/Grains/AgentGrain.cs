@@ -1803,6 +1803,9 @@ namespace FabrCore.Host.Grains
         public Task<List<StoredChatMessage>> GetThreadMessagesAsync(string threadId)
             => GetThreadMessages(threadId);
 
+        public void UntrackChatHistoryProvider(FabrCoreChatHistoryProvider provider)
+            => _activeChatHistoryProviders.Remove(provider);
+
         public Task AddThreadMessagesAsync(string threadId, IEnumerable<StoredChatMessage> messages)
             => AddThreadMessages(threadId, messages);
 
